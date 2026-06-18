@@ -1,5 +1,8 @@
 # debianform 需求文档
 
+运维资源的长期目录、Ansible 对照和后续优先级见
+[resource-catalog.md](resource-catalog.md)。
+
 ## 1. 项目目标
 
 `debianform` 是一个面向 Debian 的简单声明式配置管理工具，命令行为 `dbf`。

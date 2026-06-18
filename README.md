@@ -4,6 +4,11 @@
 
 This MVP uses a restricted `.dbf.hcl` syntax, runs locally, connects to remote Debian hosts through `ssh` as `root`, and stores state on an SSH host with a remote `flock` lock.
 
+Documentation:
+
+- [Current requirements](docs/requirements.md)
+- [Operations resource catalog and roadmap](docs/resource-catalog.md)
+
 ## Install
 
 Install system-wide to `/usr/local/bin/dbf`:
