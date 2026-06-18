@@ -134,6 +134,14 @@ func TestPlanSysctlComparesRuntimeValue(t *testing.T) {
 	}
 }
 
+func TestPlanResourceRejectsUnknownType(t *testing.T) {
+	e := &Engine{runner: &fakeRunner{}}
+	res := config.Resource{Type: "debian_bogus", Name: "x", Address: "debian_bogus.x", Host: "server1"}
+	if _, err := e.planResource(context.Background(), res); err == nil {
+		t.Fatal("expected an error for an unregistered resource type")
+	}
+}
+
 func TestPlanPackageFromDpkgQuery(t *testing.T) {
 	present := config.Resource{
 		Type: "debian_package", Name: "curl", Address: "debian_package.curl", Host: "server1",

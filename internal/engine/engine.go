@@ -281,148 +281,23 @@ func dependencyMatches(dep string, byAddress map[string]config.Resource) []confi
 }
 
 func (e *Engine) planResource(ctx context.Context, res config.Resource) (Change, error) {
-	desired, err := desiredFor(res)
+	p, err := lookupProvider(res.Type)
 	if err != nil {
 		return Change{}, err
 	}
-	switch res.Type {
-	case "debian_package":
-		return e.planPackage(ctx, res, desired)
-	case "debian_file", "debian_networkd_file":
-		return e.planFile(ctx, res, desired)
-	case "debian_nftables_file":
-		return e.planFile(ctx, res, desired)
-	case "debian_directory":
-		return e.planDirectory(ctx, res, desired)
-	case "debian_service":
-		return e.planService(ctx, res, desired)
-	case "debian_kernel_module":
-		return e.planKernelModule(ctx, res, desired)
-	case "debian_sysctl":
-		return e.planSysctl(ctx, res, desired)
-	default:
-		return Change{}, fmt.Errorf("unsupported resource type %s", res.Type)
+	desired, err := p.Desired(res)
+	if err != nil {
+		return Change{}, err
 	}
+	return p.Plan(ctx, e, res, desired)
 }
 
 func (e *Engine) applyChange(ctx context.Context, change Change) error {
-	switch change.Resource.Type {
-	case "debian_package":
-		return e.applyPackage(ctx, change)
-	case "debian_file", "debian_networkd_file":
-		return e.applyFile(ctx, change)
-	case "debian_nftables_file":
-		return e.applyNftablesFile(ctx, change)
-	case "debian_directory":
-		return e.applyDirectory(ctx, change)
-	case "debian_service":
-		return e.applyService(ctx, change)
-	case "debian_kernel_module":
-		return e.applyKernelModule(ctx, change)
-	case "debian_sysctl":
-		return e.applySysctl(ctx, change)
-	default:
-		return fmt.Errorf("unsupported resource type %s", change.Resource.Type)
+	p, err := lookupProvider(change.Resource.Type)
+	if err != nil {
+		return err
 	}
-}
-
-func desiredFor(res config.Resource) (Desired, error) {
-	d := Desired{
-		Name:   objectName(res),
-		Owner:  "root",
-		Group:  "root",
-		Mode:   "",
-		Ensure: "present",
-	}
-	switch res.Type {
-	case "debian_package":
-		d.Name = stringAttr(res, "name", d.Name)
-		d.Ensure = stringAttr(res, "ensure", "present")
-		d.Version = stringAttr(res, "version", "")
-		d.UpdateCache = boolAttr(res, "update_cache", false)
-	case "debian_file":
-		d.Path = stringAttr(res, "path", "")
-		content, err := contentAttr(res)
-		if err != nil {
-			return d, err
-		}
-		d.Content = content
-		d.ContentSHA256 = hash(d.Content)
-		d.Owner = stringAttr(res, "owner", "root")
-		d.Group = stringAttr(res, "group", "root")
-		d.Mode = stringAttr(res, "mode", "0644")
-	case "debian_directory":
-		d.Path = stringAttr(res, "path", "")
-		d.Owner = stringAttr(res, "owner", "")
-		d.Group = stringAttr(res, "group", "")
-		d.Mode = stringAttr(res, "mode", "")
-		d.Ensure = stringAttr(res, "ensure", "present")
-	case "debian_service":
-		d.Name = stringAttr(res, "name", d.Name)
-		if enabled, ok := res.Attrs["enabled"].(bool); ok {
-			d.Enabled = &enabled
-		}
-		d.ServiceState = stringAttr(res, "state", "")
-	case "debian_networkd_file":
-		d.Name = stringAttr(res, "name", d.Name)
-		d.Path = stringAttr(res, "path", "")
-		if d.Path == "" {
-			d.Path = "/etc/systemd/network/" + d.Name
-		}
-		content, err := contentAttr(res)
-		if err != nil {
-			return d, err
-		}
-		d.Content = content
-		d.ContentSHA256 = hash(d.Content)
-		d.Owner = stringAttr(res, "owner", "root")
-		d.Group = stringAttr(res, "group", "root")
-		d.Mode = stringAttr(res, "mode", "0644")
-		d.Activate = boolAttr(res, "activate", false)
-	case "debian_nftables_file":
-		d.Name = stringAttr(res, "name", d.Name)
-		d.Path = stringAttr(res, "path", "")
-		if d.Path == "" {
-			if d.Name == "main" {
-				d.Path = "/etc/nftables.conf"
-			} else {
-				d.Path = "/etc/nftables.d/" + d.Name + ".nft"
-			}
-		}
-		content, err := contentAttr(res)
-		if err != nil {
-			return d, err
-		}
-		d.Content = content
-		d.ContentSHA256 = hash(d.Content)
-		d.Owner = stringAttr(res, "owner", "root")
-		d.Group = stringAttr(res, "group", "root")
-		d.Mode = stringAttr(res, "mode", "0644")
-		d.Activate = boolAttr(res, "activate", false)
-		d.Validate = boolAttr(res, "validate", true)
-	case "debian_kernel_module":
-		d.Name = stringAttr(res, "name", d.Name)
-		d.Ensure = stringAttr(res, "ensure", "present")
-		d.Persist = boolAttr(res, "persist", true)
-		d.Path = stringAttr(res, "path", "")
-		if d.Path == "" {
-			d.Path = "/etc/modules-load.d/dbf-" + res.Name + ".conf"
-		}
-		d.Content = d.Name + "\n"
-		d.ContentSHA256 = hash(d.Content)
-	case "debian_sysctl":
-		d.Key = stringAttr(res, "key", "")
-		d.Value = stringAttr(res, "value", "")
-		d.Persist = boolAttr(res, "persist", true)
-		d.ApplyRuntime = boolAttr(res, "apply", true)
-		d.Path = stringAttr(res, "path", "")
-		if d.Path == "" {
-			d.Path = "/etc/sysctl.d/99-dbf-" + res.Name + ".conf"
-		}
-		d.Content = d.Key + " = " + d.Value + "\n"
-		d.ContentSHA256 = hash(d.Content)
-	}
-	return d, nil
+	return p.Apply(ctx, e, change)
 }
 
 func contentAttr(res config.Resource) (string, error) {
