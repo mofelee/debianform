@@ -49,7 +49,7 @@ jobs:
     name: Debian 13 libvirt integration
     needs: unit
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
 
     steps:
       - name: Check out repository
@@ -88,9 +88,6 @@ jobs:
             qemu-utils
           sudo chown -R "$(id -u):$(id -g)" "${{ runner.temp }}/apt-cache"
           sudo systemctl start libvirtd
-          if [[ -e /dev/kvm ]]; then
-            sudo chmod 0666 /dev/kvm
-          fi
 
       - name: Resolve Debian 13 image checksum
         id: debian-image
@@ -114,6 +111,7 @@ jobs:
         env:
           DBF_INTEGRATION_ARTIFACT_DIR: ${{ runner.temp }}/debianform-integration-artifacts
           DBF_INTEGRATION_IMAGE_CACHE: ${{ runner.temp }}/debian-image-cache
+          DBF_INTEGRATION_DISABLE_KVM: "1"
 
       - name: Upload libvirt diagnostics
         if: failure()

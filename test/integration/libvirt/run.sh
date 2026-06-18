@@ -100,7 +100,7 @@ dbf() {
 }
 
 wait_for_vm_ip() {
-  local deadline=$((SECONDS + 180))
+  local deadline=$((SECONDS + 420))
   while (( SECONDS < deadline )); do
     VM_IP="$(
       virsh_system domifaddr "$VM_NAME" --source lease 2>/dev/null |
@@ -115,7 +115,7 @@ wait_for_vm_ip() {
 }
 
 wait_for_ssh() {
-  local deadline=$((SECONDS + 240))
+  local deadline=$((SECONDS + 420))
   while (( SECONDS < deadline )); do
     if ssh_vm true >/dev/null 2>&1; then
       return 0
@@ -134,7 +134,7 @@ if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
   exit 1
 fi
 
-if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+if [[ "${DBF_INTEGRATION_DISABLE_KVM:-0}" != "1" && -r /dev/kvm && -w /dev/kvm ]]; then
   VIRT_TYPE="kvm"
 fi
 
