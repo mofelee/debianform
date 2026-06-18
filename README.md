@@ -6,20 +6,28 @@ This MVP uses a restricted `.dbf.hcl` syntax, runs locally, connects to remote D
 
 ## Install
 
-From this repository:
+Install system-wide to `/usr/local/bin/dbf`:
 
 ```bash
-make build
-install -m 0755 dbf ~/.local/bin/dbf
+sudo make install
+dbf --version
 ```
 
-For a released version, install a specific Git tag directly into `GOBIN` / `GOPATH/bin`:
+The install location follows standard Make variables:
+
+```bash
+sudo make install PREFIX=/usr
+make install PREFIX="$HOME/.local"
+make install DESTDIR=/tmp/debianform-package
+```
+
+`PREFIX` defaults to `/usr/local`, and the binary is installed under `$(PREFIX)/bin`.
+
+For a released version, you can also install a specific Git tag directly into `GOBIN` / `GOPATH/bin`:
 
 ```bash
 go install github.com/mofelee/debianform/cmd/dbf@v0.1.0
 ```
-
-Make sure the install directory is in `PATH`.
 
 Check the installed version:
 
