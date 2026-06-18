@@ -362,6 +362,11 @@ debian_authorized_key "app" {
   ]
 }
 
+debian_hostname "main" {
+  host     = "debian_ci"
+  hostname = "debianform-managed"
+}
+
 debian_directory "managed" {
   host  = "debian_ci"
   path  = "/var/lib/debianform-ci/managed"
@@ -400,6 +405,7 @@ grep -q 'debian_file.managed\["secondary"\]' <<<"$INITIAL_PLAN"
 grep -q "debian_group.deploy" <<<"$INITIAL_PLAN"
 grep -q "debian_user.app" <<<"$INITIAL_PLAN"
 grep -q "debian_authorized_key.app" <<<"$INITIAL_PLAN"
+grep -q "debian_hostname.main" <<<"$INITIAL_PLAN"
 grep -q "handler.record_change" <<<"$INITIAL_PLAN"
 
 log "applying initial configuration"
@@ -425,6 +431,7 @@ ssh_vm "grep -qF '$APP_PUBLIC_KEY' /home/debianform-app/.ssh/authorized_keys"
 ssh_vm "test \"\$(stat -c %a /home/debianform-app/.ssh)\" = 700"
 ssh_vm "test \"\$(stat -c %a /home/debianform-app/.ssh/authorized_keys)\" = 600"
 ssh_vm "test \"\$(stat -c %U /home/debianform-app/.ssh/authorized_keys)\" = debianform-app"
+ssh_vm "test \"\$(hostnamectl --static)\" = debianform-managed"
 
 NOOP_PLAN="$(dbf plan -f "$CONFIG_FILE")"
 printf '%s\n' "$NOOP_PLAN"
@@ -481,5 +488,17 @@ grep -q "debian_authorized_key.app" "$WORK_DIR/key-drift-check.log"
 dbf apply -f "$CONFIG_FILE" --auto-approve
 dbf check -f "$CONFIG_FILE"
 ssh_vm "grep -qF '$APP_PUBLIC_KEY' /home/debianform-app/.ssh/authorized_keys"
+
+log "introducing hostname drift and verifying repair"
+ssh_vm "hostnamectl set-hostname drifted-host"
+if dbf check -f "$CONFIG_FILE" >"$WORK_DIR/hostname-drift-check.log" 2>&1; then
+  printf 'dbf check unexpectedly accepted hostname drift\n' >&2
+  exit 1
+fi
+cat "$WORK_DIR/hostname-drift-check.log"
+grep -q "debian_hostname.main" "$WORK_DIR/hostname-drift-check.log"
+dbf apply -f "$CONFIG_FILE" --auto-approve
+dbf check -f "$CONFIG_FILE"
+ssh_vm "test \"\$(hostnamectl --static)\" = debianform-managed"
 
 log "integration test passed"

@@ -493,6 +493,10 @@ func validateResource(res Resource) error {
 		if err := validateEnum(res, "ensure", []string{"present", "absent"}, "present"); err != nil {
 			return err
 		}
+	case "debian_hostname":
+		if _, ok := stringAttr(res, "hostname"); !ok {
+			return fmt.Errorf("%s requires hostname", res.Address)
+		}
 	default:
 		return fmt.Errorf("unsupported resource type %s", res.Type)
 	}

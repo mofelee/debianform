@@ -82,6 +82,7 @@ type Desired struct {
 	Groups        []string
 	User          string
 	PublicKey     string
+	Hostname      string
 }
 
 func New(cfg *config.Config, runner Runner, backend *state.SSHBackend) *Engine {

@@ -409,6 +409,54 @@ func TestAuthorizedKeyDesiredRejectsMalformedKey(t *testing.T) {
 	}
 }
 
+func TestPlanHostname(t *testing.T) {
+	res := config.Resource{
+		Type: "debian_hostname", Name: "main", Address: "debian_hostname.main", Host: "server1",
+		Attrs: map[string]any{"hostname": "web01"},
+	}
+
+	cases := map[string]struct {
+		current    string
+		wantAction string
+	}{
+		"matches": {current: "web01\n", wantAction: "no-op"},
+		"drift":   {current: "localhost\n", wantAction: "update"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{reply: func(_, _ string) (sshx.Result, error) {
+				return sshx.Result{Stdout: tc.current}, nil
+			}}
+			got := planFixture(t, runner, res)
+			if got.Action != tc.wantAction {
+				t.Fatalf("action = %q, want %q", got.Action, tc.wantAction)
+			}
+			if !strings.Contains(runner.scripts[0], "hostnamectl --static") {
+				t.Fatalf("expected hostnamectl probe, got %q", runner.scripts[0])
+			}
+		})
+	}
+}
+
+func TestApplyHostnameEmitsSetHostname(t *testing.T) {
+	res := config.Resource{
+		Type: "debian_hostname", Name: "main", Address: "debian_hostname.main", Host: "server1",
+		Attrs: map[string]any{"hostname": "web01"},
+	}
+	runner := &fakeRunner{}
+	e := &Engine{runner: runner}
+	d, err := hostnameProvider{}.Desired(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (hostnameProvider{}).Apply(context.Background(), e, change(res, d, "update", "")); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(runner.scripts[0], "hostnamectl set-hostname 'web01'") {
+		t.Fatalf("script %q missing set-hostname", runner.scripts[0])
+	}
+}
+
 func TestPlanResourceRejectsUnknownType(t *testing.T) {
 	e := &Engine{runner: &fakeRunner{}}
 	res := config.Resource{Type: "debian_bogus", Name: "x", Address: "debian_bogus.x", Host: "server1"}

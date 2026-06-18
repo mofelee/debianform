@@ -29,6 +29,7 @@ var providers = map[string]provider{
 	"debian_group":          groupProvider{},
 	"debian_user":           userProvider{},
 	"debian_authorized_key": authorizedKeyProvider{},
+	"debian_hostname":       hostnameProvider{},
 }
 
 func lookupProvider(resType string) (provider, error) {
