@@ -3,6 +3,10 @@
 运维资源的长期目录、Ansible 对照和后续优先级见
 [resource-catalog.md](resource-catalog.md)。
 
+新增资源和 provider 的设计准则见
+[module-design.md](module-design.md)。常规模块必须让用户声明目标状态，由
+provider 和引擎推导依赖图；`depends_on` 只作为无法推断隐藏依赖时的逃生口。
+
 ## 1. 项目目标
 
 `debianform` 是一个面向 Debian 的简单声明式配置管理工具，命令行为 `dbf`。
@@ -17,6 +21,7 @@
 - Root-only：远程执行必须使用 `root` SSH，不支持普通用户加 `sudo` 的复杂路径。
 - Agentless：远程主机不安装长期运行的 agent。
 - 资源声明：用户以资源为单位描述目标状态，而不是描述整台系统镜像。
+- 模块化图执行：资源 provider 应推导语义依赖和内部动作，常规配置不依赖用户手写执行顺序。
 - 幂等执行：资源在修改前应读取远端当前状态，只在需要时变更。
 - 可预览：支持在实际修改前展示计划。
 - Debian-first：只关注当前支持的 Debian 稳定版本，不做跨发行版抽象。
@@ -690,7 +695,8 @@ debian_nftables_file "main" {
 
 ## 10. 依赖关系
 
-资源可以通过引用自然形成依赖。
+资源应优先通过资源语义和显式字段自然形成依赖。显式 `depends_on` 是过渡期能力和
+逃生口，不应成为常规模块正确工作的前提。
 
 示例：
 
@@ -721,7 +727,9 @@ debian_service "networkd" {
 }
 ```
 
-第一版可以先支持显式 `depends_on`，后续再增强引用分析。
+当前实现可以先支持显式 `depends_on`。后续模块设计必须按
+[module-design.md](module-design.md) 推进，让 provider 自动声明语义依赖、内部动作和
+互斥锁；`depends_on` 只保留给无法推断的隐藏依赖。
 
 ## 11. 错误处理
 

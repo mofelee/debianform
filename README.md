@@ -7,6 +7,7 @@ This MVP uses `.dbf.hcl` files parsed with HashiCorp HCL v2, runs locally, conne
 Documentation:
 
 - [Current requirements](docs/requirements.md)
+- [Module design standards](docs/module-design.md)
 - [Operations resource catalog and roadmap](docs/resource-catalog.md)
 - [Testing and Debian 13 libvirt integration](docs/testing.md)
 - [示例:用 DebianForm 安装 BIRD2](docs/bird2.md)

@@ -9,6 +9,9 @@
 本文档不是当前实现能力的完整承诺。具体状态以每个资源旁的标记为准，已实现行为仍以
 [requirements.md](requirements.md) 和代码为准。
 
+新增资源、provider 和示例必须遵循
+[module-design.md](module-design.md)：用户声明系统事实，provider 推导依赖图和内部动作。
+
 ## 目录
 
 - [1. 状态与优先级](#1-状态与优先级)
@@ -211,7 +214,8 @@ debian_user "operator" {
 
 ### 3.4 依赖图
 
-资源默认按显式依赖构建有向无环图。不能仅依赖文件声明顺序。
+资源必须按语义依赖构建有向无环图。不能仅依赖文件声明顺序，也不能把常规正确性
+建立在用户手写 `depends_on` 上。
 
 ```hcl
 debian_service "nginx" {
@@ -226,7 +230,9 @@ debian_service "nginx" {
 }
 ```
 
-后续支持资源属性引用时，显式属性引用应自动形成依赖；`depends_on` 只用于无法从值引用推断的隐藏依赖。
+后续 provider 应声明 `Provides`、`Requires`、`Triggers` 和 `Locks`，让引擎自动推导
+资源依赖、内部动作和并发互斥。显式属性引用应自动形成依赖；`depends_on` 只用于
+无法由资源语义或值引用推断的隐藏依赖。
 
 ### 3.5 `notify` 与 handler
 
@@ -329,7 +335,7 @@ DebianForm 可以参考 Ansible 的模块覆盖面，但配置模型采用 Terra
 | inventory host | SSH config alias 或 `host` block | 不维护独立 inventory 格式 |
 | module task | `debian_*` 资源 | 描述长期状态，不描述执行步骤 |
 | task loop | `for_each` | key 进入稳定资源地址 |
-| task order | `depends_on` 依赖图 | 不把文件顺序当作主要依赖 |
+| task order | 语义依赖图，`depends_on` 作为逃生口 | 不把文件顺序或手写步骤当作主要依赖 |
 | handler/notify | `handler` + `notify` | 一次 apply 中去重并延迟执行 |
 | check mode | `dbf plan` | 同时结合共享 state 和远端实况 |
 | diff mode | plan 详细差异 | 资源必须实现稳定 diff |

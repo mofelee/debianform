@@ -3,6 +3,10 @@
 本文演示如何把一段常见的命令式安装脚本翻译成 DebianForm 的声明式配置。
 完整配置见 [examples/bird2.dbf.hcl](../examples/bird2.dbf.hcl)。
 
+注意：本文反映当前已实现的低层资源能力，用于解释脚本如何迁移到 DebianForm。
+新增模块和后续高层资源设计不应以本文的顺序链为标准；模块设计准则见
+[module-design.md](module-design.md)。
+
 ## 要实现的功能
 
 从 CZ.NIC 官方仓库安装 BIRD2,等价于下面这段脚本做的事:
