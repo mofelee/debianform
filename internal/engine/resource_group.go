@@ -6,6 +6,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/config"
 	"github.com/mofelee/debianform/internal/sshx"
+	"github.com/mofelee/debianform/internal/state"
 )
 
 // groupProvider manages a Unix group via getent/groupadd/groupmod/groupdel.
@@ -74,6 +75,16 @@ func (groupProvider) Apply(ctx context.Context, e *Engine, change Change) error 
 
 	lines = append(lines, "if getent group "+name+" >/dev/null; then "+mod+"; else "+add+"; fi")
 	_, err := e.runner.Run(ctx, change.Resource.Host, strings.Join(lines, "\n")+"\n")
+	return err
+}
+
+func (groupProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	name := priorString(prior, "name")
+	if name == "" {
+		return nil
+	}
+	script := "if getent group " + sshx.ShellQuote(name) + " >/dev/null; then groupdel " + sshx.ShellQuote(name) + "; fi\n"
+	_, err := e.runner.Run(ctx, priorString(prior, "host"), script)
 	return err
 }
 

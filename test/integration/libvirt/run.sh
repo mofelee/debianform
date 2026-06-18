@@ -20,6 +20,7 @@ SEED_IMAGE="$WORK_DIR/seed.img"
 DBF_BIN="$WORK_DIR/dbf"
 DBF_HOME="$WORK_DIR/home"
 CONFIG_FILE="$WORK_DIR/integration.dbf.hcl"
+CONFIG_FILE2="$WORK_DIR/integration-reduced.dbf.hcl"
 VM_IP=""
 VIRT_TYPE="qemu"
 NETWORK_DEFINED=0
@@ -526,5 +527,79 @@ grep -q "debian_apt_source.example" "$WORK_DIR/apt-source-drift-check.log"
 dbf apply -f "$CONFIG_FILE" --auto-approve
 dbf check -f "$CONFIG_FILE"
 ssh_vm "! grep -q '# drift' /etc/apt/sources.list.d/example.sources"
+
+log "removing resources from config and verifying Terraform-style destroy"
+cat >"$CONFIG_FILE2" <<EOF
+state "ssh" {
+  host      = "debian_ci"
+  path      = "/var/lib/debianform-ci/state.json"
+  lock_path = "/var/lock/debianform-ci/state.lock"
+}
+
+handler "record_change" {
+  host    = "debian_ci"
+  command = "echo handler >> /var/lib/debianform-ci/handler.log"
+}
+
+locals {
+  files = {
+    primary   = "managed primary\n"
+    secondary = "managed secondary\n"
+  }
+}
+
+debian_directory "managed" {
+  host  = "debian_ci"
+  path  = "/var/lib/debianform-ci/managed"
+  owner = "root"
+  group = "root"
+  mode  = "0750"
+}
+
+debian_file "managed" {
+  for_each = local.files
+
+  host    = "debian_ci"
+  path    = each.key == "primary" ? "/var/lib/debianform-ci/managed/primary.conf" : "/var/lib/debianform-ci/managed/secondary.conf"
+  content = each.value
+  owner   = "root"
+  group   = "root"
+  mode    = each.key == "primary" ? "0640" : "0600"
+
+  depends_on = [
+    debian_directory.managed,
+  ]
+
+  notify = [
+    handler.record_change,
+  ]
+}
+
+debian_hostname "main" {
+  host     = "debian_ci"
+  hostname = "debianform-managed"
+}
+EOF
+
+DESTROY_PLAN="$(dbf plan -f "$CONFIG_FILE2")"
+printf '%s\n' "$DESTROY_PLAN"
+grep -q -- "- debian_apt_source.example" <<<"$DESTROY_PLAN"
+grep -q -- "- debian_group.deploy" <<<"$DESTROY_PLAN"
+grep -q -- "- debian_user.app" <<<"$DESTROY_PLAN"
+grep -q -- "- debian_authorized_key.app" <<<"$DESTROY_PLAN"
+
+dbf apply -f "$CONFIG_FILE2" --auto-approve
+dbf check -f "$CONFIG_FILE2"
+
+# Removed resources are gone from the host...
+ssh_vm "! getent passwd debianform-app >/dev/null"
+ssh_vm "! getent group debianform-deploy >/dev/null"
+ssh_vm "! test -e /etc/apt/sources.list.d/example.sources"
+# ...and they are pruned from state...
+ssh_vm "! grep -q debian_apt_source.example /var/lib/debianform-ci/state.json"
+ssh_vm "! grep -q debian_group.deploy /var/lib/debianform-ci/state.json"
+# ...while resources still in config are untouched.
+ssh_vm "test \"\$(cat /var/lib/debianform-ci/managed/primary.conf)\" = 'managed primary'"
+ssh_vm "test \"\$(hostnamectl --static)\" = debianform-managed"
 
 log "integration test passed"

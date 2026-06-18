@@ -46,6 +46,9 @@ type Change struct {
 	Summary  string
 	Resource config.Resource
 	Desired  Desired
+	// Prior holds the recorded state for a "destroy" change, whose resource is
+	// no longer present in configuration.
+	Prior state.ResourceState
 }
 
 type HandlerRun struct {
@@ -90,15 +93,18 @@ func New(cfg *config.Config, runner Runner, backend *state.SSHBackend) *Engine {
 }
 
 func (e *Engine) Plan(ctx context.Context, opts Options) (Plan, error) {
-	if _, err := e.backend.Read(ctx); err != nil {
+	prior, err := e.backend.Read(ctx)
+	if err != nil {
 		return Plan{}, err
 	}
 	resources, err := e.resources(opts)
 	if err != nil {
 		return Plan{}, err
 	}
+	managed := make(map[string]struct{}, len(resources))
 	changes := make([]Change, 0, len(resources))
 	for _, res := range resources {
+		managed[res.Address] = struct{}{}
 		change, err := e.planResource(ctx, res)
 		if err != nil {
 			return Plan{}, err
@@ -107,7 +113,78 @@ func (e *Engine) Plan(ctx context.Context, opts Options) (Plan, error) {
 			changes = append(changes, change)
 		}
 	}
+	changes = append(changes, orphanDestroys(prior, managed, opts)...)
 	return Plan{Changes: changes, Handlers: e.handlerRuns(changes)}, nil
+}
+
+// orphanDestroys returns destroy changes for resources that are recorded in
+// state but no longer present in configuration. They are ordered by their
+// recorded apply position, descending, so dependents are destroyed before
+// their dependencies (the reverse of how they were created).
+func orphanDestroys(prior state.State, managed map[string]struct{}, opts Options) []Change {
+	var addrs []string
+	for addr, rs := range prior.Resources {
+		if priorString(rs, "type") == "handler" {
+			continue
+		}
+		if _, ok := managed[addr]; ok {
+			continue
+		}
+		if opts.Host != "" && priorString(rs, "host") != opts.Host {
+			continue
+		}
+		if _, ok := providers[priorString(rs, "type")]; !ok {
+			continue
+		}
+		addrs = append(addrs, addr)
+	}
+	sort.Slice(addrs, func(i, j int) bool {
+		oi, oj := priorOrder(prior.Resources[addrs[i]]), priorOrder(prior.Resources[addrs[j]])
+		if oi != oj {
+			return oi > oj
+		}
+		return addrs[i] > addrs[j]
+	})
+	changes := make([]Change, 0, len(addrs))
+	for _, addr := range addrs {
+		rs := prior.Resources[addr]
+		changes = append(changes, Change{Address: addr, Action: "destroy", Summary: destroySummary(rs), Prior: rs})
+	}
+	return changes
+}
+
+func destroySummary(rs state.ResourceState) string {
+	resType := priorString(rs, "type")
+	id := priorString(rs, "name")
+	if id == "" {
+		id = priorString(rs, "path")
+	}
+	if id == "" {
+		id = priorString(rs, "user")
+	}
+	if id != "" {
+		return "destroy " + resType + " " + id
+	}
+	return "destroy " + resType
+}
+
+func priorString(rs state.ResourceState, key string) string {
+	if v, ok := rs[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func priorOrder(rs state.ResourceState) float64 {
+	switch n := rs["order"].(type) {
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	}
+	return 0
 }
 
 func (e *Engine) Apply(ctx context.Context, opts Options) (Plan, error) {
@@ -139,17 +216,46 @@ func (e *Engine) Apply(ctx context.Context, opts Options) (Plan, error) {
 		st.Resources[handler.Address] = stateForHandler(handler)
 	}
 	plan.Handlers = handlers
+
+	// Drop resources that were deleted or destroyed from state.
+	removed := make(map[string]struct{})
+	for _, change := range plan.Changes {
+		if change.Action == "delete" || change.Action == "destroy" {
+			removed[change.Address] = struct{}{}
+			delete(st.Resources, change.Address)
+		}
+	}
+
 	resources, err := e.resources(opts)
 	if err != nil {
 		return plan, err
 	}
-	for _, res := range resources {
+	for i, res := range resources {
+		if _, gone := removed[res.Address]; gone {
+			continue
+		}
 		desired, err := desiredFor(res)
 		if err != nil {
 			return plan, err
 		}
-		st.Resources[res.Address] = stateForResource(res, desired)
+		rs := stateForResource(res, desired)
+		rs["order"] = i
+		st.Resources[res.Address] = rs
 	}
+
+	// Prune state for handlers no longer declared in configuration.
+	declared := make(map[string]struct{}, len(e.cfg.Handlers))
+	for _, handler := range e.cfg.Handlers {
+		declared[handler.Address] = struct{}{}
+	}
+	for addr, rs := range st.Resources {
+		if priorString(rs, "type") == "handler" {
+			if _, ok := declared[addr]; !ok {
+				delete(st.Resources, addr)
+			}
+		}
+	}
+
 	if err := e.backend.Write(ctx, st); err != nil {
 		return plan, err
 	}
@@ -171,7 +277,7 @@ func PrintPlan(w io.Writer, plan Plan) {
 		switch change.Action {
 		case "create":
 			symbol = "+"
-		case "delete":
+		case "delete", "destroy":
 			symbol = "-"
 		}
 		fmt.Fprintf(w, "  %s %s %s\n", symbol, change.Address, change.Summary)
@@ -302,6 +408,13 @@ func (e *Engine) planResource(ctx context.Context, res config.Resource) (Change,
 }
 
 func (e *Engine) applyChange(ctx context.Context, change Change) error {
+	if change.Action == "destroy" {
+		p, err := lookupProvider(priorString(change.Prior, "type"))
+		if err != nil {
+			return err
+		}
+		return p.Destroy(ctx, e, change.Prior)
+	}
 	p, err := lookupProvider(change.Resource.Type)
 	if err != nil {
 		return err
@@ -382,6 +495,12 @@ func stateForResource(res config.Resource, desired Desired) state.ResourceState 
 	}
 	if desired.Version != "" {
 		out["version"] = desired.Version
+	}
+	if desired.User != "" {
+		out["user"] = desired.User
+	}
+	if desired.PublicKey != "" {
+		out["public_key"] = desired.PublicKey
 	}
 	return out
 }

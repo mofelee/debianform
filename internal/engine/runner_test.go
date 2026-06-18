@@ -8,6 +8,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/config"
 	"github.com/mofelee/debianform/internal/sshx"
+	"github.com/mofelee/debianform/internal/state"
 )
 
 // fakeRunner is an in-memory engine.Runner. It records every script it is
@@ -556,6 +557,100 @@ func TestApplyAptSource(t *testing.T) {
 			t.Fatalf("script %q missing rm", runner.scripts[0])
 		}
 	})
+}
+
+func TestOrphanDestroysOrderAndFiltering(t *testing.T) {
+	prior := state.State{Resources: map[string]state.ResourceState{
+		"debian_group.deploy": {"type": "debian_group", "host": "h", "name": "deploy", "order": float64(1)},
+		"debian_user.app":     {"type": "debian_user", "host": "h", "name": "app", "order": float64(2)},
+		"debian_file.keep":    {"type": "debian_file", "host": "h", "path": "/keep", "order": float64(0)},
+		"handler.note":        {"type": "handler", "host": "h"},
+	}}
+	managed := map[string]struct{}{"debian_file.keep": {}}
+
+	changes := orphanDestroys(prior, managed, Options{})
+
+	if len(changes) != 2 {
+		t.Fatalf("got %d destroy changes, want 2 (%+v)", len(changes), changes)
+	}
+	// Higher apply order is destroyed first: user (2) before group (1).
+	if changes[0].Address != "debian_user.app" || changes[0].Action != "destroy" {
+		t.Fatalf("first = %+v, want destroy debian_user.app", changes[0])
+	}
+	if changes[1].Address != "debian_group.deploy" {
+		t.Fatalf("second = %+v, want debian_group.deploy", changes[1])
+	}
+}
+
+func TestOrphanDestroysRespectsHostFilter(t *testing.T) {
+	prior := state.State{Resources: map[string]state.ResourceState{
+		"debian_group.a": {"type": "debian_group", "host": "h1", "name": "a"},
+		"debian_group.b": {"type": "debian_group", "host": "h2", "name": "b"},
+	}}
+	changes := orphanDestroys(prior, map[string]struct{}{}, Options{Host: "h1"})
+	if len(changes) != 1 || changes[0].Address != "debian_group.a" {
+		t.Fatalf("got %+v, want only debian_group.a", changes)
+	}
+}
+
+func TestDestroyEmitsCommands(t *testing.T) {
+	cases := map[string]struct {
+		p     provider
+		prior state.ResourceState
+		want  string
+	}{
+		"group":      {groupProvider{}, state.ResourceState{"type": "debian_group", "host": "h", "name": "deploy"}, "groupdel 'deploy'"},
+		"user":       {userProvider{}, state.ResourceState{"type": "debian_user", "host": "h", "name": "app"}, "userdel 'app'"},
+		"package":    {packageProvider{}, state.ResourceState{"type": "debian_package", "host": "h", "name": "nginx"}, "apt-get remove -y 'nginx'"},
+		"directory":  {directoryProvider{}, state.ResourceState{"type": "debian_directory", "host": "h", "path": "/var/lib/app"}, "rm -rf -- '/var/lib/app'"},
+		"apt_source": {aptSourceProvider{}, state.ResourceState{"type": "debian_apt_source", "host": "h", "path": "/etc/apt/sources.list.d/x.sources"}, "rm -f -- '/etc/apt/sources.list.d/x.sources'"},
+		"file":       {fileProvider{}, state.ResourceState{"type": "debian_file", "host": "h", "path": "/etc/motd"}, "rm -f -- '/etc/motd'"},
+		"service":    {serviceProvider{}, state.ResourceState{"type": "debian_service", "host": "h", "name": "nginx"}, "systemctl disable --now 'nginx'"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{}
+			e := &Engine{runner: runner}
+			if err := tc.p.Destroy(context.Background(), e, tc.prior); err != nil {
+				t.Fatal(err)
+			}
+			if len(runner.scripts) != 1 || !strings.Contains(runner.scripts[0], tc.want) {
+				t.Fatalf("scripts = %q, want substring %q", runner.scripts, tc.want)
+			}
+		})
+	}
+}
+
+func TestDestroyAuthorizedKeyFiltersLine(t *testing.T) {
+	runner := &fakeRunner{}
+	e := &Engine{runner: runner}
+	prior := state.ResourceState{
+		"type": "debian_authorized_key", "host": "h",
+		"user": "deployer", "public_key": "ssh-ed25519 AAAAC3Nz deploy@ci",
+	}
+	if err := (authorizedKeyProvider{}).Destroy(context.Background(), e, prior); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"user='deployer'", "!($1==t && $2==b)", "/.ssh/authorized_keys"} {
+		if !strings.Contains(runner.scripts[0], want) {
+			t.Fatalf("script %q missing %q", runner.scripts[0], want)
+		}
+	}
+}
+
+func TestApplyChangeDispatchesDestroy(t *testing.T) {
+	runner := &fakeRunner{}
+	e := &Engine{runner: runner}
+	ch := Change{
+		Address: "debian_group.deploy", Action: "destroy",
+		Prior: state.ResourceState{"type": "debian_group", "host": "h", "name": "deploy"},
+	}
+	if err := e.applyChange(context.Background(), ch); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 1 || !strings.Contains(runner.scripts[0], "groupdel 'deploy'") {
+		t.Fatalf("got %q", runner.scripts)
+	}
 }
 
 func TestPlanResourceRejectsUnknownType(t *testing.T) {

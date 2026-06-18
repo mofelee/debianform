@@ -5,16 +5,32 @@ import (
 	"fmt"
 
 	"github.com/mofelee/debianform/internal/config"
+	"github.com/mofelee/debianform/internal/sshx"
+	"github.com/mofelee/debianform/internal/state"
 )
 
 // provider encapsulates everything a resource type needs: deriving desired
-// state from config, planning against the live host, and applying a change.
-// Adding a resource is a matter of implementing this interface and registering
-// the value in providers, with no edits to the engine's dispatch.
+// state from config, planning against the live host, applying a change, and
+// destroying a resource that has been removed from configuration using only
+// its recorded state. Adding a resource is a matter of implementing this
+// interface and registering the value in providers, with no edits to the
+// engine's dispatch.
 type provider interface {
 	Desired(res config.Resource) (Desired, error)
 	Plan(ctx context.Context, e *Engine, res config.Resource, d Desired) (Change, error)
 	Apply(ctx context.Context, e *Engine, change Change) error
+	Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error
+}
+
+// destroyPath removes a single managed file recorded in prior state. It backs
+// the destroy of the file-backed resource types.
+func destroyPath(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	path := priorString(prior, "path")
+	if path == "" {
+		return nil
+	}
+	_, err := e.runner.Run(ctx, priorString(prior, "host"), "rm -f -- "+sshx.ShellQuote(path)+"\n")
+	return err
 }
 
 var providers = map[string]provider{
@@ -257,4 +273,64 @@ func (sysctlProvider) Plan(ctx context.Context, e *Engine, res config.Resource, 
 
 func (sysctlProvider) Apply(ctx context.Context, e *Engine, change Change) error {
 	return e.applySysctl(ctx, change)
+}
+
+// Destroy implementations for the file- and command-backed resource types.
+
+func (packageProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	name := priorString(prior, "name")
+	if name == "" {
+		return nil
+	}
+	script := "set -eu\nexport DEBIAN_FRONTEND=noninteractive\napt-get remove -y " + sshx.ShellQuote(name) + "\n"
+	_, err := e.runner.Run(ctx, priorString(prior, "host"), script)
+	return err
+}
+
+func (fileProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	return destroyPath(ctx, e, prior)
+}
+
+func (networkdFileProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	return destroyPath(ctx, e, prior)
+}
+
+func (nftablesProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	return destroyPath(ctx, e, prior)
+}
+
+func (sysctlProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	return destroyPath(ctx, e, prior)
+}
+
+func (directoryProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	path := priorString(prior, "path")
+	if path == "" || path == "/" {
+		return nil
+	}
+	_, err := e.runner.Run(ctx, priorString(prior, "host"), "rm -rf -- "+sshx.ShellQuote(path)+"\n")
+	return err
+}
+
+func (serviceProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	name := priorString(prior, "name")
+	if name == "" {
+		return nil
+	}
+	_, err := e.runner.Run(ctx, priorString(prior, "host"), "systemctl disable --now "+sshx.ShellQuote(name)+" 2>/dev/null || true\n")
+	return err
+}
+
+func (kernelModuleProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	name := priorString(prior, "name")
+	if name == "" {
+		return nil
+	}
+	script := "set -eu\n"
+	if path := priorString(prior, "path"); path != "" {
+		script += "rm -f -- " + sshx.ShellQuote(path) + "\n"
+	}
+	script += "modprobe -r " + sshx.ShellQuote(name) + " 2>/dev/null || true\n"
+	_, err := e.runner.Run(ctx, priorString(prior, "host"), script)
+	return err
 }

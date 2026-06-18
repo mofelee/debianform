@@ -114,6 +114,25 @@ dbf plan --host server1
 dbf apply --auto-approve
 ```
 
+## Destroying resources
+
+`dbf` tracks managed resources in its state. When you **remove a resource
+block from configuration**, the next `plan`/`apply` destroys it on the host —
+the same model as Terraform. You do not need a separate `ensure = "absent"`
+flag for this.
+
+```bash
+# remove the debian_user.deployer block from your .dbf.hcl, then:
+dbf plan    # shows: - debian_user.deployer destroy debian_user deployer
+dbf apply   # runs userdel, then prunes it from state
+```
+
+Destroys run in reverse of the order the resources were applied, so dependents
+are removed before their dependencies. Each resource type defines its own
+destroy action (`debian_package` → `apt-get remove`, `debian_directory` →
+`rm -rf`, `debian_group` → `groupdel`, files → `rm`, and so on);
+`debian_hostname` has no inverse and is a no-op on removal.
+
 ## Handlers
 
 Use `notify` and `handler` when a resource change should trigger a command after all normal resources are applied.

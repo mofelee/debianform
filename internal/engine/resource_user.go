@@ -7,6 +7,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/config"
 	"github.com/mofelee/debianform/internal/sshx"
+	"github.com/mofelee/debianform/internal/state"
 )
 
 // userProvider manages a Unix user via getent/useradd/usermod/userdel.
@@ -94,6 +95,16 @@ func (userProvider) Apply(ctx context.Context, e *Engine, change Change) error {
 
 	lines = append(lines, "if getent passwd "+name+" >/dev/null; then "+mod+"; else "+add+"; fi")
 	_, err := e.runner.Run(ctx, change.Resource.Host, strings.Join(lines, "\n")+"\n")
+	return err
+}
+
+func (userProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	name := priorString(prior, "name")
+	if name == "" {
+		return nil
+	}
+	script := "if getent passwd " + sshx.ShellQuote(name) + " >/dev/null; then userdel " + sshx.ShellQuote(name) + "; fi\n"
+	_, err := e.runner.Run(ctx, priorString(prior, "host"), script)
 	return err
 }
 

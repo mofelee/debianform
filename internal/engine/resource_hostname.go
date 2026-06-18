@@ -5,6 +5,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/config"
 	"github.com/mofelee/debianform/internal/sshx"
+	"github.com/mofelee/debianform/internal/state"
 )
 
 // hostnameProvider manages the static system hostname via hostnamectl.
@@ -31,4 +32,10 @@ func (hostnameProvider) Apply(ctx context.Context, e *Engine, change Change) err
 	d := change.Desired
 	_, err := e.runner.Run(ctx, change.Resource.Host, "set -eu\nhostnamectl set-hostname "+sshx.ShellQuote(d.Hostname)+"\n")
 	return err
+}
+
+// Destroy is a no-op: a hostname has no meaningful inverse to apply when the
+// resource is removed from configuration.
+func (hostnameProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	return nil
 }

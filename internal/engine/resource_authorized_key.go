@@ -8,6 +8,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/config"
 	"github.com/mofelee/debianform/internal/sshx"
+	"github.com/mofelee/debianform/internal/state"
 )
 
 // authorizedKeyProvider manages a single SSH public key in a user's
@@ -101,6 +102,34 @@ func (authorizedKeyProvider) Apply(ctx context.Context, e *Engine, change Change
 
 	script := "set -eu\n" + authorizedKeyPreamble(d) + body
 	_, err = e.runner.Run(ctx, change.Resource.Host, script)
+	return err
+}
+
+func (authorizedKeyProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	user := priorString(prior, "user")
+	key := priorString(prior, "public_key")
+	if user == "" || key == "" {
+		return nil
+	}
+	keytype, keyblob, err := splitAuthorizedKey(key)
+	if err != nil {
+		return nil
+	}
+	fileExpr := "\"$home/.ssh/authorized_keys\""
+	if path := priorString(prior, "path"); path != "" {
+		fileExpr = sshx.ShellQuote(path)
+	}
+	script := "set -eu\n" +
+		"user=" + sshx.ShellQuote(user) + "\n" +
+		"home=$(getent passwd \"$user\" | cut -d: -f6) || home=\n" +
+		"file=" + fileExpr + "\n" +
+		"if [ -f \"$file\" ]; then\n" +
+		"  tmp=$(mktemp)\n" +
+		"  awk -v t=" + sshx.ShellQuote(keytype) + " -v b=" + sshx.ShellQuote(keyblob) + " '!($1==t && $2==b)' \"$file\" > \"$tmp\"\n" +
+		"  cat \"$tmp\" > \"$file\"\n" +
+		"  rm -f \"$tmp\"\n" +
+		"fi\n"
+	_, err = e.runner.Run(ctx, priorString(prior, "host"), script)
 	return err
 }
 

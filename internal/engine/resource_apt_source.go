@@ -7,6 +7,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/config"
 	"github.com/mofelee/debianform/internal/sshx"
+	"github.com/mofelee/debianform/internal/state"
 )
 
 // aptSourceProvider manages a deb822 apt repository definition under
@@ -47,6 +48,10 @@ func (aptSourceProvider) Apply(ctx context.Context, e *Engine, change Change) er
 		return err
 	}
 	return e.applyFile(ctx, change)
+}
+
+func (aptSourceProvider) Destroy(ctx context.Context, e *Engine, prior state.ResourceState) error {
+	return destroyPath(ctx, e, prior)
 }
 
 // aptSourceContent renders the deb822 representation of the source.
