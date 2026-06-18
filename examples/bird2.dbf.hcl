@@ -8,16 +8,16 @@
 #
 # 当前实现已支持这个示例所需的 debian_apt_repository、key.url 和 service.package。
 
-state "ssh" {
-  host      = local.host
-  path      = "/var/lib/debianform/bird2-state.json"
-  lock_path = "/var/lock/debianform/bird2-state.lock"
-}
-
 locals {
   # Debian 13 = trixie。换成目标系统的 codename 即可，例如 bookworm。
   host = "ksvm202"
   suite = "trixie"
+}
+
+state "ssh" {
+  host      = local.host
+  path      = "/var/lib/debianform/bird2-state.json"
+  lock_path = "/var/lock/debianform/bird2-state.lock"
 }
 
 debian_apt_repository "cznic_bird2" {

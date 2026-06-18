@@ -77,6 +77,54 @@ func TestResourcesInfersRepositoryAndServiceDependencies(t *testing.T) {
 	}
 }
 
+func TestResourcesInfersBBRSysctlKernelModuleDependency(t *testing.T) {
+	resources := []config.Resource{
+		{
+			Type:    "debian_sysctl",
+			Name:    "bbr_congestion_control",
+			Address: "debian_sysctl.bbr_congestion_control",
+			Host:    "server1",
+			Attrs: map[string]any{
+				"key":   "net.ipv4.tcp_congestion_control",
+				"value": "bbr",
+			},
+			Order: 0,
+		},
+		{
+			Type:    "debian_kernel_module",
+			Name:    "tcp_bbr",
+			Address: "debian_kernel_module.tcp_bbr",
+			Host:    "server1",
+			Attrs:   map[string]any{"name": "tcp_bbr"},
+			Order:   1,
+		},
+		{
+			Type:    "debian_sysctl",
+			Name:    "bbr_qdisc",
+			Address: "debian_sysctl.bbr_qdisc",
+			Host:    "server1",
+			Attrs: map[string]any{
+				"key":   "net.core.default_qdisc",
+				"value": "fq",
+			},
+			Order: 2,
+		},
+	}
+	e := &Engine{cfg: &config.Config{Resources: resources}}
+
+	sorted, err := e.resources(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{sorted[0].Address, sorted[1].Address, sorted[2].Address}
+	want := []string{"debian_kernel_module.tcp_bbr", "debian_sysctl.bbr_congestion_control", "debian_sysctl.bbr_qdisc"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("sorted = %#v, want %#v", got, want)
+		}
+	}
+}
+
 func TestHandlerRunsDedupesAndUsesDeclarationOrder(t *testing.T) {
 	e := &Engine{
 		cfg: &config.Config{

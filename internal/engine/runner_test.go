@@ -896,3 +896,52 @@ func TestPlanKernelModuleChecksRuntimeLoad(t *testing.T) {
 		})
 	}
 }
+
+func TestGeneratedNativePathsAreRecordedInState(t *testing.T) {
+	cases := map[string]struct {
+		p    provider
+		res  config.Resource
+		path string
+	}{
+		"kernel module": {
+			p: kernelModuleProvider{},
+			res: config.Resource{
+				Type:    "debian_kernel_module",
+				Name:    "tcp_bbr",
+				Address: "debian_kernel_module.tcp_bbr",
+				Host:    "server1",
+				Attrs:   map[string]any{"name": "tcp_bbr"},
+			},
+			path: "/etc/modules-load.d/dbf-tcp_bbr.conf",
+		},
+		"sysctl": {
+			p: sysctlProvider{},
+			res: config.Resource{
+				Type:    "debian_sysctl",
+				Name:    "bbr_congestion_control",
+				Address: "debian_sysctl.bbr_congestion_control",
+				Host:    "server1",
+				Attrs: map[string]any{
+					"key":   "net.ipv4.tcp_congestion_control",
+					"value": "bbr",
+				},
+			},
+			path: "/etc/sysctl.d/99-dbf-bbr_congestion_control.conf",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			desired, err := tc.p.Desired(tc.res)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if desired.Path != tc.path {
+				t.Fatalf("desired path = %q, want %q", desired.Path, tc.path)
+			}
+			state := stateForResource(tc.res, desired)
+			if got := state["path"]; got != tc.path {
+				t.Fatalf("state path = %q, want %q", got, tc.path)
+			}
+		})
+	}
+}

@@ -309,11 +309,18 @@ func (e *Engine) resources(opts Options) ([]config.Resource, error) {
 
 func inferSemanticDependencies(resources []config.Resource) []config.Resource {
 	packageByHostName := map[string]string{}
+	moduleByHostName := map[string]string{}
 	repositoriesByHost := map[string][]string{}
 	for _, res := range resources {
 		switch res.Type {
 		case "debian_package":
 			packageByHostName[res.Host+"\x00"+objectName(res)] = res.Address
+		case "debian_kernel_module":
+			if stringAttr(res, "ensure", "present") != "absent" {
+				name := objectName(res)
+				moduleByHostName[res.Host+"\x00"+name] = res.Address
+				moduleByHostName[res.Host+"\x00"+strings.ReplaceAll(name, "-", "_")] = res.Address
+			}
 		case "debian_apt_repository":
 			if stringAttr(res, "ensure", "present") != "absent" {
 				repositoriesByHost[res.Host] = append(repositoriesByHost[res.Host], res.Address)
@@ -341,9 +348,24 @@ func inferSemanticDependencies(resources []config.Resource) []config.Resource {
 			if dep := packageByHostName[res.Host+"\x00"+pkg]; dep != "" {
 				appendDependency(res, dep)
 			}
+		case "debian_sysctl":
+			module := requiredKernelModuleForSysctl(*res)
+			if module == "" {
+				continue
+			}
+			if dep := moduleByHostName[res.Host+"\x00"+module]; dep != "" {
+				appendDependency(res, dep)
+			}
 		}
 	}
 	return out
+}
+
+func requiredKernelModuleForSysctl(res config.Resource) string {
+	if stringAttr(res, "key", "") == "net.ipv4.tcp_congestion_control" && stringAttr(res, "value", "") == "bbr" {
+		return "tcp_bbr"
+	}
+	return ""
 }
 
 func appendDependency(res *config.Resource, dep string) {
