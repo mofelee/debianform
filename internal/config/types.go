@@ -469,6 +469,13 @@ func validateResource(res Resource) error {
 		if _, ok := stringAttr(res, "value"); !ok {
 			return fmt.Errorf("%s requires value", res.Address)
 		}
+	case "debian_group":
+		if name := resourceObjectName(res); name == "" {
+			return fmt.Errorf("%s requires name", res.Address)
+		}
+		if err := validateEnum(res, "ensure", []string{"present", "absent"}, "present"); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported resource type %s", res.Type)
 	}

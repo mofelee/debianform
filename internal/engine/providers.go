@@ -26,6 +26,7 @@ var providers = map[string]provider{
 	"debian_service":       serviceProvider{},
 	"debian_kernel_module": kernelModuleProvider{},
 	"debian_sysctl":        sysctlProvider{},
+	"debian_group":         groupProvider{},
 }
 
 func lookupProvider(resType string) (provider, error) {

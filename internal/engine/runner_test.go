@@ -134,6 +134,91 @@ func TestPlanSysctlComparesRuntimeValue(t *testing.T) {
 	}
 }
 
+func TestPlanGroupFromGetent(t *testing.T) {
+	withGID := config.Resource{
+		Type: "debian_group", Name: "deploy", Address: "debian_group.deploy", Host: "server1",
+		Attrs: map[string]any{"name": "deploy", "gid": "1500"},
+	}
+	noGID := config.Resource{
+		Type: "debian_group", Name: "deploy", Address: "debian_group.deploy", Host: "server1",
+		Attrs: map[string]any{"name": "deploy"},
+	}
+	absent := config.Resource{
+		Type: "debian_group", Name: "old", Address: "debian_group.old", Host: "server1",
+		Attrs: map[string]any{"name": "old", "ensure": "absent"},
+	}
+
+	cases := map[string]struct {
+		res        config.Resource
+		getent     string
+		wantAction string
+	}{
+		"create when missing": {res: withGID, getent: "\n", wantAction: "create"},
+		"gid matches":         {res: withGID, getent: "deploy:x:1500:\n", wantAction: "no-op"},
+		"gid drift":           {res: withGID, getent: "deploy:x:1400:alice\n", wantAction: "update"},
+		"present without gid": {res: noGID, getent: "deploy:x:1400:\n", wantAction: "no-op"},
+		"absent but present":  {res: absent, getent: "old:x:2000:\n", wantAction: "delete"},
+		"absent and missing":  {res: absent, getent: "\n", wantAction: "no-op"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{reply: func(_, _ string) (sshx.Result, error) {
+				return sshx.Result{Stdout: tc.getent}, nil
+			}}
+			got := planFixture(t, runner, tc.res)
+			if got.Action != tc.wantAction {
+				t.Fatalf("action = %q, want %q", got.Action, tc.wantAction)
+			}
+			if !strings.Contains(runner.scripts[0], "getent group") {
+				t.Fatalf("expected a getent group probe, got %q", runner.scripts[0])
+			}
+		})
+	}
+}
+
+func TestApplyGroupEmitsExpectedCommands(t *testing.T) {
+	cases := map[string]struct {
+		res         config.Resource
+		wantSubstrs []string
+	}{
+		"system group with gid": {
+			res: config.Resource{
+				Type: "debian_group", Name: "svc", Address: "debian_group.svc", Host: "server1",
+				Attrs: map[string]any{"name": "svc", "gid": "1600", "system": true},
+			},
+			wantSubstrs: []string{"groupadd -r -g '1600' 'svc'", "groupmod -g '1600' 'svc'"},
+		},
+		"delete": {
+			res: config.Resource{
+				Type: "debian_group", Name: "svc", Address: "debian_group.svc", Host: "server1",
+				Attrs: map[string]any{"name": "svc", "ensure": "absent"},
+			},
+			wantSubstrs: []string{"groupdel 'svc'"},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{}
+			e := &Engine{runner: runner}
+			d, err := groupProvider{}.Desired(tc.res)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := (groupProvider{}).Apply(context.Background(), e, change(tc.res, d, "create", "")); err != nil {
+				t.Fatal(err)
+			}
+			if len(runner.scripts) != 1 {
+				t.Fatalf("expected one script, got %d", len(runner.scripts))
+			}
+			for _, want := range tc.wantSubstrs {
+				if !strings.Contains(runner.scripts[0], want) {
+					t.Fatalf("script %q missing %q", runner.scripts[0], want)
+				}
+			}
+		})
+	}
+}
+
 func TestPlanResourceRejectsUnknownType(t *testing.T) {
 	e := &Engine{runner: &fakeRunner{}}
 	res := config.Resource{Type: "debian_bogus", Name: "x", Address: "debian_bogus.x", Host: "server1"}

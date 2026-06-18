@@ -74,6 +74,8 @@ type Desired struct {
 	Persist       bool
 	ApplyRuntime  bool
 	Validate      bool
+	GID           string
+	System        bool
 }
 
 func New(cfg *config.Config, runner Runner, backend *state.SSHBackend) *Engine {

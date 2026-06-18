@@ -330,6 +330,12 @@ locals {
   }
 }
 
+debian_group "deploy" {
+  host = "debian_ci"
+  name = "debianform-deploy"
+  gid  = 4242
+}
+
 debian_directory "managed" {
   host  = "debian_ci"
   path  = "/var/lib/debianform-ci/managed"
@@ -365,6 +371,7 @@ printf '%s\n' "$INITIAL_PLAN"
 grep -q "debian_directory.managed" <<<"$INITIAL_PLAN"
 grep -q 'debian_file.managed\["primary"\]' <<<"$INITIAL_PLAN"
 grep -q 'debian_file.managed\["secondary"\]' <<<"$INITIAL_PLAN"
+grep -q "debian_group.deploy" <<<"$INITIAL_PLAN"
 grep -q "handler.record_change" <<<"$INITIAL_PLAN"
 
 log "applying initial configuration"
@@ -379,6 +386,8 @@ ssh_vm "test \"\$(stat -c %a /var/lib/debianform-ci/managed/secondary.conf)\" = 
 ssh_vm "test \"\$(wc -l < /var/lib/debianform-ci/handler.log)\" = 1"
 ssh_vm "test -s /var/lib/debianform-ci/state.json && test -e /var/lock/debianform-ci/state.lock"
 ssh_vm "grep -q 'debian_file.managed' /var/lib/debianform-ci/state.json"
+ssh_vm "getent group debianform-deploy >/dev/null"
+ssh_vm "test \"\$(getent group debianform-deploy | cut -d: -f3)\" = 4242"
 
 NOOP_PLAN="$(dbf plan -f "$CONFIG_FILE")"
 printf '%s\n' "$NOOP_PLAN"
@@ -399,5 +408,17 @@ dbf apply -f "$CONFIG_FILE" --auto-approve
 dbf check -f "$CONFIG_FILE"
 ssh_vm "test \"\$(cat /var/lib/debianform-ci/managed/primary.conf)\" = 'managed primary'"
 ssh_vm "test \"\$(wc -l < /var/lib/debianform-ci/handler.log)\" = 2"
+
+log "introducing group drift and verifying repair"
+ssh_vm "groupmod -g 4243 debianform-deploy"
+if dbf check -f "$CONFIG_FILE" >"$WORK_DIR/group-drift-check.log" 2>&1; then
+  printf 'dbf check unexpectedly accepted group drift\n' >&2
+  exit 1
+fi
+cat "$WORK_DIR/group-drift-check.log"
+grep -q "debian_group.deploy" "$WORK_DIR/group-drift-check.log"
+dbf apply -f "$CONFIG_FILE" --auto-approve
+dbf check -f "$CONFIG_FILE"
+ssh_vm "test \"\$(getent group debianform-deploy | cut -d: -f3)\" = 4242"
 
 log "integration test passed"
