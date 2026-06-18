@@ -40,18 +40,7 @@ func (r *Runner) Run(ctx context.Context, host string, script string) (Result, e
 }
 
 func (r *Runner) RunCommand(ctx context.Context, host string, remoteCommand string) (Result, error) {
-	args := append(r.SSHArgs(host), "sh", "-c", remoteCommand)
-	cmd := exec.CommandContext(ctx, "ssh", args...)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	result := Result{Stdout: stdout.String(), Stderr: stderr.String()}
-	if err != nil {
-		return result, fmt.Errorf("ssh %s failed: %w: %s", host, err, strings.TrimSpace(result.Stderr))
-	}
-	return result, nil
+	return r.Run(ctx, host, remoteCommand+"\n")
 }
 
 func (r *Runner) SSHArgs(host string) []string {

@@ -28,7 +28,8 @@ type Options struct {
 }
 
 type Plan struct {
-	Changes []Change
+	Changes  []Change
+	Handlers []HandlerRun
 }
 
 type Change struct {
@@ -37,6 +38,13 @@ type Change struct {
 	Summary  string
 	Resource config.Resource
 	Desired  Desired
+}
+
+type HandlerRun struct {
+	Address string
+	Host    string
+	Command string
+	Reasons []string
 }
 
 type Desired struct {
@@ -60,6 +68,9 @@ func New(cfg *config.Config, runner *sshx.Runner, backend *state.SSHBackend) *En
 }
 
 func (e *Engine) Plan(ctx context.Context, opts Options) (Plan, error) {
+	if _, err := e.backend.Read(ctx); err != nil {
+		return Plan{}, err
+	}
 	resources, err := e.resources(opts)
 	if err != nil {
 		return Plan{}, err
@@ -74,7 +85,7 @@ func (e *Engine) Plan(ctx context.Context, opts Options) (Plan, error) {
 			changes = append(changes, change)
 		}
 	}
-	return Plan{Changes: changes}, nil
+	return Plan{Changes: changes, Handlers: e.handlerRuns(changes)}, nil
 }
 
 func (e *Engine) Apply(ctx context.Context, opts Options) (Plan, error) {
@@ -98,6 +109,14 @@ func (e *Engine) Apply(ctx context.Context, opts Options) (Plan, error) {
 			return plan, err
 		}
 	}
+	handlers := e.handlerRuns(plan.Changes)
+	for _, handler := range handlers {
+		if err := e.runHandler(ctx, handler); err != nil {
+			return plan, err
+		}
+		st.Resources[handler.Address] = stateForHandler(handler)
+	}
+	plan.Handlers = handlers
 	resources, err := e.resources(opts)
 	if err != nil {
 		return plan, err
@@ -116,7 +135,7 @@ func (e *Engine) Apply(ctx context.Context, opts Options) (Plan, error) {
 }
 
 func (p Plan) HasChanges() bool {
-	return len(p.Changes) > 0
+	return len(p.Changes) > 0 || len(p.Handlers) > 0
 }
 
 func PrintPlan(w io.Writer, plan Plan) {
@@ -134,6 +153,12 @@ func PrintPlan(w io.Writer, plan Plan) {
 			symbol = "-"
 		}
 		fmt.Fprintf(w, "  %s %s %s\n", symbol, change.Address, change.Summary)
+		for _, notify := range change.Resource.Notify {
+			fmt.Fprintf(w, "    notifies %s\n", notify)
+		}
+	}
+	for _, handler := range plan.Handlers {
+		fmt.Fprintf(w, "  ! %s run handler on %s\n", handler.Address, handler.Host)
 	}
 }
 
@@ -146,6 +171,50 @@ func (e *Engine) resources(opts Options) ([]config.Resource, error) {
 		resources = append(resources, res)
 	}
 	return topoSort(resources)
+}
+
+func (e *Engine) handlerRuns(changes []Change) []HandlerRun {
+	handlers := make(map[string]config.Handler, len(e.cfg.Handlers))
+	order := make(map[string]int, len(e.cfg.Handlers))
+	for i, handler := range e.cfg.Handlers {
+		handlers[handler.Address] = handler
+		order[handler.Address] = i
+	}
+	reasons := map[string][]string{}
+	for _, change := range changes {
+		for _, target := range change.Resource.Notify {
+			if _, ok := handlers[target]; !ok {
+				continue
+			}
+			reasons[target] = append(reasons[target], change.Address)
+		}
+	}
+	addresses := make([]string, 0, len(reasons))
+	for address := range reasons {
+		addresses = append(addresses, address)
+	}
+	sort.Slice(addresses, func(i, j int) bool {
+		return order[addresses[i]] < order[addresses[j]]
+	})
+	out := make([]HandlerRun, 0, len(addresses))
+	for _, address := range addresses {
+		handler := handlers[address]
+		out = append(out, HandlerRun{
+			Address: handler.Address,
+			Host:    handler.Host,
+			Command: handler.Command,
+			Reasons: reasons[address],
+		})
+	}
+	return out
+}
+
+func (e *Engine) runHandler(ctx context.Context, handler HandlerRun) error {
+	_, err := e.runner.RunCommand(ctx, handler.Host, handler.Command)
+	if err != nil {
+		return fmt.Errorf("%s failed: %w", handler.Address, err)
+	}
+	return nil
 }
 
 func topoSort(resources []config.Resource) ([]config.Resource, error) {
@@ -358,6 +427,16 @@ func stateForResource(res config.Resource, desired Desired) state.ResourceState 
 		out["version"] = desired.Version
 	}
 	return out
+}
+
+func stateForHandler(handler HandlerRun) state.ResourceState {
+	return state.ResourceState{
+		"type":           "handler",
+		"host":           handler.Host,
+		"command_sha256": hash(handler.Command),
+		"reasons":        handler.Reasons,
+		"updated_at":     time.Now().UTC().Format(time.RFC3339),
+	}
 }
 
 func (e *Engine) planPackage(ctx context.Context, res config.Resource, d Desired) (Change, error) {

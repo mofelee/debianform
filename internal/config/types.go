@@ -13,6 +13,7 @@ type Config struct {
 	Hosts     map[string]Host
 	Locals    map[string]any
 	State     StateConfig
+	Handlers  []Handler
 	Resources []Resource
 }
 
@@ -30,6 +31,14 @@ type StateConfig struct {
 	LockPath string
 }
 
+type Handler struct {
+	Name    string
+	Address string
+	Host    string
+	Command string
+	Order   int
+}
+
 type Resource struct {
 	Type      string
 	Name      string
@@ -38,6 +47,7 @@ type Resource struct {
 	Host      string
 	Attrs     map[string]any
 	DependsOn []string
+	Notify    []string
 	Order     int
 }
 
@@ -95,6 +105,13 @@ func Load(files []string) (*Config, error) {
 				return nil, err
 			}
 			cfg.State = st
+		case "handler":
+			handler, err := loadHandler(block, moduleDir, cfg.Locals, order)
+			if err != nil {
+				return nil, err
+			}
+			cfg.Handlers = append(cfg.Handlers, handler)
+			order++
 		default:
 			resources, err := expandResource(block, moduleDir, cfg.Locals, order)
 			if err != nil {
@@ -117,6 +134,9 @@ func Load(files []string) (*Config, error) {
 		if err := validateResource(cfg.Resources[i]); err != nil {
 			return nil, err
 		}
+	}
+	if err := validateHandlers(cfg); err != nil {
+		return nil, err
 	}
 	return cfg, nil
 }
@@ -164,6 +184,31 @@ func loadState(block Block, moduleDir string, locals map[string]any) (StateConfi
 		return st, err
 	}
 	return st, nil
+}
+
+func loadHandler(block Block, moduleDir string, locals map[string]any, order int) (Handler, error) {
+	if block.Label == "" {
+		return Handler{}, fmt.Errorf("%s:%d: handler block requires a label", block.File, block.Line)
+	}
+	if !isLocalName(block.Label) {
+		return Handler{}, fmt.Errorf("%s:%d: handler name %q must use letters, digits, and underscores", block.File, block.Line, block.Label)
+	}
+	ctx := EvalContext{PathModule: moduleDir, Locals: locals}
+	host, err := requiredString(block, ctx, "host")
+	if err != nil {
+		return Handler{}, err
+	}
+	command, err := requiredString(block, ctx, "command")
+	if err != nil {
+		return Handler{}, err
+	}
+	return Handler{
+		Name:    block.Label,
+		Address: "handler." + block.Label,
+		Host:    host,
+		Command: command,
+		Order:   order,
+	}, nil
 }
 
 func expandResource(block Block, moduleDir string, locals map[string]any, order int) ([]Resource, error) {
@@ -229,6 +274,12 @@ func buildResource(block Block, ctx EvalContext, key string, order int) (Resourc
 	}
 	delete(attrs, "depends_on")
 
+	notify, err := depends(attrs["notify"])
+	if err != nil {
+		return Resource{}, fmt.Errorf("%s:%d: %s.%s notify: %w", block.File, block.Line, block.Type, block.Label, err)
+	}
+	delete(attrs, "notify")
+
 	var keyPtr *string
 	address := block.Type + "." + block.Label
 	if ctx.HasEach {
@@ -245,6 +296,7 @@ func buildResource(block Block, ctx EvalContext, key string, order int) (Resourc
 		Host:      host,
 		Attrs:     attrs,
 		DependsOn: deps,
+		Notify:    notify,
 		Order:     order,
 	}, nil
 }
@@ -365,6 +417,24 @@ func validateResource(res Resource) error {
 		}
 	default:
 		return fmt.Errorf("unsupported resource type %s", res.Type)
+	}
+	return nil
+}
+
+func validateHandlers(cfg *Config) error {
+	handlers := map[string]struct{}{}
+	for _, handler := range cfg.Handlers {
+		if _, exists := handlers[handler.Address]; exists {
+			return fmt.Errorf("duplicate handler %s", handler.Address)
+		}
+		handlers[handler.Address] = struct{}{}
+	}
+	for _, res := range cfg.Resources {
+		for _, target := range res.Notify {
+			if _, ok := handlers[target]; !ok {
+				return fmt.Errorf("%s notifies unknown handler %s", res.Address, target)
+			}
+		}
 	}
 	return nil
 }

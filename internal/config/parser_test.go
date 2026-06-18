@@ -96,6 +96,73 @@ debian_service "nginx" {
 	}
 }
 
+func TestLoadHandlerNotify(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = "server1"
+  path = "/var/lib/debianform/state.json"
+}
+
+handler "reload_nginx" {
+  host = "server1"
+  command = "systemctl reload nginx"
+}
+
+debian_file "nginx_default" {
+  host = "server1"
+  path = "/tmp/default"
+  content = "ok"
+  notify = [
+    handler.reload_nginx,
+  ]
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(cfg.Handlers), 1; got != want {
+		t.Fatalf("len(handlers) = %d, want %d", got, want)
+	}
+	if got, want := cfg.Handlers[0].Address, "handler.reload_nginx"; got != want {
+		t.Fatalf("handler address = %q, want %q", got, want)
+	}
+	if got, want := cfg.Resources[0].Notify[0], "handler.reload_nginx"; got != want {
+		t.Fatalf("notify = %q, want %q", got, want)
+	}
+}
+
+func TestLoadRejectsUnknownNotifyHandler(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = "server1"
+  path = "/var/lib/debianform/state.json"
+}
+
+debian_file "nginx_default" {
+  host = "server1"
+  path = "/tmp/default"
+  content = "ok"
+  notify = [
+    handler.reload_nginx,
+  ]
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load([]string{file}); err == nil {
+		t.Fatal("Load succeeded, want unknown handler error")
+	}
+}
+
 func TestLoadForEachLocalToSet(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "main.dbf.hcl")

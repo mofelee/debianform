@@ -34,3 +34,42 @@ func TestTopoSortKeepsDependenciesBeforeDependents(t *testing.T) {
 		t.Fatalf("second resource = %s, want %s", got, want)
 	}
 }
+
+func TestHandlerRunsDedupesAndUsesDeclarationOrder(t *testing.T) {
+	e := &Engine{
+		cfg: &config.Config{
+			Handlers: []config.Handler{
+				{Address: "handler.second", Host: "server1", Command: "echo second"},
+				{Address: "handler.first", Host: "server1", Command: "echo first"},
+			},
+		},
+	}
+	changes := []Change{
+		{
+			Address: "debian_file.a",
+			Resource: config.Resource{
+				Notify: []string{"handler.first", "handler.second"},
+			},
+		},
+		{
+			Address: "debian_file.b",
+			Resource: config.Resource{
+				Notify: []string{"handler.first"},
+			},
+		},
+	}
+
+	handlers := e.handlerRuns(changes)
+	if got, want := len(handlers), 2; got != want {
+		t.Fatalf("len(handlers) = %d, want %d", got, want)
+	}
+	if got, want := handlers[0].Address, "handler.second"; got != want {
+		t.Fatalf("first handler = %s, want %s", got, want)
+	}
+	if got, want := handlers[1].Address, "handler.first"; got != want {
+		t.Fatalf("second handler = %s, want %s", got, want)
+	}
+	if got, want := len(handlers[1].Reasons), 2; got != want {
+		t.Fatalf("len(first reasons) = %d, want %d", got, want)
+	}
+}

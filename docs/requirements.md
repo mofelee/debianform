@@ -36,6 +36,14 @@
 
 - `.dbf.hcl`
 
+默认加载规则：
+
+- 不传 `-f` 时，`dbf` 读取当前目录下所有 `*.dbf.hcl` 文件。
+- 文件按文件名排序后合并解析。
+- 默认不递归读取子目录。
+- 使用 `-f path/to/file.dbf.hcl` 时，只读取指定文件。
+- 这个模型类似 Terraform 的 root module：一个目录是一组配置文件，文件名只用于组织内容。
+
 示例：
 
 ```hcl
@@ -163,6 +171,40 @@ debian_networkd_file.native["20-wg0.netdev"]
 
 原生配置资源的 state 必须记录资源地址、目标主机、远端路径、内容 hash、owner、group、mode 和上次 apply 时间。用户可以在 `depends_on` 中引用整个 `for_each` 资源，也可以引用单个实例。
 
+### 4.3 `notify` 和 `handler`
+
+资源支持 `notify` meta-argument，用于在资源发生实际变更后触发 handler。
+
+handler 是一个延迟执行的命令块。它不参与普通 drift 比较，只在被变更资源通知后执行。
+
+示例：
+
+```hcl
+handler "reload_nginx" {
+  host    = "server1"
+  command = "systemctl reload nginx"
+}
+
+debian_file "nginx_conf" {
+  host   = "server1"
+  path   = "/etc/nginx/nginx.conf"
+  source = "${path.module}/files/nginx.conf"
+
+  notify = [
+    handler.reload_nginx,
+  ]
+}
+```
+
+执行规则：
+
+- 只有资源实际发生变更并成功 apply 后，才会通知 handler。
+- 普通资源全部 apply 成功后，才执行 pending handler。
+- 同一个 handler 被多个资源通知时，只执行一次。
+- handler 按声明顺序执行。
+- `apply` 中途失败时，默认不执行尚未执行的 handler。
+- handler 成功运行后，state 中记录 `handler.name`、主机、命令 hash、触发原因和运行时间。
+
 ## 5. CLI 需求
 
 第一版 CLI 暂定为：
@@ -179,7 +221,7 @@ dbf check
 
 - `fmt`：格式化 HCL 配置。
 - `validate`：解析配置并检查资源字段是否合法。
-- `plan`：连接远程主机，读取当前状态，生成变更计划。
+- `plan`：读取配置、读取远端 state、连接远程主机读取当前真实状态，生成变更计划。
 - `apply`：执行变更计划。
 - `check`：只检查远端状态是否符合配置，不做修改。
 
@@ -189,6 +231,14 @@ dbf check
 dbf plan -f main.dbf.hcl
 dbf apply -f main.dbf.hcl
 dbf apply --host server1
+```
+
+不传 `-f` 的常用用法：
+
+```bash
+dbf validate
+dbf plan
+dbf apply
 ```
 
 ## 6. 连接模型
@@ -268,7 +318,8 @@ state 文件保存在 SSH 服务器上的指定路径中，而不是默认保存
 - 删除配置中的资源时，默认不自动删除远端资源，除非资源显式支持 destroy 语义。
 - state 后端必须支持锁。
 - `apply` 必须在持有远端独占锁期间完成读取 state、读取远端真实状态、生成计划、执行变更、写回 state。
-- `plan` 可以读取 state 并展示计划，但 `apply` 不应直接执行之前生成的过期计划；`apply` 必须重新拿锁并重新计算计划。
+- `plan` 必须读取 state 并展示计划，但 `apply` 不应直接执行之前生成的过期计划；`apply` 必须重新拿锁并重新计算计划。
+- 第一版差异判断以远端真实状态为主，state 用于共享协作状态、记录资源地址和辅助元数据。
 
 state 配置示例：
 
@@ -600,6 +651,7 @@ type Resource interface {
 - `host`
 - SSH config alias 主机解析
 - 通用 `for_each` 展开和资源地址生成
+- 通用 `notify` 和 `handler` 延迟执行
 - `debian_package`
 - `debian_file`
 - `debian_directory`
