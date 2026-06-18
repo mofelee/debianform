@@ -33,7 +33,7 @@
 
 ## 4. 配置语言
 
-配置文件使用 HCL2 风格语法。工具借用 HCL 的表达能力和可读性，但不要求配置文件能被 OpenTofu 直接执行。
+配置文件使用 HashiCorp HCL v2 解析。工具借用 HCL 的表达能力和可读性，但不要求配置文件能被 OpenTofu 直接执行；DebianForm 只定义自己的资源类型、函数、变量和 meta-argument 语义。
 
 配置文件后缀：
 
@@ -46,6 +46,16 @@
 - 默认不递归读取子目录。
 - 使用 `-f path/to/file.dbf.hcl` 时，只读取指定文件。
 - 这个模型类似 Terraform 的 root module：一个目录是一组配置文件，文件名只用于组织内容。
+
+当前语言能力：
+
+- HCL 原生字符串、数字、布尔值、list、object、heredoc 和模板插值。
+- 普通字符串必须加引号；裸资源地址只在 `depends_on` 和 `notify` 中作为静态引用处理。
+- `locals { ... }` 和 `local.name` 引用。
+- `path.module`、`each.key`、`each.value`。
+- `file(path)` 和 `toset(list)`。
+- 条件表达式、比较表达式，以及 HCL v2 支持的基础表达式。
+- `depends_on` 和 `notify` 使用静态资源地址引用，不按普通变量表达式求值。
 
 示例：
 

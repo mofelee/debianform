@@ -97,6 +97,71 @@ debian_service "nginx" {
 	}
 }
 
+func TestLoadResourceInstanceRefs(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = "server1"
+  path = "/var/lib/debianform/state.json"
+}
+
+debian_file "managed" {
+  for_each = {
+    "primary" = "managed primary\n"
+  }
+
+  host    = "server1"
+  path    = "/tmp/${each.key}"
+  content = each.value
+}
+
+debian_service "example" {
+  host = "server1"
+  depends_on = [
+    debian_file.managed["primary"],
+  ]
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var service Resource
+	for _, res := range cfg.Resources {
+		if res.Address == "debian_service.example" {
+			service = res
+			break
+		}
+	}
+	if service.Address == "" {
+		t.Fatal("debian_service.example not found")
+	}
+	if got, want := service.DependsOn[0], `debian_file.managed["primary"]`; got != want {
+		t.Fatalf("dep = %q, want %q", got, want)
+	}
+}
+
+func TestLoadRejectsBareStringAttribute(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = server1
+  path = "/var/lib/debianform/state.json"
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load([]string{file}); err == nil || !strings.Contains(err.Error(), "Unknown variable") {
+		t.Fatalf("Load() error = %v, want unknown variable for bare string", err)
+	}
+}
+
 func TestLoadHandlerNotify(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "main.dbf.hcl")
@@ -326,7 +391,7 @@ locals {
 	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ParseFile(file); err == nil || !strings.Contains(err.Error(), `expected ':'`) {
+	if _, err := ParseFile(file); err == nil || !strings.Contains(err.Error(), "conditional") {
 		t.Fatalf("ParseFile() error = %v, want missing colon error", err)
 	}
 }

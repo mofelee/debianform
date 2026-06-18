@@ -2,7 +2,7 @@
 
 `debianform` is a small Debian configuration manager. The CLI command is `dbf`.
 
-This MVP uses a restricted `.dbf.hcl` syntax, runs locally, connects to remote Debian hosts through `ssh` as `root`, and stores state on an SSH host with a remote `flock` lock.
+This MVP uses `.dbf.hcl` files parsed with HashiCorp HCL v2, runs locally, connects to remote Debian hosts through `ssh` as `root`, and stores state on an SSH host with a remote `flock` lock.
 
 Documentation:
 
@@ -204,11 +204,14 @@ dbf check -f examples/bbr.dbf.hcl
 
 Change the SSH host alias and state paths before using the example on another host.
 
-## Supported HCL Subset
+## Supported HCL
 
-- Blocks: `state "ssh"`, optional `host "name"`, and resource blocks.
-- Handlers: `handler "name"` blocks and resource `notify`.
+DebianForm uses the HashiCorp HCL v2 parser and expression evaluator. It does not implement Terraform/OpenTofu itself; only the functions, variables, meta-arguments, and resource blocks listed here are part of the DebianForm language.
+
+- Blocks: `state "ssh"`, optional `host "name"`, `handler "name"`, and resource blocks.
+- Meta-arguments: resource `for_each`, `depends_on`, and `notify`.
 - Strings, booleans, numbers, lists, maps, heredocs.
+- Ordinary strings must be quoted; bare resource addresses are only special in `depends_on` and `notify`.
 - `file("path")`.
 - `toset(["a", "b"])` for Terraform-style string sets.
 - Conditional expressions: `condition ? true_value : false_value`.
@@ -216,5 +219,6 @@ Change the SSH host alias and state paths before using the example on another ho
 - `${path.module}`, `${each.key}`, `${each.value}` interpolation.
 - `locals { ... }` and `local.name` references.
 - `for_each` over maps or lists of strings.
+- Resource and handler addresses in `depends_on` and `notify`, such as `debian_file.nginx_conf` or `handler.reload_nginx`.
 
 For the current example, see [examples/main.dbf.hcl](examples/main.dbf.hcl).

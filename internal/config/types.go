@@ -6,6 +6,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/hashicorp/hcl/v2"
+	"github.com/zclconf/go-cty/cty"
 )
 
 type Config struct {
@@ -252,7 +255,7 @@ func expandResource(block Block, moduleDir string, locals map[string]any, order 
 func buildResource(block Block, ctx EvalContext, key string, order int) (Resource, error) {
 	attrs := map[string]any{}
 	for name, expr := range block.Attrs {
-		if name == "for_each" {
+		if name == "for_each" || name == "depends_on" || name == "notify" {
 			continue
 		}
 		value, err := Eval(expr, ctx)
@@ -268,17 +271,15 @@ func buildResource(block Block, ctx EvalContext, key string, order int) (Resourc
 	}
 	delete(attrs, "host")
 
-	deps, err := depends(attrs["depends_on"])
+	deps, err := refs(block.Attrs["depends_on"])
 	if err != nil {
 		return Resource{}, fmt.Errorf("%s:%d: %s.%s depends_on: %w", block.File, block.Line, block.Type, block.Label, err)
 	}
-	delete(attrs, "depends_on")
 
-	notify, err := depends(attrs["notify"])
+	notify, err := refs(block.Attrs["notify"])
 	if err != nil {
 		return Resource{}, fmt.Errorf("%s:%d: %s.%s notify: %w", block.File, block.Line, block.Type, block.Label, err)
 	}
-	delete(attrs, "notify")
 
 	var keyPtr *string
 	address := block.Type + "." + block.Label
@@ -362,23 +363,58 @@ func optionalString(block Block, ctx EvalContext, name string) (string, error) {
 	}
 }
 
-func depends(value any) ([]string, error) {
-	if value == nil {
+func refs(expr Expr) ([]string, error) {
+	if expr == nil {
 		return nil, nil
 	}
-	list, ok := value.([]any)
-	if !ok {
-		return nil, fmt.Errorf("must be a list")
+	items, diags := hcl.ExprList(expr)
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("%s", diags.Error())
 	}
-	out := make([]string, 0, len(list))
-	for _, item := range list {
-		s, ok := item.(string)
-		if !ok || s == "" {
-			return nil, fmt.Errorf("entries must be resource addresses")
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		traversal, diags := hcl.AbsTraversalForExpr(item)
+		if diags.HasErrors() {
+			return nil, fmt.Errorf("%s", diags.Error())
 		}
-		out = append(out, s)
+		address, err := traversalAddress(traversal)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, address)
 	}
 	return out, nil
+}
+
+func traversalAddress(traversal hcl.Traversal) (string, error) {
+	if len(traversal) < 2 {
+		return "", fmt.Errorf("entries must be resource addresses")
+	}
+	root, ok := traversal[0].(hcl.TraverseRoot)
+	if !ok || root.Name == "" {
+		return "", fmt.Errorf("entries must be resource addresses")
+	}
+	name, ok := traversal[1].(hcl.TraverseAttr)
+	if !ok || name.Name == "" {
+		return "", fmt.Errorf("entries must be resource addresses")
+	}
+
+	address := root.Name + "." + name.Name
+	for _, part := range traversal[2:] {
+		switch step := part.(type) {
+		case hcl.TraverseIndex:
+			key := step.Key
+			key, _ = key.UnmarkDeep()
+			if key.IsNull() || !key.IsKnown() || !key.Type().Equals(cty.String) {
+				return "", fmt.Errorf("resource instance keys must be strings")
+			}
+			address += "[" + strconv.Quote(key.AsString()) + "]"
+		default:
+			return "", fmt.Errorf("resource addresses may only use string instance keys")
+		}
+	}
+
+	return address, nil
 }
 
 func validateResource(res Resource) error {
