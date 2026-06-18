@@ -306,6 +306,9 @@ wait_for_ssh
 ssh_vm "cloud-init status --wait >/dev/null && test -e /run/debianform-cloud-init-ready"
 ssh_vm ". /etc/os-release && test \"\$ID\" = debian && test \"\$VERSION_ID\" = 13"
 
+ssh-keygen -q -t ed25519 -N "" -f "$WORK_DIR/app_key" -C "debianform-app@ci"
+APP_PUBLIC_KEY="$(cat "$WORK_DIR/app_key.pub")"
+
 cat >"$CONFIG_FILE" <<EOF
 host "debian_ci" {
   address       = "$VM_IP"
@@ -349,6 +352,16 @@ debian_user "app" {
   ]
 }
 
+debian_authorized_key "app" {
+  host = "debian_ci"
+  user = "debianform-app"
+  key  = "$APP_PUBLIC_KEY"
+
+  depends_on = [
+    debian_user.app,
+  ]
+}
+
 debian_directory "managed" {
   host  = "debian_ci"
   path  = "/var/lib/debianform-ci/managed"
@@ -386,6 +399,7 @@ grep -q 'debian_file.managed\["primary"\]' <<<"$INITIAL_PLAN"
 grep -q 'debian_file.managed\["secondary"\]' <<<"$INITIAL_PLAN"
 grep -q "debian_group.deploy" <<<"$INITIAL_PLAN"
 grep -q "debian_user.app" <<<"$INITIAL_PLAN"
+grep -q "debian_authorized_key.app" <<<"$INITIAL_PLAN"
 grep -q "handler.record_change" <<<"$INITIAL_PLAN"
 
 log "applying initial configuration"
@@ -406,6 +420,11 @@ ssh_vm "getent passwd debianform-app >/dev/null"
 ssh_vm "test \"\$(getent passwd debianform-app | cut -d: -f3)\" = 4250"
 ssh_vm "test \"\$(id -gn debianform-app)\" = debianform-deploy"
 ssh_vm "test \"\$(getent passwd debianform-app | cut -d: -f7)\" = /usr/sbin/nologin"
+ssh_vm "test -f /home/debianform-app/.ssh/authorized_keys"
+ssh_vm "grep -qF '$APP_PUBLIC_KEY' /home/debianform-app/.ssh/authorized_keys"
+ssh_vm "test \"\$(stat -c %a /home/debianform-app/.ssh)\" = 700"
+ssh_vm "test \"\$(stat -c %a /home/debianform-app/.ssh/authorized_keys)\" = 600"
+ssh_vm "test \"\$(stat -c %U /home/debianform-app/.ssh/authorized_keys)\" = debianform-app"
 
 NOOP_PLAN="$(dbf plan -f "$CONFIG_FILE")"
 printf '%s\n' "$NOOP_PLAN"
@@ -450,5 +469,17 @@ grep -q "debian_user.app" "$WORK_DIR/user-drift-check.log"
 dbf apply -f "$CONFIG_FILE" --auto-approve
 dbf check -f "$CONFIG_FILE"
 ssh_vm "test \"\$(getent passwd debianform-app | cut -d: -f7)\" = /usr/sbin/nologin"
+
+log "introducing authorized_key drift and verifying repair"
+ssh_vm ": > /home/debianform-app/.ssh/authorized_keys"
+if dbf check -f "$CONFIG_FILE" >"$WORK_DIR/key-drift-check.log" 2>&1; then
+  printf 'dbf check unexpectedly accepted authorized_key drift\n' >&2
+  exit 1
+fi
+cat "$WORK_DIR/key-drift-check.log"
+grep -q "debian_authorized_key.app" "$WORK_DIR/key-drift-check.log"
+dbf apply -f "$CONFIG_FILE" --auto-approve
+dbf check -f "$CONFIG_FILE"
+ssh_vm "grep -qF '$APP_PUBLIC_KEY' /home/debianform-app/.ssh/authorized_keys"
 
 log "integration test passed"

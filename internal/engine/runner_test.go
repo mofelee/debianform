@@ -318,6 +318,97 @@ func TestApplyUserEmitsExpectedCommands(t *testing.T) {
 	}
 }
 
+func TestPlanAuthorizedKey(t *testing.T) {
+	present := config.Resource{
+		Type: "debian_authorized_key", Name: "app", Address: "debian_authorized_key.app", Host: "server1",
+		Attrs: map[string]any{"user": "deployer", "key": "ssh-ed25519 AAAAC3Nz deploy@ci"},
+	}
+	absent := config.Resource{
+		Type: "debian_authorized_key", Name: "app", Address: "debian_authorized_key.app", Host: "server1",
+		Attrs: map[string]any{"user": "deployer", "key": "ssh-ed25519 AAAAC3Nz deploy@ci", "ensure": "absent"},
+	}
+
+	cases := map[string]struct {
+		res        config.Resource
+		stdout     string
+		wantAction string
+	}{
+		"create when missing": {res: present, stdout: "absent\n", wantAction: "create"},
+		"present in sync":     {res: present, stdout: "present\n", wantAction: "no-op"},
+		"absent but present":  {res: absent, stdout: "present\n", wantAction: "delete"},
+		"absent and missing":  {res: absent, stdout: "absent\n", wantAction: "no-op"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{reply: func(_, _ string) (sshx.Result, error) {
+				return sshx.Result{Stdout: tc.stdout}, nil
+			}}
+			got := planFixture(t, runner, tc.res)
+			if got.Action != tc.wantAction {
+				t.Fatalf("action = %q, want %q", got.Action, tc.wantAction)
+			}
+			if !strings.Contains(runner.scripts[0], "authorized_keys") {
+				t.Fatalf("expected authorized_keys probe, got %q", runner.scripts[0])
+			}
+		})
+	}
+}
+
+func TestApplyAuthorizedKeyEmitsExpectedCommands(t *testing.T) {
+	present := config.Resource{
+		Type: "debian_authorized_key", Name: "app", Address: "debian_authorized_key.app", Host: "server1",
+		Attrs: map[string]any{"user": "deployer", "key": "ssh-ed25519 AAAAC3Nz deploy@ci"},
+	}
+	absent := config.Resource{
+		Type: "debian_authorized_key", Name: "app", Address: "debian_authorized_key.app", Host: "server1",
+		Attrs: map[string]any{"user": "deployer", "key": "ssh-ed25519 AAAAC3Nz deploy@ci", "ensure": "absent"},
+	}
+
+	cases := map[string]struct {
+		res         config.Resource
+		wantSubstrs []string
+	}{
+		"create": {res: present, wantSubstrs: []string{
+			"chmod 0700 \"$dir\"",
+			"printf '%s\\n' 'ssh-ed25519 AAAAC3Nz deploy@ci' >> \"$file\"",
+			"chmod 0600 \"$file\"",
+			"chown 'deployer':\"$group\" \"$dir\" \"$file\"",
+		}},
+		"delete": {res: absent, wantSubstrs: []string{
+			"!($1==t && $2==b)",
+			"cat \"$tmp\" > \"$file\"",
+		}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{}
+			e := &Engine{runner: runner}
+			d, err := authorizedKeyProvider{}.Desired(tc.res)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := (authorizedKeyProvider{}).Apply(context.Background(), e, change(tc.res, d, "create", "")); err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tc.wantSubstrs {
+				if !strings.Contains(runner.scripts[0], want) {
+					t.Fatalf("script %q missing %q", runner.scripts[0], want)
+				}
+			}
+		})
+	}
+}
+
+func TestAuthorizedKeyDesiredRejectsMalformedKey(t *testing.T) {
+	res := config.Resource{
+		Type: "debian_authorized_key", Name: "app", Address: "debian_authorized_key.app", Host: "server1",
+		Attrs: map[string]any{"user": "deployer", "key": "not-a-real-key"},
+	}
+	if _, err := (authorizedKeyProvider{}).Desired(res); err == nil {
+		t.Fatal("expected error for a key without a body")
+	}
+}
+
 func TestPlanResourceRejectsUnknownType(t *testing.T) {
 	e := &Engine{runner: &fakeRunner{}}
 	res := config.Resource{Type: "debian_bogus", Name: "x", Address: "debian_bogus.x", Host: "server1"}

@@ -18,16 +18,17 @@ type provider interface {
 }
 
 var providers = map[string]provider{
-	"debian_package":       packageProvider{},
-	"debian_file":          fileProvider{},
-	"debian_networkd_file": networkdFileProvider{},
-	"debian_nftables_file": nftablesProvider{},
-	"debian_directory":     directoryProvider{},
-	"debian_service":       serviceProvider{},
-	"debian_kernel_module": kernelModuleProvider{},
-	"debian_sysctl":        sysctlProvider{},
-	"debian_group":         groupProvider{},
-	"debian_user":          userProvider{},
+	"debian_package":        packageProvider{},
+	"debian_file":           fileProvider{},
+	"debian_networkd_file":  networkdFileProvider{},
+	"debian_nftables_file":  nftablesProvider{},
+	"debian_directory":      directoryProvider{},
+	"debian_service":        serviceProvider{},
+	"debian_kernel_module":  kernelModuleProvider{},
+	"debian_sysctl":         sysctlProvider{},
+	"debian_group":          groupProvider{},
+	"debian_user":           userProvider{},
+	"debian_authorized_key": authorizedKeyProvider{},
 }
 
 func lookupProvider(resType string) (provider, error) {

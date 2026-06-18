@@ -483,6 +483,16 @@ func validateResource(res Resource) error {
 		if err := validateEnum(res, "ensure", []string{"present", "absent"}, "present"); err != nil {
 			return err
 		}
+	case "debian_authorized_key":
+		if _, ok := stringAttr(res, "user"); !ok {
+			return fmt.Errorf("%s requires user", res.Address)
+		}
+		if !hasOneOf(res, "key", "source") {
+			return fmt.Errorf("%s requires key or source", res.Address)
+		}
+		if err := validateEnum(res, "ensure", []string{"present", "absent"}, "present"); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported resource type %s", res.Type)
 	}
