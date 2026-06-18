@@ -50,8 +50,9 @@ debian_package "nginx" {
   ensure = "present"
 }
 
-debian_file "/etc/nginx/sites-enabled/default" {
+debian_file "nginx_default" {
   host    = "server1"
+  path    = "/etc/nginx/sites-enabled/default"
   content = file("${path.module}/files/nginx-default.conf")
   owner   = "root"
   group   = "root"
@@ -64,6 +65,95 @@ debian_service "nginx" {
   state   = "running"
 }
 ```
+
+资源 block 的第一个 label 是本地资源名，用于 state 地址、依赖引用和日志输出。远端真实对象名应通过字段表达，例如文件使用 `path`，服务和软件包默认使用本地资源名，也可以通过 `name` 覆盖。
+
+本地资源名必须是简单标识符，建议只使用小写字母、数字和下划线，例如 `nginx_default`。需要连字符、点号、斜杠等字符的远端对象名，应放在 `name`、`path` 或 `for_each` key 中。
+
+资源地址示例：
+
+```text
+debian_package.nginx
+debian_file.nginx_default
+debian_service.nginx
+```
+
+### 4.1 `for_each`
+
+资源支持 `for_each` meta-argument，用于从 map 批量生成资源实例。
+
+第一版只要求支持 map。map key 必须是稳定字符串，并会成为 state 地址的一部分。map value 可以是字符串、数字、布尔值、list、object 或嵌套结构。
+
+`for_each` 资源中可使用：
+
+- `each.key`：当前实例的 key。
+- `each.value`：当前实例的 value。
+
+示例：
+
+```hcl
+debian_package "base" {
+  for_each = {
+    curl = true
+    jq   = true
+    vim  = true
+  }
+
+  host = "server1"
+  name = each.key
+}
+```
+
+展开后的 state 地址：
+
+```text
+debian_package.base["curl"]
+debian_package.base["jq"]
+debian_package.base["vim"]
+```
+
+`for_each` 的 key 变化会被视为资源地址变化。第一版不自动迁移 state 地址；如果 key 改名，`dbf` 会把旧地址视为配置中已移除，把新地址视为新增资源。
+
+### 4.2 原生配置文件
+
+对于字段很多、变化快、原生格式已经足够清晰的系统配置，`dbf` 应允许用户直接写原生配置文件，同时仍然通过资源地址进入 state。
+
+例如 systemd-networkd 可以直接写 `.network`、`.netdev`、`.link` 文件：
+
+```hcl
+debian_networkd_file "native" {
+  for_each = {
+    "10-eth0.network" = <<-EOF
+      [Match]
+      Name=eth0
+
+      [Network]
+      Address=192.0.2.10/24
+      Gateway=192.0.2.1
+      DNS=1.1.1.1
+    EOF
+
+    "20-wg0.netdev" = <<-EOF
+      [NetDev]
+      Name=wg0
+      Kind=wireguard
+    EOF
+  }
+
+  host    = "server1"
+  name    = each.key
+  content = each.value
+}
+```
+
+对应 state 地址：
+
+```text
+debian_networkd_file.native["10-eth0.network"]
+debian_networkd_file.native["20-wg0.netdev"]
+```
+
+原生配置资源的 state 必须记录资源地址、目标主机、远端路径、内容 hash、owner、group、mode 和上次 apply 时间。用户可以在 `depends_on` 中引用整个 `for_each` 资源，也可以引用单个实例。
 
 ## 5. CLI 需求
 
@@ -165,6 +255,7 @@ state 文件保存在 SSH 服务器上的指定路径中，而不是默认保存
 原则：
 
 - 远端实际状态优先。
+- state 条目使用规范资源地址作为主键，例如 `debian_file.nginx_default` 或 `debian_networkd_file.native["10-eth0.network"]`。
 - state 用于记录资源 ID、上次 apply 时间、内容 hash、下载 hash 等辅助信息。
 - 删除配置中的资源时，默认不自动删除远端资源，除非资源显式支持 destroy 语义。
 - state 后端必须支持锁。
@@ -178,6 +269,26 @@ state "ssh" {
   host      = "server1"
   path      = "/var/lib/debianform/state.json"
   lock_path = "/var/lock/debianform/state.lock"
+}
+```
+
+state 文件形状示例：
+
+```json
+{
+  "version": 1,
+  "resources": {
+    "debian_file.nginx_default": {
+      "host": "server1",
+      "path": "/etc/nginx/sites-enabled/default",
+      "content_sha256": "..."
+    },
+    "debian_networkd_file.native[\"10-eth0.network\"]": {
+      "host": "server1",
+      "path": "/etc/systemd/network/10-eth0.network",
+      "content_sha256": "..."
+    }
+  }
 }
 ```
 
@@ -219,6 +330,7 @@ state "ssh" {
 字段：
 
 - `host`：必填。
+- `name`：可选，软件包名。默认使用资源本地名称。
 - `ensure`：`present` 或 `absent`，默认 `present`。
 - `version`：可选，指定版本。
 - `update_cache`：可选，是否在安装前执行 `apt-get update`。
@@ -238,8 +350,8 @@ debian_package "curl" {
 
 字段：
 
-- 资源 label：远程路径。
 - `host`：必填。
+- `path`：必填，远程路径。
 - `content`：可选，文件内容。
 - `source`：可选，本地文件路径。
 - `owner`：可选，默认 `root`。
@@ -249,14 +361,25 @@ debian_package "curl" {
 
 `content` 和 `source` 二选一。
 
+示例：
+
+```hcl
+debian_file "nginx_default" {
+  host   = "server1"
+  path   = "/etc/nginx/sites-enabled/default"
+  source = "${path.module}/files/nginx-default.conf"
+  mode   = "0644"
+}
+```
+
 ### 9.4 `debian_directory`
 
 管理远程目录。
 
 字段：
 
-- 资源 label：远程路径。
 - `host`：必填。
+- `path`：必填，远程路径。
 - `owner`：可选。
 - `group`：可选。
 - `mode`：可选。
@@ -268,8 +391,8 @@ debian_package "curl" {
 
 字段：
 
-- 资源 label：服务名。
 - `host`：必填。
+- `name`：可选，systemd 服务名。默认使用资源本地名称。
 - `enabled`：可选，是否开机启动。
 - `state`：可选，`running`、`stopped`、`restarted`、`reloaded`。
 
@@ -334,6 +457,52 @@ debian_networkd "eth0" {
 - 应支持写入配置但不立即重启网络。
 - 应尽量避免让 SSH 连接中的主机失联。
 
+### 9.8 `debian_networkd_file`
+
+直接管理 systemd-networkd 原生配置文件。
+
+该资源用于 `.network`、`.netdev`、`.link` 等原生配置场景。它不尝试抽象所有 networkd 字段，只负责把原生内容写入 `/etc/systemd/network`，并用稳定资源地址进入 state。
+
+字段：
+
+- `host`：必填。
+- `name`：可选，文件名，例如 `10-eth0.network`。默认使用资源本地名称；在 `for_each` 中通常使用 `each.key`。
+- `path`：可选，完整远程路径。若设置 `path`，则不能同时设置 `name`。
+- `content`：可选，原生配置内容。
+- `source`：可选，本地配置文件路径。
+- `owner`：可选，默认 `root`。
+- `group`：可选，默认 `root`。
+- `mode`：可选，默认 `0644`。
+- `activate`：可选，是否应用配置，默认 `false`。
+
+`content` 和 `source` 二选一。
+
+示例：
+
+```hcl
+debian_networkd_file "native" {
+  for_each = {
+    "10-eth0.network" = <<-EOF
+      [Match]
+      Name=eth0
+
+      [Network]
+      DHCP=yes
+    EOF
+  }
+
+  host    = "server1"
+  name    = each.key
+  content = each.value
+}
+```
+
+安全要求：
+
+- 默认只写入文件，不重启 `systemd-networkd`，不主动断开当前网络。
+- 如果 `activate = true`，必须在 plan 中明确显示会触发 networkd reload/restart。
+- 推荐用户通过显式 `debian_service` 或后续专门的 activation 资源控制何时应用网络变更。
+
 ## 10. 依赖关系
 
 资源可以通过引用自然形成依赖。
@@ -348,6 +517,21 @@ debian_service "nginx" {
   depends_on = [
     debian_package.nginx,
     debian_file.nginx_default,
+  ]
+}
+```
+
+`for_each` 资源可以整体引用，也可以引用单个实例：
+
+```hcl
+debian_service "networkd" {
+  host  = "server1"
+  name  = "systemd-networkd"
+  state = "reloaded"
+
+  depends_on = [
+    debian_networkd_file.native,
+    debian_networkd_file.native["10-eth0.network"],
   ]
 }
 ```
@@ -407,10 +591,12 @@ type Resource interface {
 
 - `host`
 - SSH config alias 主机解析
+- 通用 `for_each` 展开和资源地址生成
 - `debian_package`
 - `debian_file`
 - `debian_directory`
 - `debian_service`
+- `debian_networkd_file`
 - SSH state 后端和远端锁
 - `validate`
 - `plan`
@@ -426,5 +612,5 @@ type Resource interface {
 
 ## 15. 待确认问题
 
-- MVP 是否需要立即支持 `debian_networkd`，还是先等 package/file/service 稳定。
+- MVP 是否需要立即支持抽象型 `debian_networkd`，还是先只支持原生配置型 `debian_networkd_file`。
 - `apply` 是否默认需要二次确认。
