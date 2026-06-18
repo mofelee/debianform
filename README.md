@@ -8,6 +8,7 @@ Documentation:
 
 - [Current requirements](docs/requirements.md)
 - [Operations resource catalog and roadmap](docs/resource-catalog.md)
+- [Testing and Debian 13 libvirt integration](docs/testing.md)
 
 ## Install
 

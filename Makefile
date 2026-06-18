@@ -14,7 +14,7 @@ LDFLAGS := -s -w \
 	-X $(VERSION_PACKAGE).Commit=$(COMMIT) \
 	-X $(VERSION_PACKAGE).Date=$(BUILD_DATE)
 
-.PHONY: build install test clean
+.PHONY: build install test test-unit test-integration clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PACKAGE)
@@ -25,6 +25,12 @@ install: build
 
 test:
 	go test ./...
+
+test-unit:
+	go test -race -count=1 ./...
+
+test-integration:
+	./test/integration/libvirt/run.sh
 
 clean:
 	go clean
