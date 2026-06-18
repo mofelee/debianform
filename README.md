@@ -9,17 +9,48 @@ This MVP uses a restricted `.dbf.hcl` syntax, runs locally, connects to remote D
 From this repository:
 
 ```bash
-go build -o dbf ./cmd/dbf
+make build
 install -m 0755 dbf ~/.local/bin/dbf
 ```
 
-Or install directly into `GOBIN` / `GOPATH/bin`:
+For a released version, install a specific Git tag directly into `GOBIN` / `GOPATH/bin`:
 
 ```bash
-go install ./cmd/dbf
+go install github.com/mofelee/debianform/cmd/dbf@v0.1.0
 ```
 
 Make sure the install directory is in `PATH`.
+
+Check the installed version:
+
+```bash
+dbf --version
+dbf version
+```
+
+## Versioning
+
+Git tags are the source of truth for the DebianForm version. Releases use semantic version tags such as `v0.1.0`; no source file needs a manual version edit.
+
+`make build` injects the exact tag, Git commit, and UTC build time with Go linker flags. A build made from a commit without an exact tag reports `dev`. `dbf version` also reads Go's embedded VCS metadata as a fallback, including versions installed with `go install ...@vX.Y.Z`.
+
+Create a release build from a clean tagged commit:
+
+```bash
+git tag -a v0.1.0 -m "debianform v0.1.0"
+git push origin v0.1.0
+make build
+./dbf version
+```
+
+CI can provide explicit, reproducible metadata:
+
+```bash
+make build \
+  VERSION=v0.1.0 \
+  COMMIT="$(git rev-parse --short=12 HEAD)" \
+  BUILD_DATE="2026-06-18T00:00:00Z"
+```
 
 Requirements:
 
@@ -146,6 +177,18 @@ debian_nftables_file "main" {
 `debian_sysctl` runs `sysctl -w` by default and, when `persist = true`, writes a real `/etc/sysctl.d/*.conf` file.
 
 `debian_nftables_file` writes native nft syntax. With `validate = true`, it runs `nft -c -f` before installing the file. With `activate = true`, it runs `nft -f` after installing it.
+
+## BBR Example
+
+The complete BBR example is in [examples/bbr.dbf.hcl](examples/bbr.dbf.hcl). It loads `tcp_bbr`, persists the module, selects the `fq` queue discipline, and sets BBR as the TCP congestion control algorithm:
+
+```bash
+dbf plan -f examples/bbr.dbf.hcl
+dbf apply -f examples/bbr.dbf.hcl
+dbf check -f examples/bbr.dbf.hcl
+```
+
+Change the SSH host alias and state paths before using the example on another host.
 
 ## Supported HCL Subset
 

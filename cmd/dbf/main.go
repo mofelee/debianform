@@ -14,6 +14,7 @@ import (
 	"github.com/mofelee/debianform/internal/engine"
 	"github.com/mofelee/debianform/internal/sshx"
 	"github.com/mofelee/debianform/internal/state"
+	"github.com/mofelee/debianform/internal/version"
 )
 
 func main() {
@@ -31,6 +32,9 @@ func run(args []string) error {
 
 	cmd := args[0]
 	switch cmd {
+	case "version", "--version", "-version":
+		printVersion(cmd == "version")
+		return nil
 	case "fmt":
 		return runFmt(args[1:])
 	case "validate", "plan", "apply", "check":
@@ -41,6 +45,20 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q", cmd)
 	}
+}
+
+func printVersion(detailed bool) {
+	info := version.Current()
+	if !detailed {
+		fmt.Printf("dbf %s\n", info.Short())
+		return
+	}
+
+	fmt.Printf("dbf %s\n", info.Short())
+	fmt.Printf("commit: %s\n", info.Commit)
+	fmt.Printf("built: %s\n", info.Date)
+	fmt.Printf("go: %s\n", info.GoVersion)
+	fmt.Printf("platform: %s\n", info.Platform)
 }
 
 func runFmt(args []string) error {
@@ -168,6 +186,7 @@ Usage:
   dbf apply    [-f file] [--host name] [--auto-approve]
   dbf check    [-f file] [--host name]
   dbf fmt      [-f file]
+  dbf version
 
 By default dbf loads all *.dbf.hcl files in the current directory, sorted by name.
 Use -f to load exactly one configuration file.`)
