@@ -51,6 +51,7 @@ collect_diagnostics() {
   virsh_system domifaddr "$VM_NAME" --source lease >"$ARTIFACT_DIR/domifaddr.txt" 2>&1 || true
   sudo journalctl -u libvirtd --no-pager -n 300 >"$ARTIFACT_DIR/libvirtd.log" 2>&1 || true
   sudo sh -c "cat /var/log/libvirt/qemu/$VM_NAME.log" >"$ARTIFACT_DIR/qemu.log" 2>&1 || true
+  sudo sh -c "cat '$WORK_DIR/console.log'" >"$ARTIFACT_DIR/console.log" 2>&1 || true
 }
 
 cleanup() {
@@ -143,21 +144,39 @@ log "building dbf"
   go build -trimpath -o "$DBF_BIN" ./cmd/dbf
 )
 
-log "downloading latest official Debian 13 genericcloud image"
+log "fetching Debian 13 genericcloud image checksum"
 curl --fail --location --retry 3 --show-error \
   --silent \
   "$DEBIAN_CLOUD_URL/SHA512SUMS" \
   --output "$WORK_DIR/SHA512SUMS"
-curl --fail --location --retry 3 --show-error \
-  --silent \
-  "$DEBIAN_CLOUD_URL/$DEBIAN_CLOUD_IMAGE" \
-  --output "$BASE_IMAGE"
-(
-  cd "$WORK_DIR"
-  awk -v image="$DEBIAN_CLOUD_IMAGE" '$2 == image' SHA512SUMS >SHA512SUMS.selected
-  test -s SHA512SUMS.selected
-  sha512sum --check SHA512SUMS.selected
-)
+EXPECTED_SHA512="$(
+  awk -v image="$DEBIAN_CLOUD_IMAGE" '$2 == image { print $1; exit }' \
+    "$WORK_DIR/SHA512SUMS"
+)"
+test -n "$EXPECTED_SHA512"
+
+IMAGE_CACHE_DIR="${DBF_INTEGRATION_IMAGE_CACHE:-}"
+CACHED_IMAGE="${IMAGE_CACHE_DIR:+$IMAGE_CACHE_DIR/$DEBIAN_CLOUD_IMAGE}"
+
+if [[ -n "$CACHED_IMAGE" && -f "$CACHED_IMAGE" ]] &&
+  printf '%s  %s\n' "$EXPECTED_SHA512" "$CACHED_IMAGE" | sha512sum --check --status; then
+  log "using cached Debian 13 genericcloud image from $IMAGE_CACHE_DIR"
+  cp "$CACHED_IMAGE" "$BASE_IMAGE"
+else
+  log "downloading latest official Debian 13 genericcloud image"
+  curl --fail --location --retry 3 --show-error \
+    --silent \
+    "$DEBIAN_CLOUD_URL/$DEBIAN_CLOUD_IMAGE" \
+    --output "$BASE_IMAGE"
+fi
+
+printf '%s  %s\n' "$EXPECTED_SHA512" "$BASE_IMAGE" | sha512sum --check
+
+if [[ -n "$CACHED_IMAGE" && ! -f "$CACHED_IMAGE" ]]; then
+  mkdir -p "$IMAGE_CACHE_DIR"
+  cp "$BASE_IMAGE" "$CACHED_IMAGE.partial"
+  mv "$CACHED_IMAGE.partial" "$CACHED_IMAGE"
+fi
 
 log "creating cloud-init seed and qcow2 overlay"
 ssh-keygen -q -t ed25519 -N "" -f "$SSH_KEY"
@@ -258,6 +277,7 @@ cat >"$WORK_DIR/domain.xml" <<EOF
       <model type='virtio'/>
     </interface>
     <serial type='pty'>
+      <log file='$WORK_DIR/console.log' append='off'/>
       <target port='0'/>
     </serial>
     <console type='pty'>

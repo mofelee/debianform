@@ -64,10 +64,20 @@ jobs:
             go.mod
             go.sum
 
+      - name: Cache apt packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/apt-cache
+          key: apt-${{ runner.os }}-libvirt-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            apt-${{ runner.os }}-libvirt-
+
       - name: Install libvirt and cloud image tools
         run: |
+          sudo install -d -m 0755 "${{ runner.temp }}/apt-cache/partial"
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            -o Dir::Cache::archives="${{ runner.temp }}/apt-cache" \
             cloud-image-utils \
             curl \
             dnsmasq-base \
@@ -76,15 +86,34 @@ jobs:
             openssh-client \
             qemu-system-x86 \
             qemu-utils
+          sudo chown -R "$(id -u):$(id -g)" "${{ runner.temp }}/apt-cache"
           sudo systemctl start libvirtd
           if [[ -e /dev/kvm ]]; then
             sudo chmod 0666 /dev/kvm
           fi
 
+      - name: Resolve Debian 13 image checksum
+        id: debian-image
+        run: |
+          sha512="$(
+            curl --fail --location --retry 3 --show-error --silent \
+              https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS |
+              awk '$2 == "debian-13-genericcloud-amd64.qcow2" { print $1; exit }'
+          )"
+          test -n "$sha512"
+          echo "sha512=$sha512" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Debian 13 cloud image
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/debian-image-cache
+          key: debian13-genericcloud-${{ steps.debian-image.outputs.sha512 }}
+
       - name: Run Debian 13 VM integration test
         run: make test-integration
         env:
           DBF_INTEGRATION_ARTIFACT_DIR: ${{ runner.temp }}/debianform-integration-artifacts
+          DBF_INTEGRATION_IMAGE_CACHE: ${{ runner.temp }}/debian-image-cache
 
       - name: Upload libvirt diagnostics
         if: failure()
