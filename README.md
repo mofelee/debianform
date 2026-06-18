@@ -213,6 +213,9 @@ DebianForm uses the HashiCorp HCL v2 parser and expression evaluator. It does no
 - Strings, booleans, numbers, lists, maps, heredocs.
 - Ordinary strings must be quoted; bare resource addresses are only special in `depends_on` and `notify`.
 - `file("path")`.
+- `templatefile("path", { name = "value" })` renders a file as a template, with
+  `${...}` interpolation and `%{ for }` / `%{ if }` directives over the supplied
+  variables (Terraform-style). Paths are resolved relative to the module.
 - `toset(["a", "b"])` for Terraform-style string sets.
 - Conditional expressions: `condition ? true_value : false_value`.
 - Equality expressions: `==` and `!=`.

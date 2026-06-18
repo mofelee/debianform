@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/convert"
 	"github.com/zclconf/go-cty/cty/function"
 )
 
@@ -65,8 +67,9 @@ func newHCLEvalContext(ctx EvalContext) (*hcl.EvalContext, error) {
 	return &hcl.EvalContext{
 		Variables: vars,
 		Functions: map[string]function.Function{
-			"file":  fileFunction(ctx.PathModule),
-			"toset": tosetFunction(),
+			"file":         fileFunction(ctx.PathModule),
+			"templatefile": templatefileFunction(ctx.PathModule),
+			"toset":        tosetFunction(),
 		},
 	}, nil
 }
@@ -90,6 +93,64 @@ func fileFunction(moduleDir string) function.Function {
 				return cty.NilVal, err
 			}
 			return cty.StringVal(string(data)), nil
+		},
+	})
+}
+
+// templatefileFunction renders a file as an HCL template, mirroring
+// Terraform's templatefile(path, vars). The file may use ${...} interpolation
+// and %{ for }/%{ if } directives, with the supplied vars as the only available
+// variables. templatefile itself is not exposed inside the template, so a
+// template cannot recurse into another templatefile call.
+func templatefileFunction(moduleDir string) function.Function {
+	return function.New(&function.Spec{
+		Params: []function.Parameter{
+			{Name: "path", Type: cty.String},
+			{Name: "vars", Type: cty.DynamicPseudoType},
+		},
+		Type: function.StaticReturnType(cty.String),
+		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
+			path := args[0].AsString()
+			if path == "" {
+				return cty.NilVal, fmt.Errorf("templatefile() path argument must be a non-empty string")
+			}
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(moduleDir, path)
+			}
+
+			varsArg := args[1]
+			if varsArg.IsNull() {
+				return cty.NilVal, fmt.Errorf("templatefile() vars argument must not be null")
+			}
+			vt := varsArg.Type()
+			if !vt.IsObjectType() && !vt.IsMapType() {
+				return cty.NilVal, fmt.Errorf("templatefile() vars argument must be an object or map")
+			}
+			variables := map[string]cty.Value{}
+			it := varsArg.ElementIterator()
+			for it.Next() {
+				key, value := it.Element()
+				variables[key.AsString()] = value
+			}
+
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return cty.NilVal, err
+			}
+
+			expr, diags := hclsyntax.ParseTemplate(data, path, hcl.Pos{Line: 1, Column: 1})
+			if diags.HasErrors() {
+				return cty.NilVal, fmt.Errorf("templatefile() parse %s: %s", path, diags.Error())
+			}
+			rendered, diags := expr.Value(&hcl.EvalContext{Variables: variables})
+			if diags.HasErrors() {
+				return cty.NilVal, fmt.Errorf("templatefile() render %s: %s", path, diags.Error())
+			}
+			rendered, err = convert.Convert(rendered, cty.String)
+			if err != nil {
+				return cty.NilVal, fmt.Errorf("templatefile() %s: %w", path, err)
+			}
+			return rendered, nil
 		},
 	})
 }
