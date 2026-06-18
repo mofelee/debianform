@@ -49,6 +49,8 @@ type HandlerRun struct {
 
 type Desired struct {
 	Name          string
+	Key           string
+	Value         string
 	Path          string
 	Content       string
 	ContentSHA256 string
@@ -61,6 +63,9 @@ type Desired struct {
 	Enabled       *bool
 	ServiceState  string
 	Activate      bool
+	Persist       bool
+	ApplyRuntime  bool
+	Validate      bool
 }
 
 func New(cfg *config.Config, runner *sshx.Runner, backend *state.SSHBackend) *Engine {
@@ -277,10 +282,16 @@ func (e *Engine) planResource(ctx context.Context, res config.Resource) (Change,
 		return e.planPackage(ctx, res, desired)
 	case "debian_file", "debian_networkd_file":
 		return e.planFile(ctx, res, desired)
+	case "debian_nftables_file":
+		return e.planFile(ctx, res, desired)
 	case "debian_directory":
 		return e.planDirectory(ctx, res, desired)
 	case "debian_service":
 		return e.planService(ctx, res, desired)
+	case "debian_kernel_module":
+		return e.planKernelModule(ctx, res, desired)
+	case "debian_sysctl":
+		return e.planSysctl(ctx, res, desired)
 	default:
 		return Change{}, fmt.Errorf("unsupported resource type %s", res.Type)
 	}
@@ -292,10 +303,16 @@ func (e *Engine) applyChange(ctx context.Context, change Change) error {
 		return e.applyPackage(ctx, change)
 	case "debian_file", "debian_networkd_file":
 		return e.applyFile(ctx, change)
+	case "debian_nftables_file":
+		return e.applyNftablesFile(ctx, change)
 	case "debian_directory":
 		return e.applyDirectory(ctx, change)
 	case "debian_service":
 		return e.applyService(ctx, change)
+	case "debian_kernel_module":
+		return e.applyKernelModule(ctx, change)
+	case "debian_sysctl":
+		return e.applySysctl(ctx, change)
 	default:
 		return fmt.Errorf("unsupported resource type %s", change.Resource.Type)
 	}
@@ -354,6 +371,48 @@ func desiredFor(res config.Resource) (Desired, error) {
 		d.Group = stringAttr(res, "group", "root")
 		d.Mode = stringAttr(res, "mode", "0644")
 		d.Activate = boolAttr(res, "activate", false)
+	case "debian_nftables_file":
+		d.Name = stringAttr(res, "name", d.Name)
+		d.Path = stringAttr(res, "path", "")
+		if d.Path == "" {
+			if d.Name == "main" {
+				d.Path = "/etc/nftables.conf"
+			} else {
+				d.Path = "/etc/nftables.d/" + d.Name + ".nft"
+			}
+		}
+		content, err := contentAttr(res)
+		if err != nil {
+			return d, err
+		}
+		d.Content = content
+		d.ContentSHA256 = hash(d.Content)
+		d.Owner = stringAttr(res, "owner", "root")
+		d.Group = stringAttr(res, "group", "root")
+		d.Mode = stringAttr(res, "mode", "0644")
+		d.Activate = boolAttr(res, "activate", false)
+		d.Validate = boolAttr(res, "validate", true)
+	case "debian_kernel_module":
+		d.Name = stringAttr(res, "name", d.Name)
+		d.Ensure = stringAttr(res, "ensure", "present")
+		d.Persist = boolAttr(res, "persist", true)
+		d.Path = stringAttr(res, "path", "")
+		if d.Path == "" {
+			d.Path = "/etc/modules-load.d/dbf-" + res.Name + ".conf"
+		}
+		d.Content = d.Name + "\n"
+		d.ContentSHA256 = hash(d.Content)
+	case "debian_sysctl":
+		d.Key = stringAttr(res, "key", "")
+		d.Value = stringAttr(res, "value", "")
+		d.Persist = boolAttr(res, "persist", true)
+		d.ApplyRuntime = boolAttr(res, "apply", true)
+		d.Path = stringAttr(res, "path", "")
+		if d.Path == "" {
+			d.Path = "/etc/sysctl.d/99-dbf-" + res.Name + ".conf"
+		}
+		d.Content = d.Key + " = " + d.Value + "\n"
+		d.ContentSHA256 = hash(d.Content)
 	}
 	return d, nil
 }
@@ -416,6 +475,12 @@ func stateForResource(res config.Resource, desired Desired) state.ResourceState 
 	}
 	if desired.Name != "" {
 		out["name"] = desired.Name
+	}
+	if desired.Key != "" {
+		out["key"] = desired.Key
+	}
+	if desired.Value != "" {
+		out["value"] = desired.Value
 	}
 	if desired.Path != "" {
 		out["path"] = desired.Path
@@ -524,6 +589,32 @@ rm -f %s
 	if change.Resource.Type == "debian_networkd_file" && d.Activate {
 		script += "systemctl reload-or-restart systemd-networkd\n"
 	}
+	_, err := e.runner.Run(ctx, change.Resource.Host, script)
+	return err
+}
+
+func (e *Engine) applyNftablesFile(ctx context.Context, change Change) error {
+	d := change.Desired
+	encoded := base64.StdEncoding.EncodeToString([]byte(d.Content))
+	tmp := d.Path + ".dbf-tmp"
+	var validateLine string
+	if d.Validate {
+		validateLine = "nft -c -f " + sshx.ShellQuote(tmp)
+	}
+	var activateLine string
+	if d.Activate {
+		activateLine = "nft -f " + sshx.ShellQuote(d.Path)
+	}
+	script := fmt.Sprintf(`set -eu
+mkdir -p "$(dirname %s)"
+base64 -d > %s <<'__DBF_NFT__'
+%s
+__DBF_NFT__
+%s
+install -o %s -g %s -m %s %s %s
+rm -f %s
+%s
+`, sshx.ShellQuote(d.Path), sshx.ShellQuote(tmp), encoded, validateLine, sshx.ShellQuote(d.Owner), sshx.ShellQuote(d.Group), sshx.ShellQuote(d.Mode), sshx.ShellQuote(tmp), sshx.ShellQuote(d.Path), sshx.ShellQuote(tmp), activateLine)
 	_, err := e.runner.Run(ctx, change.Resource.Host, script)
 	return err
 }
@@ -644,6 +735,118 @@ func (e *Engine) applyService(ctx context.Context, change Change) error {
 	return err
 }
 
+func (e *Engine) planKernelModule(ctx context.Context, res config.Resource, d Desired) (Change, error) {
+	script := fmt.Sprintf(`module=%s
+kmod=$(printf '%%s' "$module" | tr '-' '_')
+if awk -v m="$kmod" '$1 == m { found = 1 } END { exit found ? 0 : 1 }' /proc/modules; then
+  echo loaded
+else
+  echo missing
+fi
+`, sshx.ShellQuote(d.Name))
+	result, err := e.runner.Run(ctx, res.Host, script)
+	if err != nil {
+		return Change{}, err
+	}
+	loaded := strings.Contains(result.Stdout, "loaded")
+	persisted := true
+	persistedExists := false
+	if d.Persist {
+		current, err := e.readPath(ctx, res.Host, d.Path)
+		if err != nil {
+			return Change{}, err
+		}
+		persistedExists = current.Exists
+		persisted = current.Exists && current.SHA256 == d.ContentSHA256
+	}
+	if d.Ensure == "absent" {
+		if loaded || persistedExists {
+			return change(res, d, "delete", "unload kernel module "+d.Name+" and remove "+d.Path), nil
+		}
+		return noChange(res, d), nil
+	}
+	if !loaded || !persisted {
+		summary := "modprobe " + d.Name
+		if d.Persist {
+			summary += " and write " + d.Path
+		}
+		return change(res, d, "update", summary), nil
+	}
+	return noChange(res, d), nil
+}
+
+func (e *Engine) applyKernelModule(ctx context.Context, change Change) error {
+	d := change.Desired
+	var lines []string
+	lines = append(lines, "set -eu")
+	if d.Ensure == "absent" {
+		if d.Persist {
+			lines = append(lines, "rm -f -- "+sshx.ShellQuote(d.Path))
+		}
+		lines = append(lines, "modprobe -r "+sshx.ShellQuote(d.Name)+" 2>/dev/null || true")
+	} else {
+		lines = append(lines, "modprobe "+sshx.ShellQuote(d.Name))
+		if d.Persist {
+			lines = append(lines,
+				"mkdir -p -- \"$(dirname "+sshx.ShellQuote(d.Path)+")\"",
+				"printf '%s\\n' "+sshx.ShellQuote(d.Name)+" > "+sshx.ShellQuote(d.Path),
+				"chown root:root "+sshx.ShellQuote(d.Path),
+				"chmod 0644 "+sshx.ShellQuote(d.Path),
+			)
+		}
+	}
+	_, err := e.runner.Run(ctx, change.Resource.Host, strings.Join(lines, "\n")+"\n")
+	return err
+}
+
+func (e *Engine) planSysctl(ctx context.Context, res config.Resource, d Desired) (Change, error) {
+	runtimeOK := true
+	if d.ApplyRuntime {
+		script := fmt.Sprintf(`sysctl -n %s 2>/dev/null || true`, sshx.ShellQuote(d.Key))
+		result, err := e.runner.Run(ctx, res.Host, script)
+		if err != nil {
+			return Change{}, err
+		}
+		current := lastNonEmptyLine(result.Stdout)
+		runtimeOK = current == d.Value
+	}
+	persisted := true
+	if d.Persist {
+		current, err := e.readPath(ctx, res.Host, d.Path)
+		if err != nil {
+			return Change{}, err
+		}
+		persisted = current.Exists && current.SHA256 == d.ContentSHA256
+	}
+	if !runtimeOK || !persisted {
+		summary := "sysctl -w " + d.Key + "=" + d.Value
+		if d.Persist {
+			summary += " and write " + d.Path
+		}
+		return change(res, d, "update", summary), nil
+	}
+	return noChange(res, d), nil
+}
+
+func (e *Engine) applySysctl(ctx context.Context, change Change) error {
+	d := change.Desired
+	var lines []string
+	lines = append(lines, "set -eu")
+	if d.ApplyRuntime {
+		lines = append(lines, "sysctl -w "+sshx.ShellQuote(d.Key+"="+d.Value))
+	}
+	if d.Persist {
+		lines = append(lines,
+			"mkdir -p -- \"$(dirname "+sshx.ShellQuote(d.Path)+")\"",
+			"printf '%s\\n' "+sshx.ShellQuote(d.Key+" = "+d.Value)+" > "+sshx.ShellQuote(d.Path),
+			"chown root:root "+sshx.ShellQuote(d.Path),
+			"chmod 0644 "+sshx.ShellQuote(d.Path),
+		)
+	}
+	_, err := e.runner.Run(ctx, change.Resource.Host, strings.Join(lines, "\n")+"\n")
+	return err
+}
+
 type pathState struct {
 	Exists bool
 	IsDir  bool
@@ -699,4 +902,15 @@ func noChange(res config.Resource, d Desired) Change {
 
 func normalizeMode(mode string) string {
 	return strings.TrimLeft(mode, "0")
+}
+
+func lastNonEmptyLine(output string) string {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" {
+			return line
+		}
+	}
+	return ""
 }

@@ -415,6 +415,24 @@ func validateResource(res Resource) error {
 		if !hasOneOf(res, "content", "source") {
 			return fmt.Errorf("%s requires content or source", res.Address)
 		}
+	case "debian_nftables_file":
+		if !hasOneOf(res, "content", "source") {
+			return fmt.Errorf("%s requires content or source", res.Address)
+		}
+	case "debian_kernel_module":
+		if name := resourceObjectName(res); name == "" {
+			return fmt.Errorf("%s requires name", res.Address)
+		}
+		if err := validateEnum(res, "ensure", []string{"present", "absent"}, "present"); err != nil {
+			return err
+		}
+	case "debian_sysctl":
+		if _, ok := stringAttr(res, "key"); !ok {
+			return fmt.Errorf("%s requires key", res.Address)
+		}
+		if _, ok := stringAttr(res, "value"); !ok {
+			return fmt.Errorf("%s requires value", res.Address)
+		}
 	default:
 		return fmt.Errorf("unsupported resource type %s", res.Type)
 	}

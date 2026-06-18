@@ -98,8 +98,54 @@ A handler runs only if a notifying resource actually changed. If multiple resour
 - `debian_directory`
 - `debian_service`
 - `debian_networkd_file`
+- `debian_kernel_module`
+- `debian_sysctl`
+- `debian_nftables_file`
 
 All resources use `host = "server1"`, where `server1` can be an SSH config `Host` alias. `dbf` always connects as `root`.
+
+## Native System Configuration
+
+These resources intentionally stay close to Debian's native files and commands.
+
+```hcl
+debian_kernel_module "br_netfilter" {
+  host    = "server1"
+  name    = "br_netfilter"
+  persist = true
+  path    = "/etc/modules-load.d/kubernetes.conf"
+}
+
+debian_sysctl "ip_forward" {
+  host  = "server1"
+  key   = "net.ipv4.ip_forward"
+  value = "1"
+  path  = "/etc/sysctl.d/99-kubernetes.conf"
+}
+
+debian_nftables_file "main" {
+  host     = "server1"
+  path     = "/etc/nftables.conf"
+  validate = true
+  activate = false
+
+  content = <<-EOF
+    flush ruleset
+
+    table inet filter {
+      chain input {
+        type filter hook input priority 0; policy accept;
+      }
+    }
+  EOF
+}
+```
+
+`debian_kernel_module` runs `modprobe` and, when `persist = true`, writes a real `/etc/modules-load.d/*.conf` file.
+
+`debian_sysctl` runs `sysctl -w` by default and, when `persist = true`, writes a real `/etc/sysctl.d/*.conf` file.
+
+`debian_nftables_file` writes native nft syntax. With `validate = true`, it runs `nft -c -f` before installing the file. With `activate = true`, it runs `nft -f` after installing it.
 
 ## Supported HCL Subset
 

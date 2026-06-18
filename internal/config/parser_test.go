@@ -207,3 +207,56 @@ debian_file "host_file" {
 		t.Fatalf("content = %#v, want %q", got, want)
 	}
 }
+
+func TestLoadNativeSystemResources(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = "server1"
+  path = "/var/lib/debianform/state.json"
+}
+
+debian_kernel_module "br_netfilter" {
+  host = "server1"
+  name = "br_netfilter"
+  path = "/etc/modules-load.d/kubernetes.conf"
+}
+
+debian_sysctl "ip_forward" {
+  host = "server1"
+  key = "net.ipv4.ip_forward"
+  value = "1"
+}
+
+debian_nftables_file "main" {
+  host = "server1"
+  path = "/etc/nftables.conf"
+  validate = true
+  activate = false
+
+  content = <<-EOF
+    flush ruleset
+  EOF
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(cfg.Resources), 3; got != want {
+		t.Fatalf("len(resources) = %d, want %d", got, want)
+	}
+	if got, want := cfg.Resources[0].Type, "debian_kernel_module"; got != want {
+		t.Fatalf("resource type = %q, want %q", got, want)
+	}
+	if got, want := cfg.Resources[1].Attrs["key"], "net.ipv4.ip_forward"; got != want {
+		t.Fatalf("sysctl key = %#v, want %q", got, want)
+	}
+	if got, want := cfg.Resources[2].Attrs["content"], "flush ruleset\n"; got != want {
+		t.Fatalf("nft content = %#v, want %q", got, want)
+	}
+}

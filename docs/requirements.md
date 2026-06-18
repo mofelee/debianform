@@ -562,6 +562,93 @@ debian_networkd_file "native" {
 - 如果 `activate = true`，必须在 plan 中明确显示会触发 networkd reload/restart。
 - 推荐用户通过显式 `debian_service` 或后续专门的 activation 资源控制何时应用网络变更。
 
+### 9.9 `debian_kernel_module`
+
+加载内核模块，并可写入 `/etc/modules-load.d/*.conf` 持久化。
+
+该资源是 `modprobe` 和 `modules-load.d` 的薄封装，不隐藏底层行为。
+
+字段：
+
+- `host`：必填。
+- `name`：可选，模块名。默认使用资源本地名称。
+- `ensure`：可选，`present` 或 `absent`，默认 `present`。
+- `persist`：可选，是否写入持久化文件，默认 `true`。
+- `path`：可选，持久化文件路径，默认 `/etc/modules-load.d/dbf-<resource>.conf`。
+
+行为：
+
+- `ensure = "present"` 时执行 `modprobe <name>`。
+- `persist = true` 时写入一行模块名到 `path`。
+- `ensure = "absent"` 时移除持久化文件，并尝试 `modprobe -r <name>`。
+
+### 9.10 `debian_sysctl`
+
+设置 sysctl 运行时值，并可写入 `/etc/sysctl.d/*.conf` 持久化。
+
+该资源是 `sysctl -w` 和 `sysctl.d` 的薄封装。
+
+字段：
+
+- `host`：必填。
+- `key`：必填，例如 `net.ipv4.ip_forward`。
+- `value`：必填，字符串或数字。
+- `apply`：可选，是否执行 `sysctl -w` 修改运行时值，默认 `true`。
+- `persist`：可选，是否写入持久化文件，默认 `true`。
+- `path`：可选，持久化文件路径，默认 `/etc/sysctl.d/99-dbf-<resource>.conf`。
+
+示例：
+
+```hcl
+debian_sysctl "ip_forward" {
+  host  = "server1"
+  key   = "net.ipv4.ip_forward"
+  value = "1"
+}
+```
+
+### 9.11 `debian_nftables_file`
+
+管理 nftables 原生配置文件。
+
+该资源不提供抽象防火墙 DSL。用户直接写 nft 原生语法，`dbf` 只负责写文件、校验和可选激活。
+
+字段：
+
+- `host`：必填。
+- `name`：可选，文件名基础名。
+- `path`：可选，远端路径。`name = "main"` 时默认 `/etc/nftables.conf`，其他名称默认 `/etc/nftables.d/<name>.nft`。
+- `content`：可选，nft 原生内容。
+- `source`：可选，本地 nft 文件路径。
+- `owner`：可选，默认 `root`。
+- `group`：可选，默认 `root`。
+- `mode`：可选，默认 `0644`。
+- `validate`：可选，是否执行 `nft -c -f` 校验，默认 `true`。
+- `activate`：可选，是否安装后执行 `nft -f`，默认 `false`。
+
+`content` 和 `source` 二选一。
+
+示例：
+
+```hcl
+debian_nftables_file "main" {
+  host     = "server1"
+  path     = "/etc/nftables.conf"
+  validate = true
+  activate = false
+
+  content = <<-EOF
+    flush ruleset
+
+    table inet filter {
+      chain input {
+        type filter hook input priority 0; policy accept;
+      }
+    }
+  EOF
+}
+```
+
 ## 10. 依赖关系
 
 资源可以通过引用自然形成依赖。
@@ -657,6 +744,9 @@ type Resource interface {
 - `debian_directory`
 - `debian_service`
 - `debian_networkd_file`
+- `debian_kernel_module`
+- `debian_sysctl`
+- `debian_nftables_file`
 - SSH state 后端和远端锁
 - `validate`
 - `plan`
