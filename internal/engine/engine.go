@@ -18,8 +18,16 @@ import (
 
 type Engine struct {
 	cfg     *config.Config
-	runner  *sshx.Runner
+	runner  Runner
 	backend *state.SSHBackend
+}
+
+// Runner executes shell scripts on a remote host. *sshx.Runner is the
+// production implementation; tests substitute a fake so plan/apply logic
+// can be exercised without a live SSH connection.
+type Runner interface {
+	Run(ctx context.Context, host, script string) (sshx.Result, error)
+	RunCommand(ctx context.Context, host, remoteCommand string) (sshx.Result, error)
 }
 
 type Options struct {
@@ -68,7 +76,7 @@ type Desired struct {
 	Validate      bool
 }
 
-func New(cfg *config.Config, runner *sshx.Runner, backend *state.SSHBackend) *Engine {
+func New(cfg *config.Config, runner Runner, backend *state.SSHBackend) *Engine {
 	return &Engine{cfg: cfg, runner: runner, backend: backend}
 }
 
