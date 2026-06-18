@@ -139,6 +139,9 @@ debian_package.nginx
 不计划照搬所有 Terraform lifecycle 选项。`create_before_destroy` 对大多数系统配置没有清晰含义，
 `ignore_changes` 也容易隐藏真实 drift。
 
+条件表达式支持 Terraform/OpenTofu 风格的 `condition ? true_value : false_value`，并支持 `==` 和
+`!=` 作为基础条件比较。条件必须是布尔值，且只求值被选中的分支。
+
 未来可考虑：
 
 ```hcl

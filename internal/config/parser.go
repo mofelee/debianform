@@ -31,6 +31,18 @@ type FuncCall struct {
 	Args []Expr
 }
 
+type ConditionalExpr struct {
+	Condition Expr
+	True      Expr
+	False     Expr
+}
+
+type BinaryExpr struct {
+	Left  Expr
+	Op    string
+	Right Expr
+}
+
 type parser struct {
 	src  string
 	file string
@@ -109,6 +121,73 @@ func (p *parser) parseBody() (map[string]Expr, error) {
 }
 
 func (p *parser) parseExpr() (Expr, error) {
+	return p.parseConditional()
+}
+
+func (p *parser) parseConditional() (Expr, error) {
+	condition, err := p.parseEquality()
+	if err != nil {
+		return nil, err
+	}
+
+	p.skipSpace()
+	if p.peek() != '?' {
+		return condition, nil
+	}
+	p.advance()
+	p.skipSpace()
+
+	trueExpr, err := p.parseConditional()
+	if err != nil {
+		return nil, err
+	}
+	p.skipSpace()
+	if err := p.expect(':'); err != nil {
+		return nil, err
+	}
+	p.skipSpace()
+	falseExpr, err := p.parseConditional()
+	if err != nil {
+		return nil, err
+	}
+
+	return ConditionalExpr{
+		Condition: condition,
+		True:      trueExpr,
+		False:     falseExpr,
+	}, nil
+}
+
+func (p *parser) parseEquality() (Expr, error) {
+	left, err := p.parsePrimary()
+	if err != nil {
+		return nil, err
+	}
+
+	for {
+		p.skipSpace()
+		op := ""
+		switch {
+		case strings.HasPrefix(p.src[p.pos:], "=="):
+			op = "=="
+		case strings.HasPrefix(p.src[p.pos:], "!="):
+			op = "!="
+		default:
+			return left, nil
+		}
+		p.advance()
+		p.advance()
+		p.skipSpace()
+
+		right, err := p.parsePrimary()
+		if err != nil {
+			return nil, err
+		}
+		left = BinaryExpr{Left: left, Op: op, Right: right}
+	}
+}
+
+func (p *parser) parsePrimary() (Expr, error) {
 	p.skipSpace()
 	switch p.peek() {
 	case '"':
@@ -117,6 +196,17 @@ func (p *parser) parseExpr() (Expr, error) {
 		return p.parseList()
 	case '{':
 		return p.parseMap()
+	case '(':
+		p.advance()
+		expr, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		p.skipSpace()
+		if err := p.expect(')'); err != nil {
+			return nil, err
+		}
+		return expr, nil
 	case '<':
 		if strings.HasPrefix(p.src[p.pos:], "<<") {
 			return p.parseHeredoc()
@@ -363,6 +453,10 @@ func (p *parser) parseBareToken() string {
 				return p.src[start:p.pos]
 			}
 		case ',', '}', ')':
+			if brackets == 0 {
+				return p.src[start:p.pos]
+			}
+		case ':', '?', '=', '!':
 			if brackets == 0 {
 				return p.src[start:p.pos]
 			}

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -205,6 +206,128 @@ debian_file "host_file" {
 	}
 	if got, want := cfg.Resources[1].Attrs["content"], "host ksvm202\n"; got != want {
 		t.Fatalf("content = %#v, want %q", got, want)
+	}
+}
+
+func TestLoadConditionalExpression(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = "ksvm201"
+  path = "/tmp/state.json"
+}
+
+locals {
+  production = true
+}
+
+locals {
+  service_state = local.production ? "running" : "stopped"
+}
+
+debian_service "example" {
+  for_each = toset([
+    "ci",
+    "user",
+  ])
+
+  host    = "ksvm201"
+  name    = each.key == "ci" ? "ci-service" : "user-service"
+  state   = local.service_state
+  enabled = each.key != "user"
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := cfg.Locals["service_state"], "running"; got != want {
+		t.Fatalf("local.service_state = %#v, want %q", got, want)
+	}
+	if got, want := cfg.Resources[0].Attrs["name"], "ci-service"; got != want {
+		t.Fatalf("ci name = %#v, want %q", got, want)
+	}
+	if got, want := cfg.Resources[0].Attrs["enabled"], true; got != want {
+		t.Fatalf("ci enabled = %#v, want %t", got, want)
+	}
+	if got, want := cfg.Resources[1].Attrs["name"], "user-service"; got != want {
+		t.Fatalf("user name = %#v, want %q", got, want)
+	}
+	if got, want := cfg.Resources[1].Attrs["enabled"], false; got != want {
+		t.Fatalf("user enabled = %#v, want %t", got, want)
+	}
+}
+
+func TestLoadConditionalExpressionInCompositeValues(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = "server1"
+  path = "/tmp/state.json"
+}
+
+debian_package "example" {
+  host = "server1"
+
+  labels = true ? ["primary"] : ["secondary"]
+  settings = false ? {
+    choice = "primary"
+  } : {
+    choice = "secondary"
+  }
+  selected_set = true ? toset(["one"]) : toset(["two"])
+  nested       = false ? "one" : true ? "two" : "three"
+  parenthesized = (1 == 1.0) ? "equal" : "different"
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	attrs := cfg.Resources[0].Attrs
+	labels, ok := attrs["labels"].([]any)
+	if !ok || len(labels) != 1 || labels[0] != "primary" {
+		t.Fatalf("labels = %#v, want [primary]", attrs["labels"])
+	}
+	settings, ok := attrs["settings"].(map[string]any)
+	if !ok || settings["choice"] != "secondary" {
+		t.Fatalf("settings = %#v, want secondary choice", attrs["settings"])
+	}
+	selectedSet, ok := attrs["selected_set"].([]any)
+	if !ok || len(selectedSet) != 1 || selectedSet[0] != "one" {
+		t.Fatalf("selected_set = %#v, want [one]", attrs["selected_set"])
+	}
+	if got, want := attrs["nested"], "two"; got != want {
+		t.Fatalf("nested = %#v, want %q", got, want)
+	}
+	if got, want := attrs["parenthesized"], "equal"; got != want {
+		t.Fatalf("parenthesized = %#v, want %q", got, want)
+	}
+}
+
+func TestParseConditionalRequiresColon(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+locals {
+  value = true ? "yes"
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParseFile(file); err == nil || !strings.Contains(err.Error(), `expected ':'`) {
+		t.Fatalf("ParseFile() error = %v, want missing colon error", err)
 	}
 }
 

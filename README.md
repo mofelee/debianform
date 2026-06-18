@@ -210,6 +210,8 @@ Change the SSH host alias and state paths before using the example on another ho
 - Strings, booleans, numbers, lists, maps, heredocs.
 - `file("path")`.
 - `toset(["a", "b"])` for Terraform-style string sets.
+- Conditional expressions: `condition ? true_value : false_value`.
+- Equality expressions: `==` and `!=`.
 - `${path.module}`, `${each.key}`, `${each.value}` interpolation.
 - `locals { ... }` and `local.name` references.
 - `for_each` over maps or lists of strings.

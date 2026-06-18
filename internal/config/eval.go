@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -49,8 +51,125 @@ func Eval(expr Expr, ctx EvalContext) (any, error) {
 		return out, nil
 	case FuncCall:
 		return evalFunc(v, ctx)
+	case ConditionalExpr:
+		return evalConditional(v, ctx)
+	case BinaryExpr:
+		return evalBinary(v, ctx)
 	default:
 		return nil, fmt.Errorf("unsupported expression %T", expr)
+	}
+}
+
+func evalConditional(expr ConditionalExpr, ctx EvalContext) (any, error) {
+	if err := validateConditionalTypes(expr.True, expr.False); err != nil {
+		return nil, err
+	}
+
+	condition, err := Eval(expr.Condition, ctx)
+	if err != nil {
+		return nil, err
+	}
+	selected, ok := condition.(bool)
+	if !ok {
+		return nil, fmt.Errorf("conditional expression condition must be a boolean, got %s", valueType(condition))
+	}
+	if selected {
+		return Eval(expr.True, ctx)
+	}
+	return Eval(expr.False, ctx)
+}
+
+func evalBinary(expr BinaryExpr, ctx EvalContext) (any, error) {
+	left, err := Eval(expr.Left, ctx)
+	if err != nil {
+		return nil, err
+	}
+	right, err := Eval(expr.Right, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	equal := equalValues(left, right)
+	switch expr.Op {
+	case "==":
+		return equal, nil
+	case "!=":
+		return !equal, nil
+	default:
+		return nil, fmt.Errorf("unsupported binary operator %q", expr.Op)
+	}
+}
+
+func equalValues(left, right any) bool {
+	leftNumber, leftIsNumber := left.(Number)
+	rightNumber, rightIsNumber := right.(Number)
+	if leftIsNumber || rightIsNumber {
+		if !leftIsNumber || !rightIsNumber {
+			return false
+		}
+		leftFloat, leftErr := strconv.ParseFloat(string(leftNumber), 64)
+		rightFloat, rightErr := strconv.ParseFloat(string(rightNumber), 64)
+		return leftErr == nil && rightErr == nil && leftFloat == rightFloat
+	}
+	return reflect.DeepEqual(left, right)
+}
+
+func validateConditionalTypes(trueExpr, falseExpr Expr) error {
+	trueType := staticExprType(trueExpr)
+	falseType := staticExprType(falseExpr)
+	if trueType != "dynamic" && falseType != "dynamic" && trueType != falseType {
+		return fmt.Errorf("conditional expression branches must have compatible types, got %s and %s", trueType, falseType)
+	}
+	return nil
+}
+
+func staticExprType(expr Expr) string {
+	switch v := expr.(type) {
+	case StringLit, HeredocLit:
+		return "string"
+	case Number:
+		return "number"
+	case bool, BinaryExpr:
+		return "bool"
+	case List:
+		return "list"
+	case Map:
+		return "map"
+	case FuncCall:
+		switch v.Name {
+		case "file":
+			return "string"
+		case "toset":
+			return "list"
+		default:
+			return "dynamic"
+		}
+	case ConditionalExpr:
+		trueType := staticExprType(v.True)
+		falseType := staticExprType(v.False)
+		if trueType == falseType {
+			return trueType
+		}
+		return "dynamic"
+	default:
+		return "dynamic"
+	}
+}
+
+func valueType(value any) string {
+	switch value.(type) {
+	case string:
+		return "string"
+	case Number:
+		return "number"
+	case bool:
+		return "bool"
+	case []any:
+		return "list"
+	case map[string]any:
+		return "map"
+	default:
+		return fmt.Sprintf("%T", value)
 	}
 }
 

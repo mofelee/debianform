@@ -133,7 +133,33 @@ debian_package.base["vim"]
 
 `for_each` 的 key 变化会被视为资源地址变化。第一版不自动迁移 state 地址；如果 key 改名，`dbf` 会把旧地址视为配置中已移除，把新地址视为新增资源。
 
-### 4.2 原生配置文件
+### 4.2 条件表达式
+
+支持 Terraform/OpenTofu 风格的条件表达式：
+
+```hcl
+debian_service "worker" {
+  host    = "server1"
+  name    = each.key == "ci" ? "ci-worker" : "user-worker"
+  enabled = each.key != "disabled"
+}
+```
+
+语法：
+
+```text
+condition ? true_value : false_value
+```
+
+要求：
+
+- `condition` 必须产生布尔值。
+- 支持 `==` 和 `!=` 比较。
+- 只求值被选中的分支。
+- 可以静态判断类型时，两个结果分支必须类型兼容。
+- 条件表达式可以用于 locals、资源属性、list、map 和函数参数。
+
+### 4.3 原生配置文件
 
 对于字段很多、变化快、原生格式已经足够清晰的系统配置，`dbf` 应允许用户直接写原生配置文件，同时仍然通过资源地址进入 state。
 
@@ -174,7 +200,7 @@ debian_networkd_file.native["20-wg0.netdev"]
 
 原生配置资源的 state 必须记录资源地址、目标主机、远端路径、内容 hash、owner、group、mode 和上次 apply 时间。用户可以在 `depends_on` 中引用整个 `for_each` 资源，也可以引用单个实例。
 
-### 4.3 `notify` 和 `handler`
+### 4.4 `notify` 和 `handler`
 
 资源支持 `notify` meta-argument，用于在资源发生实际变更后触发 handler。
 
