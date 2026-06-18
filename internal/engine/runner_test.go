@@ -457,6 +457,107 @@ func TestApplyHostnameEmitsSetHostname(t *testing.T) {
 	}
 }
 
+func aptSourceResource() config.Resource {
+	return config.Resource{
+		Type: "debian_apt_source", Name: "example", Address: "debian_apt_source.example", Host: "server1",
+		Attrs: map[string]any{
+			"uris": "https://example.invalid/debian", "suites": "trixie",
+			"components": "main", "signed_by": "/etc/apt/keyrings/example.gpg",
+		},
+	}
+}
+
+func TestAptSourceDesiredRendersDeb822(t *testing.T) {
+	d, err := aptSourceProvider{}.Desired(aptSourceResource())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Types: deb\n",
+		"URIs: https://example.invalid/debian\n",
+		"Suites: trixie\n",
+		"Components: main\n",
+		"Signed-By: /etc/apt/keyrings/example.gpg\n",
+	} {
+		if !strings.Contains(d.Content, want) {
+			t.Fatalf("content %q missing %q", d.Content, want)
+		}
+	}
+	if d.Path != "/etc/apt/sources.list.d/example.sources" {
+		t.Fatalf("path = %q", d.Path)
+	}
+}
+
+func TestPlanAptSource(t *testing.T) {
+	res := aptSourceResource()
+	d, err := aptSourceProvider{}.Desired(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inSync := "file\nroot\nroot\n644\n" + d.ContentSHA256 + "\n"
+
+	absent := aptSourceResource()
+	absent.Attrs["ensure"] = "absent"
+
+	cases := map[string]struct {
+		res        config.Resource
+		readPath   string
+		wantAction string
+	}{
+		"create when missing": {res: res, readPath: "missing\n", wantAction: "create"},
+		"in sync":             {res: res, readPath: inSync, wantAction: "no-op"},
+		"content drift":       {res: res, readPath: "file\nroot\nroot\n644\n" + hash("stale") + "\n", wantAction: "update"},
+		"absent but present":  {res: absent, readPath: "file\nroot\nroot\n644\n" + hash("x") + "\n", wantAction: "delete"},
+		"absent and missing":  {res: absent, readPath: "missing\n", wantAction: "no-op"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{reply: func(_, _ string) (sshx.Result, error) {
+				return sshx.Result{Stdout: tc.readPath}, nil
+			}}
+			if got := planFixture(t, runner, tc.res).Action; got != tc.wantAction {
+				t.Fatalf("action = %q, want %q", got, tc.wantAction)
+			}
+		})
+	}
+}
+
+func TestApplyAptSource(t *testing.T) {
+	t.Run("present writes file", func(t *testing.T) {
+		res := aptSourceResource()
+		runner := &fakeRunner{}
+		e := &Engine{runner: runner}
+		d, err := aptSourceProvider{}.Desired(res)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := (aptSourceProvider{}).Apply(context.Background(), e, change(res, d, "create", "")); err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"base64 -d", "/etc/apt/sources.list.d/example.sources", "install -o 'root' -g 'root' -m '0644'"} {
+			if !strings.Contains(runner.scripts[0], want) {
+				t.Fatalf("script %q missing %q", runner.scripts[0], want)
+			}
+		}
+	})
+	t.Run("absent removes file", func(t *testing.T) {
+		res := aptSourceResource()
+		res.Attrs["ensure"] = "absent"
+		runner := &fakeRunner{}
+		e := &Engine{runner: runner}
+		d, err := aptSourceProvider{}.Desired(res)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := (aptSourceProvider{}).Apply(context.Background(), e, change(res, d, "delete", "")); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(runner.scripts[0], "rm -f -- '/etc/apt/sources.list.d/example.sources'") {
+			t.Fatalf("script %q missing rm", runner.scripts[0])
+		}
+	})
+}
+
 func TestPlanResourceRejectsUnknownType(t *testing.T) {
 	e := &Engine{runner: &fakeRunner{}}
 	res := config.Resource{Type: "debian_bogus", Name: "x", Address: "debian_bogus.x", Host: "server1"}

@@ -497,6 +497,15 @@ func validateResource(res Resource) error {
 		if _, ok := stringAttr(res, "hostname"); !ok {
 			return fmt.Errorf("%s requires hostname", res.Address)
 		}
+	case "debian_apt_source":
+		for _, field := range []string{"uris", "suites", "components"} {
+			if _, ok := stringAttr(res, field); !ok {
+				return fmt.Errorf("%s requires %s", res.Address, field)
+			}
+		}
+		if err := validateEnum(res, "ensure", []string{"present", "absent"}, "present"); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported resource type %s", res.Type)
 	}

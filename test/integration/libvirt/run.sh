@@ -367,6 +367,14 @@ debian_hostname "main" {
   hostname = "debianform-managed"
 }
 
+debian_apt_source "example" {
+  host       = "debian_ci"
+  uris       = "https://example.invalid/debian"
+  suites     = "trixie"
+  components = "main"
+  signed_by  = "/etc/apt/keyrings/example.gpg"
+}
+
 debian_directory "managed" {
   host  = "debian_ci"
   path  = "/var/lib/debianform-ci/managed"
@@ -406,6 +414,7 @@ grep -q "debian_group.deploy" <<<"$INITIAL_PLAN"
 grep -q "debian_user.app" <<<"$INITIAL_PLAN"
 grep -q "debian_authorized_key.app" <<<"$INITIAL_PLAN"
 grep -q "debian_hostname.main" <<<"$INITIAL_PLAN"
+grep -q "debian_apt_source.example" <<<"$INITIAL_PLAN"
 grep -q "handler.record_change" <<<"$INITIAL_PLAN"
 
 log "applying initial configuration"
@@ -432,6 +441,11 @@ ssh_vm "test \"\$(stat -c %a /home/debianform-app/.ssh)\" = 700"
 ssh_vm "test \"\$(stat -c %a /home/debianform-app/.ssh/authorized_keys)\" = 600"
 ssh_vm "test \"\$(stat -c %U /home/debianform-app/.ssh/authorized_keys)\" = debianform-app"
 ssh_vm "test \"\$(hostnamectl --static)\" = debianform-managed"
+ssh_vm "test -f /etc/apt/sources.list.d/example.sources"
+ssh_vm "grep -qx 'URIs: https://example.invalid/debian' /etc/apt/sources.list.d/example.sources"
+ssh_vm "grep -qx 'Suites: trixie' /etc/apt/sources.list.d/example.sources"
+ssh_vm "grep -qx 'Signed-By: /etc/apt/keyrings/example.gpg' /etc/apt/sources.list.d/example.sources"
+ssh_vm "test \"\$(stat -c %a /etc/apt/sources.list.d/example.sources)\" = 644"
 
 NOOP_PLAN="$(dbf plan -f "$CONFIG_FILE")"
 printf '%s\n' "$NOOP_PLAN"
@@ -500,5 +514,17 @@ grep -q "debian_hostname.main" "$WORK_DIR/hostname-drift-check.log"
 dbf apply -f "$CONFIG_FILE" --auto-approve
 dbf check -f "$CONFIG_FILE"
 ssh_vm "test \"\$(hostnamectl --static)\" = debianform-managed"
+
+log "introducing apt source drift and verifying repair"
+ssh_vm "echo '# drift' >> /etc/apt/sources.list.d/example.sources"
+if dbf check -f "$CONFIG_FILE" >"$WORK_DIR/apt-source-drift-check.log" 2>&1; then
+  printf 'dbf check unexpectedly accepted apt source drift\n' >&2
+  exit 1
+fi
+cat "$WORK_DIR/apt-source-drift-check.log"
+grep -q "debian_apt_source.example" "$WORK_DIR/apt-source-drift-check.log"
+dbf apply -f "$CONFIG_FILE" --auto-approve
+dbf check -f "$CONFIG_FILE"
+ssh_vm "! grep -q '# drift' /etc/apt/sources.list.d/example.sources"
 
 log "integration test passed"

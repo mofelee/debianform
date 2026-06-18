@@ -30,6 +30,7 @@ var providers = map[string]provider{
 	"debian_user":           userProvider{},
 	"debian_authorized_key": authorizedKeyProvider{},
 	"debian_hostname":       hostnameProvider{},
+	"debian_apt_source":     aptSourceProvider{},
 }
 
 func lookupProvider(resType string) (provider, error) {
