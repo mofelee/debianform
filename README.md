@@ -147,6 +147,7 @@ A handler runs only if a notifying resource actually changed. If multiple resour
 - `debian_sysctl`
 - `debian_nftables_file`
 - `debian_group`
+- `debian_user`
 
 All resources use `host = "server1"`, where `server1` can be an SSH config `Host` alias. `dbf` always connects as `root`.
 

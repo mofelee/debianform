@@ -219,6 +219,105 @@ func TestApplyGroupEmitsExpectedCommands(t *testing.T) {
 	}
 }
 
+func TestPlanUserFromGetent(t *testing.T) {
+	managed := config.Resource{
+		Type: "debian_user", Name: "deployer", Address: "debian_user.deployer", Host: "server1",
+		Attrs: map[string]any{
+			"name": "deployer", "uid": "1500", "gid": "deploy",
+			"home": "/home/deployer", "shell": "/bin/bash", "groups": []any{"sudo", "docker"},
+		},
+	}
+	absent := config.Resource{
+		Type: "debian_user", Name: "old", Address: "debian_user.old", Host: "server1",
+		Attrs: map[string]any{"name": "old", "ensure": "absent"},
+	}
+
+	// getent passwd \n id -gn \n id -nG
+	inSync := "deployer:x:1500:1500:,,,:/home/deployer:/bin/bash\ndeploy\ndeploy docker sudo\n"
+	shellDrift := "deployer:x:1500:1500:,,,:/home/deployer:/bin/sh\ndeploy\ndeploy docker sudo\n"
+	groupDrift := "deployer:x:1500:1500:,,,:/home/deployer:/bin/bash\ndeploy\ndeploy sudo\n"
+
+	cases := map[string]struct {
+		res        config.Resource
+		passwd     string
+		wantAction string
+	}{
+		"create when missing": {res: managed, passwd: "__ABSENT__\n", wantAction: "create"},
+		"in sync":             {res: managed, passwd: inSync, wantAction: "no-op"},
+		"shell drift":         {res: managed, passwd: shellDrift, wantAction: "update"},
+		"supplementary drift": {res: managed, passwd: groupDrift, wantAction: "update"},
+		"absent but present":  {res: absent, passwd: "old:x:2000:2000::/home/old:/bin/sh\nold\nold\n", wantAction: "delete"},
+		"absent and missing":  {res: absent, passwd: "__ABSENT__\n", wantAction: "no-op"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{reply: func(_, _ string) (sshx.Result, error) {
+				return sshx.Result{Stdout: tc.passwd}, nil
+			}}
+			got := planFixture(t, runner, tc.res)
+			if got.Action != tc.wantAction {
+				t.Fatalf("action = %q, want %q", got.Action, tc.wantAction)
+			}
+			if !strings.Contains(runner.scripts[0], "getent passwd") {
+				t.Fatalf("expected a getent passwd probe, got %q", runner.scripts[0])
+			}
+		})
+	}
+}
+
+func TestApplyUserEmitsExpectedCommands(t *testing.T) {
+	cases := map[string]struct {
+		res         config.Resource
+		wantSubstrs []string
+	}{
+		"create with attributes": {
+			res: config.Resource{
+				Type: "debian_user", Name: "deployer", Address: "debian_user.deployer", Host: "server1",
+				Attrs: map[string]any{
+					"name": "deployer", "uid": "1500", "gid": "deploy",
+					"home": "/home/deployer", "shell": "/bin/bash", "groups": []any{"sudo", "docker"},
+				},
+			},
+			wantSubstrs: []string{
+				"useradd -m -u '1500' -g 'deploy' -G 'sudo,docker' -d '/home/deployer' -s '/bin/bash' 'deployer'",
+				"usermod -u '1500' -g 'deploy' -G 'sudo,docker' -d '/home/deployer' -s '/bin/bash' 'deployer'",
+			},
+		},
+		"system user no home": {
+			res: config.Resource{
+				Type: "debian_user", Name: "svc", Address: "debian_user.svc", Host: "server1",
+				Attrs: map[string]any{"name": "svc", "system": true, "shell": "/usr/sbin/nologin"},
+			},
+			wantSubstrs: []string{"useradd -r -s '/usr/sbin/nologin' 'svc'"},
+		},
+		"delete": {
+			res: config.Resource{
+				Type: "debian_user", Name: "svc", Address: "debian_user.svc", Host: "server1",
+				Attrs: map[string]any{"name": "svc", "ensure": "absent"},
+			},
+			wantSubstrs: []string{"userdel 'svc'"},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			runner := &fakeRunner{}
+			e := &Engine{runner: runner}
+			d, err := userProvider{}.Desired(tc.res)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := (userProvider{}).Apply(context.Background(), e, change(tc.res, d, "create", "")); err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tc.wantSubstrs {
+				if !strings.Contains(runner.scripts[0], want) {
+					t.Fatalf("script %q missing %q", runner.scripts[0], want)
+				}
+			}
+		})
+	}
+}
+
 func TestPlanResourceRejectsUnknownType(t *testing.T) {
 	e := &Engine{runner: &fakeRunner{}}
 	res := config.Resource{Type: "debian_bogus", Name: "x", Address: "debian_bogus.x", Host: "server1"}

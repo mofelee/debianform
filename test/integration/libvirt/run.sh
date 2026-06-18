@@ -336,6 +336,19 @@ debian_group "deploy" {
   gid  = 4242
 }
 
+debian_user "app" {
+  host  = "debian_ci"
+  name  = "debianform-app"
+  uid   = 4250
+  gid   = "debianform-deploy"
+  home  = "/home/debianform-app"
+  shell = "/usr/sbin/nologin"
+
+  depends_on = [
+    debian_group.deploy,
+  ]
+}
+
 debian_directory "managed" {
   host  = "debian_ci"
   path  = "/var/lib/debianform-ci/managed"
@@ -372,6 +385,7 @@ grep -q "debian_directory.managed" <<<"$INITIAL_PLAN"
 grep -q 'debian_file.managed\["primary"\]' <<<"$INITIAL_PLAN"
 grep -q 'debian_file.managed\["secondary"\]' <<<"$INITIAL_PLAN"
 grep -q "debian_group.deploy" <<<"$INITIAL_PLAN"
+grep -q "debian_user.app" <<<"$INITIAL_PLAN"
 grep -q "handler.record_change" <<<"$INITIAL_PLAN"
 
 log "applying initial configuration"
@@ -388,6 +402,10 @@ ssh_vm "test -s /var/lib/debianform-ci/state.json && test -e /var/lock/debianfor
 ssh_vm "grep -q 'debian_file.managed' /var/lib/debianform-ci/state.json"
 ssh_vm "getent group debianform-deploy >/dev/null"
 ssh_vm "test \"\$(getent group debianform-deploy | cut -d: -f3)\" = 4242"
+ssh_vm "getent passwd debianform-app >/dev/null"
+ssh_vm "test \"\$(getent passwd debianform-app | cut -d: -f3)\" = 4250"
+ssh_vm "test \"\$(id -gn debianform-app)\" = debianform-deploy"
+ssh_vm "test \"\$(getent passwd debianform-app | cut -d: -f7)\" = /usr/sbin/nologin"
 
 NOOP_PLAN="$(dbf plan -f "$CONFIG_FILE")"
 printf '%s\n' "$NOOP_PLAN"
@@ -420,5 +438,17 @@ grep -q "debian_group.deploy" "$WORK_DIR/group-drift-check.log"
 dbf apply -f "$CONFIG_FILE" --auto-approve
 dbf check -f "$CONFIG_FILE"
 ssh_vm "test \"\$(getent group debianform-deploy | cut -d: -f3)\" = 4242"
+
+log "introducing user drift and verifying repair"
+ssh_vm "usermod -s /bin/sh debianform-app"
+if dbf check -f "$CONFIG_FILE" >"$WORK_DIR/user-drift-check.log" 2>&1; then
+  printf 'dbf check unexpectedly accepted user drift\n' >&2
+  exit 1
+fi
+cat "$WORK_DIR/user-drift-check.log"
+grep -q "debian_user.app" "$WORK_DIR/user-drift-check.log"
+dbf apply -f "$CONFIG_FILE" --auto-approve
+dbf check -f "$CONFIG_FILE"
+ssh_vm "test \"\$(getent passwd debianform-app | cut -d: -f7)\" = /usr/sbin/nologin"
 
 log "integration test passed"

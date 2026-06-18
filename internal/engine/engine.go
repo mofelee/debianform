@@ -76,6 +76,10 @@ type Desired struct {
 	Validate      bool
 	GID           string
 	System        bool
+	UID           string
+	Home          string
+	Shell         string
+	Groups        []string
 }
 
 func New(cfg *config.Config, runner Runner, backend *state.SSHBackend) *Engine {
