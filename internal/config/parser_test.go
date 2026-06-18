@@ -1,0 +1,142 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestLoadForEachNetworkdFile(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = "server1"
+  path = "/var/lib/debianform/state.json"
+}
+
+debian_networkd_file "native" {
+  for_each = {
+    "10-eth0.network" = <<-EOF
+      [Match]
+      Name=eth0
+    EOF
+    "20-wg0.netdev" = <<-EOF
+      [NetDev]
+      Name=wg0
+    EOF
+  }
+
+  host = "server1"
+  name = each.key
+  content = each.value
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(cfg.Resources), 2; got != want {
+		t.Fatalf("len(resources) = %d, want %d", got, want)
+	}
+	if got, want := cfg.Resources[0].Address, `debian_networkd_file.native["10-eth0.network"]`; got != want {
+		t.Fatalf("address = %q, want %q", got, want)
+	}
+	if got, want := cfg.Resources[0].Attrs["name"], "10-eth0.network"; got != want {
+		t.Fatalf("name = %#v, want %q", got, want)
+	}
+	if got := cfg.Resources[0].Attrs["content"].(string); got != "[Match]\nName=eth0\n" {
+		t.Fatalf("unexpected heredoc content: %q", got)
+	}
+}
+
+func TestLoadResourceRefs(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = "server1"
+  path = "/var/lib/debianform/state.json"
+}
+
+debian_package "nginx" {
+  host = "server1"
+}
+
+debian_file "nginx_default" {
+  host = "server1"
+  path = "/tmp/default"
+  content = "ok"
+}
+
+debian_service "nginx" {
+  host = "server1"
+  depends_on = [
+    debian_package.nginx,
+    debian_file.nginx_default,
+  ]
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := cfg.Resources[2]
+	if got, want := len(service.DependsOn), 2; got != want {
+		t.Fatalf("depends_on len = %d, want %d", got, want)
+	}
+	if got, want := service.DependsOn[0], "debian_package.nginx"; got != want {
+		t.Fatalf("dep = %q, want %q", got, want)
+	}
+}
+
+func TestLoadForEachLocalToSet(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = "ksvm201"
+  path = "/tmp/state.json"
+}
+
+locals {
+  hosts = toset([
+    "ksvm201",
+    "ksvm202",
+  ])
+}
+
+debian_file "host_file" {
+  for_each = local.hosts
+
+  host = each.key
+  path = "/tmp/${each.key}.txt"
+  content = "host ${each.value}\n"
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(cfg.Resources), 2; got != want {
+		t.Fatalf("len(resources) = %d, want %d", got, want)
+	}
+	if got, want := cfg.Resources[0].Address, `debian_file.host_file["ksvm201"]`; got != want {
+		t.Fatalf("address = %q, want %q", got, want)
+	}
+	if got, want := cfg.Resources[1].Host, "ksvm202"; got != want {
+		t.Fatalf("host = %q, want %q", got, want)
+	}
+	if got, want := cfg.Resources[1].Attrs["content"], "host ksvm202\n"; got != want {
+		t.Fatalf("content = %#v, want %q", got, want)
+	}
+}

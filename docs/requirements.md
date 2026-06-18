@@ -82,7 +82,11 @@ debian_service.nginx
 
 资源支持 `for_each` meta-argument，用于从 map 批量生成资源实例。
 
-第一版只要求支持 map。map key 必须是稳定字符串，并会成为 state 地址的一部分。map value 可以是字符串、数字、布尔值、list、object 或嵌套结构。
+第一版要求支持 map 和字符串列表。
+
+map key 必须是稳定字符串，并会成为 state 地址的一部分。map value 可以是字符串、数字、布尔值、list、object 或嵌套结构。
+
+字符串列表会被当作字符串集合处理，每个字符串既是 key 也是 value。为了贴近 Terraform，也支持 `toset([...])` 写法。
 
 `for_each` 资源中可使用：
 
@@ -92,12 +96,16 @@ debian_service.nginx
 示例：
 
 ```hcl
+locals {
+  base_packages = toset([
+    "curl",
+    "jq",
+    "vim",
+  ])
+}
+
 debian_package "base" {
-  for_each = {
-    curl = true
-    jq   = true
-    vim  = true
-  }
+  for_each = local.base_packages
 
   host = "server1"
   name = each.key
