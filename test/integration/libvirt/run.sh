@@ -263,7 +263,6 @@ cat >"$WORK_DIR/domain.xml" <<EOF
     <console type='pty'>
       <target type='serial' port='0'/>
     </console>
-    <graphics type='none'/>
   </devices>
 </domain>
 EOF
