@@ -1,6 +1,6 @@
 # 用 DebianForm 的高层 APT repository 模型从 CZ.NIC 官方仓库安装 BIRD2。
 #
-# 这个示例遵循 docs/module-design.md 的最新模块设计标准：
+# 这个示例遵循 README.md 中的模块设计原则：
 #   - 用户声明系统事实，不声明执行步骤。
 #   - APT signing key 从 HTTPS 远端获取时，provider 自动依赖 ca-certificates。
 #   - APT source 变化后，provider 自动触发 host 级 apt_update[host]。
