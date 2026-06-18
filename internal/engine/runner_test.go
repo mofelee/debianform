@@ -559,6 +559,112 @@ func TestApplyAptSource(t *testing.T) {
 	})
 }
 
+func aptRepositoryResource() config.Resource {
+	return config.Resource{
+		Type: "debian_apt_repository", Name: "cznic_bird2", Address: "debian_apt_repository.cznic_bird2", Host: "server1",
+		Attrs: map[string]any{
+			"uris": "https://pkg.labs.nic.cz/bird2", "suites": "trixie", "components": "main",
+			"key": map[string]any{
+				"url":  "https://pkg.labs.nic.cz/gpg",
+				"path": "/etc/apt/keyrings/cznic.asc",
+			},
+		},
+	}
+}
+
+func TestAptRepositoryDesiredRendersSourceWithKey(t *testing.T) {
+	d, err := aptRepositoryProvider{}.Desired(aptRepositoryResource())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := d.Path, "/etc/apt/sources.list.d/cznic_bird2.sources"; got != want {
+		t.Fatalf("path = %q, want %q", got, want)
+	}
+	if got, want := d.KeyPath, "/etc/apt/keyrings/cznic.asc"; got != want {
+		t.Fatalf("key path = %q, want %q", got, want)
+	}
+	if got, want := d.KeyURL, "https://pkg.labs.nic.cz/gpg"; got != want {
+		t.Fatalf("key url = %q, want %q", got, want)
+	}
+	for _, want := range []string{
+		"URIs: https://pkg.labs.nic.cz/bird2\n",
+		"Suites: trixie\n",
+		"Signed-By: /etc/apt/keyrings/cznic.asc\n",
+	} {
+		if !strings.Contains(d.Content, want) {
+			t.Fatalf("content %q missing %q", d.Content, want)
+		}
+	}
+}
+
+func TestPlanAptRepository(t *testing.T) {
+	res := aptRepositoryResource()
+	d, err := aptRepositoryProvider{}.Desired(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inSyncSource := "file\nroot\nroot\n644\n" + d.ContentSHA256 + "\n"
+	inSyncKey := "file\nroot\nroot\n644\n\n"
+
+	cases := map[string]struct {
+		source     string
+		key        string
+		wantAction string
+	}{
+		"create when missing": {source: "missing\n", key: "missing\n", wantAction: "create"},
+		"in sync":             {source: inSyncSource, key: inSyncKey, wantAction: "no-op"},
+		"source drift":        {source: "file\nroot\nroot\n644\n" + hash("stale") + "\n", key: inSyncKey, wantAction: "update"},
+		"key missing":         {source: inSyncSource, key: "missing\n", wantAction: "update"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			runner := &fakeRunner{reply: func(_, _ string) (sshx.Result, error) {
+				calls++
+				if calls == 1 {
+					return sshx.Result{Stdout: tc.source}, nil
+				}
+				return sshx.Result{Stdout: tc.key}, nil
+			}}
+			got, err := aptRepositoryProvider{}.Plan(context.Background(), &Engine{runner: runner}, res, d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Action != tc.wantAction {
+				t.Fatalf("action = %q, want %q", got.Action, tc.wantAction)
+			}
+		})
+	}
+}
+
+func TestApplyAptRepositoryWithHTTPSKeyURL(t *testing.T) {
+	res := aptRepositoryResource()
+	runner := &fakeRunner{}
+	e := &Engine{runner: runner}
+	d, err := aptRepositoryProvider{}.Desired(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := (aptRepositoryProvider{}).Apply(context.Background(), e, change(res, d, "update", "")); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 1 {
+		t.Fatalf("scripts = %d, want 1", len(runner.scripts))
+	}
+	script := runner.scripts[0]
+	for _, want := range []string{
+		"apt-get install -y ca-certificates",
+		"https://pkg.labs.nic.cz/gpg",
+		"/etc/apt/keyrings/cznic.asc",
+		"/etc/apt/sources.list.d/cznic_bird2.sources",
+		"apt-get update",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("script %q missing %q", script, want)
+		}
+	}
+}
+
 func TestOrphanDestroysOrderAndFiltering(t *testing.T) {
 	prior := state.State{Resources: map[string]state.ResourceState{
 		"debian_group.deploy": {"type": "debian_group", "host": "h", "name": "deploy", "order": float64(1)},
@@ -604,8 +710,11 @@ func TestDestroyEmitsCommands(t *testing.T) {
 		"package":    {packageProvider{}, state.ResourceState{"type": "debian_package", "host": "h", "name": "nginx"}, "apt-get remove -y 'nginx'"},
 		"directory":  {directoryProvider{}, state.ResourceState{"type": "debian_directory", "host": "h", "path": "/var/lib/app"}, "rm -rf -- '/var/lib/app'"},
 		"apt_source": {aptSourceProvider{}, state.ResourceState{"type": "debian_apt_source", "host": "h", "path": "/etc/apt/sources.list.d/x.sources"}, "rm -f -- '/etc/apt/sources.list.d/x.sources'"},
-		"file":       {fileProvider{}, state.ResourceState{"type": "debian_file", "host": "h", "path": "/etc/motd"}, "rm -f -- '/etc/motd'"},
-		"service":    {serviceProvider{}, state.ResourceState{"type": "debian_service", "host": "h", "name": "nginx"}, "systemctl disable --now 'nginx'"},
+		"apt_repository": {aptRepositoryProvider{}, state.ResourceState{
+			"type": "debian_apt_repository", "host": "h", "path": "/etc/apt/sources.list.d/x.sources", "key_path": "/etc/apt/keyrings/x.asc",
+		}, "rm -f -- '/etc/apt/keyrings/x.asc'"},
+		"file":    {fileProvider{}, state.ResourceState{"type": "debian_file", "host": "h", "path": "/etc/motd"}, "rm -f -- '/etc/motd'"},
+		"service": {serviceProvider{}, state.ResourceState{"type": "debian_service", "host": "h", "name": "nginx"}, "systemctl disable --now 'nginx'"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

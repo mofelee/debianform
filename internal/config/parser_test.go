@@ -448,3 +448,67 @@ debian_nftables_file "main" {
 		t.Fatalf("nft content = %#v, want %q", got, want)
 	}
 }
+
+func TestLoadAptRepository(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	input := `
+state "ssh" {
+  host = "bird_host"
+  path = "/var/lib/debianform/state.json"
+}
+
+locals {
+  suite = "trixie"
+}
+
+debian_apt_repository "cznic_bird2" {
+  host       = "bird_host"
+  uris       = "https://pkg.labs.nic.cz/bird2"
+  suites     = local.suite
+  components = "main"
+
+  key = {
+    url  = "https://pkg.labs.nic.cz/gpg"
+    path = "/etc/apt/keyrings/cznic.asc"
+  }
+}
+
+debian_package "bird2" {
+  host = "bird_host"
+  name = "bird2"
+}
+
+debian_service "bird" {
+  host    = "bird_host"
+  name    = "bird"
+  package = "bird2"
+  enabled = true
+  state   = "running"
+}
+`
+	if err := os.WriteFile(file, []byte(input), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := len(cfg.Resources), 3; got != want {
+		t.Fatalf("len(resources) = %d, want %d", got, want)
+	}
+	repo := cfg.Resources[0]
+	if got, want := repo.Type, "debian_apt_repository"; got != want {
+		t.Fatalf("repo type = %q, want %q", got, want)
+	}
+	key, ok := repo.Attrs["key"].(map[string]any)
+	if !ok {
+		t.Fatalf("key = %#v, want object", repo.Attrs["key"])
+	}
+	if got, want := key["url"], "https://pkg.labs.nic.cz/gpg"; got != want {
+		t.Fatalf("key.url = %#v, want %q", got, want)
+	}
+	if got, want := cfg.Resources[2].Attrs["package"], "bird2"; got != want {
+		t.Fatalf("service package = %#v, want %q", got, want)
+	}
+}

@@ -47,6 +47,7 @@ var providers = map[string]provider{
 	"debian_authorized_key": authorizedKeyProvider{},
 	"debian_hostname":       hostnameProvider{},
 	"debian_apt_source":     aptSourceProvider{},
+	"debian_apt_repository": aptRepositoryProvider{},
 }
 
 func lookupProvider(resType string) (provider, error) {
@@ -215,6 +216,7 @@ func (serviceProvider) Desired(res config.Resource) (Desired, error) {
 		d.Enabled = &enabled
 	}
 	d.ServiceState = stringAttr(res, "state", "")
+	d.Package = stringAttr(res, "package", "")
 	return d, nil
 }
 

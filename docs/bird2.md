@@ -3,9 +3,7 @@
 本文展示按最新模块设计标准安装 BIRD2 的目标写法。完整配置见
 [examples/bird2.dbf.hcl](../examples/bird2.dbf.hcl)。
 
-注意：这里使用的 `debian_apt_repository`、`key.url`、`debian_service.package`
-和内部图调度仍是目标设计。当前实现完成前，现有 `dbf validate/apply` 可能会拒绝
-这个示例。
+当前实现已支持这个示例所需的高层 APT repository、远端 key 获取和服务包依赖字段。
 
 ## 目标状态
 
@@ -79,9 +77,9 @@ locals {
 }
 ```
 
-## 实现后使用
+## 使用
 
-高层 APT repository 和图调度实现后，使用方式应保持普通 `dbf` 工作流：
+使用方式保持普通 `dbf` 工作流：
 
 ```bash
 dbf plan  -f examples/bird2.dbf.hcl

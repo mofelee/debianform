@@ -506,6 +506,29 @@ func validateResource(res Resource) error {
 		if err := validateEnum(res, "ensure", []string{"present", "absent"}, "present"); err != nil {
 			return err
 		}
+	case "debian_apt_repository":
+		for _, field := range []string{"uris", "suites", "components"} {
+			if _, ok := stringAttr(res, field); !ok {
+				return fmt.Errorf("%s requires %s", res.Address, field)
+			}
+		}
+		if value, ok := res.Attrs["key"]; ok {
+			key, ok := value.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s key must be an object", res.Address)
+			}
+			hasURL := nonEmptyMapString(key, "url")
+			hasContent := nonEmptyMapString(key, "content")
+			if hasURL && hasContent {
+				return fmt.Errorf("%s key must not set both url and content", res.Address)
+			}
+			if !hasURL && !hasContent {
+				return fmt.Errorf("%s key requires url or content", res.Address)
+			}
+		}
+		if err := validateEnum(res, "ensure", []string{"present", "absent"}, "present"); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported resource type %s", res.Type)
 	}
@@ -565,6 +588,21 @@ func hasOneOf(res Resource, a, b string) bool {
 	_, hasA := stringAttr(res, a)
 	_, hasB := stringAttr(res, b)
 	return hasA != hasB
+}
+
+func nonEmptyMapString(values map[string]any, name string) bool {
+	value, ok := values[name]
+	if !ok {
+		return false
+	}
+	switch v := value.(type) {
+	case string:
+		return v != ""
+	case Number:
+		return string(v) != ""
+	default:
+		return false
+	}
 }
 
 func resourceObjectName(res Resource) string {

@@ -35,6 +35,48 @@ func TestTopoSortKeepsDependenciesBeforeDependents(t *testing.T) {
 	}
 }
 
+func TestResourcesInfersRepositoryAndServiceDependencies(t *testing.T) {
+	resources := []config.Resource{
+		{
+			Type:    "debian_service",
+			Name:    "bird",
+			Address: "debian_service.bird",
+			Host:    "server1",
+			Attrs:   map[string]any{"package": "bird2"},
+			Order:   0,
+		},
+		{
+			Type:    "debian_package",
+			Name:    "bird2",
+			Address: "debian_package.bird2",
+			Host:    "server1",
+			Attrs:   map[string]any{"name": "bird2"},
+			Order:   1,
+		},
+		{
+			Type:    "debian_apt_repository",
+			Name:    "cznic_bird2",
+			Address: "debian_apt_repository.cznic_bird2",
+			Host:    "server1",
+			Attrs:   map[string]any{},
+			Order:   2,
+		},
+	}
+	e := &Engine{cfg: &config.Config{Resources: resources}}
+
+	sorted, err := e.resources(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{sorted[0].Address, sorted[1].Address, sorted[2].Address}
+	want := []string{"debian_apt_repository.cznic_bird2", "debian_package.bird2", "debian_service.bird"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("sorted = %#v, want %#v", got, want)
+		}
+	}
+}
+
 func TestHandlerRunsDedupesAndUsesDeclarationOrder(t *testing.T) {
 	e := &Engine{
 		cfg: &config.Config{

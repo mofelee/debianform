@@ -794,6 +794,7 @@ type Resource interface {
 - `debian_kernel_module`
 - `debian_sysctl`
 - `debian_nftables_file`
+- `debian_apt_repository`
 - SSH state 后端和远端锁
 - `validate`
 - `plan`

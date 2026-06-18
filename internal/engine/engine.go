@@ -86,6 +86,11 @@ type Desired struct {
 	User          string
 	PublicKey     string
 	Hostname      string
+	Package       string
+	KeyPath       string
+	KeyURL        string
+	KeyContent    string
+	KeySHA256     string
 }
 
 func New(cfg *config.Config, runner Runner, backend *state.SSHBackend) *Engine {
@@ -298,7 +303,59 @@ func (e *Engine) resources(opts Options) ([]config.Resource, error) {
 		}
 		resources = append(resources, res)
 	}
+	resources = inferSemanticDependencies(resources)
 	return topoSort(resources)
+}
+
+func inferSemanticDependencies(resources []config.Resource) []config.Resource {
+	packageByHostName := map[string]string{}
+	repositoriesByHost := map[string][]string{}
+	for _, res := range resources {
+		switch res.Type {
+		case "debian_package":
+			packageByHostName[res.Host+"\x00"+objectName(res)] = res.Address
+		case "debian_apt_repository":
+			if stringAttr(res, "ensure", "present") != "absent" {
+				repositoriesByHost[res.Host] = append(repositoriesByHost[res.Host], res.Address)
+			}
+		}
+	}
+
+	out := make([]config.Resource, len(resources))
+	copy(out, resources)
+	for i := range out {
+		res := &out[i]
+		switch res.Type {
+		case "debian_package":
+			if stringAttr(*res, "ensure", "present") == "absent" {
+				continue
+			}
+			for _, repo := range repositoriesByHost[res.Host] {
+				appendDependency(res, repo)
+			}
+		case "debian_service":
+			pkg := stringAttr(*res, "package", "")
+			if pkg == "" {
+				continue
+			}
+			if dep := packageByHostName[res.Host+"\x00"+pkg]; dep != "" {
+				appendDependency(res, dep)
+			}
+		}
+	}
+	return out
+}
+
+func appendDependency(res *config.Resource, dep string) {
+	if dep == "" || dep == res.Address {
+		return
+	}
+	for _, existing := range res.DependsOn {
+		if existing == dep {
+			return
+		}
+	}
+	res.DependsOn = append(res.DependsOn, dep)
 }
 
 func (e *Engine) handlerRuns(changes []Change) []HandlerRun {
@@ -501,6 +558,18 @@ func stateForResource(res config.Resource, desired Desired) state.ResourceState 
 	}
 	if desired.PublicKey != "" {
 		out["public_key"] = desired.PublicKey
+	}
+	if desired.Package != "" {
+		out["package"] = desired.Package
+	}
+	if desired.KeyPath != "" {
+		out["key_path"] = desired.KeyPath
+	}
+	if desired.KeyURL != "" {
+		out["key_url"] = desired.KeyURL
+	}
+	if desired.KeySHA256 != "" {
+		out["key_sha256"] = desired.KeySHA256
 	}
 	return out
 }
