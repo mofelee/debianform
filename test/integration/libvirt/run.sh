@@ -530,6 +530,11 @@ ssh_vm "! grep -q '# drift' /etc/apt/sources.list.d/example.sources"
 
 log "removing resources from config and verifying Terraform-style destroy"
 cat >"$CONFIG_FILE2" <<EOF
+host "debian_ci" {
+  address       = "$VM_IP"
+  identity_file = "$SSH_KEY"
+}
+
 state "ssh" {
   host      = "debian_ci"
   path      = "/var/lib/debianform-ci/state.json"
