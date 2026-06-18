@@ -100,7 +100,7 @@ dbf() {
 }
 
 wait_for_vm_ip() {
-  local deadline=$((SECONDS + 420))
+  local deadline=$((SECONDS + 240))
   while (( SECONDS < deadline )); do
     VM_IP="$(
       virsh_system domifaddr "$VM_NAME" --source lease 2>/dev/null |
@@ -115,7 +115,7 @@ wait_for_vm_ip() {
 }
 
 wait_for_ssh() {
-  local deadline=$((SECONDS + 420))
+  local deadline=$((SECONDS + 300))
   while (( SECONDS < deadline )); do
     if ssh_vm true >/dev/null 2>&1; then
       return 0
@@ -245,8 +245,12 @@ cat >"$WORK_DIR/domain.xml" <<EOF
   <name>$VM_NAME</name>
   <memory unit='MiB'>1024</memory>
   <vcpu>2</vcpu>
-  <os>
+  <os firmware='efi'>
     <type arch='x86_64' machine='q35'>hvm</type>
+    <firmware>
+      <feature enabled='no' name='enrolled-keys'/>
+      <feature enabled='no' name='secure-boot'/>
+    </firmware>
     <boot dev='hd'/>
   </os>
   <features>
