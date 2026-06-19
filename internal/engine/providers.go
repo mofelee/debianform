@@ -48,6 +48,8 @@ var providers = map[string]provider{
 	"debian_hostname":       hostnameProvider{},
 	"debian_apt_source":     aptSourceProvider{},
 	"debian_apt_repository": aptRepositoryProvider{},
+	"debian_release_binary": releaseBinaryProvider{},
+	"debian_systemd_unit":   systemdUnitProvider{},
 }
 
 func lookupProvider(resType string) (provider, error) {

@@ -125,6 +125,39 @@ func TestResourcesInfersBBRSysctlKernelModuleDependency(t *testing.T) {
 	}
 }
 
+func TestResourcesInfersSystemdUnitDependency(t *testing.T) {
+	resources := []config.Resource{
+		{
+			Type:    "debian_service",
+			Name:    "tool",
+			Address: "debian_service.tool",
+			Host:    "server1",
+			Attrs:   map[string]any{"name": "tool.service"},
+			Order:   0,
+		},
+		{
+			Type:    "debian_systemd_unit",
+			Name:    "tool",
+			Address: "debian_systemd_unit.tool",
+			Host:    "server1",
+			Attrs:   map[string]any{"name": "tool.service"},
+			Order:   1,
+		},
+	}
+	e := &Engine{cfg: &config.Config{Resources: resources}}
+
+	sorted, err := e.resources(Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := sorted[0].Address, "debian_systemd_unit.tool"; got != want {
+		t.Fatalf("first resource = %q, want %q", got, want)
+	}
+	if got, want := sorted[1].Address, "debian_service.tool"; got != want {
+		t.Fatalf("second resource = %q, want %q", got, want)
+	}
+}
+
 func TestHandlerRunsDedupesAndUsesDeclarationOrder(t *testing.T) {
 	e := &Engine{
 		cfg: &config.Config{

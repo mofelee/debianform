@@ -59,38 +59,48 @@ type HandlerRun struct {
 }
 
 type Desired struct {
-	Name          string
-	Key           string
-	Value         string
-	Path          string
-	Content       string
-	ContentSHA256 string
-	Owner         string
-	Group         string
-	Mode          string
-	Ensure        string
-	Version       string
-	UpdateCache   bool
-	Enabled       *bool
-	ServiceState  string
-	Activate      bool
-	Persist       bool
-	ApplyRuntime  bool
-	Validate      bool
-	GID           string
-	System        bool
-	UID           string
-	Home          string
-	Shell         string
-	Groups        []string
-	User          string
-	PublicKey     string
-	Hostname      string
-	Package       string
-	KeyPath       string
-	KeyURL        string
-	KeyContent    string
-	KeySHA256     string
+	Name           string
+	Key            string
+	Value          string
+	Path           string
+	Content        string
+	ContentSHA256  string
+	Owner          string
+	Group          string
+	Mode           string
+	Ensure         string
+	Version        string
+	UpdateCache    bool
+	Enabled        *bool
+	ServiceState   string
+	Activate       bool
+	Persist        bool
+	ApplyRuntime   bool
+	Validate       bool
+	GID            string
+	System         bool
+	UID            string
+	Home           string
+	Shell          string
+	Groups         []string
+	User           string
+	PublicKey      string
+	Hostname       string
+	Package        string
+	KeyPath        string
+	KeyURL         string
+	KeyContent     string
+	KeySHA256      string
+	ArchiveFormat  string
+	ArchiveMember  string
+	ReleaseSource  ReleaseSource
+	ReleaseSources map[string]ReleaseSource
+}
+
+type ReleaseSource struct {
+	URL           string
+	ArchiveSHA256 string
+	BinarySHA256  string
 }
 
 func New(cfg *config.Config, runner Runner, backend *state.SSHBackend) *Engine {
@@ -310,6 +320,7 @@ func (e *Engine) resources(opts Options) ([]config.Resource, error) {
 func inferSemanticDependencies(resources []config.Resource) []config.Resource {
 	packageByHostName := map[string]string{}
 	moduleByHostName := map[string]string{}
+	unitByHostName := map[string]string{}
 	repositoriesByHost := map[string][]string{}
 	for _, res := range resources {
 		switch res.Type {
@@ -324,6 +335,12 @@ func inferSemanticDependencies(resources []config.Resource) []config.Resource {
 		case "debian_apt_repository":
 			if stringAttr(res, "ensure", "present") != "absent" {
 				repositoriesByHost[res.Host] = append(repositoriesByHost[res.Host], res.Address)
+			}
+		case "debian_systemd_unit":
+			name := objectName(res)
+			unitByHostName[res.Host+"\x00"+name] = res.Address
+			if strings.HasSuffix(name, ".service") {
+				unitByHostName[res.Host+"\x00"+strings.TrimSuffix(name, ".service")] = res.Address
 			}
 		}
 	}
@@ -342,10 +359,13 @@ func inferSemanticDependencies(resources []config.Resource) []config.Resource {
 			}
 		case "debian_service":
 			pkg := stringAttr(*res, "package", "")
-			if pkg == "" {
-				continue
+			if pkg != "" {
+				if dep := packageByHostName[res.Host+"\x00"+pkg]; dep != "" {
+					appendDependency(res, dep)
+				}
 			}
-			if dep := packageByHostName[res.Host+"\x00"+pkg]; dep != "" {
+			name := objectName(*res)
+			if dep := unitByHostName[res.Host+"\x00"+name]; dep != "" {
 				appendDependency(res, dep)
 			}
 		case "debian_sysctl":
@@ -592,6 +612,12 @@ func stateForResource(res config.Resource, desired Desired) state.ResourceState 
 	}
 	if desired.KeySHA256 != "" {
 		out["key_sha256"] = desired.KeySHA256
+	}
+	if desired.ReleaseSource.URL != "" {
+		out["source_url"] = desired.ReleaseSource.URL
+	}
+	if desired.ReleaseSource.ArchiveSHA256 != "" {
+		out["archive_sha256"] = desired.ReleaseSource.ArchiveSHA256
 	}
 	return out
 }

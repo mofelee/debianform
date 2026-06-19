@@ -529,10 +529,93 @@ func validateResource(res Resource) error {
 		if err := validateEnum(res, "ensure", []string{"present", "absent"}, "present"); err != nil {
 			return err
 		}
+	case "debian_release_binary":
+		for _, field := range []string{"path", "member"} {
+			if _, ok := stringAttr(res, field); !ok {
+				return fmt.Errorf("%s requires %s", res.Address, field)
+			}
+		}
+		if err := validateEnum(res, "archive_format", []string{"tar.xz"}, "tar.xz"); err != nil {
+			return err
+		}
+		source, hasSource := res.Attrs["source"]
+		sources, hasSources := res.Attrs["sources"]
+		if hasSource == hasSources {
+			return fmt.Errorf("%s requires exactly one of source or sources", res.Address)
+		}
+		if hasSource {
+			if err := validateReleaseSource(res.Address+" source", source); err != nil {
+				return err
+			}
+		}
+		if hasSources {
+			values, ok := sources.(map[string]any)
+			if !ok || len(values) == 0 {
+				return fmt.Errorf("%s sources must be a non-empty object", res.Address)
+			}
+			for arch, value := range values {
+				if arch == "" {
+					return fmt.Errorf("%s sources contains an empty architecture", res.Address)
+				}
+				if err := validateReleaseSource(res.Address+" sources."+arch, value); err != nil {
+					return err
+				}
+			}
+		}
+	case "debian_systemd_unit":
+		if _, hasPath := stringAttr(res, "path"); !hasPath {
+			if name := resourceObjectName(res); name == "" {
+				return fmt.Errorf("%s requires name or path", res.Address)
+			}
+		}
+		if !hasOneOf(res, "content", "source") {
+			return fmt.Errorf("%s requires content or source", res.Address)
+		}
 	default:
 		return fmt.Errorf("unsupported resource type %s", res.Type)
 	}
 	return nil
+}
+
+func validateReleaseSource(address string, value any) error {
+	source, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s must be an object", address)
+	}
+	for _, field := range []string{"url", "archive_sha256", "binary_sha256"} {
+		value, ok := source[field]
+		if !ok || configString(value) == "" {
+			return fmt.Errorf("%s requires %s", address, field)
+		}
+		if field != "url" && !isSHA256(configString(value)) {
+			return fmt.Errorf("%s field %s must be a 64-character hexadecimal SHA-256", address, field)
+		}
+	}
+	return nil
+}
+
+func configString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case Number:
+		return string(v)
+	default:
+		return ""
+	}
+}
+
+func isSHA256(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, r := range value {
+		if r >= '0' && r <= '9' || r >= 'a' && r <= 'f' || r >= 'A' && r <= 'F' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func validateHandlers(cfg *Config) error {
