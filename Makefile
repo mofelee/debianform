@@ -14,7 +14,7 @@ LDFLAGS := -s -w \
 	-X $(VERSION_PACKAGE).Commit=$(COMMIT) \
 	-X $(VERSION_PACKAGE).Date=$(BUILD_DATE)
 
-.PHONY: build install test test-unit test-integration clean
+.PHONY: build install test test-unit test-integration test-integration-case test-integration-layout clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PACKAGE)
@@ -31,6 +31,13 @@ test-unit:
 
 test-integration:
 	./test/integration/libvirt/run.sh
+
+test-integration-case:
+	@test -n "$(CASE)" || (echo "CASE is required, for example: make test-integration-case CASE=files" >&2; exit 1)
+	DBF_INTEGRATION_CASE="$(CASE)" ./test/integration/libvirt/run.sh
+
+test-integration-layout:
+	./test/integration/libvirt/validate-cases.sh
 
 clean:
 	go clean

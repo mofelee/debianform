@@ -1549,7 +1549,9 @@ make clean
 | `make build` | 构建带版本元数据的 `dbf` |
 | `make test` | 执行 `go test ./...` |
 | `make test-unit` | 执行 race detector 和全部 Go 测试 |
-| `make test-integration` | 启动 Debian 13 VM 执行集成测试 |
+| `make test-integration` | 每个场景启动一台全新 Debian 13 VM |
+| `make test-integration-case CASE=files` | 只运行指定场景 |
+| `make test-integration-layout` | 不启动 VM，校验场景目录、HCL 和 shell 语法 |
 | `make clean` | 清理构建产物 |
 
 CI 还会检查：
@@ -1559,23 +1561,23 @@ gofmt
 go vet ./...
 go test -race -count=1 ./...
 make build
+make test-integration-layout
 ```
 
 ### Debian 13 libvirt 集成测试
 
-集成测试使用官方 Debian 13 `trixie` genericcloud 镜像，校验 `SHA512SUMS` 后创建
-隔离 NAT 网络、cloud-init seed 和 qcow2 overlay。
+集成测试使用官方 Debian 13 `trixie` genericcloud 镜像，校验 `SHA512SUMS`。每个
+`test/integration/libvirt/cases/<name>/` 目录会创建独立 NAT 网络、cloud-init seed、
+qcow2 overlay 和空白 VM，不复用其他场景修改过的系统盘。
 
-测试覆盖：
+场景使用连续编号的 `1.dbf.hcl`、`2.dbf.hcl` 等文件表达多步骤变更。每一步都有
+对应的 `.plan` 精确列出全部计划地址，并用 `.check.sh` 将远端检查逐项命名。可选
+`.drift.sh` 负责制造漂移，并要求 `dbf check` 在修复前失败。
 
-1. `validate`。
-2. 首次 `plan`。
-3. 使用 SSH state 和远端锁执行 `apply`。
-4. `check`。
-5. 第二次 no-op plan。
-6. 人工制造远端漂移。
-7. 检测并修复漂移。
-8. handler 只在变化后运行并去重。
+最后一个配置必须包含零个资源，用于销毁该场景创建的全部资源。运行器会检查最终
+销毁计划与 `.plan` 完全一致、应用后的 state 为空，并执行最终 `.check.sh` 检查
+主机残留。详细协议见
+[test/integration/libvirt/README.md](test/integration/libvirt/README.md)。
 
 在 x86_64 Linux 上安装依赖：
 
@@ -1589,12 +1591,19 @@ sudo systemctl start libvirtd
 make test-integration
 ```
 
+只运行一个场景：
+
+```bash
+make test-integration-case CASE=identity
+```
+
 `/dev/kvm` 可读写时使用 KVM，否则回退到 QEMU 软件模拟。
 
 可用环境变量：
 
 | 变量 | 说明 |
 | --- | --- |
+| `DBF_INTEGRATION_CASE` | 只运行指定场景目录 |
 | `DBF_INTEGRATION_WORKDIR` | 指定测试工作目录 |
 | `DBF_INTEGRATION_KEEP_WORKDIR=1` | 测试后保留工作目录 |
 | `DBF_INTEGRATION_ARTIFACT_DIR` | 指定失败诊断输出目录 |

@@ -1,0 +1,2 @@
+debian_file.managed["primary"]
+handler.record_change

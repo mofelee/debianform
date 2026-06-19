@@ -1,0 +1,3 @@
+debian_directory.managed
+debian_file.managed["primary"]
+debian_file.managed["secondary"]

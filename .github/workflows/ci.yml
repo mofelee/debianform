@@ -19,6 +19,8 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      integration_cases: ${{ steps.integration_cases.outputs.cases }}
 
     steps:
       - name: Check out repository
@@ -45,11 +47,29 @@ jobs:
       - name: Build CLI
         run: make build
 
+      - name: Validate integration case layout
+        run: make test-integration-layout
+
+      - name: Discover integration cases
+        id: integration_cases
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+
+          cases = sorted(path.name for path in Path("test/integration/libvirt/cases").iterdir() if path.is_dir())
+          print("cases=" + json.dumps(cases))
+          PY
+
   integration:
-    name: Debian 13 libvirt integration
+    name: Debian 13 libvirt (${{ matrix.case }})
     needs: unit
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJSON(needs.unit.outputs.integration_cases) }}
 
     steps:
       - name: Check out repository
@@ -113,6 +133,7 @@ jobs:
       - name: Run Debian 13 VM integration test
         run: make test-integration
         env:
+          DBF_INTEGRATION_CASE: ${{ matrix.case }}
           DBF_INTEGRATION_ARTIFACT_DIR: ${{ runner.temp }}/debianform-integration-artifacts
           DBF_INTEGRATION_IMAGE_CACHE: ${{ runner.temp }}/debian-image-cache
 
@@ -120,7 +141,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: debianform-libvirt-diagnostics
+          name: debianform-libvirt-${{ matrix.case }}-diagnostics
           path: ${{ runner.temp }}/debianform-integration-artifacts
           if-no-files-found: ignore
           retention-days: 7
