@@ -14,7 +14,7 @@ LDFLAGS := -s -w \
 	-X $(VERSION_PACKAGE).Commit=$(COMMIT) \
 	-X $(VERSION_PACKAGE).Date=$(BUILD_DATE)
 
-.PHONY: build install test test-unit test-integration test-integration-case test-integration-layout test-legacy-v1-integration test-legacy-v1-integration-case test-legacy-v1-integration-layout clean
+.PHONY: build install test test-unit update-golden test-integration test-integration-case test-integration-layout test-legacy-v1-integration test-legacy-v1-integration-case test-legacy-v1-integration-layout clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PACKAGE)
@@ -28,6 +28,9 @@ test:
 
 test-unit:
 	go test -race -count=1 ./...
+
+update-golden:
+	UPDATE_GOLDEN=1 go test ./...
 
 test-integration:
 	@echo "v1 libvirt integration tests were moved to legacy/v1; use make test-legacy-v1-integration" >&2

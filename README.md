@@ -6,7 +6,8 @@ DebianForm v2 是对原 v1 原型的破坏式重设计。
 
 - v2 是当前设计方向。
 - v2 用户语法记录在 `docs/`，设计夹具位于 `examples/v2-*.dbf.hcl`。
-- 当前 `dbf` CLI 仍临时使用 `internal/v1/` 中的 legacy v1 执行器构建。
+- `dbf validate` 已接入 v2 Loop 1a 路径，可解析 profile/host 合并并生成 HostSpec；
+  `plan`/`apply` 仍临时使用 `internal/v1/` 中的 legacy v1 执行器构建。
 - legacy v1 示例、文档和 libvirt 集成测试已归档到 `legacy/v1/`。
 
 新的 v2 工作不要以旧的 `debian_*` 资源语法作为用户模型。它只作为 provider、SSH
@@ -22,9 +23,14 @@ DebianForm v2 是对原 v1 原型的破坏式重设计。
 ## v2 示例
 
 `examples/` 中的文件是 v2 设计夹具，当前还不能由 legacy CLI 执行。
+Loop 1a 已支持以下示例通过 v2 validate：
+
+- `examples/v2-bbr.dbf.hcl`
+- `examples/v2-profile-merge.dbf.hcl`
+
+其他示例仍为 design-only fixture：
 
 - `examples/v2-fleet.dbf.hcl`
-- `examples/v2-bbr.dbf.hcl`
 - `examples/v2-apt-repository.dbf.hcl`
 - `examples/v2-bird2.dbf.hcl`
 - `examples/v2-component-binary.dbf.hcl`
@@ -54,6 +60,8 @@ make test-legacy-v1-integration
 ```bash
 make build
 make test
+make update-golden
 ```
 
 `make test` 当前会运行过渡代码库的 Go 测试，包括 legacy v1 包。
+`make update-golden` 使用 `UPDATE_GOLDEN=1` 刷新 snapshot/golden 测试输出。

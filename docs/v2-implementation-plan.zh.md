@@ -19,8 +19,8 @@
 - [x] v2 中间表达文档已存在：`docs/v2-ir-requirements.zh.md`
 - [x] v2 plan JSON 格式文档已存在：`docs/v2-plan-format.md`
 - [x] v2 设计示例已存在：`examples/v2-*.dbf.hcl`
-- [ ] v2 编译器尚未实现
-- [ ] v2 CLI 尚未接入
+- [ ] v2 编译器尚未完整实现；Loop 1a 已支持解析、profile 合并和 HostSpec
+- [ ] v2 CLI 尚未完整接入；Loop 1a 已支持 `validate`
 - [ ] v2 plan/apply 尚未实现
 
 ## Loop 1a: 解析、合并与 HostSpec
@@ -56,49 +56,54 @@ HostSpec 这条前半截编译链，但还不生成 ResourceGraph 和 plan。
 - ResourceGraph 和 plan（放到 Loop 1b）
 - HTML preview
 
+说明：
+
+- Loop 1a 允许 `assert` block 出现在 host/profile 中以兼容现有 BBR 示例，但不会求值；
+  assert 校验在 Loop 2 实现。
+
 代码：
 
-- [ ] 新增 `internal/v2/parser`，解析 v2 顶层 block 和本轮领域 block
-- [ ] 保留 `SourceRef`，至少记录 file、line、path
-- [ ] 新增 `internal/v2/merge`，实现 profile imports 顺序合并
-- [ ] 实现 list append 去重
-- [ ] 实现 map 深度合并
-- [ ] 实现 scalar 后者覆盖
-- [ ] 实现 `force(value)`
-- [ ] 实现 `before(value)` 和 `after(value)`
-- [ ] 实现 `unset()` 删除 map key
-- [ ] 新增 `internal/v2/ir`，定义 `Program`、`HostSpec` 和本轮领域 spec
-- [ ] 为 `ssh`、`state`、`system.hostname` 填充默认值
-- [ ] 归一化 `kernel.modules`
-- [ ] 归一化 `kernel.sysctl`
-- [ ] 归一化 `packages.install`
-- [ ] 选定 snapshot/golden 测试框架，并提供 `make update-golden` 统一刷新机制
-- [ ] 支持 `dbf validate -f examples/v2-bbr.dbf.hcl` 走 v2 路径
-- [ ] 保留 legacy v1 CLI 测试通过
+- [x] 新增 `internal/v2/parser`，解析 v2 顶层 block 和本轮领域 block
+- [x] 保留 `SourceRef`，至少记录 file、line、path
+- [x] 新增 `internal/v2/merge`，实现 profile imports 顺序合并
+- [x] 实现 list append 去重
+- [x] 实现 map 深度合并
+- [x] 实现 scalar 后者覆盖
+- [x] 实现 `force(value)`
+- [x] 实现 `before(value)` 和 `after(value)`
+- [x] 实现 `unset()` 删除 map key
+- [x] 新增 `internal/v2/ir`，定义 `Program`、`HostSpec` 和本轮领域 spec
+- [x] 为 `ssh`、`state`、`system.hostname` 填充默认值
+- [x] 归一化 `kernel.modules`
+- [x] 归一化 `kernel.sysctl`
+- [x] 归一化 `packages.install`
+- [x] 选定 snapshot/golden 测试框架，并提供 `make update-golden` 统一刷新机制
+- [x] 支持 `dbf validate -f examples/v2-bbr.dbf.hcl` 走 v2 路径
+- [x] 保留 legacy v1 CLI 测试通过
 
 测试：
 
-- [ ] parser 单测覆盖 `host`、`profile`、nested domain block、source line
-- [ ] parser 负例覆盖未知顶层 block、错误 label 数量、重复 host
-- [ ] merge 单测覆盖 imports 顺序、list 去重、map 覆盖、scalar 覆盖
-- [ ] merge modifier 单测覆盖 `force`、`before`、`after`、`unset`
-- [ ] merge 负例覆盖 profile import cycle
-- [ ] HostSpec snapshot 覆盖 `examples/v2-bbr.dbf.hcl`
+- [x] parser 单测覆盖 `host`、`profile`、nested domain block、source line
+- [x] parser 负例覆盖未知顶层 block、错误 label 数量、重复 host
+- [x] merge 单测覆盖 imports 顺序、list 去重、map 覆盖、scalar 覆盖
+- [x] merge modifier 单测覆盖 `force`、`before`、`after`、`unset`
+- [x] merge 负例覆盖 profile import cycle
+- [x] HostSpec snapshot 覆盖 `examples/v2-bbr.dbf.hcl`
 
 示例：
 
-- [ ] `examples/v2-bbr.dbf.hcl` 作为本轮主 golden fixture
-- [ ] 增加一个 profile 合并小示例，覆盖 base packages + bbr profile + host override
+- [x] `examples/v2-bbr.dbf.hcl` 作为本轮主 golden fixture
+- [x] 增加一个 profile 合并小示例，覆盖 base packages + bbr profile + host override
 
 文档：
 
-- [ ] 在 v2 docs 中注明本轮支持范围和暂不支持范围
+- [x] 在 v2 docs 中注明本轮支持范围和暂不支持范围
 
 验收：
 
-- [ ] `dbf validate -f examples/v2-bbr.dbf.hcl` 成功
-- [ ] profile 合并 fixture 的 HostSpec snapshot 稳定
-- [ ] `make test` 成功
+- [x] `dbf validate -f examples/v2-bbr.dbf.hcl` 成功
+- [x] profile 合并 fixture 的 HostSpec snapshot 稳定
+- [x] `make test` 成功
 
 ## Loop 1b: ResourceGraph 与 BBR plan
 

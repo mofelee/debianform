@@ -10,10 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/mofelee/debianform/internal/v1/config"
 	"github.com/mofelee/debianform/internal/v1/engine"
 	"github.com/mofelee/debianform/internal/v1/sshx"
 	"github.com/mofelee/debianform/internal/v1/state"
+	v2merge "github.com/mofelee/debianform/internal/v2/merge"
+	v2parser "github.com/mofelee/debianform/internal/v2/parser"
 	"github.com/mofelee/debianform/internal/version"
 )
 
@@ -94,6 +98,15 @@ func runConfigCommand(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	isV2, err := looksLikeV2(files)
+	if err != nil {
+		return err
+	}
+	if isV2 {
+		return runV2ConfigCommand(cmd, files)
+	}
+
 	cfg, err := config.Load(files)
 	if err != nil {
 		return err
@@ -151,6 +164,56 @@ func runConfigCommand(cmd string, args []string) error {
 	default:
 		return fmt.Errorf("unsupported command %q", cmd)
 	}
+}
+
+func runV2ConfigCommand(cmd string, files []string) error {
+	if cmd != "validate" {
+		return fmt.Errorf("v2 %s is not implemented yet; supported command: validate", cmd)
+	}
+
+	cfg, err := v2parser.ParseFiles(files)
+	if err != nil {
+		return err
+	}
+	program, err := v2merge.Compile(cfg)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("v2 configuration is valid: %d host(s)\n", len(program.Hosts))
+	return nil
+}
+
+func looksLikeV2(files []string) (bool, error) {
+	parser := hclparse.NewParser()
+	for _, file := range files {
+		parsed, diags := parser.ParseHCLFile(file)
+		if diags.HasErrors() {
+			return false, fmt.Errorf("%s", diags.Error())
+		}
+		body, ok := parsed.Body.(*hclsyntax.Body)
+		if !ok {
+			return false, fmt.Errorf("%s: unsupported HCL body type %T", file, parsed.Body)
+		}
+		for _, block := range body.Blocks {
+			switch block.Type {
+			case "profile", "component":
+				return true, nil
+			case "host":
+				for name := range block.Body.Attributes {
+					if name == "imports" || name == "components" {
+						return true, nil
+					}
+				}
+				for _, nested := range block.Body.Blocks {
+					switch nested.Type {
+					case "ssh", "state", "system", "kernel", "packages", "assert":
+						return true, nil
+					}
+				}
+			}
+		}
+	}
+	return false, nil
 }
 
 func configFiles(file string) ([]string, error) {

@@ -66,6 +66,18 @@ func TestVersionFlag(t *testing.T) {
 	}
 }
 
+func TestValidateV2BBR(t *testing.T) {
+	output := captureStdout(t, func() {
+		if err := run([]string{"validate", "-f", "../../examples/v2-bbr.dbf.hcl"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	if !strings.Contains(output, "v2 configuration is valid: 1 host(s)") {
+		t.Fatalf("validate output = %q", output)
+	}
+}
+
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
