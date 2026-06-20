@@ -70,6 +70,7 @@ type PackageSpec struct {
 }
 
 type PackageItem struct {
-	Name   string    `json:"name"`
-	Source SourceRef `json:"source,omitempty"`
+	Name         string    `json:"name"`
+	Repositories []string  `json:"repositories,omitempty"`
+	Source       SourceRef `json:"source,omitempty"`
 }

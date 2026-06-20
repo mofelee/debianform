@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
@@ -24,6 +25,7 @@ type Profile struct {
 	Source  ir.SourceRef
 	Imports []string
 	Body    Value
+	Asserts []Assert
 }
 
 type Host struct {
@@ -31,6 +33,15 @@ type Host struct {
 	Source  ir.SourceRef
 	Imports []string
 	Body    Value
+	Asserts []Assert
+}
+
+type Assert struct {
+	Source          ir.SourceRef
+	Condition       hcl.Expression
+	ConditionSource ir.SourceRef
+	Message         string
+	MessageSource   ir.SourceRef
 }
 
 func ParseFiles(files []string) (*Config, error) {
@@ -153,11 +164,14 @@ func parseProfile(file string, block *hclsyntax.Block, ctx EvalContext) (Profile
 	if err != nil {
 		return Profile{}, err
 	}
-	imports, body, err := parseHostLikeBody(file, source.Path, block.Body, ctx)
+	imports, body, asserts, err := parseHostLikeBody(file, source.Path, block.Body, ctx)
 	if err != nil {
 		return Profile{}, err
 	}
-	return Profile{Name: name, Source: source, Imports: imports, Body: body}, nil
+	if err := validateProfileBody(source, body); err != nil {
+		return Profile{}, err
+	}
+	return Profile{Name: name, Source: source, Imports: imports, Body: body, Asserts: asserts}, nil
 }
 
 func parseHost(file string, block *hclsyntax.Block, ctx EvalContext) (Host, error) {
@@ -165,11 +179,11 @@ func parseHost(file string, block *hclsyntax.Block, ctx EvalContext) (Host, erro
 	if err != nil {
 		return Host{}, err
 	}
-	imports, body, err := parseHostLikeBody(file, source.Path, block.Body, ctx)
+	imports, body, asserts, err := parseHostLikeBody(file, source.Path, block.Body, ctx)
 	if err != nil {
 		return Host{}, err
 	}
-	return Host{Name: name, Source: source, Imports: imports, Body: body}, nil
+	return Host{Name: name, Source: source, Imports: imports, Body: body, Asserts: asserts}, nil
 }
 
 func parseComponentHeader(file string, block *hclsyntax.Block) (ir.SourceRef, string, error) {
@@ -185,8 +199,9 @@ func parseLabeledHeader(file, typ string, block *hclsyntax.Block) (ir.SourceRef,
 	return ir.SourceRef{File: file, Line: line, Path: typ + "." + name}, name, nil
 }
 
-func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext) ([]string, Value, error) {
+func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext) ([]string, Value, []Assert, error) {
 	imports := []string{}
+	asserts := []Assert{}
 	values := map[string]Value{}
 
 	for name, attr := range body.Attributes {
@@ -194,13 +209,13 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext)
 		case "imports":
 			refs, err := parseProfileRefs(file, attr.Expr)
 			if err != nil {
-				return nil, Value{}, fmt.Errorf("%s:%d: %s.imports: %w", file, attr.NameRange.Start.Line, path, err)
+				return nil, Value{}, nil, fmt.Errorf("%s:%d: %s.imports: %w", file, attr.NameRange.Start.Line, path, err)
 			}
 			imports = refs
 		case "components":
 			continue
 		default:
-			return nil, Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+			return nil, Value{}, nil, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
 		}
 	}
 
@@ -208,35 +223,36 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext)
 		switch block.Type {
 		case "ssh", "state", "system", "kernel", "packages":
 			if len(block.Labels) != 0 {
-				return nil, Value{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, block.Type)
+				return nil, Value{}, nil, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, block.Type)
 			}
 			if _, exists := values[block.Type]; exists {
-				return nil, Value{}, fmt.Errorf("%s:%d: duplicate %s.%s block", file, block.TypeRange.Start.Line, path, block.Type)
+				return nil, Value{}, nil, fmt.Errorf("%s:%d: duplicate %s.%s block", file, block.TypeRange.Start.Line, path, block.Type)
 			}
 			value, err := parseDomainBlock(file, path+"."+block.Type, block, ctx)
 			if err != nil {
-				return nil, Value{}, err
+				return nil, Value{}, nil, err
 			}
 			values[block.Type] = value
 		case "assert":
 			if len(block.Labels) != 0 {
-				return nil, Value{}, fmt.Errorf("%s:%d: assert block must not have labels", file, block.TypeRange.Start.Line)
+				return nil, Value{}, nil, fmt.Errorf("%s:%d: assert block must not have labels", file, block.TypeRange.Start.Line)
 			}
-			continue
+			assert, err := parseAssertBlock(file, fmt.Sprintf("%s.assert[%d]", path, len(asserts)), block, ctx)
+			if err != nil {
+				return nil, Value{}, nil, err
+			}
+			asserts = append(asserts, assert)
 		default:
-			return nil, Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, block.TypeRange.Start.Line, path, block.Type)
+			return nil, Value{}, nil, fmt.Errorf("%s:%d: unsupported block %s.%s", file, block.TypeRange.Start.Line, path, block.Type)
 		}
 	}
 
-	return imports, MapValue(values, ir.SourceRef{File: file, Line: body.SrcRange.Start.Line, Path: path}), nil
+	return imports, MapValue(values, ir.SourceRef{File: file, Line: body.SrcRange.Start.Line, Path: path}), asserts, nil
 }
 
 func parseDomainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
-	if len(block.Body.Blocks) != 0 {
-		return Value{}, fmt.Errorf("%s:%d: %s does not support nested blocks in this v2 implementation loop", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
-	}
-
 	allowed := allowedDomainAttrs(block.Type)
+	allowedBlocks := allowedDomainObjectBlocks(block.Type)
 	values := map[string]Value{}
 	for name, attr := range block.Body.Attributes {
 		if _, ok := allowed[name]; !ok {
@@ -254,7 +270,94 @@ func parseDomainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext
 		values[name] = value
 	}
 
+	for _, child := range block.Body.Blocks {
+		if _, ok := allowedBlocks[child.Type]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+		if len(child.Labels) != 1 {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s block requires exactly one label", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+		label := child.Labels[0]
+		objectPath := fmt.Sprintf("%s.%s[%s]", path, child.Type, strconv.Quote(label))
+		object, err := parseLabeledObjectBlock(file, block.Type, objectPath, child, ctx)
+		if err != nil {
+			return Value{}, err
+		}
+		collection, ok := values[child.Type]
+		if !ok {
+			collection = MapValue(nil, ir.SourceRef{File: file, Line: child.TypeRange.Start.Line, Path: path + "." + child.Type})
+		}
+		if _, exists := collection.Map[label]; exists {
+			return Value{}, fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
+		}
+		collection.Map[label] = object
+		values[child.Type] = collection
+	}
+
 	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseLabeledObjectBlock(file, domain, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	if len(block.Body.Blocks) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s does not support nested blocks in this v2 implementation loop", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+
+	allowed := allowedLabeledObjectAttrs(domain, block.Type)
+	values := map[string]Value{}
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{
+			File: file,
+			Line: attr.NameRange.Start.Line,
+			Path: path + "." + name,
+		}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseAssertBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Assert, error) {
+	if len(block.Body.Blocks) != 0 {
+		return Assert{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	for name, attr := range block.Body.Attributes {
+		if name != "condition" && name != "message" {
+			return Assert{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+
+	condition, ok := block.Body.Attributes["condition"]
+	if !ok {
+		return Assert{}, fmt.Errorf("%s:%d: %s.condition is required", file, block.TypeRange.Start.Line, path)
+	}
+	message, ok := block.Body.Attributes["message"]
+	if !ok {
+		return Assert{}, fmt.Errorf("%s:%d: %s.message is required", file, block.TypeRange.Start.Line, path)
+	}
+
+	messageSource := ir.SourceRef{File: file, Line: message.NameRange.Start.Line, Path: path + ".message"}
+	messageValue, err := evalValue(message.Expr, ctx, messageSource)
+	if err != nil {
+		return Assert{}, fmt.Errorf("%s:%d: %s.message: %w", file, messageSource.Line, path, err)
+	}
+	messageString, ok := messageValue.StringValue()
+	if !ok || messageString == "" {
+		return Assert{}, fmt.Errorf("%s:%d: %s.message must be a non-empty string", file, messageSource.Line, path)
+	}
+
+	return Assert{
+		Source:          ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path},
+		Condition:       condition.Expr,
+		ConditionSource: ir.SourceRef{File: file, Line: condition.NameRange.Start.Line, Path: path + ".condition"},
+		Message:         messageString,
+		MessageSource:   messageSource,
+	}, nil
 }
 
 func allowedDomainAttrs(domain string) map[string]struct{} {
@@ -272,6 +375,37 @@ func allowedDomainAttrs(domain string) map[string]struct{} {
 	default:
 		return map[string]struct{}{}
 	}
+}
+
+func allowedDomainObjectBlocks(domain string) map[string]struct{} {
+	switch domain {
+	case "packages":
+		return attrSet("package")
+	default:
+		return map[string]struct{}{}
+	}
+}
+
+func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struct{} {
+	switch domain + "." + blockType {
+	case "packages.package":
+		return attrSet("repositories")
+	default:
+		return map[string]struct{}{}
+	}
+}
+
+func validateProfileBody(profile ir.SourceRef, body Value) error {
+	system, ok := body.Map["system"]
+	if !ok {
+		return nil
+	}
+	for _, name := range []string{"hostname", "architecture", "codename"} {
+		if value, exists := system.Map[name]; exists {
+			return fmt.Errorf("%s:%d: %s is host-only and cannot be declared in profile %s", value.Source.File, value.Source.Line, value.Source.Path, profile.Path)
+		}
+	}
+	return nil
 }
 
 func parseProfileRefs(file string, expr hcl.Expression) ([]string, error) {

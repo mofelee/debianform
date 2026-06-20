@@ -92,6 +92,35 @@ host "web1" {}
 	}
 }
 
+func TestParseLabeledObjectBlockSourcePath(t *testing.T) {
+	file := writeConfig(t, `
+host "web1" {
+  packages {
+    package "bird2" {
+      repositories = ["cznic"]
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	packages := cfg.Hosts["web1"].Body.Map["packages"]
+	pkg := packages.Map["package"].Map["bird2"]
+	if pkg.Source.Path != `host.web1.packages.package["bird2"]` {
+		t.Fatalf("package source path = %q", pkg.Source.Path)
+	}
+	repositories := pkg.Map["repositories"]
+	if repositories.Source.Path != `host.web1.packages.package["bird2"].repositories` {
+		t.Fatalf("repositories source path = %q", repositories.Source.Path)
+	}
+	if repositories.List[0].Source.Path != `host.web1.packages.package["bird2"].repositories[0]` {
+		t.Fatalf("repository item source path = %q", repositories.List[0].Source.Path)
+	}
+}
+
 func writeConfig(t *testing.T, content string) string {
 	t.Helper()
 

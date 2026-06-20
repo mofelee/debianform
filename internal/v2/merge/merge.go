@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/mofelee/debianform/internal/v2/ir"
 	"github.com/mofelee/debianform/internal/v2/parser"
@@ -12,7 +13,7 @@ import (
 func Compile(cfg *parser.Config) (*ir.Program, error) {
 	compiler := &compiler{
 		cfg:          cfg,
-		profileCache: map[string]parser.Value{},
+		profileCache: map[string]resolvedProfile{},
 		visiting:     map[string]bool{},
 	}
 
@@ -26,23 +27,29 @@ func Compile(cfg *parser.Config) (*ir.Program, error) {
 	for _, name := range names {
 		host := cfg.Hosts[name]
 		raw := parser.MapValue(nil, host.Source)
+		asserts := []parser.Assert{}
 		for _, importName := range host.Imports {
 			profile, err := compiler.resolveProfile(importName, nil)
 			if err != nil {
 				return nil, err
 			}
-			merged, err := Merge(raw, profile)
+			merged, err := Merge(raw, profile.Body)
 			if err != nil {
 				return nil, fmt.Errorf("%s:%d: host %q import profile.%s: %w", host.Source.File, host.Source.Line, host.Name, importName, err)
 			}
 			raw = merged
+			asserts = append(asserts, profile.Asserts...)
 		}
 		merged, err := Merge(raw, host.Body)
 		if err != nil {
 			return nil, fmt.Errorf("%s:%d: host %q: %w", host.Source.File, host.Source.Line, host.Name, err)
 		}
+		asserts = append(asserts, host.Asserts...)
 		spec, err := buildHostSpec(host, merged)
 		if err != nil {
+			return nil, err
+		}
+		if err := evaluateAssertions(asserts, spec); err != nil {
 			return nil, err
 		}
 		program.Hosts = append(program.Hosts, spec)
@@ -52,44 +59,53 @@ func Compile(cfg *parser.Config) (*ir.Program, error) {
 
 type compiler struct {
 	cfg          *parser.Config
-	profileCache map[string]parser.Value
+	profileCache map[string]resolvedProfile
 	visiting     map[string]bool
 }
 
-func (c *compiler) resolveProfile(name string, stack []string) (parser.Value, error) {
+type resolvedProfile struct {
+	Body    parser.Value
+	Asserts []parser.Assert
+}
+
+func (c *compiler) resolveProfile(name string, stack []string) (resolvedProfile, error) {
 	if cached, ok := c.profileCache[name]; ok {
 		return cached, nil
 	}
 	profile, ok := c.cfg.Profiles[name]
 	if !ok {
-		return parser.Value{}, fmt.Errorf("unknown profile.%s", name)
+		return resolvedProfile{}, fmt.Errorf("unknown profile.%s", name)
 	}
 	if c.visiting[name] {
 		cycle := append(append([]string(nil), stack...), name)
-		return parser.Value{}, fmt.Errorf("profile import cycle: %s", cycleString(cycle))
+		return resolvedProfile{}, fmt.Errorf("%s:%d:%s: profile import cycle: %s", profile.Source.File, profile.Source.Line, profile.Source.Path, cycleString(cycle))
 	}
 
 	c.visiting[name] = true
 	nextStack := append(append([]string(nil), stack...), name)
 	raw := parser.MapValue(nil, profile.Source)
+	asserts := []parser.Assert{}
 	for _, importName := range profile.Imports {
 		imported, err := c.resolveProfile(importName, nextStack)
 		if err != nil {
-			return parser.Value{}, err
+			return resolvedProfile{}, err
 		}
-		merged, err := Merge(raw, imported)
+		merged, err := Merge(raw, imported.Body)
 		if err != nil {
-			return parser.Value{}, fmt.Errorf("%s:%d: profile.%s import profile.%s: %w", profile.Source.File, profile.Source.Line, name, importName, err)
+			return resolvedProfile{}, fmt.Errorf("%s:%d:%s: profile.%s import profile.%s: %w", profile.Source.File, profile.Source.Line, profile.Source.Path, name, importName, err)
 		}
 		raw = merged
+		asserts = append(asserts, imported.Asserts...)
 	}
 	merged, err := Merge(raw, profile.Body)
 	if err != nil {
-		return parser.Value{}, fmt.Errorf("%s:%d: profile.%s: %w", profile.Source.File, profile.Source.Line, name, err)
+		return resolvedProfile{}, fmt.Errorf("%s:%d:%s: profile.%s: %w", profile.Source.File, profile.Source.Line, profile.Source.Path, name, err)
 	}
+	asserts = append(asserts, profile.Asserts...)
 	delete(c.visiting, name)
-	c.profileCache[name] = merged
-	return merged, nil
+	resolved := resolvedProfile{Body: merged, Asserts: asserts}
+	c.profileCache[name] = resolved
+	return resolved, nil
 }
 
 func cycleString(names []string) string {
@@ -116,6 +132,9 @@ func Merge(base, overlay parser.Value) (parser.Value, error) {
 
 func mergeValue(base, overlay parser.Value) (parser.Value, bool, error) {
 	if overlay.Modifier == parser.ModifierUnset {
+		if base.IsList() || isKnownListPath(overlay.Source.Path) {
+			return parser.Value{}, true, fmt.Errorf("%s:%d:%s: unset() cannot be used on lists; use force([]) to clear a list", overlay.Source.File, overlay.Source.Line, overlay.Source.Path)
+		}
 		return parser.Value{}, false, nil
 	}
 	if overlay.Modifier == parser.ModifierForce {
@@ -125,7 +144,7 @@ func mergeValue(base, overlay parser.Value) (parser.Value, bool, error) {
 	if base.Kind == "" {
 		if overlay.Modifier == parser.ModifierBefore || overlay.Modifier == parser.ModifierAfter {
 			if !overlay.IsList() {
-				return parser.Value{}, true, fmt.Errorf("%s:%d: %s() can only be used with lists", overlay.Source.File, overlay.Source.Line, overlay.Modifier)
+				return parser.Value{}, true, fmt.Errorf("%s:%d:%s: %s() can only be used with lists", overlay.Source.File, overlay.Source.Line, overlay.Source.Path, overlay.Modifier)
 			}
 			return overlay.WithoutModifier(), true, nil
 		}
@@ -156,7 +175,7 @@ func mergeValue(base, overlay parser.Value) (parser.Value, bool, error) {
 	listModifier := overlay.Modifier
 	if listModifier == parser.ModifierBefore || listModifier == parser.ModifierAfter {
 		if !overlay.IsList() {
-			return parser.Value{}, true, fmt.Errorf("%s:%d: %s() can only be used with lists", overlay.Source.File, overlay.Source.Line, overlay.Modifier)
+			return parser.Value{}, true, fmt.Errorf("%s:%d:%s: %s() can only be used with lists", overlay.Source.File, overlay.Source.Line, overlay.Source.Path, overlay.Modifier)
 		}
 		if !base.IsList() {
 			return overlay.WithoutModifier(), true, nil
@@ -172,6 +191,15 @@ func mergeValue(base, overlay parser.Value) (parser.Value, bool, error) {
 	}
 
 	return overlay.WithoutModifier(), true, nil
+}
+
+func isKnownListPath(path string) bool {
+	for _, suffix := range []string{".install", ".modules", ".repositories"} {
+		if strings.HasSuffix(path, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func copyMap(in map[string]parser.Value) map[string]parser.Value {
@@ -392,10 +420,10 @@ func moduleSpecs(kernel parser.Value) ([]ir.KernelModuleSpec, error) {
 	for _, item := range modules.List {
 		name, ok := item.StringValue()
 		if !ok || name == "" {
-			return nil, fmt.Errorf("%s:%d: %s entries must be non-empty strings", item.Source.File, item.Source.Line, modules.Source.Path)
+			return nil, fmt.Errorf("%s:%d:%s: kernel module entries must be non-empty strings", item.Source.File, item.Source.Line, item.Source.Path)
 		}
 		if _, exists := seen[name]; exists {
-			continue
+			return nil, fmt.Errorf("%s:%d:%s: duplicate kernel module %q", item.Source.File, item.Source.Line, item.Source.Path, name)
 		}
 		seen[name] = struct{}{}
 		out = append(out, ir.KernelModuleSpec{
@@ -423,10 +451,14 @@ func sysctlSpecs(kernel parser.Value) (map[string]ir.SysctlSpec, error) {
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
+		if key == "" {
+			item := value.Map[key]
+			return nil, fmt.Errorf("%s:%d:%s: sysctl key must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
 		item := value.Map[key]
 		str, ok := item.StringValue()
 		if !ok {
-			return nil, fmt.Errorf("%s:%d: %s must contain string values", item.Source.File, item.Source.Line, value.Source.Path)
+			return nil, fmt.Errorf("%s:%d:%s: sysctl value must be a string", item.Source.File, item.Source.Line, item.Source.Path)
 		}
 		out[key] = ir.SysctlSpec{
 			Key:          key,
@@ -440,22 +472,74 @@ func sysctlSpecs(kernel parser.Value) (map[string]ir.SysctlSpec, error) {
 }
 
 func packageItems(packages parser.Value) ([]ir.PackageItem, error) {
+	out := []ir.PackageItem{}
+	seen := map[string]ir.SourceRef{}
+
 	install, ok, err := listField(packages, "install")
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		for _, item := range install.List {
+			name, ok := item.StringValue()
+			if !ok || name == "" {
+				return nil, fmt.Errorf("%s:%d:%s: package install entries must be non-empty strings", item.Source.File, item.Source.Line, item.Source.Path)
+			}
+			if previous, exists := seen[name]; exists {
+				return nil, fmt.Errorf("%s:%d:%s: duplicate package %q; first declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, name, previous.File, previous.Line, previous.Path)
+			}
+			seen[name] = item.Source
+			out = append(out, ir.PackageItem{Name: name, Source: item.Source})
+		}
+	}
+
+	packageBlocks, ok := packages.Map["package"]
+	if !ok {
+		return out, nil
+	}
+	if !packageBlocks.IsMap() {
+		return nil, fmt.Errorf("%s:%d:%s: package must be a map", packageBlocks.Source.File, packageBlocks.Source.Line, packageBlocks.Source.Path)
+	}
+	names := make([]string, 0, len(packageBlocks.Map))
+	for name := range packageBlocks.Map {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		item := packageBlocks.Map[name]
+		if name == "" {
+			return nil, fmt.Errorf("%s:%d:%s: package label must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		if previous, exists := seen[name]; exists {
+			return nil, fmt.Errorf("%s:%d:%s: duplicate package %q; first declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, name, previous.File, previous.Line, previous.Path)
+		}
+		repositories, err := stringListField(item, "repositories")
+		if err != nil {
+			return nil, err
+		}
+		seen[name] = item.Source
+		out = append(out, ir.PackageItem{Name: name, Repositories: repositories, Source: item.Source})
+	}
+	return out, nil
+}
+
+func stringListField(root parser.Value, name string) ([]string, error) {
+	list, ok, err := listField(root, name)
 	if err != nil || !ok {
 		return nil, err
 	}
-	out := []ir.PackageItem{}
+	out := make([]string, 0, len(list.List))
 	seen := map[string]struct{}{}
-	for _, item := range install.List {
-		name, ok := item.StringValue()
-		if !ok || name == "" {
-			return nil, fmt.Errorf("%s:%d: %s entries must be non-empty strings", item.Source.File, item.Source.Line, install.Source.Path)
+	for _, item := range list.List {
+		value, ok := item.StringValue()
+		if !ok || value == "" {
+			return nil, fmt.Errorf("%s:%d:%s: %s entries must be non-empty strings", item.Source.File, item.Source.Line, item.Source.Path, list.Source.Path)
 		}
-		if _, exists := seen[name]; exists {
-			continue
+		if _, exists := seen[value]; exists {
+			return nil, fmt.Errorf("%s:%d:%s: duplicate %s entry %q", item.Source.File, item.Source.Line, item.Source.Path, list.Source.Path, value)
 		}
-		seen[name] = struct{}{}
-		out = append(out, ir.PackageItem{Name: name, Source: item.Source})
+		seen[value] = struct{}{}
+		out = append(out, value)
 	}
 	return out, nil
 }

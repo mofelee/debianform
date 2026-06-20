@@ -107,21 +107,22 @@ func compileHost(host ir.HostSpec) ([]Node, error) {
 
 	for _, item := range host.Packages.Install {
 		address := fmt.Sprintf("host.%s.packages.install[%s]", host.Name, strconv.Quote(item.Name))
+		desired := map[string]any{
+			"name":   item.Name,
+			"ensure": "present",
+		}
+		if len(item.Repositories) > 0 {
+			desired["repositories"] = append([]string(nil), item.Repositories...)
+		}
 		nodes = append(nodes, Node{
-			Address: address,
-			Kind:    "package",
-			Summary: "create package " + item.Name,
-			Source:  item.Source,
-			Desired: map[string]any{
-				"name":   item.Name,
-				"ensure": "present",
-			},
+			Address:         address,
+			Kind:            "package",
+			Summary:         "create package " + item.Name,
+			Source:          item.Source,
+			Desired:         desired,
 			ProviderType:    "debian_package",
 			ProviderAddress: "debian_package." + providerName(host.Name, item.Name),
-			ProviderPayload: map[string]any{
-				"name":   item.Name,
-				"ensure": "present",
-			},
+			ProviderPayload: desired,
 		})
 	}
 

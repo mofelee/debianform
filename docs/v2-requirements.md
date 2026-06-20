@@ -652,6 +652,34 @@ list:   默认 append，保持顺序并去重
 的对象执行字段级深度合并，因此 profile 中的 `user "deploy"` 可以由 host 的同名
 user 追加 supplementary groups；不同 label 保留为不同对象。
 
+例如 labeled package block 会先归一化为 `packages.package["bird2"]` 再合并：
+
+```hcl
+profile "bird" {
+  packages {
+    package "bird2" {
+      repositories = ["base_repo"]
+    }
+  }
+}
+
+host "router1" {
+  imports = [profile.bird]
+
+  packages {
+    package "bird2" {
+      repositories = ["host_repo"]
+    }
+  }
+}
+```
+
+有效结果：
+
+```text
+packages.package["bird2"].repositories = ["base_repo", "host_repo"]
+```
+
 `components` 不是普通领域 list。重复引用同一个 component 时去重；不同 component
 之间不做字段合并，而是在实例化后执行远端 identity 冲突检查。
 
@@ -765,6 +793,26 @@ host "ksvm214" {
 - 生成中间表达后，不再保留 `force/before/after/unset`。
 - `unset()` 用在 list 上应报错，清空 list 应使用 `force([])`。
 - `force()` 可以用于 scalar、map、list。
+
+错误用法：
+
+```hcl
+host "ksvm215" {
+  packages {
+    install = unset()
+  }
+}
+```
+
+应改为：
+
+```hcl
+host "ksvm215" {
+  packages {
+    install = force([])
+  }
+}
+```
 
 ## Kernel 功能
 

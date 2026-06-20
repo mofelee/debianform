@@ -165,6 +165,40 @@ host "server1" {
 	}
 }
 
+func TestCompileMergesLabeledPackageBlocks(t *testing.T) {
+	program := compileInline(t, `
+profile "base" {
+  packages {
+    package "bird2" {
+      repositories = ["base_repo"]
+    }
+  }
+}
+
+host "server1" {
+  imports = [profile.base]
+
+  packages {
+    package "bird2" {
+      repositories = ["host_repo"]
+    }
+  }
+}
+`)
+
+	packages := program.Hosts[0].Packages.Install
+	if len(packages) != 1 {
+		t.Fatalf("package count = %d, want 1", len(packages))
+	}
+	if packages[0].Name != "bird2" {
+		t.Fatalf("package name = %q, want bird2", packages[0].Name)
+	}
+	wantRepositories := []string{"base_repo", "host_repo"}
+	if !reflect.DeepEqual(packages[0].Repositories, wantRepositories) {
+		t.Fatalf("repositories = %#v, want %#v", packages[0].Repositories, wantRepositories)
+	}
+}
+
 func TestCompileRejectsProfileImportCycle(t *testing.T) {
 	cfg := parseInline(t, `
 profile "a" {
@@ -183,6 +217,195 @@ host "server1" {
 	_, err := Compile(cfg)
 	if err == nil || !strings.Contains(err.Error(), "profile.a -> profile.b -> profile.a") {
 		t.Fatalf("Compile() error = %v, want profile import cycle", err)
+	}
+}
+
+func TestCompileRejectsProfileHostOnlyFields(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+profile "bad" {
+  system {
+    hostname = "bad"
+  }
+}
+
+host "server1" {
+  imports = [profile.bad]
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "profile.bad.system.hostname is host-only") {
+		t.Fatalf("error = %v, want host-only field error", err)
+	}
+}
+
+func TestCompileRejectsDuplicatePackage(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+host "server1" {
+  packages {
+    install = ["curl", "curl"]
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), `duplicate package "curl"`) || !strings.Contains(err.Error(), "packages.install[1]") {
+		t.Fatalf("error = %v, want duplicate package with source path", err)
+	}
+}
+
+func TestCompileRejectsEmptyModuleAndSysctlKey(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "empty module",
+			hcl: `
+host "server1" {
+  kernel {
+    modules = [""]
+  }
+}
+`,
+			want: "kernel module entries must be non-empty strings",
+		},
+		{
+			name: "empty sysctl key",
+			hcl: `
+host "server1" {
+  kernel {
+    sysctl = {
+      "" = "bad"
+    }
+  }
+}
+`,
+			want: "sysctl key must be non-empty",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompileRejectsUnsetOnList(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+profile "base" {
+  packages {
+    install = ["curl"]
+  }
+}
+
+host "server1" {
+  imports = [profile.base]
+
+  packages {
+    install = unset()
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "unset() cannot be used on lists") || !strings.Contains(err.Error(), "packages.install") {
+		t.Fatalf("error = %v, want unset list error with path", err)
+	}
+}
+
+func TestCompileEvaluatesAssertAgainstMergedSelf(t *testing.T) {
+	program := compileInline(t, `
+profile "bbr" {
+  kernel {
+    modules = ["tcp_bbr"]
+  }
+
+  assert {
+    condition = contains(self.kernel.modules, "tcp_bbr")
+    message   = "tcp_bbr should be inherited"
+  }
+}
+
+host "server1" {
+  imports = [profile.bbr]
+
+  system {
+    hostname = "server1"
+  }
+
+  assert {
+    condition = self.system.hostname == "server1"
+    message   = "hostname should have defaulted or been set"
+  }
+}
+`)
+	if got := program.Hosts[0].Name; got != "server1" {
+		t.Fatalf("host = %q, want server1", got)
+	}
+}
+
+func TestCompileRejectsAssertFailures(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "false condition",
+			hcl: `
+host "server1" {
+  assert {
+    condition = contains(self.kernel.modules, "tcp_bbr")
+    message   = "BBR requires tcp_bbr"
+  }
+}
+`,
+			want: "assertion failed: BBR requires tcp_bbr",
+		},
+		{
+			name: "empty message",
+			hcl: `
+host "server1" {
+  assert {
+    condition = true
+    message   = ""
+  }
+}
+`,
+			want: "message must be a non-empty string",
+		},
+		{
+			name: "illegal field",
+			hcl: `
+host "server1" {
+  assert {
+    condition = self.observed.ready
+    message   = "remote runtime state is not available"
+  }
+}
+`,
+			want: "Unsupported attribute",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompileInvalidFixtureReportsSourcePath(t *testing.T) {
+	_, err := parseOrCompileFiles([]string{"../testdata/invalid/profile-hostname.dbf.hcl"})
+	if err == nil {
+		t.Fatal("expected invalid fixture error")
+	}
+	for _, want := range []string{"profile.bad.system.hostname", "host-only"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want substring %q", err, want)
+		}
 	}
 }
 
@@ -252,6 +475,25 @@ func parseInline(t *testing.T, content string) *parser.Config {
 		t.Fatal(err)
 	}
 	return cfg
+}
+
+func parseOrCompileInline(t *testing.T, content string) (*ir.Program, error) {
+	t.Helper()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(file, []byte(strings.TrimPrefix(content, "\n")), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return parseOrCompileFiles([]string{file})
+}
+
+func parseOrCompileFiles(files []string) (*ir.Program, error) {
+	cfg, err := parser.ParseFiles(files)
+	if err != nil {
+		return nil, err
+	}
+	return Compile(cfg)
 }
 
 func packageNames(items []ir.PackageItem) []string {
