@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mofelee/debianform/internal/config"
-	"github.com/mofelee/debianform/internal/sshx"
-	"github.com/mofelee/debianform/internal/state"
+	"github.com/mofelee/debianform/internal/v1/config"
+	"github.com/mofelee/debianform/internal/v1/sshx"
+	"github.com/mofelee/debianform/internal/v1/state"
 )
 
 type Engine struct {

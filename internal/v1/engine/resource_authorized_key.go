@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mofelee/debianform/internal/config"
-	"github.com/mofelee/debianform/internal/sshx"
-	"github.com/mofelee/debianform/internal/state"
+	"github.com/mofelee/debianform/internal/v1/config"
+	"github.com/mofelee/debianform/internal/v1/sshx"
+	"github.com/mofelee/debianform/internal/v1/state"
 )
 
 // authorizedKeyProvider manages a single SSH public key in a user's

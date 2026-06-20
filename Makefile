@@ -14,7 +14,7 @@ LDFLAGS := -s -w \
 	-X $(VERSION_PACKAGE).Commit=$(COMMIT) \
 	-X $(VERSION_PACKAGE).Date=$(BUILD_DATE)
 
-.PHONY: build install test test-unit test-integration test-integration-case test-integration-layout clean
+.PHONY: build install test test-unit test-integration test-integration-case test-integration-layout test-legacy-v1-integration test-legacy-v1-integration-case test-legacy-v1-integration-layout clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PACKAGE)
@@ -30,14 +30,26 @@ test-unit:
 	go test -race -count=1 ./...
 
 test-integration:
-	./test/integration/libvirt/run.sh
+	@echo "v1 libvirt integration tests were moved to legacy/v1; use make test-legacy-v1-integration" >&2
+	@exit 2
 
 test-integration-case:
-	@test -n "$(CASE)" || (echo "CASE is required, for example: make test-integration-case CASE=files" >&2; exit 1)
-	DBF_INTEGRATION_CASE="$(CASE)" ./test/integration/libvirt/run.sh
+	@echo "v1 libvirt integration tests were moved to legacy/v1; use make test-legacy-v1-integration-case CASE=$(CASE)" >&2
+	@exit 2
 
 test-integration-layout:
-	./test/integration/libvirt/validate-cases.sh
+	@echo "v1 libvirt integration tests were moved to legacy/v1; use make test-legacy-v1-integration-layout" >&2
+	@exit 2
+
+test-legacy-v1-integration:
+	./legacy/v1/test/integration/libvirt/run.sh
+
+test-legacy-v1-integration-case:
+	@test -n "$(CASE)" || (echo "CASE is required, for example: make test-legacy-v1-integration-case CASE=files" >&2; exit 1)
+	DBF_INTEGRATION_CASE="$(CASE)" ./legacy/v1/test/integration/libvirt/run.sh
+
+test-legacy-v1-integration-layout:
+	./legacy/v1/test/integration/libvirt/validate-cases.sh
 
 clean:
 	go clean

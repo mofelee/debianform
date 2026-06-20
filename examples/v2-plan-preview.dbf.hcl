@@ -1,6 +1,6 @@
 # DebianForm v2 plan preview 设计示例。
 #
-# 当前 v1 执行器还不能 apply 此语法。
+# v2 编译器尚未接入当前 CLI；本文件是设计夹具。
 #
 # 设计边界：
 # - 本文件用于固定结构化 plan、终端树状 diff 和 HTML preview 的展示目标。

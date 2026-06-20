@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/mofelee/debianform/internal/config"
+	"github.com/mofelee/debianform/internal/v1/config"
 )
 
 type Runner struct {

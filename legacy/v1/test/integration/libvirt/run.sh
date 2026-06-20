@@ -5,8 +5,8 @@ set -euo pipefail
 readonly DEBIAN_CLOUD_URL="https://cloud.debian.org/images/cloud/trixie/latest"
 readonly DEBIAN_CLOUD_IMAGE="debian-13-genericcloud-amd64.qcow2"
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SCRIPT_DIR="$ROOT_DIR/test/integration/libvirt"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
+SCRIPT_DIR="$ROOT_DIR/legacy/v1/test/integration/libvirt"
 CASES_DIR="$SCRIPT_DIR/cases"
 WORK_ROOT="${DBF_INTEGRATION_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/debianform-integration.XXXXXX")}"
 ARTIFACT_ROOT="${DBF_INTEGRATION_ARTIFACT_DIR:-${TMPDIR:-/tmp}/debianform-integration-artifacts}"

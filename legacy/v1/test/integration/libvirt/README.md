@@ -48,19 +48,19 @@ authorized key 测试通过 `source = "${path.module}/app_key.pub"` 读取。
 运行全部场景，每个场景使用一台新 VM：
 
 ```bash
-make test-integration
+make test-legacy-v1-integration
 ```
 
 只运行一个目录：
 
 ```bash
-make test-integration-case CASE=files
+make test-legacy-v1-integration-case CASE=files
 ```
 
 只检查目录协议、HCL 和 shell 语法，不启动 VM：
 
 ```bash
-make test-integration-layout
+make test-legacy-v1-integration-layout
 ```
 
 可用环境变量：

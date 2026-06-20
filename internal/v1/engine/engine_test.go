@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/mofelee/debianform/internal/config"
+	"github.com/mofelee/debianform/internal/v1/config"
 )
 
 func TestTopoSortKeepsDependenciesBeforeDependents(t *testing.T) {

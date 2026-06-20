@@ -1,6 +1,6 @@
 # DebianForm v2 BIRD2 设计示例。
 #
-# 当前 v1 执行器还不能 apply 此语法。可执行的 v1 版本见 bird2.dbf.hcl。
+# v2 编译器尚未接入当前 CLI；legacy v1 参考版本见 ../legacy/v1/examples/bird2.dbf.hcl。
 #
 # 设计边界：
 # - APT repository 是 apt 领域对象，不是顶层 component。

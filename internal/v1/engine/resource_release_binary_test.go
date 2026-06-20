@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mofelee/debianform/internal/config"
-	"github.com/mofelee/debianform/internal/sshx"
+	"github.com/mofelee/debianform/internal/v1/config"
+	"github.com/mofelee/debianform/internal/v1/sshx"
 )
 
 func releaseBinaryResource() config.Resource {

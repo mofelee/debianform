@@ -1,7 +1,7 @@
 # DebianForm v2 nftables 设计示例。
 #
-# 当前 v1 执行器还不能 apply 此语法。可执行的 v1 原生 nftables 示例见
-# system-native.dbf.hcl。
+# v2 编译器尚未接入当前 CLI；legacy v1 原生 nftables 参考见
+# ../legacy/v1/examples/system-native.dbf.hcl。
 #
 # 设计边界：
 # - v2 的主路径是 nftables 原生配置，不是通用 firewall 抽象。

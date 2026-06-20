@@ -1,6 +1,6 @@
 # DebianForm v2 binary component 设计示例。
 #
-# 当前 v1 执行器还不能 apply 此语法。
+# v2 编译器尚未接入当前 CLI；本文件是设计夹具。
 #
 # 设计边界：
 # - component 封装 artifact source、extract 和 install。
