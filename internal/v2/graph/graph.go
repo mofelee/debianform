@@ -67,6 +67,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	packageAddresses := map[string]string{}
 	repositoryAddresses := map[string]string{}
 	repositoryTriggers := []string{}
+	aptCacheSource := host.APT.Source
 	groupAddresses := map[string]string{}
 	unitAddresses := map[string]string{}
 
@@ -123,6 +124,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	for _, name := range sortedKeys(host.APT.Repositories) {
 		item := host.APT.Repositories[name]
 		sourceAddress := fmt.Sprintf("host.%s.apt.repository[%s]", host.Name, strconv.Quote(name))
+		if aptCacheSource.File == "" {
+			aptCacheSource = item.Source
+		}
 		repositoryAddresses[name] = sourceAddress
 		sourcePath := aptRepositorySourcePath(name)
 		sourceDesired := map[string]any{
@@ -187,6 +191,81 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		repositoryTriggers = append(repositoryTriggers, sourceAddress)
 	}
 
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, name := range sortedKeys(component.APT.Repositories) {
+			item := component.APT.Repositories[name]
+			sourceAddress := fmt.Sprintf("%s.apt.repository[%s]", componentPrefix, strconv.Quote(name))
+			if aptCacheSource.File == "" {
+				aptCacheSource = item.Source
+			}
+			repositoryAddresses[name] = sourceAddress
+			sourcePath := aptRepositorySourcePath(name)
+			sourceDesired := map[string]any{
+				"name":      item.Name,
+				"component": component.Name,
+				"path":      sourcePath,
+				"owner":     "root",
+				"group":     "root",
+				"mode":      "0644",
+				"ensure":    item.Ensure,
+			}
+			var deps []string
+			if item.Ensure != "absent" {
+				sourceDesired["content"] = aptRepositorySourceContent(item)
+			}
+			if item.SigningKey != nil {
+				keyAddress := fmt.Sprintf("%s.apt.signing_key[%s]", componentPrefix, strconv.Quote(name))
+				keyDesired := map[string]any{
+					"name":      item.Name,
+					"component": component.Name,
+					"path":      item.SigningKey.Path,
+					"owner":     "root",
+					"group":     "root",
+					"mode":      "0644",
+					"ensure":    item.Ensure,
+				}
+				if item.SigningKey.URL != "" {
+					keyDesired["url"] = item.SigningKey.URL
+				}
+				if item.SigningKey.Content != "" {
+					keyDesired["content"] = item.SigningKey.Content
+				}
+				if item.SigningKey.SHA256 != "" {
+					keyDesired["sha256"] = item.SigningKey.SHA256
+				}
+				nodes = append(nodes, Node{
+					Host:            host.Name,
+					Address:         keyAddress,
+					Kind:            "apt_signing_key",
+					Summary:         "manage apt signing key " + item.Name,
+					Source:          item.SigningKey.Source,
+					Lifecycle:       lifecyclePtr(item.Lifecycle),
+					Desired:         keyDesired,
+					ProviderType:    "apt_signing_key",
+					ProviderAddress: "apt_signing_key." + providerName(host.Name, component.Name, item.Name),
+					ProviderPayload: keyDesired,
+				})
+				deps = append(deps, keyAddress)
+				repositoryTriggers = append(repositoryTriggers, keyAddress)
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         sourceAddress,
+				Kind:            "file",
+				Summary:         "manage apt repository " + item.Name,
+				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         sourceDesired,
+				DependsOn:       deps,
+				ProviderType:    "file",
+				ProviderAddress: "file." + providerName(host.Name, sourcePath),
+				ProviderPayload: sourceDesired,
+			})
+			repositoryTriggers = append(repositoryTriggers, sourceAddress)
+		}
+	}
+
 	aptCacheRefreshAddress := ""
 	if len(repositoryTriggers) > 0 {
 		aptCacheRefreshAddress = "host." + host.Name + ".apt.cache_refresh"
@@ -197,7 +276,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			DependsOn:      append([]string(nil), repositoryTriggers...),
 			TriggeredBy:    append([]string(nil), repositoryTriggers...),
 			CommandPreview: "apt-get update",
-			Source:         host.APT.Source,
+			Source:         aptCacheSource,
 		})
 	}
 
@@ -234,6 +313,45 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			ProviderAddress: "package." + providerName(host.Name, item.Name),
 			ProviderPayload: desired,
 		})
+	}
+
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, item := range component.Packages.Install {
+			address := fmt.Sprintf("%s.packages.install[%s]", componentPrefix, strconv.Quote(item.Name))
+			packageAddresses[item.Name] = address
+			deps := []string{}
+			for _, repository := range item.Repositories {
+				if repositoryAddress, ok := repositoryAddresses[repository]; ok {
+					deps = append(deps, repositoryAddress)
+				}
+			}
+			if len(deps) > 0 && aptCacheRefreshAddress != "" {
+				deps = append(deps, aptCacheRefreshAddress)
+			}
+			deps = dedupeStrings(deps)
+			desired := map[string]any{
+				"name":      item.Name,
+				"component": component.Name,
+				"ensure":    "present",
+			}
+			if len(item.Repositories) > 0 {
+				desired["repositories"] = append([]string(nil), item.Repositories...)
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "package",
+				Summary:         "create package " + item.Name,
+				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         desired,
+				DependsOn:       deps,
+				ProviderType:    "package",
+				ProviderAddress: "package." + providerName(host.Name, component.Name, item.Name),
+				ProviderPayload: desired,
+			})
+		}
 	}
 
 	for _, path := range sortedKeys(host.Directories.Directories) {
@@ -487,6 +605,64 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				CommandPreview: "systemctl " + action + " " + item.Unit,
 				Source:         item.Source,
 			})
+		}
+	}
+
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, name := range sortedKeys(component.Services.Services) {
+			item := component.Services.Services[name]
+			address := fmt.Sprintf("%s.services.service[%s]", componentPrefix, strconv.Quote(name))
+			deps := []string{}
+			if packageAddress, ok := packageAddresses[item.Package]; ok {
+				deps = append(deps, packageAddress)
+			}
+			if unitAddress, ok := unitAddresses[item.Unit]; ok {
+				deps = append(deps, unitAddress)
+				if daemonReloadAddress != "" {
+					deps = append(deps, daemonReloadAddress)
+				}
+			}
+			deps = dedupeStrings(deps)
+			desired := map[string]any{
+				"name":      item.Name,
+				"component": component.Name,
+				"unit":      item.Unit,
+				"package":   item.Package,
+				"state":     item.State,
+			}
+			if item.Enabled != nil {
+				desired["enabled"] = *item.Enabled
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "service",
+				Summary:         "manage service " + item.Name,
+				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         desired,
+				DependsOn:       deps,
+				ProviderType:    "service",
+				ProviderAddress: "service." + providerName(host.Name, component.Name, item.Name),
+				ProviderPayload: desired,
+			})
+			switch item.State {
+			case "restarted", "reloaded":
+				action := "restart"
+				if item.State == "reloaded" {
+					action = "reload"
+				}
+				operations = append(operations, Operation{
+					Address:        fmt.Sprintf("%s.services.service[%s].%s", componentPrefix, strconv.Quote(name), action),
+					Action:         "run",
+					Summary:        action + " service " + item.Name,
+					DependsOn:      append([]string{address}, deps...),
+					TriggeredBy:    []string{address},
+					CommandPreview: "systemctl " + action + " " + item.Unit,
+					Source:         item.Source,
+				})
+			}
 		}
 	}
 

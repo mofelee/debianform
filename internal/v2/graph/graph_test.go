@@ -75,6 +75,31 @@ func TestCompileAPTRepositoryResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileBIRD2ResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-bird2.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-bird2.golden.json", got)
+
+	serviceDeps := dependsOnFor(resourceGraph, `host.router1.components.bird2.services.service["bird"]`)
+	if !containsString(serviceDeps, `host.router1.components.bird2.packages.install["bird2"]`) {
+		t.Fatalf("bird service deps = %#v, want bird2 package", serviceDeps)
+	}
+	packageDeps := dependsOnFor(resourceGraph, `host.router1.components.bird2.packages.install["bird2"]`)
+	for _, want := range []string{
+		`host.router1.components.bird2.apt.repository["cznic_bird2"]`,
+		`host.router1.apt.cache_refresh`,
+	} {
+		if !containsString(packageDeps, want) {
+			t.Fatalf("bird2 package deps = %#v, want %q", packageDeps, want)
+		}
+	}
+}
+
 func TestCompileServiceRestartOperation(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {

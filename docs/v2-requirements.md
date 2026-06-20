@@ -1212,7 +1212,7 @@ component "bird2" {
 
       signing_key {
         url    = "https://pkg.labs.nic.cz/gpg"
-        sha256 = "REPLACE_WITH_KEY_SHA256"
+        sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       }
     }
   }

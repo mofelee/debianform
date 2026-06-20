@@ -90,6 +90,29 @@ func TestAPTRepositoryPlanJSONGolden(t *testing.T) {
 	}
 }
 
+func TestBIRD2PlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-bird2.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-bird2.dbf.hcl",
+		Host:        "router1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-bird2.golden.json", got)
+
+	if doc.Summary.Create != 4 {
+		t.Fatalf("create count = %d, want 4", doc.Summary.Create)
+	}
+	if doc.Summary.Operations != 1 {
+		t.Fatalf("operations = %d, want 1", doc.Summary.Operations)
+	}
+}
+
 func TestPlanHTMLDoesNotLeakSecrets(t *testing.T) {
 	doc := planFixture(t, "../testdata/fixtures/v2-foundation.dbf.hcl", Options{
 		CommandFile: "../testdata/fixtures/v2-foundation.dbf.hcl",

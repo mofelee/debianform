@@ -17,7 +17,7 @@ type Config struct {
 	Locals     map[string]Value
 	Profiles   map[string]Profile
 	Hosts      map[string]Host
-	Components map[string]ir.SourceRef
+	Components map[string]Component
 }
 
 type Profile struct {
@@ -29,11 +29,35 @@ type Profile struct {
 }
 
 type Host struct {
-	Name    string
-	Source  ir.SourceRef
-	Imports []string
-	Body    Value
-	Asserts []Assert
+	Name       string
+	Source     ir.SourceRef
+	Imports    []string
+	Components []ComponentInstance
+	Body       Value
+	Asserts    []Assert
+}
+
+type Component struct {
+	Name      string
+	Source    ir.SourceRef
+	ModuleDir string
+	Body      *hclsyntax.Body
+	Inputs    map[string]ComponentInput
+}
+
+type ComponentInput struct {
+	Name      string
+	Type      string
+	Default   *Value
+	Sensitive bool
+	Source    ir.SourceRef
+}
+
+type ComponentInstance struct {
+	Name     string
+	Template string
+	Inputs   map[string]Value
+	Source   ir.SourceRef
 }
 
 type Assert struct {
@@ -50,7 +74,7 @@ func ParseFiles(files []string) (*Config, error) {
 		Locals:     map[string]Value{},
 		Profiles:   map[string]Profile{},
 		Hosts:      map[string]Host{},
-		Components: map[string]ir.SourceRef{},
+		Components: map[string]Component{},
 	}
 
 	type parsedFile struct {
@@ -144,14 +168,14 @@ func parseTopLevel(cfg *Config, file string, body *hclsyntax.Body) error {
 			}
 			cfg.Hosts[host.Name] = host
 		case "component":
-			source, name, err := parseComponentHeader(file, block)
+			component, err := parseComponent(file, block, ctx)
 			if err != nil {
 				return err
 			}
-			if previous, exists := cfg.Components[name]; exists {
-				return fmt.Errorf("%s:%d: duplicate component %q; first defined at %s:%d", file, source.Line, name, previous.File, previous.Line)
+			if previous, exists := cfg.Components[component.Name]; exists {
+				return fmt.Errorf("%s:%d: duplicate component %q; first defined at %s:%d", file, component.Source.Line, component.Name, previous.Source.File, previous.Source.Line)
 			}
-			cfg.Components[name] = source
+			cfg.Components[component.Name] = component
 		default:
 			return fmt.Errorf("%s:%d: unknown v2 top-level block %q", file, block.TypeRange.Start.Line, block.Type)
 		}
@@ -164,7 +188,7 @@ func parseProfile(file string, block *hclsyntax.Block, ctx EvalContext) (Profile
 	if err != nil {
 		return Profile{}, err
 	}
-	imports, body, asserts, err := parseHostLikeBody(file, source.Path, block.Body, ctx)
+	imports, _, body, asserts, err := parseHostLikeBody(file, source.Path, block.Body, ctx, false)
 	if err != nil {
 		return Profile{}, err
 	}
@@ -179,15 +203,39 @@ func parseHost(file string, block *hclsyntax.Block, ctx EvalContext) (Host, erro
 	if err != nil {
 		return Host{}, err
 	}
-	imports, body, asserts, err := parseHostLikeBody(file, source.Path, block.Body, ctx)
+	imports, components, body, asserts, err := parseHostLikeBody(file, source.Path, block.Body, ctx, true)
 	if err != nil {
 		return Host{}, err
 	}
-	return Host{Name: name, Source: source, Imports: imports, Body: body, Asserts: asserts}, nil
+	return Host{Name: name, Source: source, Imports: imports, Components: components, Body: body, Asserts: asserts}, nil
 }
 
-func parseComponentHeader(file string, block *hclsyntax.Block) (ir.SourceRef, string, error) {
-	return parseLabeledHeader(file, "component", block)
+func parseComponent(file string, block *hclsyntax.Block, ctx EvalContext) (Component, error) {
+	source, name, err := parseLabeledHeader(file, "component", block)
+	if err != nil {
+		return Component{}, err
+	}
+	component := Component{
+		Name:      name,
+		Source:    source,
+		ModuleDir: filepath.Dir(file),
+		Body:      block.Body,
+		Inputs:    map[string]ComponentInput{},
+	}
+	for _, child := range block.Body.Blocks {
+		if child.Type != "input" {
+			continue
+		}
+		input, err := parseComponentInputBlock(file, source.Path, child, ctx)
+		if err != nil {
+			return Component{}, err
+		}
+		if previous, exists := component.Inputs[input.Name]; exists {
+			return Component{}, fmt.Errorf("%s:%d: duplicate component input %q; first defined at %s:%d", file, input.Source.Line, input.Name, previous.Source.File, previous.Source.Line)
+		}
+		component.Inputs[input.Name] = input
+	}
+	return component, nil
 }
 
 func parseLabeledHeader(file, typ string, block *hclsyntax.Block) (ir.SourceRef, string, error) {
@@ -199,8 +247,9 @@ func parseLabeledHeader(file, typ string, block *hclsyntax.Block) (ir.SourceRef,
 	return ir.SourceRef{File: file, Line: line, Path: typ + "." + name}, name, nil
 }
 
-func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext) ([]string, Value, []Assert, error) {
+func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext, allowComponents bool) ([]string, []ComponentInstance, Value, []Assert, error) {
 	imports := []string{}
+	components := []ComponentInstance{}
 	asserts := []Assert{}
 	values := map[string]Value{}
 
@@ -209,13 +258,20 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext)
 		case "imports":
 			refs, err := parseProfileRefs(file, attr.Expr)
 			if err != nil {
-				return nil, Value{}, nil, fmt.Errorf("%s:%d: %s.imports: %w", file, attr.NameRange.Start.Line, path, err)
+				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: %s.imports: %w", file, attr.NameRange.Start.Line, path, err)
 			}
 			imports = refs
 		case "components":
-			continue
+			if !allowComponents {
+				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: %s.components is host-only and cannot be declared in profile", file, attr.NameRange.Start.Line, path)
+			}
+			refs, err := parseComponentRefs(file, path+".components", attr.Expr)
+			if err != nil {
+				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: %s.components: %w", file, attr.NameRange.Start.Line, path, err)
+			}
+			components = append(components, refs...)
 		default:
-			return nil, Value{}, nil, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+			return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
 		}
 	}
 
@@ -223,31 +279,235 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext)
 		switch block.Type {
 		case "ssh", "state", "system", "kernel", "packages", "apt", "files", "secrets", "directories", "groups", "users", "systemd", "services":
 			if len(block.Labels) != 0 {
-				return nil, Value{}, nil, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, block.Type)
+				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, block.Type)
 			}
 			if _, exists := values[block.Type]; exists {
-				return nil, Value{}, nil, fmt.Errorf("%s:%d: duplicate %s.%s block", file, block.TypeRange.Start.Line, path, block.Type)
+				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: duplicate %s.%s block", file, block.TypeRange.Start.Line, path, block.Type)
 			}
 			value, err := parseDomainBlock(file, path+"."+block.Type, block, ctx)
 			if err != nil {
-				return nil, Value{}, nil, err
+				return nil, nil, Value{}, nil, err
 			}
 			values[block.Type] = value
+		case "component":
+			if !allowComponents {
+				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: %s.component is host-only and cannot be declared in profile", file, block.TypeRange.Start.Line, path)
+			}
+			instance, err := parseComponentInstanceBlock(file, path, block, ctx)
+			if err != nil {
+				return nil, nil, Value{}, nil, err
+			}
+			components = append(components, instance)
 		case "assert":
 			if len(block.Labels) != 0 {
-				return nil, Value{}, nil, fmt.Errorf("%s:%d: assert block must not have labels", file, block.TypeRange.Start.Line)
+				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: assert block must not have labels", file, block.TypeRange.Start.Line)
 			}
 			assert, err := parseAssertBlock(file, fmt.Sprintf("%s.assert[%d]", path, len(asserts)), block, ctx)
 			if err != nil {
-				return nil, Value{}, nil, err
+				return nil, nil, Value{}, nil, err
 			}
 			asserts = append(asserts, assert)
 		default:
-			return nil, Value{}, nil, fmt.Errorf("%s:%d: unsupported block %s.%s", file, block.TypeRange.Start.Line, path, block.Type)
+			return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: unsupported block %s.%s", file, block.TypeRange.Start.Line, path, block.Type)
 		}
 	}
 
-	return imports, MapValue(values, ir.SourceRef{File: file, Line: body.SrcRange.Start.Line, Path: path}), asserts, nil
+	return imports, components, MapValue(values, ir.SourceRef{File: file, Line: body.SrcRange.Start.Line, Path: path}), asserts, nil
+}
+
+func parseComponentRefs(file, path string, expr hcl.Expression) ([]ComponentInstance, error) {
+	items, diags := hcl.ExprList(expr)
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("must be a list of component references")
+	}
+	refs := make([]ComponentInstance, 0, len(items))
+	for i, item := range items {
+		template, err := parseComponentTraversal(file, item)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ComponentInstance{
+			Name:     template,
+			Template: template,
+			Inputs:   map[string]Value{},
+			Source: ir.SourceRef{
+				File: file,
+				Line: item.Range().Start.Line,
+				Path: fmt.Sprintf("%s[%d]", path, i),
+			},
+		})
+	}
+	return refs, nil
+}
+
+func parseComponentInstanceBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (ComponentInstance, error) {
+	source, name, err := parseLabeledHeader(file, path+".component", block)
+	if err != nil {
+		return ComponentInstance{}, err
+	}
+	source.Path = fmt.Sprintf("%s.component[%s]", path, strconv.Quote(name))
+	if len(block.Body.Blocks) != 0 {
+		return ComponentInstance{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, source.Path)
+	}
+	for attrName, attr := range block.Body.Attributes {
+		if attrName != "source" && attrName != "inputs" {
+			return ComponentInstance{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, source.Path, attrName)
+		}
+	}
+	sourceAttr, ok := block.Body.Attributes["source"]
+	if !ok {
+		return ComponentInstance{}, fmt.Errorf("%s:%d: %s.source is required", file, block.TypeRange.Start.Line, source.Path)
+	}
+	template, err := parseComponentTraversal(file, sourceAttr.Expr)
+	if err != nil {
+		return ComponentInstance{}, err
+	}
+	inputs := map[string]Value{}
+	if inputsAttr, ok := block.Body.Attributes["inputs"]; ok {
+		inputSource := ir.SourceRef{File: file, Line: inputsAttr.NameRange.Start.Line, Path: source.Path + ".inputs"}
+		inputValue, err := evalValue(inputsAttr.Expr, ctx, inputSource)
+		if err != nil {
+			return ComponentInstance{}, fmt.Errorf("%s:%d: %s.inputs: %w", file, inputSource.Line, source.Path, err)
+		}
+		if !inputValue.IsMap() {
+			return ComponentInstance{}, fmt.Errorf("%s:%d: %s.inputs must be a map", file, inputSource.Line, source.Path)
+		}
+		inputs = inputValue.Map
+	}
+	return ComponentInstance{Name: name, Template: template, Inputs: inputs, Source: source}, nil
+}
+
+func parseComponentTraversal(file string, expr hcl.Expression) (string, error) {
+	traversal, diags := hcl.AbsTraversalForExpr(expr)
+	if diags.HasErrors() {
+		return "", fmt.Errorf("%s:%d: component reference must be component.<name>", file, expr.Range().Start.Line)
+	}
+	if len(traversal) != 2 {
+		return "", fmt.Errorf("%s:%d: component reference must be component.<name>", file, expr.Range().Start.Line)
+	}
+	root, ok := traversal[0].(hcl.TraverseRoot)
+	if !ok || root.Name != "component" {
+		return "", fmt.Errorf("%s:%d: component reference must be component.<name>", file, expr.Range().Start.Line)
+	}
+	attr, ok := traversal[1].(hcl.TraverseAttr)
+	if !ok || attr.Name == "" {
+		return "", fmt.Errorf("%s:%d: component reference must be component.<name>", file, expr.Range().Start.Line)
+	}
+	return attr.Name, nil
+}
+
+func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentInput, error) {
+	if len(block.Labels) != 1 {
+		return ComponentInput{}, fmt.Errorf("%s:%d: component input block requires exactly one label", file, block.TypeRange.Start.Line)
+	}
+	name := block.Labels[0]
+	path := fmt.Sprintf("%s.input[%s]", componentPath, strconv.Quote(name))
+	if len(block.Body.Blocks) != 0 {
+		return ComponentInput{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	for attrName, attr := range block.Body.Attributes {
+		if attrName != "type" && attrName != "default" && attrName != "sensitive" {
+			return ComponentInput{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, attrName)
+		}
+	}
+	typeAttr, ok := block.Body.Attributes["type"]
+	if !ok {
+		return ComponentInput{}, fmt.Errorf("%s:%d: %s.type is required", file, block.TypeRange.Start.Line, path)
+	}
+	typeName, err := parseComponentInputType(typeAttr.Expr)
+	if err != nil {
+		return ComponentInput{}, fmt.Errorf("%s:%d: %s.type: %w", file, typeAttr.NameRange.Start.Line, path, err)
+	}
+	input := ComponentInput{
+		Name:   name,
+		Type:   typeName,
+		Source: ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path},
+	}
+	if defaultAttr, ok := block.Body.Attributes["default"]; ok {
+		defaultSource := ir.SourceRef{File: file, Line: defaultAttr.NameRange.Start.Line, Path: path + ".default"}
+		value, err := evalValue(defaultAttr.Expr, ctx, defaultSource)
+		if err != nil {
+			return ComponentInput{}, fmt.Errorf("%s:%d: %s.default: %w", file, defaultSource.Line, path, err)
+		}
+		input.Default = &value
+	}
+	if sensitiveAttr, ok := block.Body.Attributes["sensitive"]; ok {
+		sensitiveSource := ir.SourceRef{File: file, Line: sensitiveAttr.NameRange.Start.Line, Path: path + ".sensitive"}
+		value, err := evalValue(sensitiveAttr.Expr, ctx, sensitiveSource)
+		if err != nil {
+			return ComponentInput{}, fmt.Errorf("%s:%d: %s.sensitive: %w", file, sensitiveSource.Line, path, err)
+		}
+		if value.Kind != KindBool {
+			return ComponentInput{}, fmt.Errorf("%s:%d: %s.sensitive must be a boolean", file, sensitiveSource.Line, path)
+		}
+		input.Sensitive = value.Bool
+	}
+	return input, nil
+}
+
+func parseComponentInputType(expr hcl.Expression) (string, error) {
+	if traversal, diags := hcl.AbsTraversalForExpr(expr); !diags.HasErrors() && len(traversal) == 1 {
+		if root, ok := traversal[0].(hcl.TraverseRoot); ok {
+			switch root.Name {
+			case "string", "number", "bool":
+				return root.Name, nil
+			}
+		}
+	}
+	if call, ok := expr.(*hclsyntax.FunctionCallExpr); ok {
+		if len(call.Args) != 1 {
+			return "", fmt.Errorf("%s() requires exactly one type argument", call.Name)
+		}
+		traversal, diags := hcl.AbsTraversalForExpr(call.Args[0])
+		if diags.HasErrors() || len(traversal) != 1 {
+			return "", fmt.Errorf("%s() argument must be string", call.Name)
+		}
+		root, ok := traversal[0].(hcl.TraverseRoot)
+		if !ok || root.Name != "string" {
+			return "", fmt.Errorf("%s() argument must be string", call.Name)
+		}
+		switch call.Name {
+		case "list", "map":
+			return call.Name + "(string)", nil
+		}
+	}
+	return "", fmt.Errorf("supported types are string, number, bool, list(string), and map(string)")
+}
+
+func ParseComponentBody(component Component, ctx EvalContext) (Value, error) {
+	values := map[string]Value{}
+	for name, attr := range component.Body.Attributes {
+		switch name {
+		case "type", "version":
+			return Value{}, fmt.Errorf("%s:%d: %s.%s artifact attributes are not implemented yet", attr.NameRange.Filename, attr.NameRange.Start.Line, component.Source.Path, name)
+		default:
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", attr.NameRange.Filename, attr.NameRange.Start.Line, component.Source.Path, name)
+		}
+	}
+
+	for _, block := range component.Body.Blocks {
+		switch block.Type {
+		case "input":
+			continue
+		case "apt", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services":
+			if len(block.Labels) != 0 {
+				return Value{}, fmt.Errorf("%s:%d: %s block must not have labels", component.Source.File, block.TypeRange.Start.Line, block.Type)
+			}
+			if _, exists := values[block.Type]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.%s block", component.Source.File, block.TypeRange.Start.Line, component.Source.Path, block.Type)
+			}
+			value, err := parseDomainBlock(component.Source.File, component.Source.Path+"."+block.Type, block, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values[block.Type] = value
+		case "source", "extract", "install":
+			return Value{}, fmt.Errorf("%s:%d: component %s block is not implemented yet", component.Source.File, block.TypeRange.Start.Line, block.Type)
+		default:
+			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", component.Source.File, block.TypeRange.Start.Line, component.Source.Path, block.Type)
+		}
+	}
+	return MapValue(values, component.Source), nil
 }
 
 func parseDomainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {

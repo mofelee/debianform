@@ -16,6 +16,7 @@ import (
 type EvalContext struct {
 	ModuleDir string
 	Locals    map[string]Value
+	Variables map[string]cty.Value
 }
 
 func evalValue(expr hcl.Expression, ctx EvalContext, source ir.SourceRef) (Value, error) {
@@ -122,6 +123,9 @@ func hclEvalContext(ctx EvalContext) (*hcl.EvalContext, error) {
 			localValues[name] = converted
 		}
 		vars["local"] = cty.ObjectVal(localValues)
+	}
+	for name, value := range ctx.Variables {
+		vars[name] = value
 	}
 
 	return &hcl.EvalContext{

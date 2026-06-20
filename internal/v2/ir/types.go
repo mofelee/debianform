@@ -5,21 +5,22 @@ type Program struct {
 }
 
 type HostSpec struct {
-	Name        string        `json:"name"`
-	Source      SourceRef     `json:"source"`
-	SSH         SSHSpec       `json:"ssh"`
-	State       StateSpec     `json:"state"`
-	System      SystemSpec    `json:"system"`
-	Kernel      KernelSpec    `json:"kernel"`
-	Packages    PackageSpec   `json:"packages"`
-	APT         APTSpec       `json:"apt"`
-	Files       FileSpec      `json:"files"`
-	Secrets     SecretSpec    `json:"secrets"`
-	Directories DirectorySpec `json:"directories"`
-	Groups      GroupSpec     `json:"groups"`
-	Users       UserSpec      `json:"users"`
-	Systemd     SystemdSpec   `json:"systemd"`
-	Services    ServiceSpec   `json:"services"`
+	Name        string                  `json:"name"`
+	Source      SourceRef               `json:"source"`
+	SSH         SSHSpec                 `json:"ssh"`
+	State       StateSpec               `json:"state"`
+	System      SystemSpec              `json:"system"`
+	Kernel      KernelSpec              `json:"kernel"`
+	Packages    PackageSpec             `json:"packages"`
+	APT         APTSpec                 `json:"apt"`
+	Files       FileSpec                `json:"files"`
+	Secrets     SecretSpec              `json:"secrets"`
+	Directories DirectorySpec           `json:"directories"`
+	Groups      GroupSpec               `json:"groups"`
+	Users       UserSpec                `json:"users"`
+	Systemd     SystemdSpec             `json:"systemd"`
+	Services    ServiceSpec             `json:"services"`
+	Components  []ComponentInstanceSpec `json:"components,omitempty"`
 }
 
 type SourceRef struct {
@@ -235,4 +236,20 @@ type ManagedService struct {
 type ContentSummary struct {
 	SHA256 string `json:"sha256,omitempty"`
 	Bytes  int64  `json:"bytes,omitempty"`
+}
+
+type ComponentInstanceSpec struct {
+	Name        string         `json:"name"`
+	Template    string         `json:"template"`
+	InputValues map[string]any `json:"input_values,omitempty"`
+	APT         APTSpec        `json:"apt"`
+	Packages    PackageSpec    `json:"packages"`
+	Files       FileSpec       `json:"files"`
+	Secrets     SecretSpec     `json:"secrets"`
+	Directories DirectorySpec  `json:"directories"`
+	Groups      GroupSpec      `json:"groups"`
+	Users       UserSpec       `json:"users"`
+	Systemd     SystemdSpec    `json:"systemd"`
+	Services    ServiceSpec    `json:"services"`
+	Source      SourceRef      `json:"source,omitempty"`
 }

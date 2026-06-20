@@ -27,6 +27,7 @@ v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源
 
 - `examples/v2-bbr.dbf.hcl`
 - `examples/v2-apt-repository.dbf.hcl`
+- `examples/v2-bird2.dbf.hcl`
 - `examples/v2-files-plan-preview.dbf.hcl`
 - `examples/v2-profile-merge.dbf.hcl`
 - `examples/v2-systemd-service.dbf.hcl`
@@ -35,7 +36,6 @@ v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源
 其他示例仍为 design-only fixture：
 
 - `examples/v2-fleet.dbf.hcl`
-- `examples/v2-bird2.dbf.hcl`
 - `examples/v2-component-binary.dbf.hcl`
 - `examples/v2-nftables.dbf.hcl`
 - `examples/v2-plan-preview.dbf.hcl`
@@ -76,6 +76,15 @@ dbf plan -f examples/v2-bbr.dbf.hcl --format json --debug
 ```bash
 dbf plan -f examples/v2-files-plan-preview.dbf.hcl --html plan.html
 ```
+
+领域型 component 可用：
+
+```bash
+dbf plan -f examples/v2-bird2.dbf.hcl
+```
+
+component 内可以读取 `target.system.codename` 等只读 host 视图，并展开为
+`host.<host>.components.<instance>...` 地址。
 
 配置格式化会原地改写目标 HCL 文件：
 

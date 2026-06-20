@@ -157,6 +157,59 @@ host "web1" {
 	}
 }
 
+func TestParseComponentReferences(t *testing.T) {
+	file := writeConfig(t, `
+component "rclone" {
+  input "version" {
+    type    = string
+    default = "1.66.0"
+  }
+}
+
+component "restic" {}
+
+host "web1" {
+  components = [
+    component.rclone,
+  ]
+
+  component "backup" {
+    source = component.restic
+
+    inputs = {
+      environment_source = "secrets/restic.env"
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rclone, ok := cfg.Components["rclone"]
+	if !ok {
+		t.Fatalf("component rclone was not parsed")
+	}
+	input := rclone.Inputs["version"]
+	if input.Type != "string" || input.Default == nil || input.Default.String != "1.66.0" {
+		t.Fatalf("component input = %#v", input)
+	}
+	host := cfg.Hosts["web1"]
+	if len(host.Components) != 2 {
+		t.Fatalf("host components = %d, want 2", len(host.Components))
+	}
+	if host.Components[0].Name != "rclone" || host.Components[0].Template != "rclone" {
+		t.Fatalf("shorthand component = %#v", host.Components[0])
+	}
+	if host.Components[1].Name != "backup" || host.Components[1].Template != "restic" {
+		t.Fatalf("block component = %#v", host.Components[1])
+	}
+	if got := host.Components[1].Inputs["environment_source"].String; got != "secrets/restic.env" {
+		t.Fatalf("component input value = %q", got)
+	}
+}
+
 func TestParseLifecycleBlock(t *testing.T) {
 	file := writeConfig(t, `
 host "web1" {

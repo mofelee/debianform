@@ -13,6 +13,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/v2/ir"
 	"github.com/mofelee/debianform/internal/v2/parser"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func Compile(cfg *parser.Config) (*ir.Program, error) {
@@ -52,6 +53,14 @@ func Compile(cfg *parser.Config) (*ir.Program, error) {
 		asserts = append(asserts, host.Asserts...)
 		spec, err := buildHostSpec(host, merged)
 		if err != nil {
+			return nil, err
+		}
+		components, err := compiler.instantiateComponents(host.Components, spec)
+		if err != nil {
+			return nil, err
+		}
+		spec.Components = components
+		if err := validateHostSpec(spec); err != nil {
 			return nil, err
 		}
 		if err := evaluateAssertions(asserts, spec); err != nil {
@@ -111,6 +120,157 @@ func (c *compiler) resolveProfile(name string, stack []string) (resolvedProfile,
 	resolved := resolvedProfile{Body: merged, Asserts: asserts}
 	c.profileCache[name] = resolved
 	return resolved, nil
+}
+
+func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, target ir.HostSpec) ([]ir.ComponentInstanceSpec, error) {
+	if len(instances) == 0 {
+		return nil, nil
+	}
+	out := make([]ir.ComponentInstanceSpec, 0, len(instances))
+	seen := map[string]ir.SourceRef{}
+	targetValue := hostSpecToCty(target)
+	for _, instance := range instances {
+		if instance.Name == "" {
+			return nil, fmt.Errorf("%s:%d:%s: component instance name must be non-empty", instance.Source.File, instance.Source.Line, instance.Source.Path)
+		}
+		if previous, exists := seen[instance.Name]; exists {
+			return nil, fmt.Errorf("%s:%d:%s: duplicate component instance %q; first declared at %s:%d:%s", instance.Source.File, instance.Source.Line, instance.Source.Path, instance.Name, previous.File, previous.Line, previous.Path)
+		}
+		seen[instance.Name] = instance.Source
+
+		template, ok := c.cfg.Components[instance.Template]
+		if !ok {
+			return nil, fmt.Errorf("%s:%d:%s: unknown component.%s", instance.Source.File, instance.Source.Line, instance.Source.Path, instance.Template)
+		}
+		inputValues, inputJSON, err := componentInputValues(template, instance)
+		if err != nil {
+			return nil, err
+		}
+		inputVars := make(map[string]cty.Value, len(inputValues))
+		for name, value := range inputValues {
+			converted, err := value.ToCty()
+			if err != nil {
+				return nil, fmt.Errorf("%s:%d:%s.inputs[%q]: %w", instance.Source.File, instance.Source.Line, instance.Source.Path, name, err)
+			}
+			inputVars[name] = converted
+		}
+		raw, err := parser.ParseComponentBody(template, parser.EvalContext{
+			ModuleDir: template.ModuleDir,
+			Locals:    c.cfg.Locals,
+			Variables: map[string]cty.Value{
+				"target": targetValue,
+				"input":  objectOrEmpty(inputVars),
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
+		}
+		component, err := buildComponentSpec(instance, raw)
+		if err != nil {
+			return nil, err
+		}
+		component.Template = template.Name
+		component.InputValues = inputJSON
+		out = append(out, component)
+	}
+	return out, nil
+}
+
+func componentInputValues(template parser.Component, instance parser.ComponentInstance) (map[string]parser.Value, map[string]any, error) {
+	values := map[string]parser.Value{}
+	jsonValues := map[string]any{}
+	for name, value := range instance.Inputs {
+		if _, ok := template.Inputs[name]; !ok {
+			return nil, nil, fmt.Errorf("%s:%d:%s.inputs[%q]: unknown input for component.%s", value.Source.File, value.Source.Line, value.Source.Path, name, template.Name)
+		}
+		values[name] = value
+	}
+	for _, name := range sortedKeys(template.Inputs) {
+		input := template.Inputs[name]
+		value, ok := values[name]
+		if !ok {
+			if input.Default == nil {
+				return nil, nil, fmt.Errorf("%s:%d:%s: component.%s input %q is required", instance.Source.File, instance.Source.Line, instance.Source.Path, template.Name, name)
+			}
+			value = *input.Default
+			values[name] = value
+		}
+		if err := validateComponentInputType(input, value); err != nil {
+			return nil, nil, err
+		}
+		if input.Sensitive {
+			jsonValues[name] = "<sensitive>"
+		} else {
+			jsonValues[name] = parserValueToAny(value)
+		}
+	}
+	return values, jsonValues, nil
+}
+
+func validateComponentInputType(input parser.ComponentInput, value parser.Value) error {
+	switch input.Type {
+	case "string":
+		if value.Kind != parser.KindString {
+			return fmt.Errorf("%s:%d:%s: component input %q must be a string", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
+		}
+	case "number":
+		if value.Kind != parser.KindNumber {
+			return fmt.Errorf("%s:%d:%s: component input %q must be a number", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
+		}
+	case "bool":
+		if value.Kind != parser.KindBool {
+			return fmt.Errorf("%s:%d:%s: component input %q must be a bool", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
+		}
+	case "list(string)":
+		if !value.IsList() {
+			return fmt.Errorf("%s:%d:%s: component input %q must be a list(string)", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
+		}
+		for _, item := range value.List {
+			if item.Kind != parser.KindString {
+				return fmt.Errorf("%s:%d:%s: component input %q entries must be strings", item.Source.File, item.Source.Line, item.Source.Path, input.Name)
+			}
+		}
+	case "map(string)":
+		if !value.IsMap() {
+			return fmt.Errorf("%s:%d:%s: component input %q must be a map(string)", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
+		}
+		for _, key := range sortedKeys(value.Map) {
+			item := value.Map[key]
+			if item.Kind != parser.KindString {
+				return fmt.Errorf("%s:%d:%s: component input %q values must be strings", item.Source.File, item.Source.Line, item.Source.Path, input.Name)
+			}
+		}
+	default:
+		return fmt.Errorf("%s:%d:%s: unsupported component input type %q", input.Source.File, input.Source.Line, input.Source.Path, input.Type)
+	}
+	return nil
+}
+
+func parserValueToAny(value parser.Value) any {
+	switch value.Kind {
+	case parser.KindNull:
+		return nil
+	case parser.KindString:
+		return value.String
+	case parser.KindBool:
+		return value.Bool
+	case parser.KindNumber:
+		return value.Number
+	case parser.KindList:
+		out := make([]any, 0, len(value.List))
+		for _, item := range value.List {
+			out = append(out, parserValueToAny(item))
+		}
+		return out
+	case parser.KindMap:
+		out := make(map[string]any, len(value.Map))
+		for _, key := range sortedKeys(value.Map) {
+			out[key] = parserValueToAny(value.Map[key])
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func cycleString(names []string) string {
@@ -471,8 +631,137 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 		spec.Services.Services = managedServices
 	}
 
-	if err := validateHostSpec(spec); err != nil {
+	return spec, nil
+}
+
+func buildComponentSpec(instance parser.ComponentInstance, raw parser.Value) (ir.ComponentInstanceSpec, error) {
+	spec := ir.ComponentInstanceSpec{
+		Name:     instance.Name,
+		Template: instance.Template,
+		Source:   instance.Source,
+		APT: ir.APTSpec{
+			Repositories: map[string]ir.APTRepositorySpec{},
+		},
+		Files: ir.FileSpec{
+			Files: map[string]ir.ManagedFile{},
+		},
+		Secrets: ir.SecretSpec{
+			Files: map[string]ir.SecretFile{},
+		},
+		Directories: ir.DirectorySpec{
+			Directories: map[string]ir.ManagedDirectory{},
+		},
+		Groups: ir.GroupSpec{
+			Groups: map[string]ir.ManagedGroup{},
+		},
+		Users: ir.UserSpec{
+			Users: map[string]ir.ManagedUser{},
+		},
+		Systemd: ir.SystemdSpec{
+			Units: map[string]ir.SystemdUnit{},
+		},
+		Services: ir.ServiceSpec{
+			Services: map[string]ir.ManagedService{},
+		},
+	}
+
+	if packages, ok, err := mapField(raw, "packages"); err != nil {
 		return spec, err
+	} else if ok {
+		spec.Packages.Source = packages.Source
+		install, err := packageItems(packages)
+		if err != nil {
+			return spec, err
+		}
+		spec.Packages.Install = install
+	}
+
+	if apt, ok, err := mapField(raw, "apt"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.APT.Source = apt.Source
+		repositories, err := aptRepositorySpecs(apt)
+		if err != nil {
+			return spec, err
+		}
+		spec.APT.Repositories = repositories
+	}
+
+	if files, ok, err := mapField(raw, "files"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Files.Source = files.Source
+		managedFiles, err := fileSpecs(files)
+		if err != nil {
+			return spec, err
+		}
+		spec.Files.Files = managedFiles
+	}
+
+	if secrets, ok, err := mapField(raw, "secrets"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Secrets.Source = secrets.Source
+		secretFiles, err := secretSpecs(secrets)
+		if err != nil {
+			return spec, err
+		}
+		spec.Secrets.Files = secretFiles
+	}
+
+	if directories, ok, err := mapField(raw, "directories"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Directories.Source = directories.Source
+		managedDirectories, err := directorySpecs(directories)
+		if err != nil {
+			return spec, err
+		}
+		spec.Directories.Directories = managedDirectories
+	}
+
+	if groups, ok, err := mapField(raw, "groups"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Groups.Source = groups.Source
+		managedGroups, err := groupSpecs(groups)
+		if err != nil {
+			return spec, err
+		}
+		spec.Groups.Groups = managedGroups
+	}
+
+	if users, ok, err := mapField(raw, "users"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Users.Source = users.Source
+		managedUsers, err := userSpecs(users)
+		if err != nil {
+			return spec, err
+		}
+		spec.Users.Users = managedUsers
+	}
+
+	if systemd, ok, err := mapField(raw, "systemd"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Systemd.Source = systemd.Source
+		units, err := systemdSpecs(systemd)
+		if err != nil {
+			return spec, err
+		}
+		spec.Systemd.Units = units
+	}
+
+	if services, ok, err := mapField(raw, "services"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Services.Source = services.Source
+		managedServices, err := serviceSpecs(services)
+		if err != nil {
+			return spec, err
+		}
+		spec.Services.Services = managedServices
 	}
 
 	return spec, nil
@@ -1238,23 +1527,121 @@ func serviceSpecs(services parser.Value) (map[string]ir.ManagedService, error) {
 }
 
 func validateHostSpec(spec ir.HostSpec) error {
+	files := map[string]ir.SourceRef{}
+	secrets := map[string]ir.SourceRef{}
+	repositories := map[string]ir.APTRepositorySpec{}
+	packages := map[string]ir.PackageItem{}
+	directories := map[string]ir.ManagedDirectory{}
+	groups := map[string]ir.ManagedGroup{}
+	users := map[string]ir.ManagedUser{}
+	units := map[string]ir.SystemdUnit{}
+	services := map[string]ir.ManagedService{}
+
+	for path, file := range spec.Files.Files {
+		files[path] = file.Source
+	}
 	for path, secret := range spec.Secrets.Files {
-		if file, exists := spec.Files.Files[path]; exists {
-			return fmt.Errorf("%s:%d:%s: file path %q conflicts with secret declared at %s:%d:%s", file.Source.File, file.Source.Line, file.Source.Path, path, secret.Source.File, secret.Source.Line, secret.Source.Path)
+		secrets[path] = secret.Source
+		if fileSource, exists := files[path]; exists {
+			return fmt.Errorf("%s:%d:%s: file path %q conflicts with secret declared at %s:%d:%s", fileSource.File, fileSource.Line, fileSource.Path, path, secret.Source.File, secret.Source.Line, secret.Source.Path)
+		}
+	}
+	for name, repository := range spec.APT.Repositories {
+		repositories[name] = repository
+	}
+	for _, pkg := range spec.Packages.Install {
+		packages[pkg.Name] = pkg
+	}
+	for path, directory := range spec.Directories.Directories {
+		directories[path] = directory
+	}
+	for name, group := range spec.Groups.Groups {
+		groups[name] = group
+	}
+	for name, user := range spec.Users.Users {
+		users[name] = user
+	}
+	for name, unit := range spec.Systemd.Units {
+		units[name] = unit
+	}
+	for name, service := range spec.Services.Services {
+		services[name] = service
+	}
+
+	for _, component := range spec.Components {
+		for path, file := range component.Files.Files {
+			if previous, exists := files[path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q file path %q conflicts with file declared at %s:%d:%s", file.Source.File, file.Source.Line, file.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)
+			}
+			if previous, exists := secrets[path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q file path %q conflicts with secret declared at %s:%d:%s", file.Source.File, file.Source.Line, file.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)
+			}
+			files[path] = file.Source
+		}
+		for path, secret := range component.Secrets.Files {
+			if previous, exists := files[path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q secret path %q conflicts with file declared at %s:%d:%s", secret.Source.File, secret.Source.Line, secret.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)
+			}
+			if previous, exists := secrets[path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q secret path %q conflicts with secret declared at %s:%d:%s", secret.Source.File, secret.Source.Line, secret.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)
+			}
+			secrets[path] = secret.Source
+		}
+		for name, repository := range component.APT.Repositories {
+			if previous, exists := repositories[name]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q apt.repository %q conflicts with repository declared at %s:%d:%s", repository.Source.File, repository.Source.Line, repository.Source.Path, component.Name, name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+			}
+			repositories[name] = repository
+		}
+		for _, pkg := range component.Packages.Install {
+			if previous, exists := packages[pkg.Name]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q package %q conflicts with package declared at %s:%d:%s", pkg.Source.File, pkg.Source.Line, pkg.Source.Path, component.Name, pkg.Name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+			}
+			packages[pkg.Name] = pkg
+		}
+		for path, directory := range component.Directories.Directories {
+			if previous, exists := directories[path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q directory %q conflicts with directory declared at %s:%d:%s", directory.Source.File, directory.Source.Line, directory.Source.Path, component.Name, path, previous.Source.File, previous.Source.Line, previous.Source.Path)
+			}
+			directories[path] = directory
+		}
+		for name, group := range component.Groups.Groups {
+			if previous, exists := groups[name]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q group %q conflicts with group declared at %s:%d:%s", group.Source.File, group.Source.Line, group.Source.Path, component.Name, name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+			}
+			groups[name] = group
+		}
+		for name, user := range component.Users.Users {
+			if previous, exists := users[name]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q user %q conflicts with user declared at %s:%d:%s", user.Source.File, user.Source.Line, user.Source.Path, component.Name, name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+			}
+			users[name] = user
+		}
+		for name, unit := range component.Systemd.Units {
+			if previous, exists := units[name]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q systemd unit %q conflicts with unit declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+			}
+			units[name] = unit
+		}
+		for name, service := range component.Services.Services {
+			if previous, exists := services[name]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q service %q conflicts with service declared at %s:%d:%s", service.Source.File, service.Source.Line, service.Source.Path, component.Name, name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+			}
+			services[name] = service
 		}
 	}
 
-	for _, user := range spec.Users.Users {
+	for _, user := range users {
 		if user.PrimaryGroup == "" {
 			continue
 		}
-		if _, ok := spec.Groups.Groups[user.PrimaryGroup]; !ok && user.PrimaryGroup != user.Name {
+		if _, ok := groups[user.PrimaryGroup]; !ok && user.PrimaryGroup != user.Name {
 			return fmt.Errorf("%s:%d:%s: user %q references missing primary group %q", user.Source.File, user.Source.Line, user.Source.Path, user.Name, user.PrimaryGroup)
 		}
 	}
-	for _, pkg := range spec.Packages.Install {
+	for _, pkg := range packages {
 		for _, repo := range pkg.Repositories {
-			repository, ok := spec.APT.Repositories[repo]
+			repository, ok := repositories[repo]
 			if !ok {
 				return fmt.Errorf("%s:%d:%s: package %q references missing apt.repository %q", pkg.Source.File, pkg.Source.Line, pkg.Source.Path, pkg.Name, repo)
 			}

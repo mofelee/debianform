@@ -352,6 +352,170 @@ host "server1" {
 	}
 }
 
+func TestCompileComponentTargetAndInput(t *testing.T) {
+	program := compileInline(t, `
+component "tools" {
+  input "repo_uri" {
+    type = string
+  }
+
+  apt {
+    repository "tools_repo" {
+      uris       = [input.repo_uri]
+      suites     = [target.system.codename]
+      components = ["main"]
+    }
+  }
+
+  packages {
+    package "example-tool" {
+      repositories = ["tools_repo"]
+    }
+  }
+}
+
+host "server1" {
+  component "tools" {
+    source = component.tools
+
+    inputs = {
+      repo_uri = "https://repo.example/debian"
+    }
+  }
+
+  system {
+    codename = "trixie"
+  }
+}
+`)
+
+	host := program.Hosts[0]
+	if len(host.Components) != 1 {
+		t.Fatalf("components = %d, want 1", len(host.Components))
+	}
+	component := host.Components[0]
+	repository := component.APT.Repositories["tools_repo"]
+	if !reflect.DeepEqual(repository.URIs, []string{"https://repo.example/debian"}) {
+		t.Fatalf("repository uris = %#v", repository.URIs)
+	}
+	if !reflect.DeepEqual(repository.Suites, []string{"trixie"}) {
+		t.Fatalf("repository suites = %#v", repository.Suites)
+	}
+	if got := component.Packages.Install[0].Repositories; !reflect.DeepEqual(got, []string{"tools_repo"}) {
+		t.Fatalf("package repositories = %#v", got)
+	}
+}
+
+func TestCompileComponentCanMountOnMultipleHosts(t *testing.T) {
+	program := compileInline(t, `
+component "tools" {
+  apt {
+    repository "tools_repo" {
+      uris       = ["https://repo.example/debian"]
+      suites     = [target.system.codename]
+      components = ["main"]
+    }
+  }
+}
+
+host "bookworm1" {
+  components = [component.tools]
+
+  system {
+    codename = "bookworm"
+  }
+}
+
+host "trixie1" {
+  components = [component.tools]
+
+  system {
+    codename = "trixie"
+  }
+}
+`)
+
+	if len(program.Hosts) != 2 {
+		t.Fatalf("hosts = %d, want 2", len(program.Hosts))
+	}
+	got := map[string]string{}
+	for _, host := range program.Hosts {
+		got[host.Name] = host.Components[0].APT.Repositories["tools_repo"].Suites[0]
+	}
+	want := map[string]string{"bookworm1": "bookworm", "trixie1": "trixie"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("suites = %#v, want %#v", got, want)
+	}
+}
+
+func TestCompileRejectsInvalidComponentInputsAndConflicts(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "missing input",
+			hcl: `
+component "tools" {
+  input "repo_uri" {
+    type = string
+  }
+}
+
+host "server1" {
+  components = [component.tools]
+}
+`,
+			want: `input "repo_uri" is required`,
+		},
+		{
+			name: "unknown input",
+			hcl: `
+component "tools" {}
+
+host "server1" {
+  component "tools" {
+    source = component.tools
+
+    inputs = {
+      missing = "value"
+    }
+  }
+}
+`,
+			want: "unknown input",
+		},
+		{
+			name: "identity conflict",
+			hcl: `
+component "tools" {
+  packages {
+    install = ["curl"]
+  }
+}
+
+host "server1" {
+  components = [component.tools]
+
+  packages {
+    install = ["curl"]
+  }
+}
+`,
+			want: `package "curl" conflicts`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestCompileRejectsProfileImportCycle(t *testing.T) {
 	cfg := parseInline(t, `
 profile "a" {
@@ -576,6 +740,10 @@ func TestCompileFoundationHostSpecGolden(t *testing.T) {
 
 func TestCompileAPTRepositoryHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-apt-repository.dbf.hcl", "../testdata/hostspec/v2-apt-repository.golden.json")
+}
+
+func TestCompileBIRD2HostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../../../examples/v2-bird2.dbf.hcl", "../testdata/hostspec/v2-bird2.golden.json")
 }
 
 func TestCompileRejectsLoop3InvalidInputs(t *testing.T) {

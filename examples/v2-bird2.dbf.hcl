@@ -1,8 +1,8 @@
-# DebianForm v2 BIRD2 设计示例。
+# DebianForm v2 BIRD2 component 示例。
 #
-# 设计夹具：component 和 apt 领域会在后续 loop 接入 CLI。
+# 该示例覆盖已实现的领域型 component 展开、target 上下文、APT repository
+# 和 package/service 依赖。
 #
-# 设计边界：
 # - APT repository 是 apt 领域对象，不是顶层 component。
 # - bird2 component 封装 repository、package 和 service。
 # - package 只依赖自己显式引用的 repository。
@@ -17,7 +17,7 @@ component "bird2" {
 
       signing_key {
         url    = "https://pkg.labs.nic.cz/gpg"
-        sha256 = "REPLACE_WITH_CZNIC_BIRD2_KEY_SHA256"
+        sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         path   = "/etc/apt/keyrings/cznic-bird2.asc"
       }
     }

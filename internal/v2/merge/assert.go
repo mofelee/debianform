@@ -47,6 +47,7 @@ func hostSpecToCty(host ir.HostSpec) cty.Value {
 		"system":      systemSpecToCty(host.System),
 		"kernel":      kernelSpecToCty(host.Kernel),
 		"packages":    packageSpecToCty(host.Packages),
+		"apt":         aptSpecToCty(host.APT),
 		"files":       fileSpecToCty(host.Files),
 		"secrets":     secretSpecToCty(host.Secrets),
 		"directories": directorySpecToCty(host.Directories),
@@ -113,6 +114,22 @@ func packageSpecToCty(spec ir.PackageSpec) cty.Value {
 	return cty.ObjectVal(map[string]cty.Value{
 		"install": stringTuple(install),
 	})
+}
+
+func aptSpecToCty(spec ir.APTSpec) cty.Value {
+	repositories := make(map[string]cty.Value, len(spec.Repositories))
+	for _, name := range sortedMapKeys(spec.Repositories) {
+		item := spec.Repositories[name]
+		repositories[name] = cty.ObjectVal(map[string]cty.Value{
+			"name":          cty.StringVal(item.Name),
+			"uris":          stringListToCty(item.URIs),
+			"suites":        stringListToCty(item.Suites),
+			"components":    stringListToCty(item.Components),
+			"architectures": stringListToCty(item.Architectures),
+			"ensure":        cty.StringVal(item.Ensure),
+		})
+	}
+	return cty.ObjectVal(map[string]cty.Value{"repositories": objectOrEmpty(repositories)})
 }
 
 func fileSpecToCty(spec ir.FileSpec) cty.Value {
