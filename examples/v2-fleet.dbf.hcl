@@ -559,17 +559,48 @@ host "server1" {
     }
   }
 
-  firewall {
+  nftables {
     enable = true
 
-    allowed_tcp_ports = [
-      22,
-      8080,
-    ]
+    main {
+      path     = "/etc/nftables.conf"
+      validate = true
+      activate = true
 
-    allowed_udp_ports = [
-      51820,
-    ]
+      content = <<-EOF
+        flush ruleset
+
+        include "/etc/nftables.d/*.nft"
+      EOF
+    }
+
+    file "20-server1-filter" {
+      path = "/etc/nftables.d/20-server1-filter.nft"
+
+      content = <<-EOF
+        table inet filter {
+          chain input {
+            type filter hook input priority 0; policy drop;
+
+            ct state established,related accept
+            iifname "lo" accept
+
+            tcp dport { 22, 8080 } accept
+            udp dport 51820 accept
+
+            counter drop
+          }
+
+          chain forward {
+            type filter hook forward priority 0; policy drop;
+          }
+
+          chain output {
+            type filter hook output priority 0; policy accept;
+          }
+        }
+      EOF
+    }
   }
 
   docker {
@@ -699,10 +730,48 @@ host "server2" {
     }
   }
 
-  firewall {
-    enable            = true
-    allowed_tcp_ports = [22]
-    allowed_udp_ports = [51820]
+  nftables {
+    enable = true
+
+    main {
+      path     = "/etc/nftables.conf"
+      validate = true
+      activate = true
+
+      content = <<-EOF
+        flush ruleset
+
+        include "/etc/nftables.d/*.nft"
+      EOF
+    }
+
+    file "20-server2-filter" {
+      path = "/etc/nftables.d/20-server2-filter.nft"
+
+      content = <<-EOF
+        table inet filter {
+          chain input {
+            type filter hook input priority 0; policy drop;
+
+            ct state established,related accept
+            iifname "lo" accept
+
+            tcp dport 22 accept
+            udp dport 51820 accept
+
+            counter drop
+          }
+
+          chain forward {
+            type filter hook forward priority 0; policy drop;
+          }
+
+          chain output {
+            type filter hook output priority 0; policy accept;
+          }
+        }
+      EOF
+    }
   }
 
   assert {

@@ -150,6 +150,7 @@ host "ksvm213" {
   groups {}
   services {}
   systemd {}
+  nftables {}
   networking {}
   security {}
 }
@@ -171,9 +172,11 @@ v2 第一阶段需要重点实现：
 - `services`
 - `systemd`
 
-`apt`、`networking`、`security` 可以放到后续阶段。
+`apt`、`nftables`、`networking`、`security` 可以放到后续阶段。其中
+`nftables` 是目标 DSL 的一等领域；第一版可以复用 v1 的原生 nftables 文件
+provider 实现，不需要先发明通用 firewall 抽象。
 
-完整目标语法还可以包含 `environment`、`sudo`、`sshd`、`firewall`、`docker`
+完整目标语法还可以包含 `environment`、`sudo`、`sshd`、`nftables`、`docker`
 以及重复的 `assert` 块。它们在
 [examples/v2-fleet.dbf.hcl](../examples/v2-fleet.dbf.hcl)
 中用于检查组合后的 DSL 是否协调，不代表都属于第一阶段实现范围。
@@ -1022,6 +1025,69 @@ component "bird2" {
 完整示例见
 [examples/v2-bird2.dbf.hcl](../examples/v2-bird2.dbf.hcl)。
 
+## Nftables 功能
+
+v2 的主模型应直接暴露 nftables，而不是把防火墙抽象成
+`allowed_tcp_ports` / `allowed_udp_ports` 这类低能力字段。nftables 已经是 Debian
+上的稳定原生配置语言，DebianForm 只负责文件管理、校验、激活、依赖和 plan diff。
+
+建议语法：
+
+```hcl
+nftables {
+  enable = true
+
+  main {
+    path     = "/etc/nftables.conf"
+    validate = true
+    activate = true
+
+    content = <<-EOF
+      flush ruleset
+
+      include "/etc/nftables.d/*.nft"
+    EOF
+  }
+
+  file "20-services" {
+    path = "/etc/nftables.d/20-services.nft"
+
+    content = <<-EOF
+      table inet filter {
+        chain input {
+          type filter hook input priority 0; policy drop;
+
+          ct state established,related accept
+          iifname "lo" accept
+          tcp dport { 22, 80, 443 } accept
+          udp dport 51820 accept
+          counter drop
+        }
+      }
+    EOF
+  }
+}
+```
+
+要求：
+
+- `nftables.enable = true` 表示安装/启用 nftables 运行时；是否安装包可以由
+  `packages` 或编译器生成的内部依赖负责。
+- `main` 表示主 ruleset，默认 path 为 `/etc/nftables.conf`。
+- `file "<label>"` 表示 DebianForm 管理的 snippet，默认 path 为
+  `/etc/nftables.d/<label>.nft`。
+- `content` 和 `source` 二选一。
+- `validate` 默认 true；激活前必须执行 `nft -c -f /etc/nftables.conf` 或等价校验。
+- `activate` 默认 true；通过校验后执行 `nft -f /etc/nftables.conf`。
+- 多个 nftables 文件变化时，同一 host 只校验和激活一次主 ruleset。
+- plan 必须展示 nft 文件的文本 diff；sensitive snippet 不显示明文。
+- component/profile 可以贡献 snippet，但同一 host 最终 path 不能冲突。
+- 第一版不提供通用 `firewall` 主块。后续如增加 helper，也只能编译成明确的
+  nftables snippet，不能成为替代 nftables 的第二套语义。
+
+完整示例见
+[examples/v2-nftables.dbf.hcl](../examples/v2-nftables.dbf.hcl)。
+
 ## Networking 和 Security
 
 `networking`、`security` 作为后续扩展域保留。
@@ -1029,7 +1095,8 @@ component "bird2" {
 要求：
 
 - 第一阶段不设计复杂网络抽象。
-- 不要过早发明覆盖 nftables、networkd、ssh hardening 的另一套领域模型。
+- 不要过早发明覆盖 networkd、ssh hardening 的另一套领域模型。
+- 防火墙能力以原生 `nftables` domain 为主路径，不以通用 `firewall` 抽象为主路径。
 - 对成熟的 systemd 原生格式，可以提供一对一结构化序列化和 raw file 逃生口。
 - 可以先通过 `files`、`systemd`、`services` 覆盖相关用例。
 
@@ -1119,18 +1186,31 @@ host.ksvm213.components.rclone.install["/usr/local/bin/rclone"]
 
 ## Plan 输出
 
-Plan 应以用户能理解的 v2 地址为主。
+Plan 应以用户能理解的 v2 地址为主，但不能只输出扁平资源列表。v2 的变更经常发生在
+很深的领域结构内，plan 内部必须保留结构化字段级 diff，再由不同 renderer 输出为
+终端文本、JSON 或 HTML。
 
 示例：
 
 ```text
 Plan:
-  ~ host.ksvm213.kernel.sysctl["net.ipv4.tcp_congestion_control"]
-    sysctl -w net.ipv4.tcp_congestion_control=bbr
-    writes /etc/sysctl.d/99-dbf-bbr_congestion_control.conf
+  ~ host.server1.systemd.networkd.netdev["10-wg0"]
+    source: examples/v2-fleet.dbf.hcl:430
 
-  + host.ksvm213.packages.install["curl"]
-    install package curl
+    ~ wireguard_peer["server2"]
+      ~ PersistentKeepalive: 15 -> 25
+      ~ AllowedIPs
+        + "10.200.0.0/24"
+
+  ~ host.server1.nftables.file["20-services"]
+    source: examples/v2-fleet.dbf.hcl:560
+
+    ~ content
+      - tcp dport { 22, 80 } accept
+      + tcp dport { 22, 80, 443 } accept
+
+    validates: nft -c -f /etc/nftables.conf
+    activates: nft -f /etc/nftables.conf
 ```
 
 要求：
@@ -1139,6 +1219,20 @@ Plan:
 - plan 展示用户层地址。
 - debug 模式可展示低阶 provider address。
 - 错误信息必须指向用户配置文件和行号。
+- plan 内部应使用结构化 `DiffNode`，而不是只有 summary 字符串。
+- scalar diff 显示 before/after。
+- object/map diff 按 key 递归显示。
+- set diff 按元素 identity 显示新增/删除，不能把无序集合误报成 index 变化。
+- 只有顺序有语义的 list 才按 index diff。
+- labeled block list 必须先归一化成 map，例如 `wireguard_peer["server2"]`。
+- text content 使用行级 diff；大文件默认折叠上下文。
+- sensitive 字段只显示 `<sensitive>`、hash、长度等摘要，不能显示明文。
+- 终端输出使用颜色时，新增为绿色，删除为红色，更新为黄色；无颜色环境必须保留
+  `+`、`-`、`~` 符号。
+- JSON 输出是稳定机器接口；HTML preview 只是这个结构化 plan 的一个 renderer。
+- HTML preview 必须是可独立打开的静态文件，支持按 host、component、action 过滤，
+  支持折叠/展开、搜索字段路径，并展示 source location。
+- 交互式 TUI 可以后续增加，不作为第一版要求。
 
 ## CLI 需求
 
@@ -1147,6 +1241,8 @@ v2 CLI 第一阶段：
 ```text
 dbf validate
 dbf plan
+dbf plan --format json
+dbf plan --html plan.html
 dbf apply
 dbf check
 dbf fmt
@@ -1156,11 +1252,14 @@ dbf fmt
 
 - `validate` 执行 HCL 解析、profile 合并、HostSpec 校验、ResourceGraph 校验。
 - `plan` 生成并展示按 v2 地址组织的计划。
+- `plan --format json` 输出结构化 plan，供 CI、审计和外部 viewer 使用。
+- `plan --html <file>` 生成静态 HTML preview，不改变远端状态。
 - `apply` 先 plan，再按 ResourceGraph 执行。
 - `check` 如果存在 drift 或 plan 有变更，返回非零。
 - `--host <name>` 过滤单个 host。
 - `--parallel <n>` 控制跨 host 并发。
 - `--dry-run` 可以作为 `plan` 的别名或后续补充。
+- `plan --interactive` 可以作为后续 TUI viewer 扩展，不阻塞第一版。
 
 ## Roadmap
 
@@ -1234,11 +1333,15 @@ dbf fmt
 
 ### Milestone 5: Plan v2
 
-目标：用 ResourceGraph 生成用户可读 plan。
+目标：用 ResourceGraph 生成用户可读、机器可读的结构化 plan。
 
 交付：
 
 - plan 输出 v2 地址。
+- plan 内部包含字段级 `DiffNode`。
+- 终端树状 diff renderer。
+- 稳定 JSON renderer。
+- 静态 HTML preview renderer。
 - debug 模式输出低阶 provider 地址。
 - 保留现有 drift 检测能力。
 - 错误指向用户配置来源。
@@ -1269,6 +1372,7 @@ dbf fmt
 - `users`
 - `systemd`
 - `services`
+- `nftables`
 - 对应语义依赖推导。
 - 对应 plan/apply 测试。
 
