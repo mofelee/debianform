@@ -69,7 +69,37 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	repositoryTriggers := []string{}
 	aptCacheSource := host.APT.Source
 	groupAddresses := map[string]string{}
+	userAddresses := map[string]string{}
 	unitAddresses := map[string]string{}
+	componentArtifactInstallAddresses := map[string]string{}
+
+	for _, name := range sortedKeys(host.Groups.Groups) {
+		groupAddresses[name] = fmt.Sprintf("host.%s.groups.group[%s]", host.Name, strconv.Quote(name))
+	}
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, name := range sortedKeys(component.Groups.Groups) {
+			groupAddresses[name] = fmt.Sprintf("%s.groups.group[%s]", componentPrefix, strconv.Quote(name))
+		}
+	}
+	for _, name := range sortedKeys(host.Users.Users) {
+		userAddresses[name] = fmt.Sprintf("host.%s.users.user[%s]", host.Name, strconv.Quote(name))
+	}
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, name := range sortedKeys(component.Users.Users) {
+			userAddresses[name] = fmt.Sprintf("%s.users.user[%s]", componentPrefix, strconv.Quote(name))
+		}
+	}
+	for _, name := range sortedKeys(host.Systemd.Units) {
+		unitAddresses[name] = fmt.Sprintf("host.%s.systemd.unit[%s]", host.Name, strconv.Quote(name))
+	}
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, name := range sortedKeys(component.Systemd.Units) {
+			unitAddresses[name] = fmt.Sprintf("%s.systemd.unit[%s]", componentPrefix, strconv.Quote(name))
+		}
+	}
 
 	for _, module := range host.Kernel.Modules {
 		address := fmt.Sprintf("host.%s.kernel.module[%s]", host.Name, strconv.Quote(module.Name))
@@ -354,8 +384,10 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 	}
 
+	caCertificateTriggers := []string{}
+	caCertificateSource := ir.SourceRef{}
 	for _, component := range host.Components {
-		if component.ArtifactType != "binary" || component.SelectedSource == nil || component.Install == nil {
+		if component.ArtifactType == "" || component.SelectedSource == nil || component.Install == nil {
 			continue
 		}
 		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
@@ -388,6 +420,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		})
 
 		installAddress := fmt.Sprintf("%s.artifact.install[%s]", componentPrefix, strconv.Quote(component.Install.Path))
+		installKind := componentArtifactInstallKind(component.ArtifactType)
 		installDesired := map[string]any{
 			"component":     component.Name,
 			"type":          component.ArtifactType,
@@ -409,17 +442,39 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			installDesired["include"] = component.Extract.Include
 			source = component.Extract.Source
 		}
+		deps := []string{downloadAddress}
+		deps = append(deps, ownershipDependencies(component.Install.Owner, component.Install.Group, userAddresses, groupAddresses)...)
+		deps = dedupeStrings(deps)
 		nodes = append(nodes, Node{
 			Host:            host.Name,
 			Address:         installAddress,
-			Kind:            "component_binary",
-			Summary:         "install component " + component.Name + " binary " + component.Install.Path,
+			Kind:            installKind,
+			Summary:         componentArtifactInstallSummary(component),
 			Source:          source,
 			Desired:         installDesired,
-			DependsOn:       []string{downloadAddress},
-			ProviderType:    "component_binary",
-			ProviderAddress: "component_binary." + providerName(host.Name, component.Name, component.Install.Path),
+			DependsOn:       deps,
+			ProviderType:    installKind,
+			ProviderAddress: installKind + "." + providerName(host.Name, component.Name, component.Install.Path),
 			ProviderPayload: installDesired,
+		})
+		componentArtifactInstallAddresses[component.Name] = installAddress
+		if component.ArtifactType == "ca_certificate" {
+			caCertificateTriggers = append(caCertificateTriggers, installAddress)
+			if caCertificateSource.File == "" {
+				caCertificateSource = source
+			}
+		}
+	}
+
+	if len(caCertificateTriggers) > 0 {
+		operations = append(operations, Operation{
+			Address:        "host." + host.Name + ".ca_certificates.update",
+			Action:         "run",
+			Summary:        "update ca certificates",
+			DependsOn:      append([]string(nil), caCertificateTriggers...),
+			TriggeredBy:    append([]string(nil), caCertificateTriggers...),
+			CommandPreview: "update-ca-certificates",
+			Source:         caCertificateSource,
 		})
 	}
 
@@ -439,6 +494,28 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			ProviderAddress: "directory." + providerName(host.Name, item.Path),
 			ProviderPayload: desired,
 		})
+	}
+
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, path := range sortedKeys(component.Directories.Directories) {
+			item := component.Directories.Directories[path]
+			address := fmt.Sprintf("%s.directories.directory[%s]", componentPrefix, strconv.Quote(path))
+			desired := map[string]any{"path": item.Path, "component": component.Name, "owner": item.Owner, "group": item.Group, "mode": item.Mode, "ensure": item.Ensure}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "directory",
+				Summary:         "create directory " + item.Path,
+				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         desired,
+				DependsOn:       ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses),
+				ProviderType:    "directory",
+				ProviderAddress: "directory." + providerName(host.Name, component.Name, item.Path),
+				ProviderPayload: desired,
+			})
+		}
 	}
 
 	for _, path := range sortedKeys(host.Files.Files) {
@@ -473,6 +550,43 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		})
 	}
 
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, path := range sortedKeys(component.Files.Files) {
+			item := component.Files.Files[path]
+			address := fmt.Sprintf("%s.files.file[%s]", componentPrefix, strconv.Quote(path))
+			desired := map[string]any{
+				"path":      item.Path,
+				"component": component.Name,
+				"owner":     item.Owner,
+				"group":     item.Group,
+				"mode":      item.Mode,
+				"ensure":    item.Ensure,
+				"sensitive": item.Sensitive,
+				"summary":   item.Summary,
+			}
+			if item.Content != "" && !item.Sensitive {
+				desired["content"] = item.Content
+			}
+			if item.SourcePath != "" {
+				desired["source_path"] = item.SourcePath
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "file",
+				Summary:         "create file " + item.Path,
+				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         desired,
+				DependsOn:       ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses),
+				ProviderType:    "file",
+				ProviderAddress: "file." + providerName(host.Name, component.Name, item.Path),
+				ProviderPayload: desired,
+			})
+		}
+	}
+
 	for _, path := range sortedKeys(host.Secrets.Files) {
 		item := host.Secrets.Files[path]
 		address := fmt.Sprintf("host.%s.secrets.file[%s]", host.Name, strconv.Quote(path))
@@ -500,6 +614,38 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		})
 	}
 
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, path := range sortedKeys(component.Secrets.Files) {
+			item := component.Secrets.Files[path]
+			address := fmt.Sprintf("%s.secrets.file[%s]", componentPrefix, strconv.Quote(path))
+			desired := map[string]any{
+				"path":        item.Path,
+				"component":   component.Name,
+				"source_path": item.SourcePath,
+				"owner":       item.Owner,
+				"group":       item.Group,
+				"mode":        item.Mode,
+				"ensure":      item.Ensure,
+				"sensitive":   true,
+				"summary":     item.Summary,
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "secret",
+				Summary:         "create secret file " + item.Path,
+				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         desired,
+				DependsOn:       ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses),
+				ProviderType:    "file",
+				ProviderAddress: "file." + providerName(host.Name, component.Name, item.Path),
+				ProviderPayload: desired,
+			})
+		}
+	}
+
 	for _, name := range sortedKeys(host.Groups.Groups) {
 		item := host.Groups.Groups[name]
 		address := fmt.Sprintf("host.%s.groups.group[%s]", host.Name, strconv.Quote(name))
@@ -517,6 +663,28 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			ProviderAddress: "group." + providerName(host.Name, item.Name),
 			ProviderPayload: desired,
 		})
+	}
+
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, name := range sortedKeys(component.Groups.Groups) {
+			item := component.Groups.Groups[name]
+			address := fmt.Sprintf("%s.groups.group[%s]", componentPrefix, strconv.Quote(name))
+			groupAddresses[name] = address
+			desired := map[string]any{"name": item.Name, "component": component.Name, "gid": item.GID, "system": item.System, "ensure": item.Ensure}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "group",
+				Summary:         "create group " + item.Name,
+				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         desired,
+				ProviderType:    "group",
+				ProviderAddress: "group." + providerName(host.Name, component.Name, item.Name),
+				ProviderPayload: desired,
+			})
+		}
 	}
 
 	for _, name := range sortedKeys(host.Users.Users) {
@@ -576,6 +744,68 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 	}
 
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, name := range sortedKeys(component.Users.Users) {
+			item := component.Users.Users[name]
+			address := fmt.Sprintf("%s.users.user[%s]", componentPrefix, strconv.Quote(name))
+			userAddresses[name] = address
+			deps := []string{}
+			if groupAddress, ok := groupAddresses[item.PrimaryGroup]; ok {
+				deps = append(deps, groupAddress)
+			}
+			for _, group := range item.Groups {
+				if groupAddress, ok := groupAddresses[group]; ok {
+					deps = append(deps, groupAddress)
+				}
+			}
+			deps = dedupeStrings(deps)
+			desired := map[string]any{
+				"name":                item.Name,
+				"component":           component.Name,
+				"uid":                 item.UID,
+				"group":               item.PrimaryGroup,
+				"groups":              cloneStrings(item.Groups),
+				"system":              item.System,
+				"home":                item.Home,
+				"shell":               item.Shell,
+				"ssh_authorized_keys": cloneStrings(item.SSHAuthorizedKeys),
+				"ensure":              item.Ensure,
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "user",
+				Summary:         "create user " + item.Name,
+				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         desired,
+				DependsOn:       deps,
+				ProviderType:    "user",
+				ProviderAddress: "user." + providerName(host.Name, component.Name, item.Name),
+				ProviderPayload: desired,
+			})
+			for _, key := range item.SSHAuthorizedKeys {
+				keyID := shortHash(key)
+				keyAddress := fmt.Sprintf("%s.users.user[%s].ssh_authorized_key[%s]", componentPrefix, strconv.Quote(name), strconv.Quote(keyID))
+				keyDesired := map[string]any{"user": item.Name, "component": component.Name, "key": key, "ensure": item.Ensure}
+				nodes = append(nodes, Node{
+					Host:            host.Name,
+					Address:         keyAddress,
+					Kind:            "ssh_authorized_key",
+					Summary:         "create authorized key for " + item.Name,
+					Source:          item.Source,
+					Lifecycle:       lifecyclePtr(item.Lifecycle),
+					Desired:         keyDesired,
+					DependsOn:       []string{address},
+					ProviderType:    "ssh_authorized_key",
+					ProviderAddress: "ssh_authorized_key." + providerName(host.Name, component.Name, item.Name, keyID),
+					ProviderPayload: keyDesired,
+				})
+			}
+		}
+	}
+
 	unitTriggers := []string{}
 	for _, name := range sortedKeys(host.Systemd.Units) {
 		item := host.Systemd.Units[name]
@@ -607,6 +837,48 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			ProviderAddress: "systemd_unit." + providerName(host.Name, item.Name),
 			ProviderPayload: desired,
 		})
+	}
+
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, name := range sortedKeys(component.Systemd.Units) {
+			item := component.Systemd.Units[name]
+			address := fmt.Sprintf("%s.systemd.unit[%s]", componentPrefix, strconv.Quote(name))
+			unitAddresses[name] = address
+			unitTriggers = append(unitTriggers, address)
+			desired := map[string]any{
+				"name":        item.Name,
+				"component":   component.Name,
+				"path":        item.Path,
+				"owner":       item.Owner,
+				"group":       item.Group,
+				"mode":        item.Mode,
+				"ensure":      item.Ensure,
+				"summary":     item.Summary,
+				"source_path": item.SourcePath,
+			}
+			if item.Content != "" {
+				desired["content"] = item.Content
+			}
+			deps := ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses)
+			if installAddress, ok := componentArtifactInstallAddresses[component.Name]; ok {
+				deps = append(deps, installAddress)
+			}
+			deps = dedupeStrings(deps)
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "systemd_unit",
+				Summary:         "create systemd unit " + item.Name,
+				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         desired,
+				DependsOn:       deps,
+				ProviderType:    "systemd_unit",
+				ProviderAddress: "systemd_unit." + providerName(host.Name, component.Name, item.Name),
+				ProviderPayload: desired,
+			})
+		}
 	}
 
 	daemonReloadAddress := ""
@@ -685,6 +957,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			deps := []string{}
 			if packageAddress, ok := packageAddresses[item.Package]; ok {
 				deps = append(deps, packageAddress)
+			}
+			if installAddress, ok := componentArtifactInstallAddresses[component.Name]; ok {
+				deps = append(deps, installAddress)
 			}
 			if unitAddress, ok := unitAddresses[item.Unit]; ok {
 				deps = append(deps, unitAddress)
@@ -783,6 +1058,27 @@ func componentArtifactSourceLabel(source ir.ComponentArtifactSourceSpec) string 
 	return "default"
 }
 
+func componentArtifactInstallKind(artifactType string) string {
+	switch artifactType {
+	case "archive":
+		return "component_archive"
+	case "file":
+		return "component_file"
+	case "ca_certificate":
+		return "component_ca_certificate"
+	default:
+		return "component_binary"
+	}
+}
+
+func componentArtifactInstallSummary(component ir.ComponentInstanceSpec) string {
+	artifact := component.ArtifactType
+	if artifact == "ca_certificate" {
+		artifact = "ca certificate"
+	}
+	return "install component " + component.Name + " " + artifact + " " + component.Install.Path
+}
+
 func componentArtifactCachePath(component ir.ComponentInstanceSpec) string {
 	if component.SelectedSource == nil {
 		return ""
@@ -792,6 +1088,21 @@ func componentArtifactCachePath(component ir.ComponentInstanceSpec) string {
 		name = providerName(component.Template, component.Name)
 	}
 	return "/var/cache/debianform/components/" + name + "/" + component.SelectedSource.SHA256 + "/source"
+}
+
+func ownershipDependencies(owner, group string, userAddresses, groupAddresses map[string]string) []string {
+	deps := []string{}
+	if owner != "" && owner != "root" {
+		if address, ok := userAddresses[owner]; ok {
+			deps = append(deps, address)
+		}
+	}
+	if group != "" && group != "root" {
+		if address, ok := groupAddresses[group]; ok {
+			deps = append(deps, address)
+		}
+	}
+	return dedupeStrings(deps)
 }
 
 func sortedKeys[T any](values map[string]T) []string {

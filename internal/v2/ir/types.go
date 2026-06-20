@@ -1,7 +1,8 @@
 package ir
 
 type Program struct {
-	Hosts []HostSpec `json:"hosts"`
+	Hosts      []HostSpec                       `json:"hosts"`
+	Components map[string]ComponentTemplateSpec `json:"components,omitempty"`
 }
 
 type HostSpec struct {
@@ -236,6 +237,25 @@ type ManagedService struct {
 type ContentSummary struct {
 	SHA256 string `json:"sha256,omitempty"`
 	Bytes  int64  `json:"bytes,omitempty"`
+}
+
+type ComponentTemplateSpec struct {
+	Name         string                                 `json:"name"`
+	ArtifactType string                                 `json:"artifact_type,omitempty"`
+	Version      string                                 `json:"version,omitempty"`
+	Inputs       map[string]ComponentInputSpec          `json:"inputs,omitempty"`
+	Sources      map[string]ComponentArtifactSourceSpec `json:"sources,omitempty"`
+	Extract      *ComponentArtifactExtractSpec          `json:"extract,omitempty"`
+	Install      *ComponentArtifactInstallSpec          `json:"install,omitempty"`
+	Source       SourceRef                              `json:"source,omitempty"`
+}
+
+type ComponentInputSpec struct {
+	Name      string    `json:"name"`
+	Type      string    `json:"type"`
+	Default   any       `json:"default,omitempty"`
+	Sensitive bool      `json:"sensitive,omitempty"`
+	Source    SourceRef `json:"source,omitempty"`
 }
 
 type ComponentInstanceSpec struct {

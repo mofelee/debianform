@@ -86,10 +86,11 @@ dbf plan -f examples/v2-bird2.dbf.hcl
 component 内可以读取 `target.system.codename` 等只读 host 视图，并展开为
 `host.<host>.components.<instance>...` 地址。
 
-binary component 可以声明 `source "<architecture>"` 并由
-`host.system.architecture` 选择唯一 source；无 label 的 `source {}` 表示架构无关，
-不能和带 label 的 source 混用。远程 URL source 必须声明 64 位 sha256，plan 会生成
-download 和 install 两个 artifact 节点。
+component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
+它们可以声明 `source "<architecture>"` 并由 `host.system.architecture` 选择唯一
+source；无 label 的 `source {}` 表示架构无关，不能和带 label 的 source 混用。
+远程 URL source 必须声明 64 位 sha256，plan 会生成 download 和 install 节点；
+`ca_certificate` 变化会额外触发 `update-ca-certificates` operation。
 
 配置格式化会原地改写目标 HCL 文件：
 

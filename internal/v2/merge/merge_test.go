@@ -501,6 +501,86 @@ host "tool1" {
 	}
 }
 
+func TestCompileComponentTemplateSpecAndArtifactTypes(t *testing.T) {
+	program := compileInline(t, `
+component "artifact_file" {
+  type    = "file"
+  version = "1.0.0"
+
+  input "path" {
+    type      = string
+    default   = "/etc/example.conf"
+    sensitive = true
+  }
+
+  source {
+    url    = "https://downloads.example/example.conf"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/etc/example.conf"
+  }
+}
+
+component "artifact_archive" {
+  type = "archive"
+
+  source "amd64" {
+    url    = "https://downloads.example/app.tar.gz"
+    sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  }
+
+  extract {
+    strip_components = 1
+  }
+
+  install {
+    path = "/opt/app"
+  }
+}
+
+component "company_ca" {
+  type = "ca_certificate"
+
+  source {
+    url    = "https://downloads.example/ca.crt"
+    sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+  }
+
+  install {
+    path = "/usr/local/share/ca-certificates/company-ca.crt"
+  }
+}
+
+host "server1" {
+  components = [component.artifact_file, component.artifact_archive, component.company_ca]
+
+  system {
+    architecture = "amd64"
+  }
+}
+`)
+
+	template := program.Components["artifact_file"]
+	if template.Name != "artifact_file" || template.ArtifactType != "file" || template.Version != "1.0.0" {
+		t.Fatalf("template = %#v", template)
+	}
+	if template.Inputs["path"].Default != "/etc/example.conf" || !template.Inputs["path"].Sensitive {
+		t.Fatalf("template input = %#v", template.Inputs["path"])
+	}
+	host := program.Hosts[0]
+	if host.Components[0].Install.Mode != "0644" {
+		t.Fatalf("file artifact mode = %q, want 0644", host.Components[0].Install.Mode)
+	}
+	if host.Components[1].Extract == nil || host.Components[1].Extract.Format != "tar.gz" {
+		t.Fatalf("archive extract = %#v", host.Components[1].Extract)
+	}
+	if host.Components[2].Install.Mode != "0644" {
+		t.Fatalf("ca certificate mode = %q, want 0644", host.Components[2].Install.Mode)
+	}
+}
+
 func TestCompileRejectsInvalidComponentArtifacts(t *testing.T) {
 	tests := []struct {
 		name string
@@ -603,6 +683,54 @@ host "tool1" {
 }
 `,
 			want: "install path must be absolute",
+		},
+		{
+			name: "archive missing extract",
+			hcl: `
+component "app" {
+  type = "archive"
+
+  source {
+    url    = "https://downloads.example/app.tar.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/opt/app"
+  }
+}
+
+host "tool1" {
+  components = [component.app]
+}
+`,
+			want: "archive component requires an extract block",
+		},
+		{
+			name: "file with extract",
+			hcl: `
+component "config" {
+  type = "file"
+
+  source {
+    url    = "https://downloads.example/config.zip"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  extract {
+    format = "zip"
+  }
+
+  install {
+    path = "/etc/config"
+  }
+}
+
+host "tool1" {
+  components = [component.config]
+}
+`,
+			want: "file component does not support extract",
 		},
 	}
 	for _, tt := range tests {

@@ -116,6 +116,102 @@ func TestCompileComponentBinaryResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileComponentArtifactKindsAndCAOperation(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+component "company_ca" {
+  type = "ca_certificate"
+
+  source {
+    url    = "https://downloads.example/company-ca.crt"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/usr/local/share/ca-certificates/company-ca.crt"
+  }
+}
+
+component "config" {
+  type = "file"
+
+  source {
+    url    = "https://downloads.example/config.yaml"
+    sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  }
+
+  install {
+    path = "/etc/myapp/config.yaml"
+  }
+}
+
+component "myapp" {
+  type = "archive"
+
+  source "amd64" {
+    url    = "https://downloads.example/myapp.tar.gz"
+    sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+  }
+
+  extract {
+    format           = "tar.gz"
+    strip_components = 1
+  }
+
+  install {
+    path  = "/opt/myapp"
+    owner = "myapp"
+    group = "myapp"
+  }
+
+  groups {
+    group "myapp" {
+      system = true
+    }
+  }
+
+  users {
+    user "myapp" {
+      system = true
+      group  = "myapp"
+    }
+  }
+}
+
+host "server1" {
+  components = [component.company_ca, component.config, component.myapp]
+
+  system {
+    architecture = "amd64"
+  }
+}
+`)
+
+	if node := nodeFor(resourceGraph, `host.server1.components.config.artifact.install["/etc/myapp/config.yaml"]`); node == nil || node.Kind != "component_file" {
+		t.Fatalf("component file node = %#v", node)
+	}
+	caAddress := `host.server1.components.company_ca.artifact.install["/usr/local/share/ca-certificates/company-ca.crt"]`
+	if node := nodeFor(resourceGraph, caAddress); node == nil || node.Kind != "component_ca_certificate" {
+		t.Fatalf("ca certificate node = %#v", node)
+	}
+	operation := operationFor(resourceGraph, "host.server1.ca_certificates.update")
+	if operation == nil {
+		t.Fatalf("ca certificates update operation missing")
+	}
+	if !containsString(operation.TriggeredBy, caAddress) || operation.CommandPreview != "update-ca-certificates" {
+		t.Fatalf("ca operation = %#v", operation)
+	}
+	archiveDeps := dependsOnFor(resourceGraph, `host.server1.components.myapp.artifact.install["/opt/myapp"]`)
+	for _, want := range []string{
+		`host.server1.components.myapp.artifact.download["amd64"]`,
+		`host.server1.components.myapp.groups.group["myapp"]`,
+		`host.server1.components.myapp.users.user["myapp"]`,
+	} {
+		if !containsString(archiveDeps, want) {
+			t.Fatalf("archive deps = %#v, want %q", archiveDeps, want)
+		}
+	}
+}
+
 func TestCompileServiceRestartOperation(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {

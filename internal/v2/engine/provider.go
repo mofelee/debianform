@@ -35,6 +35,10 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2stat
 		return p.planComponentDownload(ctx, node, prior)
 	case "component_binary":
 		return p.planComponentBinary(ctx, node, prior)
+	case "component_file", "component_ca_certificate":
+		return p.planComponentFile(ctx, node, prior)
+	case "component_archive":
+		return p.planComponentArchive(ctx, node, prior)
 	case "directory":
 		return p.planDirectory(ctx, node, prior)
 	case "package":
@@ -68,6 +72,10 @@ func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, e
 		return p.applyComponentDownload(ctx, step)
 	case "component_binary":
 		return p.applyComponentBinary(ctx, step)
+	case "component_file", "component_ca_certificate":
+		return p.applyComponentFile(ctx, step)
+	case "component_archive":
+		return p.applyComponentArchive(ctx, step)
 	case "directory":
 		return p.applyDirectory(ctx, step)
 	case "package":
@@ -96,8 +104,10 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 	desired := step.Prior.Desired
 	host := step.Prior.Host
 	switch step.Prior.Kind {
-	case "file", "secret", "apt_signing_key", "component_download", "component_binary":
+	case "file", "secret", "apt_signing_key", "component_download", "component_binary", "component_file", "component_ca_certificate":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), false)
+	case "component_archive":
+		return p.removeDirectory(ctx, host, stringMapValue(desired, "path"))
 	case "systemd_unit":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), true)
 	case "directory":
@@ -427,10 +437,10 @@ func (p NativeProvider) applyComponentBinary(ctx context.Context, step Step) (ma
 		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
 	}
 	if format := stringDesired(step.Node, "extract_format"); format != "" {
-		if format != "zip" {
+		if format != "zip" && format != "tar.gz" && format != "bz2" {
 			return nil, fmt.Errorf("%s unsupported component binary extract format %q", step.Address, format)
 		}
-		lines = append(lines, componentBinaryZipInstallScript(step.Node)...)
+		lines = append(lines, componentBinaryExtractInstallScript(step.Node)...)
 	} else {
 		lines = append(lines,
 			"install -o "+shellQuote(stringDesired(step.Node, "owner"))+
@@ -452,25 +462,208 @@ func (p NativeProvider) applyComponentBinary(ctx context.Context, step Step) (ma
 	return observed, nil
 }
 
-func componentBinaryZipInstallScript(node graph.Node) []string {
+func (p NativeProvider) planComponentFile(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	path := stringDesired(node, "path")
+	current, err := p.readPath(ctx, node.Host, path)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	if ensureAbsent(node) {
+		if current.Exists {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove component file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent component file "+path, observed), nil
+	}
+	wantSHA := strings.ToLower(stringDesired(node, "source_sha256"))
+	if wantSHA == "" {
+		return ProviderPlan{}, fmt.Errorf("%s component file requires source_sha256", node.Address)
+	}
+	if !current.Exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "install component file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if current.IsDir ||
+		current.SHA256 != wantSHA ||
+		current.Owner != stringDesired(node, "owner") ||
+		current.Group != stringDesired(node, "group") ||
+		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update component file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for component file "+path, observed), nil
+}
+
+func (p NativeProvider) applyComponentFile(ctx context.Context, step Step) (map[string]any, error) {
+	path := stringDesired(step.Node, "path")
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		if err := p.removePath(ctx, step.Node.Host, path, false); err != nil {
+			return nil, err
+		}
+		return map[string]any{"exists": false}, nil
+	}
+	cachePath := stringDesired(step.Node, "cache_path")
+	if cachePath == "" {
+		return nil, fmt.Errorf("%s component file requires cache_path", step.Address)
+	}
+	lines := []string{
+		"set -eu",
+		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
+		"install -o " + shellQuote(stringDesired(step.Node, "owner")) +
+			" -g " + shellQuote(stringDesired(step.Node, "group")) +
+			" -m " + shellQuote(stringDesired(step.Node, "mode")) +
+			" " + shellQuote(cachePath) + " " + shellQuote(path),
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	current, err := p.readPath(ctx, step.Node.Host, path)
+	if err != nil {
+		return nil, err
+	}
+	observed := current.observed()
+	observed["desired_digest"] = v2state.DesiredDigest(step.Node.Desired)
+	return observed, nil
+}
+
+func (p NativeProvider) planComponentArchive(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	path := stringDesired(node, "path")
+	current, err := p.readPath(ctx, node.Host, path)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	if ensureAbsent(node) {
+		if current.Exists {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove component archive " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent component archive "+path, observed), nil
+	}
+	if !current.Exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "install component archive " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if !current.IsDir ||
+		current.Owner != stringDesired(node, "owner") ||
+		current.Group != stringDesired(node, "group") ||
+		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update component archive " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if prior == nil || prior.DesiredDigest != v2state.DesiredDigest(node.Desired) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "replace component archive " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for component archive "+path, observed), nil
+}
+
+func (p NativeProvider) applyComponentArchive(ctx context.Context, step Step) (map[string]any, error) {
+	path := stringDesired(step.Node, "path")
+	if path == "" || path == "/" {
+		return nil, fmt.Errorf("%s refuses to manage unsafe archive path %q", step.Address, path)
+	}
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		if err := p.removeDirectory(ctx, step.Node.Host, path); err != nil {
+			return nil, err
+		}
+		return map[string]any{"exists": false}, nil
+	}
+	cachePath := stringDesired(step.Node, "cache_path")
+	if cachePath == "" {
+		return nil, fmt.Errorf("%s component archive requires cache_path", step.Address)
+	}
+	if format := stringDesired(step.Node, "extract_format"); format != "tar.gz" {
+		return nil, fmt.Errorf("%s unsupported component archive extract format %q", step.Address, format)
+	}
+	stripComponents := fmt.Sprintf("%v", step.Node.Desired["strip_components"])
+	if stripComponents == "" || stripComponents == "<nil>" {
+		stripComponents = "0"
+	}
+	lines := []string{
+		"set -eu",
+		"if ! command -v tar >/dev/null 2>&1; then",
+		"  export DEBIAN_FRONTEND=noninteractive",
+		"  apt-get update",
+		"  apt-get install -y tar gzip",
+		"fi",
+		"parent=$(dirname " + shellQuote(path) + ")",
+		"base=$(basename " + shellQuote(path) + ")",
+		"mkdir -p \"$parent\"",
+		"work=$(mktemp -d)",
+		"trap 'rm -rf -- \"$work\"' EXIT",
+		"staging=\"$work/staging\"",
+		"mkdir -p \"$staging\"",
+		"tar -xzf " + shellQuote(cachePath) + " -C \"$staging\" --strip-components " + shellQuote(stripComponents),
+		"chown -R " + shellQuote(stringDesired(step.Node, "owner")+":"+stringDesired(step.Node, "group")) + " \"$staging\"",
+		"chmod " + shellQuote(stringDesired(step.Node, "mode")) + " \"$staging\"",
+		"tmp=\"$parent/.${base}.dbf-new\"",
+		"old=\"$parent/.${base}.dbf-old\"",
+		"rm -rf -- \"$tmp\" \"$old\"",
+		"mv \"$staging\" \"$tmp\"",
+		"if [ -e " + shellQuote(path) + " ]; then mv " + shellQuote(path) + " \"$old\"; fi",
+		"if mv \"$tmp\" " + shellQuote(path) + "; then",
+		"  rm -rf -- \"$old\"",
+		"else",
+		"  if [ -e \"$old\" ]; then mv \"$old\" " + shellQuote(path) + "; fi",
+		"  exit 1",
+		"fi",
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	current, err := p.readPath(ctx, step.Node.Host, path)
+	if err != nil {
+		return nil, err
+	}
+	observed := current.observed()
+	observed["desired_digest"] = v2state.DesiredDigest(step.Node.Desired)
+	return observed, nil
+}
+
+func componentBinaryExtractInstallScript(node graph.Node) []string {
 	cachePath := stringDesired(node, "cache_path")
 	path := stringDesired(node, "path")
+	format := stringDesired(node, "extract_format")
+	if format == "bz2" {
+		return []string{
+			"if ! command -v bzip2 >/dev/null 2>&1; then",
+			"  export DEBIAN_FRONTEND=noninteractive",
+			"  apt-get update",
+			"  apt-get install -y bzip2",
+			"fi",
+			"work=$(mktemp -d)",
+			"trap 'rm -rf -- \"$work\"' EXIT",
+			"bzip2 -dc " + shellQuote(cachePath) + " > \"$work/binary\"",
+			"install -o " + shellQuote(stringDesired(node, "owner")) +
+				" -g " + shellQuote(stringDesired(node, "group")) +
+				" -m " + shellQuote(stringDesired(node, "mode")) +
+				" \"$work/binary\" " + shellQuote(path),
+		}
+	}
 	include := stringDesired(node, "include")
 	stripComponents := fmt.Sprintf("%v", node.Desired["strip_components"])
 	if stripComponents == "" || stripComponents == "<nil>" {
 		stripComponents = "0"
 	}
-	return []string{
-		"if ! command -v unzip >/dev/null 2>&1; then",
+	lines := []string{
+		"if [ " + shellQuote(format) + " = 'zip' ] && ! command -v unzip >/dev/null 2>&1; then",
 		"  export DEBIAN_FRONTEND=noninteractive",
 		"  apt-get update",
 		"  apt-get install -y unzip",
 		"fi",
+		"if [ " + shellQuote(format) + " = 'tar.gz' ] && ! command -v tar >/dev/null 2>&1; then",
+		"  export DEBIAN_FRONTEND=noninteractive",
+		"  apt-get update",
+		"  apt-get install -y tar gzip",
+		"fi",
 		"work=$(mktemp -d)",
 		"trap 'rm -rf -- \"$work\"' EXIT",
-		"unzip -q " + shellQuote(cachePath) + " -d \"$work\"",
-		"include=" + shellQuote(include),
-		"strip_components=" + shellQuote(stripComponents),
+	}
+	if format == "zip" {
+		lines = append(lines, "unzip -q "+shellQuote(cachePath)+" -d \"$work\"")
+	} else {
+		lines = append(lines, "tar -xzf "+shellQuote(cachePath)+" -C \"$work\"")
+	}
+	lines = append(lines,
+		"include="+shellQuote(include),
+		"strip_components="+shellQuote(stripComponents),
 		"matches=\"$work/.dbf-matches\"",
 		": > \"$matches\"",
 		"find \"$work\" -type f | sort > \"$work/.dbf-files\"",
@@ -487,11 +680,12 @@ func componentBinaryZipInstallScript(node graph.Node) []string {
 		"count=$(wc -l < \"$matches\" | tr -d ' ')",
 		"if [ \"$count\" != 1 ]; then echo \"component binary include matched $count files: $include\" >&2; exit 1; fi",
 		"src=$(sed -n '1p' \"$matches\")",
-		"install -o " + shellQuote(stringDesired(node, "owner")) +
-			" -g " + shellQuote(stringDesired(node, "group")) +
-			" -m " + shellQuote(stringDesired(node, "mode")) +
-			" \"$src\" " + shellQuote(path),
-	}
+		"install -o "+shellQuote(stringDesired(node, "owner"))+
+			" -g "+shellQuote(stringDesired(node, "group"))+
+			" -m "+shellQuote(stringDesired(node, "mode"))+
+			" \"$src\" "+shellQuote(path),
+	)
+	return lines
 }
 
 func (p NativeProvider) planDirectory(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
@@ -942,6 +1136,14 @@ func (p NativeProvider) removePath(ctx context.Context, host, path string, daemo
 		script += "systemctl daemon-reload\n"
 	}
 	_, err := p.Runner.Run(ctx, host, script)
+	return err
+}
+
+func (p NativeProvider) removeDirectory(ctx context.Context, host, path string) error {
+	if path == "" || path == "/" {
+		return nil
+	}
+	_, err := p.Runner.Run(ctx, host, "set -eu\nrm -rf -- "+shellQuote(path)+"\n")
 	return err
 }
 

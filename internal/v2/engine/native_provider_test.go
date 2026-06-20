@@ -237,6 +237,90 @@ func TestNativeProviderComponentBinaryZipInstall(t *testing.T) {
 	}
 }
 
+func TestNativeProviderComponentFileInstall(t *testing.T) {
+	node := graph.Node{
+		Address: "host.server1.components.config.artifact.install[\"/etc/myapp/config.yaml\"]",
+		Host:    "server1",
+		Kind:    "component_file",
+		Desired: map[string]any{
+			"path":          "/etc/myapp/config.yaml",
+			"cache_path":    "/var/cache/debianform/components/config/source",
+			"source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"owner":         "root",
+			"group":         "root",
+			"mode":          "0644",
+			"ensure":        "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{
+		{Stdout: "missing\n"},
+		{},
+		{Stdout: "file\nroot\nroot\n644\n0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n"},
+	}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing component file action = %q, want create", got.Action)
+	}
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[len(runner.scripts)-2]
+	if !strings.Contains(applied, "install -o 'root' -g 'root' -m '0644' '/var/cache/debianform/components/config/source' '/etc/myapp/config.yaml'") {
+		t.Fatalf("component file apply script did not install from cache:\n%s", applied)
+	}
+}
+
+func TestNativeProviderComponentArchiveInstall(t *testing.T) {
+	node := graph.Node{
+		Address: "host.server1.components.myapp.artifact.install[\"/opt/myapp\"]",
+		Host:    "server1",
+		Kind:    "component_archive",
+		Desired: map[string]any{
+			"path":             "/opt/myapp",
+			"cache_path":       "/var/cache/debianform/components/myapp/source",
+			"extract_format":   "tar.gz",
+			"strip_components": 1,
+			"owner":            "myapp",
+			"group":            "myapp",
+			"mode":             "0755",
+			"ensure":           "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{
+		{Stdout: "missing\n"},
+		{},
+		{Stdout: "dir\nmyapp\nmyapp\n755\n\n"},
+	}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing component archive action = %q, want create", got.Action)
+	}
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[len(runner.scripts)-2]
+	for _, want := range []string{
+		"tar -xzf '/var/cache/debianform/components/myapp/source'",
+		"--strip-components '1'",
+		"chown -R 'myapp:myapp'",
+		"mv \"$tmp\" '/opt/myapp'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("component archive apply script missing %q:\n%s", want, applied)
+		}
+	}
+}
+
 func TestSSHRunnerExpandsHomeIdentityFile(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

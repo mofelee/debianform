@@ -29,7 +29,10 @@ func Compile(cfg *parser.Config) (*ir.Program, error) {
 	}
 	sort.Strings(names)
 
-	program := &ir.Program{Hosts: make([]ir.HostSpec, 0, len(names))}
+	program := &ir.Program{
+		Hosts:      make([]ir.HostSpec, 0, len(names)),
+		Components: componentTemplateSpecs(cfg.Components),
+	}
 	for _, name := range names {
 		host := cfg.Hosts[name]
 		raw := parser.MapValue(nil, host.Source)
@@ -80,6 +83,72 @@ type compiler struct {
 type resolvedProfile struct {
 	Body    parser.Value
 	Asserts []parser.Assert
+}
+
+func componentTemplateSpecs(components map[string]parser.Component) map[string]ir.ComponentTemplateSpec {
+	if len(components) == 0 {
+		return nil
+	}
+	out := make(map[string]ir.ComponentTemplateSpec, len(components))
+	for _, name := range sortedKeys(components) {
+		component := components[name]
+		spec := ir.ComponentTemplateSpec{
+			Name:         component.Name,
+			ArtifactType: component.Type,
+			Version:      component.Version,
+			Inputs:       map[string]ir.ComponentInputSpec{},
+			Sources:      map[string]ir.ComponentArtifactSourceSpec{},
+			Source:       component.Source,
+		}
+		for _, inputName := range sortedKeys(component.Inputs) {
+			input := component.Inputs[inputName]
+			var defaultValue any
+			if input.Default != nil {
+				defaultValue = parserValueToAny(*input.Default)
+			}
+			spec.Inputs[inputName] = ir.ComponentInputSpec{
+				Name:      input.Name,
+				Type:      input.Type,
+				Default:   defaultValue,
+				Sensitive: input.Sensitive,
+				Source:    input.Source,
+			}
+		}
+		if len(spec.Inputs) == 0 {
+			spec.Inputs = nil
+		}
+		for _, sourceName := range sortedKeys(component.Sources) {
+			source := component.Sources[sourceName]
+			spec.Sources[sourceName] = ir.ComponentArtifactSourceSpec{
+				Architecture: source.Architecture,
+				URL:          source.URL,
+				SHA256:       strings.ToLower(source.SHA256),
+				Source:       source.Source,
+			}
+		}
+		if len(spec.Sources) == 0 {
+			spec.Sources = nil
+		}
+		if component.Extract != nil {
+			spec.Extract = &ir.ComponentArtifactExtractSpec{
+				Format:          component.Extract.Format,
+				StripComponents: component.Extract.StripComponents,
+				Include:         component.Extract.Include,
+				Source:          component.Extract.Source,
+			}
+		}
+		if component.Install != nil {
+			spec.Install = &ir.ComponentArtifactInstallSpec{
+				Path:   component.Install.Path,
+				Owner:  component.Install.Owner,
+				Group:  component.Install.Group,
+				Mode:   component.Install.Mode,
+				Source: component.Install.Source,
+			}
+		}
+		out[name] = spec
+	}
+	return out
 }
 
 func (c *compiler) resolveProfile(name string, stack []string) (resolvedProfile, error) {
@@ -256,7 +325,7 @@ func applyComponentArtifact(spec *ir.ComponentInstanceSpec, template parser.Comp
 	if template.Type == "" {
 		return fmt.Errorf("%s:%d:%s.type: component artifact type is required when source, extract, install, or version is declared", template.Source.File, template.Source.Line, template.Source.Path)
 	}
-	if template.Type != "binary" {
+	if !supportedComponentArtifactType(template.Type) {
 		return fmt.Errorf("%s:%d:%s.type: component artifact type %q is not supported yet", template.Source.File, template.Source.Line, template.Source.Path, template.Type)
 	}
 	source, err := selectComponentArtifactSource(template, target)
@@ -272,11 +341,16 @@ func applyComponentArtifact(spec *ir.ComponentInstanceSpec, template parser.Comp
 		Source:       source.Source,
 	}
 	if template.Extract != nil {
-		extract, err := componentArtifactExtractSpec(*template.Extract, source)
+		extract, err := componentArtifactExtractSpec(template.Type, *template.Extract, source)
 		if err != nil {
 			return err
 		}
 		spec.Extract = extract
+	} else if template.Type == "archive" {
+		return fmt.Errorf("%s:%d:%s.extract: archive component requires an extract block", template.Source.File, template.Source.Line, template.Source.Path)
+	}
+	if template.Extract != nil && (template.Type == "file" || template.Type == "ca_certificate") {
+		return fmt.Errorf("%s:%d:%s.extract: %s component does not support extract", template.Extract.Source.File, template.Extract.Source.Line, template.Extract.Source.Path, template.Type)
 	}
 	install, err := componentArtifactInstallSpec(template)
 	if err != nil {
@@ -284,6 +358,15 @@ func applyComponentArtifact(spec *ir.ComponentInstanceSpec, template parser.Comp
 	}
 	spec.Install = install
 	return nil
+}
+
+func supportedComponentArtifactType(artifactType string) bool {
+	switch artifactType {
+	case "binary", "archive", "file", "ca_certificate":
+		return true
+	default:
+		return false
+	}
 }
 
 func selectComponentArtifactSource(template parser.Component, target ir.HostSpec) (parser.ComponentArtifactSource, error) {
@@ -327,7 +410,7 @@ func validateComponentArtifactSource(source parser.ComponentArtifactSource) erro
 	return nil
 }
 
-func componentArtifactExtractSpec(extract parser.ComponentArtifactExtract, source parser.ComponentArtifactSource) (*ir.ComponentArtifactExtractSpec, error) {
+func componentArtifactExtractSpec(artifactType string, extract parser.ComponentArtifactExtract, source parser.ComponentArtifactSource) (*ir.ComponentArtifactExtractSpec, error) {
 	format := extract.Format
 	if format == "" {
 		format = inferArtifactFormat(source.URL)
@@ -335,14 +418,33 @@ func componentArtifactExtractSpec(extract parser.ComponentArtifactExtract, sourc
 	if format == "" {
 		return nil, fmt.Errorf("%s:%d:%s.format: extract format is required when it cannot be inferred from source url", extract.Source.File, extract.Source.Line, extract.Source.Path)
 	}
-	if format != "zip" {
-		return nil, fmt.Errorf("%s:%d:%s.format: only zip extract is supported for binary components", extract.Source.File, extract.Source.Line, extract.Source.Path)
+	switch artifactType {
+	case "binary":
+		if format != "zip" && format != "tar.gz" && format != "bz2" {
+			return nil, fmt.Errorf("%s:%d:%s.format: binary extract format must be zip, tar.gz, or bz2", extract.Source.File, extract.Source.Line, extract.Source.Path)
+		}
+		if format == "bz2" {
+			if extract.Include != "" {
+				return nil, fmt.Errorf("%s:%d:%s.include: bz2 binary extract does not support include", extract.Source.File, extract.Source.Line, extract.Source.Path)
+			}
+			if extract.StripComponents != 0 {
+				return nil, fmt.Errorf("%s:%d:%s.strip_components: bz2 binary extract requires strip_components = 0", extract.Source.File, extract.Source.Line, extract.Source.Path)
+			}
+		} else if extract.Include == "" {
+			return nil, fmt.Errorf("%s:%d:%s.include: binary extract requires include", extract.Source.File, extract.Source.Line, extract.Source.Path)
+		}
+	case "archive":
+		if format != "tar.gz" {
+			return nil, fmt.Errorf("%s:%d:%s.format: archive extract format must be tar.gz", extract.Source.File, extract.Source.Line, extract.Source.Path)
+		}
+		if extract.Include != "" {
+			return nil, fmt.Errorf("%s:%d:%s.include: archive extract does not support include", extract.Source.File, extract.Source.Line, extract.Source.Path)
+		}
+	default:
+		return nil, fmt.Errorf("%s:%d:%s: %s component does not support extract", extract.Source.File, extract.Source.Line, extract.Source.Path, artifactType)
 	}
 	if extract.StripComponents < 0 {
 		return nil, fmt.Errorf("%s:%d:%s.strip_components: strip_components must be greater than or equal to 0", extract.Source.File, extract.Source.Line, extract.Source.Path)
-	}
-	if extract.Include == "" {
-		return nil, fmt.Errorf("%s:%d:%s.include: binary extract requires include", extract.Source.File, extract.Source.Line, extract.Source.Path)
 	}
 	return &ir.ComponentArtifactExtractSpec{
 		Format:          format,
@@ -354,7 +456,7 @@ func componentArtifactExtractSpec(extract parser.ComponentArtifactExtract, sourc
 
 func componentArtifactInstallSpec(template parser.Component) (*ir.ComponentArtifactInstallSpec, error) {
 	if template.Install == nil {
-		return nil, fmt.Errorf("%s:%d:%s.install: binary component requires an install block", template.Source.File, template.Source.Line, template.Source.Path)
+		return nil, fmt.Errorf("%s:%d:%s.install: %s component requires an install block", template.Source.File, template.Source.Line, template.Source.Path, template.Type)
 	}
 	install := *template.Install
 	if install.Path == "" {
@@ -373,7 +475,7 @@ func componentArtifactInstallSpec(template parser.Component) (*ir.ComponentArtif
 	}
 	mode := install.Mode
 	if mode == "" {
-		mode = "0755"
+		mode = defaultArtifactInstallMode(template.Type)
 	}
 	if !modePattern.MatchString(mode) {
 		return nil, fmt.Errorf("%s:%d:%s.mode: mode must be a four digit octal string", install.Source.File, install.Source.Line, install.Source.Path)
@@ -387,6 +489,15 @@ func componentArtifactInstallSpec(template parser.Component) (*ir.ComponentArtif
 	}, nil
 }
 
+func defaultArtifactInstallMode(artifactType string) string {
+	switch artifactType {
+	case "file", "ca_certificate":
+		return "0644"
+	default:
+		return "0755"
+	}
+}
+
 func inferArtifactFormat(sourceURL string) string {
 	base := sourceURL
 	if i := strings.IndexAny(base, "?#"); i >= 0 {
@@ -395,6 +506,10 @@ func inferArtifactFormat(sourceURL string) string {
 	switch {
 	case strings.HasSuffix(strings.ToLower(base), ".zip"):
 		return "zip"
+	case strings.HasSuffix(strings.ToLower(base), ".tar.gz"), strings.HasSuffix(strings.ToLower(base), ".tgz"):
+		return "tar.gz"
+	case strings.HasSuffix(strings.ToLower(base), ".bz2"):
+		return "bz2"
 	default:
 		return ""
 	}
@@ -1726,13 +1841,13 @@ func validateHostSpec(spec ir.HostSpec) error {
 		if component.Install != nil {
 			path := component.Install.Path
 			if previous, exists := files[path]; exists {
-				return fmt.Errorf("%s:%d:%s: component %q binary path %q conflicts with file declared at %s:%d:%s", component.Install.Source.File, component.Install.Source.Line, component.Install.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)
+				return fmt.Errorf("%s:%d:%s: component %q artifact path %q conflicts with file declared at %s:%d:%s", component.Install.Source.File, component.Install.Source.Line, component.Install.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)
 			}
 			if previous, exists := secrets[path]; exists {
-				return fmt.Errorf("%s:%d:%s: component %q binary path %q conflicts with secret declared at %s:%d:%s", component.Install.Source.File, component.Install.Source.Line, component.Install.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)
+				return fmt.Errorf("%s:%d:%s: component %q artifact path %q conflicts with secret declared at %s:%d:%s", component.Install.Source.File, component.Install.Source.Line, component.Install.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)
 			}
 			if previous, exists := directories[path]; exists {
-				return fmt.Errorf("%s:%d:%s: component %q binary path %q conflicts with directory declared at %s:%d:%s", component.Install.Source.File, component.Install.Source.Line, component.Install.Source.Path, component.Name, path, previous.Source.File, previous.Source.Line, previous.Source.Path)
+				return fmt.Errorf("%s:%d:%s: component %q artifact path %q conflicts with directory declared at %s:%d:%s", component.Install.Source.File, component.Install.Source.Line, component.Install.Source.Path, component.Name, path, previous.Source.File, previous.Source.Line, previous.Source.Path)
 			}
 			files[path] = component.Install.Source
 		}
