@@ -298,14 +298,50 @@ func parseDomainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext
 }
 
 func parseLabeledObjectBlock(file, domain, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
-	if len(block.Body.Blocks) != 0 {
-		return Value{}, fmt.Errorf("%s:%d: %s does not support nested blocks in this v2 implementation loop", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
-	}
-
 	allowed := allowedLabeledObjectAttrs(domain, block.Type)
 	values := map[string]Value{}
 	for name, attr := range block.Body.Attributes {
 		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{
+			File: file,
+			Line: attr.NameRange.Start.Line,
+			Path: path + "." + name,
+		}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+
+	for _, child := range block.Body.Blocks {
+		if child.Type != "lifecycle" {
+			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+		if _, exists := values["lifecycle"]; exists {
+			return Value{}, fmt.Errorf("%s:%d: duplicate %s.lifecycle block", file, child.TypeRange.Start.Line, path)
+		}
+		lifecycle, err := parseLifecycleBlock(file, path+".lifecycle", child, ctx)
+		if err != nil {
+			return Value{}, err
+		}
+		values["lifecycle"] = lifecycle
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseLifecycleBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	if len(block.Labels) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	values := map[string]Value{}
+	for name, attr := range block.Body.Attributes {
+		if name != "prevent_destroy" {
 			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
 		}
 		attrSource := ir.SourceRef{

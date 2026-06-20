@@ -121,6 +121,80 @@ func TestPlanV2BBRJSON(t *testing.T) {
 	}
 }
 
+func TestPlanV2BBRHTML(t *testing.T) {
+	dir := t.TempDir()
+	htmlPath := filepath.Join(dir, "plan.html")
+	output := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--html", htmlPath}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	if !strings.Contains(output, "wrote HTML plan to "+htmlPath) {
+		t.Fatalf("plan --html output = %q", output)
+	}
+	data, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(data)
+	for _, want := range []string{
+		"DebianForm Plan",
+		`host.bbr1.kernel.module[&#34;tcp_bbr&#34;]`,
+		"Summary",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML output does not contain %q:\n%s", want, html)
+		}
+	}
+}
+
+func TestFmtV2IsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(config, []byte(`host "web1" {
+files{
+file "/tmp/example" {
+content="hello"
+}
+}
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	first := captureStdout(t, func() {
+		if err := run([]string{"fmt", "-f", config}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(first, "formatted 1 file(s)") {
+		t.Fatalf("first fmt output = %q", first)
+	}
+	data, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`host "web1" {`,
+		`file "/tmp/example" {`,
+		`content = "hello"`,
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("formatted config does not contain %q:\n%s", want, data)
+		}
+	}
+
+	second := captureStdout(t, func() {
+		if err := run([]string{"fmt", "-f", config}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(second, "formatted 0 file(s)") {
+		t.Fatalf("second fmt output = %q", second)
+	}
+}
+
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 

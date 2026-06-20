@@ -121,6 +121,60 @@ host "web1" {
 	}
 }
 
+func TestParseLifecycleBlock(t *testing.T) {
+	file := writeConfig(t, `
+host "web1" {
+  files {
+    file "/etc/protected.conf" {
+      content = "managed"
+
+      lifecycle {
+        prevent_destroy = true
+      }
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileBlock := cfg.Hosts["web1"].Body.Map["files"].Map["file"].Map["/etc/protected.conf"]
+	lifecycle := fileBlock.Map["lifecycle"]
+	if lifecycle.Source.Path != `host.web1.files.file["/etc/protected.conf"].lifecycle` {
+		t.Fatalf("lifecycle source path = %q", lifecycle.Source.Path)
+	}
+	preventDestroy := lifecycle.Map["prevent_destroy"]
+	if preventDestroy.Kind != KindBool || !preventDestroy.Bool {
+		t.Fatalf("prevent_destroy = %#v, want true", preventDestroy)
+	}
+	if preventDestroy.Source.Path != `host.web1.files.file["/etc/protected.conf"].lifecycle.prevent_destroy` {
+		t.Fatalf("prevent_destroy source path = %q", preventDestroy.Source.Path)
+	}
+}
+
+func TestParseRejectsUnknownLifecycleAttribute(t *testing.T) {
+	file := writeConfig(t, `
+host "web1" {
+  files {
+    file "/etc/protected.conf" {
+      content = "managed"
+
+      lifecycle {
+        ignore_changes = true
+      }
+    }
+  }
+}
+`)
+
+	_, err := ParseFiles([]string{file})
+	if err == nil || !strings.Contains(err.Error(), "unsupported attribute") || !strings.Contains(err.Error(), "lifecycle.ignore_changes") {
+		t.Fatalf("ParseFiles() error = %v, want unsupported lifecycle attribute", err)
+	}
+}
+
 func writeConfig(t *testing.T, content string) string {
 	t.Helper()
 

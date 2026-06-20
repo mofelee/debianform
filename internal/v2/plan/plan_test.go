@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -57,6 +58,38 @@ func TestFoundationPlanJSONGoldenDoesNotLeakSecrets(t *testing.T) {
 	}
 	if doc.Summary.Operations != 1 {
 		t.Fatalf("operations = %d, want 1", doc.Summary.Operations)
+	}
+}
+
+func TestPlanHTMLDoesNotLeakSecrets(t *testing.T) {
+	doc := planFixture(t, "../testdata/fixtures/v2-foundation.dbf.hcl", Options{
+		CommandFile: "../testdata/fixtures/v2-foundation.dbf.hcl",
+		Host:        "foundation1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	var out bytes.Buffer
+	if err := PrintHTML(&out, doc); err != nil {
+		t.Fatal(err)
+	}
+	html := out.String()
+	for _, want := range []string{
+		"DebianForm Plan",
+		`host.foundation1.files.file[&#34;/etc/myapp/config.yaml&#34;]`,
+		"host.foundation1.systemd.daemon_reload",
+		"debianform.plan.v2alpha1",
+		`id="action-filter"`,
+		`id="host-filter"`,
+		`id="search-filter"`,
+		`value="foundation1"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML output does not contain %q:\n%s", want, html)
+		}
+	}
+	if strings.Contains(html, "not-a-real-secret-token") {
+		t.Fatalf("plan HTML leaked secret content:\n%s", html)
 	}
 }
 

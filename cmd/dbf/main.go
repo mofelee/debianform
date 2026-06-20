@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	v2engine "github.com/mofelee/debianform/internal/v2/engine"
 	v2graph "github.com/mofelee/debianform/internal/v2/graph"
 	v2ir "github.com/mofelee/debianform/internal/v2/ir"
@@ -77,7 +79,26 @@ func runFmt(args []string) error {
 	if _, err := loadV2Program(files, ""); err != nil {
 		return err
 	}
-	fmt.Println("fmt: no-op for v2 parser; configuration parsed successfully")
+	changed := 0
+	for _, path := range files {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		formatted := hclwrite.Format(data)
+		if bytes.Equal(data, formatted) {
+			continue
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, formatted, info.Mode().Perm()); err != nil {
+			return err
+		}
+		changed++
+	}
+	fmt.Printf("formatted %d file(s)\n", changed)
 	return nil
 }
 
@@ -87,6 +108,7 @@ func runConfigCommand(cmd string, args []string) error {
 	file := fs.String("f", "", "configuration file")
 	host := fs.String("host", "", "limit execution to a host")
 	format := fs.String("format", "text", "plan output format: text or json")
+	htmlPath := fs.String("html", "", "write plan as static HTML")
 	lockTimeout := fs.Duration("lock-timeout", 5*time.Minute, "state lock timeout")
 	autoApprove := fs.Bool("auto-approve", false, "skip apply confirmation")
 	if err := fs.Parse(args); err != nil {
@@ -97,15 +119,21 @@ func runConfigCommand(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runV2ConfigCommand(cmd, files, *host, *format, *lockTimeout, *autoApprove)
+	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *lockTimeout, *autoApprove)
 }
 
-func runV2ConfigCommand(cmd string, files []string, host string, format string, lockTimeout time.Duration, autoApprove bool) error {
+func runV2ConfigCommand(cmd string, files []string, host string, format string, htmlPath string, lockTimeout time.Duration, autoApprove bool) error {
 	if format == "" {
 		format = "text"
 	}
 	if format != "text" && format != "json" {
 		return fmt.Errorf("unsupported v2 plan format %q", format)
+	}
+	if htmlPath != "" && cmd != "plan" {
+		return fmt.Errorf("--html is only supported for v2 plan")
+	}
+	if htmlPath != "" && format != "text" {
+		return fmt.Errorf("--html cannot be combined with --format")
 	}
 
 	program, err := loadV2Program(files, host)
@@ -129,6 +157,13 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 			CommandFile: commandFile(files),
 			Host:        commandHost(program, host),
 		})
+		if htmlPath != "" {
+			if err := writePlanHTML(htmlPath, doc); err != nil {
+				return err
+			}
+			fmt.Printf("wrote HTML plan to %s\n", htmlPath)
+			return nil
+		}
 		switch format {
 		case "json":
 			return v2plan.PrintJSON(os.Stdout, doc)
@@ -257,7 +292,7 @@ func usage() {
 
 Usage:
   dbf validate [-f file]
-  dbf plan     [-f file] [--host name] [--format text|json]
+  dbf plan     [-f file] [--host name] [--format text|json] [--html file]
   dbf apply    [-f file] [--host name] [--auto-approve]
   dbf check    [-f file] [--host name]
   dbf fmt      [-f file]
@@ -265,4 +300,21 @@ Usage:
 
 By default dbf loads all *.dbf.hcl files in the current directory, sorted by name.
 Use -f to load exactly one configuration file.`)
+}
+
+func writePlanHTML(path string, doc v2plan.Document) error {
+	if path == "" {
+		return fmt.Errorf("html output path is required")
+	}
+	if dir := filepath.Dir(path); dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return err
+		}
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return v2plan.PrintHTML(file, doc)
 }

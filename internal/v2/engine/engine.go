@@ -134,6 +134,9 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 		if providerPlan.Summary == "" {
 			providerPlan.Summary = defaultSummary(providerPlan.Action, node.Summary)
 		}
+		if destroysResource(providerPlan.Action) && preventsDestroy(node.Lifecycle) {
+			return Plan{}, preventDestroyError(node.Address, node.Kind, node.Lifecycle)
+		}
 		step := Step{
 			Address:   node.Address,
 			Host:      node.Host,
@@ -155,7 +158,11 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 		}
 	}
 
-	steps = append(steps, orphanSteps(stateByHost, desired, opts)...)
+	orphaned, err := orphanSteps(stateByHost, desired, opts)
+	if err != nil {
+		return Plan{}, err
+	}
+	steps = append(steps, orphaned...)
 	operations := operationSteps(resourceGraph.Operations, changed, opts)
 	sortSteps(steps)
 	sortOperationSteps(operations)
@@ -356,7 +363,7 @@ func priorResource(st v2state.State, address string) *v2state.Resource {
 	return nil
 }
 
-func orphanSteps(states map[string]v2state.State, desired map[string]graph.Node, opts Options) []Step {
+func orphanSteps(states map[string]v2state.State, desired map[string]graph.Node, opts Options) ([]Step, error) {
 	var out []Step
 	for host, st := range states {
 		if opts.Host != "" && host != opts.Host {
@@ -372,6 +379,9 @@ func orphanSteps(states map[string]v2state.State, desired map[string]graph.Node,
 				action = ActionForget
 				summary = "forget adopted " + prior.Kind + " " + address
 			}
+			if action == ActionDestroy && preventsDestroy(prior.Lifecycle) {
+				return nil, preventDestroyError(address, prior.Kind, prior.Lifecycle)
+			}
 			priorCopy := prior
 			out = append(out, Step{
 				Address: address,
@@ -382,7 +392,7 @@ func orphanSteps(states map[string]v2state.State, desired map[string]graph.Node,
 			})
 		}
 	}
-	return out
+	return out, nil
 }
 
 func operationSteps(operations []graph.Operation, changed map[string]struct{}, opts Options) []OperationStep {
@@ -431,12 +441,41 @@ func resourceStateForStep(step Step, observed map[string]any, updatedAt string) 
 		ProviderType:    step.Node.ProviderType,
 		ProviderAddress: step.Node.ProviderAddress,
 		Ownership:       ownership,
+		Lifecycle:       cloneLifecycle(step.Node.Lifecycle),
 		Desired:         v2state.SanitizeDesired(step.Node.Desired),
 		DesiredDigest:   v2state.DesiredDigest(step.Node.Desired),
 		Observed:        v2state.SanitizeObserved(observed),
 		UpdatedAt:       updatedAt,
 		Order:           step.Order,
 	}
+}
+
+func destroysResource(action string) bool {
+	switch action {
+	case ActionDelete, ActionDestroy:
+		return true
+	default:
+		return false
+	}
+}
+
+func preventsDestroy(lifecycle *ir.LifecycleSpec) bool {
+	return lifecycle != nil && lifecycle.PreventDestroy
+}
+
+func cloneLifecycle(lifecycle *ir.LifecycleSpec) *ir.LifecycleSpec {
+	if lifecycle == nil {
+		return nil
+	}
+	copy := *lifecycle
+	return &copy
+}
+
+func preventDestroyError(address, kind string, lifecycle *ir.LifecycleSpec) error {
+	if lifecycle != nil && lifecycle.Source.File != "" {
+		return fmt.Errorf("%s:%d:%s: %s %s is protected by lifecycle.prevent_destroy", lifecycle.Source.File, lifecycle.Source.Line, lifecycle.Source.Path, kind, address)
+	}
+	return fmt.Errorf("%s %s is protected by lifecycle.prevent_destroy", kind, address)
 }
 
 func hostsByName(program *ir.Program) map[string]ir.HostSpec {

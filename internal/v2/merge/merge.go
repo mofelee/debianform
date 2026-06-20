@@ -646,8 +646,12 @@ func packageItems(packages parser.Value) ([]ir.PackageItem, error) {
 		if err != nil {
 			return nil, err
 		}
+		lifecycle, err := lifecycleSpec(item)
+		if err != nil {
+			return nil, err
+		}
 		seen[name] = item.Source
-		out = append(out, ir.PackageItem{Name: name, Repositories: repositories, Source: item.Source})
+		out = append(out, ir.PackageItem{Name: name, Repositories: repositories, Lifecycle: lifecycle, Source: item.Source})
 	}
 	return out, nil
 }
@@ -718,6 +722,10 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 		if !ok {
 			sensitive = false
 		}
+		lifecycle, err := lifecycleSpec(item)
+		if err != nil {
+			return nil, err
+		}
 		managed := ir.ManagedFile{
 			Path:       path,
 			Content:    content,
@@ -727,6 +735,7 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 			Mode:       mode,
 			Sensitive:  sensitive,
 			Ensure:     ensure,
+			Lifecycle:  lifecycle,
 			Source:     item.Source,
 		}
 		if hasContent {
@@ -777,6 +786,10 @@ func secretSpecs(secrets parser.Value) (map[string]ir.SecretFile, error) {
 		if err != nil {
 			return nil, err
 		}
+		lifecycle, err := lifecycleSpec(item)
+		if err != nil {
+			return nil, err
+		}
 		secret := ir.SecretFile{
 			Path:       path,
 			SourcePath: resolvePath(item.Source.File, sourcePath),
@@ -784,6 +797,7 @@ func secretSpecs(secrets parser.Value) (map[string]ir.SecretFile, error) {
 			Group:      group,
 			Mode:       mode,
 			Ensure:     ensure,
+			Lifecycle:  lifecycle,
 			Source:     item.Source,
 		}
 		if hasSource {
@@ -825,7 +839,11 @@ func directorySpecs(directories parser.Value) (map[string]ir.ManagedDirectory, e
 		if err != nil {
 			return nil, err
 		}
-		out[path] = ir.ManagedDirectory{Path: path, Owner: owner, Group: group, Mode: mode, Ensure: ensure, Source: item.Source}
+		lifecycle, err := lifecycleSpec(item)
+		if err != nil {
+			return nil, err
+		}
+		out[path] = ir.ManagedDirectory{Path: path, Owner: owner, Group: group, Mode: mode, Ensure: ensure, Lifecycle: lifecycle, Source: item.Source}
 	}
 	return out, nil
 }
@@ -856,7 +874,11 @@ func groupSpecs(groups parser.Value) (map[string]ir.ManagedGroup, error) {
 		if err != nil {
 			return nil, err
 		}
-		out[name] = ir.ManagedGroup{Name: name, GID: gid, System: system, Ensure: ensure, Source: item.Source}
+		lifecycle, err := lifecycleSpec(item)
+		if err != nil {
+			return nil, err
+		}
+		out[name] = ir.ManagedGroup{Name: name, GID: gid, System: system, Ensure: ensure, Lifecycle: lifecycle, Source: item.Source}
 	}
 	return out, nil
 }
@@ -907,6 +929,10 @@ func userSpecs(users parser.Value) (map[string]ir.ManagedUser, error) {
 		if err != nil {
 			return nil, err
 		}
+		lifecycle, err := lifecycleSpec(item)
+		if err != nil {
+			return nil, err
+		}
 		out[name] = ir.ManagedUser{
 			Name:              name,
 			UID:               uid,
@@ -917,6 +943,7 @@ func userSpecs(users parser.Value) (map[string]ir.ManagedUser, error) {
 			Shell:             shell,
 			SSHAuthorizedKeys: keys,
 			Ensure:            ensure,
+			Lifecycle:         lifecycle,
 			Source:            item.Source,
 		}
 	}
@@ -961,6 +988,10 @@ func systemdSpecs(systemd parser.Value) (map[string]ir.SystemdUnit, error) {
 		if err != nil {
 			return nil, err
 		}
+		lifecycle, err := lifecycleSpec(item)
+		if err != nil {
+			return nil, err
+		}
 		unit := ir.SystemdUnit{
 			Name:       name,
 			Path:       "/etc/systemd/system/" + name,
@@ -970,6 +1001,7 @@ func systemdSpecs(systemd parser.Value) (map[string]ir.SystemdUnit, error) {
 			Group:      group,
 			Mode:       mode,
 			Ensure:     ensure,
+			Lifecycle:  lifecycle,
 			Source:     item.Source,
 		}
 		if hasContent {
@@ -1016,7 +1048,11 @@ func serviceSpecs(services parser.Value) (map[string]ir.ManagedService, error) {
 		if state != "" && !validServiceState(state) {
 			return nil, fmt.Errorf("%s:%d:%s.state: service state must be running, stopped, restarted, or reloaded", item.Source.File, item.Source.Line, item.Source.Path)
 		}
-		out[name] = ir.ManagedService{Name: name, Unit: serviceUnitName(name), Package: pkg, Enabled: enabled, State: state, Source: item.Source}
+		lifecycle, err := lifecycleSpec(item)
+		if err != nil {
+			return nil, err
+		}
+		out[name] = ir.ManagedService{Name: name, Unit: serviceUnitName(name), Package: pkg, Enabled: enabled, State: state, Lifecycle: lifecycle, Source: item.Source}
 	}
 	return out, nil
 }
@@ -1062,6 +1098,21 @@ func ensureField(root parser.Value, fallback string) (string, error) {
 		return "", fmt.Errorf("%s:%d:%s.ensure: ensure must be present or absent", root.Source.File, root.Source.Line, root.Source.Path)
 	}
 	return ensure, nil
+}
+
+func lifecycleSpec(root parser.Value) (*ir.LifecycleSpec, error) {
+	lifecycle, ok, err := mapField(root, "lifecycle")
+	if err != nil || !ok {
+		return nil, err
+	}
+	preventDestroy, ok, err := boolField(lifecycle, "prevent_destroy")
+	if err != nil {
+		return nil, err
+	}
+	if !ok || !preventDestroy {
+		return nil, nil
+	}
+	return &ir.LifecycleSpec{PreventDestroy: preventDestroy, Source: lifecycle.Source}, nil
 }
 
 func modeFieldDefault(root parser.Value, name string, fallback string) (string, error) {

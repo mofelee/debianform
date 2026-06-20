@@ -63,6 +63,18 @@ Summary: 3 create, 0 update, 0 delete, 0 no-op, 0 operations
 dbf plan -f examples/v2-bbr.dbf.hcl --format json
 ```
 
+静态 HTML preview 可用：
+
+```bash
+dbf plan -f examples/v2-bbr.dbf.hcl --html plan.html
+```
+
+配置格式化会原地改写目标 HCL 文件：
+
+```bash
+dbf fmt -f examples/v2-bbr.dbf.hcl
+```
+
 基础系统配置示例：
 
 ```hcl

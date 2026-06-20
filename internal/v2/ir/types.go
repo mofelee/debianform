@@ -27,6 +27,11 @@ type SourceRef struct {
 	Path string `json:"path,omitempty"`
 }
 
+type LifecycleSpec struct {
+	PreventDestroy bool      `json:"prevent_destroy,omitempty"`
+	Source         SourceRef `json:"source,omitempty"`
+}
+
 type SSHSpec struct {
 	Host         string    `json:"host"`
 	Port         int       `json:"port,omitempty"`
@@ -77,9 +82,10 @@ type PackageSpec struct {
 }
 
 type PackageItem struct {
-	Name         string    `json:"name"`
-	Repositories []string  `json:"repositories,omitempty"`
-	Source       SourceRef `json:"source,omitempty"`
+	Name         string         `json:"name"`
+	Repositories []string       `json:"repositories,omitempty"`
+	Lifecycle    *LifecycleSpec `json:"lifecycle,omitempty"`
+	Source       SourceRef      `json:"source,omitempty"`
 }
 
 type FileSpec struct {
@@ -96,6 +102,7 @@ type ManagedFile struct {
 	Mode       string         `json:"mode"`
 	Sensitive  bool           `json:"sensitive,omitempty"`
 	Ensure     string         `json:"ensure"`
+	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
 	Summary    ContentSummary `json:"summary,omitempty"`
 	Source     SourceRef      `json:"source,omitempty"`
 }
@@ -112,6 +119,7 @@ type SecretFile struct {
 	Group      string         `json:"group"`
 	Mode       string         `json:"mode"`
 	Ensure     string         `json:"ensure"`
+	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
 	Summary    ContentSummary `json:"summary,omitempty"`
 	Source     SourceRef      `json:"source,omitempty"`
 }
@@ -122,12 +130,13 @@ type DirectorySpec struct {
 }
 
 type ManagedDirectory struct {
-	Path   string    `json:"path"`
-	Owner  string    `json:"owner"`
-	Group  string    `json:"group"`
-	Mode   string    `json:"mode"`
-	Ensure string    `json:"ensure"`
-	Source SourceRef `json:"source,omitempty"`
+	Path      string         `json:"path"`
+	Owner     string         `json:"owner"`
+	Group     string         `json:"group"`
+	Mode      string         `json:"mode"`
+	Ensure    string         `json:"ensure"`
+	Lifecycle *LifecycleSpec `json:"lifecycle,omitempty"`
+	Source    SourceRef      `json:"source,omitempty"`
 }
 
 type GroupSpec struct {
@@ -136,11 +145,12 @@ type GroupSpec struct {
 }
 
 type ManagedGroup struct {
-	Name   string    `json:"name"`
-	GID    string    `json:"gid,omitempty"`
-	System bool      `json:"system,omitempty"`
-	Ensure string    `json:"ensure"`
-	Source SourceRef `json:"source,omitempty"`
+	Name      string         `json:"name"`
+	GID       string         `json:"gid,omitempty"`
+	System    bool           `json:"system,omitempty"`
+	Ensure    string         `json:"ensure"`
+	Lifecycle *LifecycleSpec `json:"lifecycle,omitempty"`
+	Source    SourceRef      `json:"source,omitempty"`
 }
 
 type UserSpec struct {
@@ -149,16 +159,17 @@ type UserSpec struct {
 }
 
 type ManagedUser struct {
-	Name              string    `json:"name"`
-	UID               string    `json:"uid,omitempty"`
-	PrimaryGroup      string    `json:"group,omitempty"`
-	Groups            []string  `json:"groups,omitempty"`
-	System            bool      `json:"system,omitempty"`
-	Home              string    `json:"home,omitempty"`
-	Shell             string    `json:"shell,omitempty"`
-	SSHAuthorizedKeys []string  `json:"ssh_authorized_keys,omitempty"`
-	Ensure            string    `json:"ensure"`
-	Source            SourceRef `json:"source,omitempty"`
+	Name              string         `json:"name"`
+	UID               string         `json:"uid,omitempty"`
+	PrimaryGroup      string         `json:"group,omitempty"`
+	Groups            []string       `json:"groups,omitempty"`
+	System            bool           `json:"system,omitempty"`
+	Home              string         `json:"home,omitempty"`
+	Shell             string         `json:"shell,omitempty"`
+	SSHAuthorizedKeys []string       `json:"ssh_authorized_keys,omitempty"`
+	Ensure            string         `json:"ensure"`
+	Lifecycle         *LifecycleSpec `json:"lifecycle,omitempty"`
+	Source            SourceRef      `json:"source,omitempty"`
 }
 
 type SystemdSpec struct {
@@ -175,6 +186,7 @@ type SystemdUnit struct {
 	Group      string         `json:"group"`
 	Mode       string         `json:"mode"`
 	Ensure     string         `json:"ensure"`
+	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
 	Summary    ContentSummary `json:"summary,omitempty"`
 	Source     SourceRef      `json:"source,omitempty"`
 }
@@ -185,12 +197,13 @@ type ServiceSpec struct {
 }
 
 type ManagedService struct {
-	Name    string    `json:"name"`
-	Unit    string    `json:"unit"`
-	Package string    `json:"package,omitempty"`
-	Enabled *bool     `json:"enabled,omitempty"`
-	State   string    `json:"state,omitempty"`
-	Source  SourceRef `json:"source,omitempty"`
+	Name      string         `json:"name"`
+	Unit      string         `json:"unit"`
+	Package   string         `json:"package,omitempty"`
+	Enabled   *bool          `json:"enabled,omitempty"`
+	State     string         `json:"state,omitempty"`
+	Lifecycle *LifecycleSpec `json:"lifecycle,omitempty"`
+	Source    SourceRef      `json:"source,omitempty"`
 }
 
 type ContentSummary struct {

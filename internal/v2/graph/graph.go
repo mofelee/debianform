@@ -18,16 +18,17 @@ type ResourceGraph struct {
 }
 
 type Node struct {
-	Host            string         `json:"host,omitempty"`
-	Address         string         `json:"address"`
-	Kind            string         `json:"kind"`
-	Summary         string         `json:"summary"`
-	Source          ir.SourceRef   `json:"source"`
-	Desired         map[string]any `json:"desired,omitempty"`
-	ProviderType    string         `json:"provider_type,omitempty"`
-	ProviderAddress string         `json:"provider_address,omitempty"`
-	ProviderPayload map[string]any `json:"provider_payload,omitempty"`
-	DependsOn       []string       `json:"depends_on,omitempty"`
+	Host            string            `json:"host,omitempty"`
+	Address         string            `json:"address"`
+	Kind            string            `json:"kind"`
+	Summary         string            `json:"summary"`
+	Source          ir.SourceRef      `json:"source"`
+	Lifecycle       *ir.LifecycleSpec `json:"lifecycle,omitempty"`
+	Desired         map[string]any    `json:"desired,omitempty"`
+	ProviderType    string            `json:"provider_type,omitempty"`
+	ProviderAddress string            `json:"provider_address,omitempty"`
+	ProviderPayload map[string]any    `json:"provider_payload,omitempty"`
+	DependsOn       []string          `json:"depends_on,omitempty"`
 }
 
 type Operation struct {
@@ -133,6 +134,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Kind:            "package",
 			Summary:         "create package " + item.Name,
 			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
 			Desired:         desired,
 			ProviderType:    "package",
 			ProviderAddress: "package." + providerName(host.Name, item.Name),
@@ -150,6 +152,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Kind:            "directory",
 			Summary:         "create directory " + item.Path,
 			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
 			Desired:         desired,
 			ProviderType:    "directory",
 			ProviderAddress: "directory." + providerName(host.Name, item.Path),
@@ -181,6 +184,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Kind:            "file",
 			Summary:         "create file " + item.Path,
 			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
 			Desired:         desired,
 			ProviderType:    "file",
 			ProviderAddress: "file." + providerName(host.Name, item.Path),
@@ -207,6 +211,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Kind:            "secret",
 			Summary:         "create secret file " + item.Path,
 			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
 			Desired:         desired,
 			ProviderType:    "file",
 			ProviderAddress: "file." + providerName(host.Name, item.Path),
@@ -225,6 +230,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Kind:            "group",
 			Summary:         "create group " + item.Name,
 			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
 			Desired:         desired,
 			ProviderType:    "group",
 			ProviderAddress: "group." + providerName(host.Name, item.Name),
@@ -262,6 +268,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Kind:            "user",
 			Summary:         "create user " + item.Name,
 			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
 			Desired:         desired,
 			DependsOn:       deps,
 			ProviderType:    "user",
@@ -278,6 +285,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				Kind:            "ssh_authorized_key",
 				Summary:         "create authorized key for " + item.Name,
 				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
 				Desired:         keyDesired,
 				DependsOn:       []string{address},
 				ProviderType:    "ssh_authorized_key",
@@ -312,6 +320,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Kind:            "systemd_unit",
 			Summary:         "create systemd unit " + item.Name,
 			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
 			Desired:         desired,
 			ProviderType:    "systemd_unit",
 			ProviderAddress: "systemd_unit." + providerName(host.Name, item.Name),
@@ -362,6 +371,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Kind:            "service",
 			Summary:         "manage service " + item.Name,
 			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
 			Desired:         desired,
 			DependsOn:       deps,
 			ProviderType:    "service",
@@ -435,6 +445,14 @@ func dedupeStrings(values []string) []string {
 func shortHash(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])[:16]
+}
+
+func lifecyclePtr(lifecycle *ir.LifecycleSpec) *ir.LifecycleSpec {
+	if lifecycle == nil || !lifecycle.PreventDestroy {
+		return nil
+	}
+	copy := *lifecycle
+	return &copy
 }
 
 func cloneStrings(values []string) []string {

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/mofelee/debianform/internal/v2/ir"
 )
 
 const Version = 2
@@ -20,16 +22,17 @@ type State struct {
 }
 
 type Resource struct {
-	Host            string         `json:"host,omitempty"`
-	Kind            string         `json:"kind"`
-	ProviderType    string         `json:"provider_type,omitempty"`
-	ProviderAddress string         `json:"provider_address,omitempty"`
-	Ownership       string         `json:"ownership"`
-	Desired         map[string]any `json:"desired,omitempty"`
-	DesiredDigest   string         `json:"desired_digest"`
-	Observed        map[string]any `json:"observed,omitempty"`
-	UpdatedAt       string         `json:"updated_at,omitempty"`
-	Order           int            `json:"order"`
+	Host            string            `json:"host,omitempty"`
+	Kind            string            `json:"kind"`
+	ProviderType    string            `json:"provider_type,omitempty"`
+	ProviderAddress string            `json:"provider_address,omitempty"`
+	Ownership       string            `json:"ownership"`
+	Lifecycle       *ir.LifecycleSpec `json:"lifecycle,omitempty"`
+	Desired         map[string]any    `json:"desired,omitempty"`
+	DesiredDigest   string            `json:"desired_digest"`
+	Observed        map[string]any    `json:"observed,omitempty"`
+	UpdatedAt       string            `json:"updated_at,omitempty"`
+	Order           int               `json:"order"`
 }
 
 func Empty(host string) State {

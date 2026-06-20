@@ -141,6 +141,7 @@ func cloneState(st v2state.State) v2state.State {
 	for address, resource := range st.Resources {
 		resource.Desired = cloneMap(resource.Desired)
 		resource.Observed = cloneMap(resource.Observed)
+		resource.Lifecycle = cloneLifecycle(resource.Lifecycle)
 		out.Resources[address] = resource
 	}
 	return out

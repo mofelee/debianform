@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -159,6 +161,70 @@ func TestApplyDestroysOrphanStateResource(t *testing.T) {
 	}
 }
 
+func TestPreventDestroyBlocksOrphanDestroy(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `
+host "server1" {
+  files {
+    file "/tmp/protected" {
+      content = "managed"
+
+      lifecycle {
+        prevent_destroy = true
+      }
+    }
+  }
+}
+`))
+	backend := NewMemoryBackend()
+	provider := NewMemoryProvider()
+	engine := Engine{Backend: backend, Provider: provider}
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{}); err != nil {
+		t.Fatal(err)
+	}
+
+	emptyProgram, emptyGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `
+host "server1" {}
+`))
+	_, err := engine.Apply(context.Background(), emptyProgram, emptyGraph, Options{})
+	if err == nil {
+		t.Fatal("apply succeeded, want prevent_destroy error")
+	}
+	if !strings.Contains(err.Error(), "lifecycle.prevent_destroy") {
+		t.Fatalf("error = %v, want prevent_destroy", err)
+	}
+	if len(provider.Destroyed) != 0 {
+		t.Fatalf("destroyed = %#v, want no destroy", provider.Destroyed)
+	}
+}
+
+func TestPreventDestroyBlocksExplicitDelete(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `
+host "server1" {
+  files {
+    file "/tmp/protected" {
+      ensure = "absent"
+
+      lifecycle {
+        prevent_destroy = true
+      }
+    }
+  }
+}
+`))
+	provider := NewMemoryProvider()
+	address := `host.server1.files.file["/tmp/protected"]`
+	provider.Observed[address] = Observed{Exists: true}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	_, err := engine.Plan(context.Background(), program, resourceGraph, Options{})
+	if err == nil {
+		t.Fatal("plan succeeded, want prevent_destroy error")
+	}
+	if !strings.Contains(err.Error(), "lifecycle.prevent_destroy") {
+		t.Fatalf("error = %v, want prevent_destroy", err)
+	}
+}
+
 func fixtureProgramAndGraph(t *testing.T, fixture string) (*ir.Program, *graph.ResourceGraph) {
 	t.Helper()
 
@@ -175,4 +241,15 @@ func fixtureProgramAndGraph(t *testing.T, fixture string) (*ir.Program, *graph.R
 		t.Fatal(err)
 	}
 	return program, resourceGraph
+}
+
+func writeEngineConfig(t *testing.T, content string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(file, []byte(strings.TrimPrefix(content, "\n")), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return file
 }
