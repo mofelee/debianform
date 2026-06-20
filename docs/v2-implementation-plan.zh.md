@@ -1,0 +1,510 @@
+# DebianForm v2 实施计划
+
+本文档把 v2 设计落成可执行的开发计划。每个 loop 都必须形成一个可合并闭环：
+
+- [ ] 代码路径可运行
+- [ ] 单元测试和 golden 测试覆盖本轮语义
+- [ ] 至少一个示例进入验收输入
+- [ ] 文档同步更新
+- [ ] `make test` 通过
+
+状态约定：
+
+- [x] 已完成
+- [ ] 未完成
+
+## 当前基线
+
+- [x] v2 用户需求文档已存在：`docs/v2-requirements.md`
+- [x] v2 中间表达文档已存在：`docs/v2-ir-requirements.zh.md`
+- [x] v2 plan JSON 格式文档已存在：`docs/v2-plan-format.md`
+- [x] v2 设计示例已存在：`examples/v2-*.dbf.hcl`
+- [ ] v2 编译器尚未实现
+- [ ] v2 CLI 尚未接入
+- [ ] v2 plan/apply 尚未实现
+
+## Loop 1: BBR 最小编译闭环
+
+目标：让 `examples/v2-bbr.dbf.hcl` 可以通过 v2 路径完成 validate 和 plan，不需要写任何
+`debian_*` 用户资源。
+
+范围：
+
+- `locals`
+- `profile`
+- `host`
+- `imports`
+- `ssh`
+- `state`
+- `system`
+- `kernel`
+- `packages`
+
+暂不做：
+
+- `apply`
+- `component`
+- `files`
+- `secrets`
+- `directories`
+- `users`
+- `groups`
+- `systemd`
+- `services`
+- `apt`
+- `nftables`
+- HTML preview
+
+代码：
+
+- [ ] 新增 `internal/v2/parser`，解析 v2 顶层 block 和本轮领域 block
+- [ ] 保留 `SourceRef`，至少记录 file、line、path
+- [ ] 新增 `internal/v2/merge`，实现 profile imports 顺序合并
+- [ ] 实现 list append 去重
+- [ ] 实现 map 深度合并
+- [ ] 实现 scalar 后者覆盖
+- [ ] 实现 `force(value)`
+- [ ] 实现 `before(value)` 和 `after(value)`
+- [ ] 实现 `unset()` 删除 map key
+- [ ] 新增 `internal/v2/ir`，定义 `Program`、`HostSpec` 和本轮领域 spec
+- [ ] 为 `ssh`、`state`、`system.hostname` 填充默认值
+- [ ] 归一化 `kernel.modules`
+- [ ] 归一化 `kernel.sysctl`
+- [ ] 归一化 `packages.install`
+- [ ] 新增 `internal/v2/graph`，从 HostSpec 编译 ResourceGraph
+- [ ] 生成稳定 v2 地址，例如 `host.bbr1.kernel.module["tcp_bbr"]`
+- [ ] 生成低阶 provider payload，但不暴露给普通用户 plan
+- [ ] 推导 BBR 依赖：`tcp_congestion_control = "bbr"` 依赖 `tcp_bbr` module
+- [ ] 新增 `internal/v2/plan`，生成结构化 plan 模型
+- [ ] 支持 `dbf validate -f examples/v2-bbr.dbf.hcl` 走 v2 路径
+- [ ] 支持 `dbf plan -f examples/v2-bbr.dbf.hcl`
+- [ ] 支持 `dbf plan -f examples/v2-bbr.dbf.hcl --format json`
+- [ ] 保留 legacy v1 CLI 测试通过
+
+测试：
+
+- [ ] parser 单测覆盖 `host`、`profile`、nested domain block、source line
+- [ ] parser 负例覆盖未知顶层 block、错误 label 数量、重复 host
+- [ ] merge 单测覆盖 imports 顺序、list 去重、map 覆盖、scalar 覆盖
+- [ ] merge modifier 单测覆盖 `force`、`before`、`after`、`unset`
+- [ ] merge 负例覆盖 profile import cycle
+- [ ] HostSpec snapshot 覆盖 `examples/v2-bbr.dbf.hcl`
+- [ ] ResourceGraph snapshot 覆盖 BBR module/sysctl 地址和依赖边
+- [ ] plan JSON golden 覆盖 BBR create plan
+- [ ] CLI smoke 覆盖 validate、plan text、plan JSON
+
+示例：
+
+- [ ] `examples/v2-bbr.dbf.hcl` 作为本轮主 golden fixture
+- [ ] 增加一个 profile 合并小示例，覆盖 base packages + bbr profile + host override
+
+文档：
+
+- [ ] README 标记 BBR v2 路径已可 validate/plan
+- [ ] 在 v2 docs 中注明本轮支持范围和暂不支持范围
+- [ ] 增加 BBR plan 输出样例
+
+验收：
+
+- [ ] `dbf validate -f examples/v2-bbr.dbf.hcl` 成功
+- [ ] `dbf plan -f examples/v2-bbr.dbf.hcl` 输出 v2 用户地址
+- [ ] `dbf plan -f examples/v2-bbr.dbf.hcl --format json` 输出 `debianform.plan.v2alpha1`
+- [ ] `make test` 成功
+
+## Loop 2: 合并语义和错误定位收口
+
+目标：让 profile/host 组合语义稳定，错误能指向用户 DSL，而不是内部 provider。
+
+代码：
+
+- [ ] 完善 `SourceRef.Path`，覆盖 list、map、labeled object block
+- [ ] 让 merge 错误携带最终用户来源
+- [ ] 支持 host 覆盖 profile 中的 list、map、scalar
+- [ ] 支持 labeled object 归一化为 map 后字段级合并
+- [ ] 检测 host/profile 中禁止声明的字段，例如 profile 中的 `system.hostname`
+- [ ] 检测同一 host 内重复 resource identity
+- [ ] 检测同一 package 重复声明
+- [ ] 检测空 sysctl key 和空 kernel module
+- [ ] 检测 `unset()` 用在 list 上并报错
+
+测试：
+
+- [ ] merge golden 覆盖多 profile imports
+- [ ] merge golden 覆盖 host override
+- [ ] merge golden 覆盖 labeled block 合并
+- [ ] 负例覆盖 import cycle 的完整路径
+- [ ] 负例覆盖 profile 中非法 host-only 字段
+- [ ] 负例覆盖重复 package、空 key、非法 modifier
+- [ ] 错误消息测试覆盖 file:line:path
+
+示例：
+
+- [ ] 增加 `examples/v2-profile-merge.dbf.hcl`
+- [ ] 增加至少一个 intentional invalid fixture 到测试目录，而不是 examples 目录
+
+文档：
+
+- [ ] 合并规则文档补充 labeled block 合并示例
+- [ ] merge modifier 文档补充错误用法
+
+验收：
+
+- [ ] profile 合并 fixture 的 HostSpec snapshot 稳定
+- [ ] 所有负例返回可读 source location
+- [ ] `make test` 成功
+
+## Loop 3: 第一批日常领域块
+
+目标：补齐基础系统配置所需的本地领域块，并保持 plan 地址仍为 v2 用户地址。
+
+范围：
+
+- `files`
+- `secrets`
+- `directories`
+- `groups`
+- `users`
+- `systemd`
+- `services`
+
+代码：
+
+- [ ] parser 支持本轮领域 block 和 labeled object block
+- [ ] IR 增加 FileSpec、SecretSpec、DirectorySpec、GroupSpec、UserSpec、SystemdSpec、ServiceSpec
+- [ ] files 支持 content/source 二选一
+- [ ] files 支持 owner、group、mode、ensure、sensitive
+- [ ] secrets 支持本地 source 文件
+- [ ] secrets 默认 owner/group/mode 为 root/root/0600
+- [ ] secrets 在 plan、日志、state 中只输出摘要
+- [ ] directories 支持 owner、group、mode、ensure
+- [ ] groups 支持 system、gid、ensure
+- [ ] users 支持 home、shell、group、groups、system、ssh_authorized_keys、ensure
+- [ ] systemd 支持 unit file 管理
+- [ ] services 支持 enabled 和 state
+- [ ] 编译 systemd daemon_reload operation node
+- [ ] 编译 service restart/reload operation node
+- [ ] 推导 user -> group 依赖
+- [ ] 推导 service -> package 依赖
+- [ ] 推导 service -> systemd unit 依赖
+- [ ] 检测 files 和 secrets 远端 path 冲突
+
+测试：
+
+- [ ] parser 单测覆盖 labeled object block
+- [ ] HostSpec snapshot 覆盖 files/secrets/directories/users/groups/systemd/services
+- [ ] ResourceGraph snapshot 覆盖语义依赖边
+- [ ] plan golden 覆盖 file text diff
+- [ ] 负例覆盖重复 path、非法 mode、缺失 group 引用、secret source 不存在
+
+示例：
+
+- [ ] 增加 user/group/authorized_key 示例
+- [ ] 增加 systemd service 示例
+- [ ] 从 `examples/v2-fleet.dbf.hcl` 抽出小型可测 fixture
+
+文档：
+
+- [ ] 更新 README 的基础系统配置示例
+- [ ] 补充 files sensitive 限制
+- [ ] 补充 secrets 不落明文限制
+- [ ] 补充 services state 语义
+
+验收：
+
+- [ ] 新增示例均可 validate
+- [ ] plan 显示 files、secrets、users、services 的 v2 地址
+- [ ] `make test` 成功
+
+## Loop 4: v2 state 和 apply
+
+目标：让 v2 可以对 kernel、packages 和第一批日常领域块执行 apply，并写入 v2 state。
+
+代码：
+
+- [ ] 定义 v2 state 文件 schema
+- [ ] 每个 host 使用独立 state path 和 lock path
+- [ ] state resource key 优先使用 v2 地址
+- [ ] state 保留低阶 provider address 作为 debug 信息
+- [ ] 复用或适配 v1 SSH runner
+- [ ] 复用或适配 v1 provider 实现
+- [ ] 实现单 host 串行 apply
+- [ ] 实现多 host 并行 apply 的 CLI 参数接口
+- [ ] apply 失败后停止依赖它的后续节点
+- [ ] `check` 在 plan 有变更时返回非零
+- [ ] 防止 `prevent_destroy` 资源被 delete/destroy/replace
+
+测试：
+
+- [ ] state read/write 单测
+- [ ] apply dry-run 或 fake runner 测试
+- [ ] prevent_destroy 负例测试
+- [ ] check 命令返回码测试
+- [ ] v1 legacy 测试保持通过
+
+示例：
+
+- [ ] BBR 示例进入 fake runner apply 测试
+- [ ] packages 示例进入 fake runner apply 测试
+
+文档：
+
+- [ ] 新增 v2 state 文件说明
+- [ ] README 增加 apply/check 使用说明
+- [ ] 明确 v1 state address 不兼容 v2
+
+验收：
+
+- [ ] fake runner apply 能写入 v2 state
+- [ ] `dbf check` 能检测 drift 或变更
+- [ ] `make test` 成功
+
+## Loop 5: 结构化 plan renderer
+
+目标：让 plan 成为稳定机器接口，同时提供可读的终端和 HTML preview。
+
+范围：
+
+- text diff
+- sensitive diff
+- JSON renderer
+- terminal tree renderer
+- static HTML renderer
+
+代码：
+
+- [ ] plan 顶层输出 `format_version = "debianform.plan.v2alpha1"`
+- [ ] DiffNode 支持 object、map、set、list、scalar、text、sensitive
+- [ ] 文本内容支持行级 diff hunks
+- [ ] sensitive 内容只输出摘要，不输出明文
+- [ ] JSON renderer 输出稳定字段顺序
+- [ ] terminal renderer 显示 source location 和字段级 diff
+- [ ] terminal renderer 在无颜色环境保留 `+`、`-`、`~` 符号
+- [ ] HTML renderer 生成可独立打开的静态文件
+- [ ] HTML preview 支持 action 过滤
+- [ ] HTML preview 支持 host 过滤
+- [ ] HTML preview 支持搜索字段路径
+- [ ] debug 模式输出 provider address
+
+测试：
+
+- [ ] plan JSON golden 覆盖 create/update/delete/no_op/run
+- [ ] text diff golden 覆盖普通 file content
+- [ ] sensitive diff golden 覆盖 secret 文件
+- [ ] terminal renderer snapshot
+- [ ] HTML renderer smoke 测试
+- [ ] 检查 plan/state/log 不包含 secret 明文
+
+示例：
+
+- [ ] 增加小型 files/secrets plan preview fixture 作为本轮主 fixture
+- [ ] 增加示例 secret 占位说明，但不提交真实 secret
+- [ ] `.gitignore` 忽略示例 secrets 目录
+
+文档：
+
+- [ ] 更新 `docs/v2-plan-format.md` 中的实际字段
+- [ ] README 增加 `plan --format json`
+- [ ] README 增加 `plan --html plan.html`
+
+验收：
+
+- [ ] `dbf plan -f examples/v2-files-plan-preview.dbf.hcl --format json` 不泄露 secret 明文
+- [ ] `dbf plan -f examples/v2-files-plan-preview.dbf.hcl --html plan.html` 生成静态文件
+- [ ] `make test` 成功
+
+## Loop 6: APT 和 component
+
+目标：支持复用部署单元和显式 APT repository 关系。
+
+范围：
+
+- `apt.repository`
+- `packages.package`
+- component input
+- component source architecture selection
+- binary/archive/file/ca_certificate artifact
+
+代码：
+
+- [ ] parser 支持 `apt.repository`
+- [ ] parser 支持 `packages.package`
+- [ ] parser 支持 `component`
+- [ ] parser 支持 host `components`
+- [ ] IR 增加 APTSpec 和 ComponentTemplateSpec
+- [ ] component input 支持 string、number、bool、list(string)、map(string)
+- [ ] component instance 校验缺失 input 和未知 input
+- [ ] 按 host architecture 选择唯一 source
+- [ ] 远程 URL source 必须声明 sha256
+- [ ] repository signing_key 支持 url/content 二选一
+- [ ] repository 输出 deb822 sources payload
+- [ ] package repositories 引用同 host repository
+- [ ] 生成 host-scoped `apt.cache_refresh` operation node
+- [ ] 多 repository 变化时每 host 只刷新一次 APT cache
+- [ ] binary/archive/file artifact 编译为下载、校验、安装节点
+- [ ] ca_certificate 生成 `update-ca-certificates` operation node
+- [ ] component 与 host/profile 产生相同远端 identity 时 validate 报错
+
+测试：
+
+- [ ] APT repository HostSpec snapshot
+- [ ] APT ResourceGraph snapshot 覆盖 cache refresh 汇聚
+- [ ] component parser 单测
+- [ ] component architecture selection 单测
+- [ ] component input validation 负例
+- [ ] artifact sha256 负例
+- [ ] identity 冲突负例
+
+示例：
+
+- [ ] `examples/v2-apt-repository.dbf.hcl` 进入 golden 测试
+- [ ] `examples/v2-bird2.dbf.hcl` 进入 golden 测试
+- [ ] `examples/v2-component-binary.dbf.hcl` 进入 golden 测试
+
+文档：
+
+- [ ] README 增加 component 基本示例
+- [ ] APT 文档补充 repository/package 依赖规则
+- [ ] component 文档补充 architecture source 选择规则
+
+验收：
+
+- [ ] 同一个 component 可挂载到多台 host
+- [ ] 不同 architecture 能选择对应 source
+- [ ] 不能唯一选择 source 时 validate 失败
+- [ ] `make test` 成功
+
+## Loop 7: nftables
+
+目标：以原生 nftables 文件为主路径，提供校验、激活和文本 diff。
+
+代码：
+
+- [ ] parser 支持 `nftables.enable`
+- [ ] parser 支持 `nftables.main`
+- [ ] parser 支持 `nftables.file "<label>"`
+- [ ] IR 增加 NftablesSpec
+- [ ] main 默认 path 为 `/etc/nftables.conf`
+- [ ] file 默认 path 为 `/etc/nftables.d/<label>.nft`
+- [ ] content/source 二选一
+- [ ] 检测最终 path 冲突
+- [ ] 编译 nftables file resource
+- [ ] 编译 `nftables.validate` operation node
+- [ ] 编译 `nftables.activate` operation node
+- [ ] 多个 nftables 文件变化时每 host 只 validate/activate 一次
+- [ ] plan 显示 nftables content 行级 diff
+
+测试：
+
+- [ ] HostSpec snapshot 覆盖 main 和 snippet
+- [ ] ResourceGraph snapshot 覆盖 validate/activate 汇聚
+- [ ] text diff golden 覆盖端口变化
+- [ ] 负例覆盖重复 path、content/source 同时设置
+
+示例：
+
+- [ ] `examples/v2-nftables.dbf.hcl` 进入 golden 测试
+- [ ] `examples/v2-plan-preview.dbf.hcl` 作为 nftables + secret 完整 plan preview fixture
+
+文档：
+
+- [ ] README 增加 nftables 简短示例
+- [ ] nftables 文档明确不提供通用 firewall 抽象
+
+验收：
+
+- [ ] nftables 示例可 validate/plan
+- [ ] plan 中展示 validate 和 activate operation
+- [ ] `make test` 成功
+
+## Loop 8: 调度器增强
+
+目标：从保守串行执行升级为 ResourceGraph DAG wave 调度。
+
+代码：
+
+- [ ] 实现 ResourceGraph 拓扑排序
+- [ ] 实现 DAG wave 计算
+- [ ] 实现资源地址唯一校验
+- [ ] 实现依赖地址存在校验
+- [ ] 实现环检测并输出环路径
+- [ ] 实现全局并发限制
+- [ ] 实现 per-host 并发限制
+- [ ] 增加资源类型 safe_parallel 标记
+- [ ] 失败节点阻止依赖节点执行
+
+测试：
+
+- [ ] wave 计算单测
+- [ ] 依赖缺失负例
+- [ ] 环检测负例
+- [ ] 并发限制测试
+- [ ] 失败传播测试
+
+文档：
+
+- [ ] 调度语义文档补充 wave 示例
+- [ ] CLI 文档补充 `--parallel`
+
+验收：
+
+- [ ] 多 host plan/apply 保持稳定顺序展示
+- [ ] 单 host 默认仍可保守串行
+- [ ] `make test` 成功
+
+## Loop 9: v2 作为主版本收口
+
+目标：让 v2 可以作为 DebianForm 主版本使用。
+
+代码：
+
+- [ ] CLI 默认路径切到 v2
+- [ ] legacy v1 保留在 `legacy/v1` 或显式兼容入口中
+- [ ] 清理 v2 中不再需要的临时 feature gate
+- [ ] 错误信息统一使用 v2 用户术语
+- [ ] release build 包含 v2 文档和示例
+
+测试：
+
+- [ ] 所有 v2 examples 进入 validate 测试
+- [ ] 小型 golden examples 覆盖 parser、HostSpec、ResourceGraph、plan
+- [ ] `v2-fleet` 只作为组合压力测试
+- [ ] legacy v1 归档测试仍可按需运行
+
+示例：
+
+- [ ] BBR 示例
+- [ ] nginx 或 systemd service 示例
+- [ ] user/group/authorized_key 示例
+- [ ] multi host/profile 示例
+- [ ] APT repository 示例
+- [ ] BIRD2 component 示例
+- [ ] binary component 示例
+- [ ] nftables 示例
+- [ ] plan preview 示例
+
+文档：
+
+- [ ] README 改为 v2 语法主入口
+- [ ] 增加 v1 已废弃说明
+- [ ] 增加从设计 fixture 到可运行示例的说明
+- [ ] 增加常见错误说明
+
+验收：
+
+- [ ] v2 第一版验收标准全部满足
+- [ ] `make test` 成功
+- [ ] README 中所有 v2 命令可复制运行
+
+## 第一版总体验收标准
+
+- [ ] 可以用 `host` 配置单台主机 BBR
+- [ ] 可以用 `profile` 复用 BBR 和 base packages
+- [ ] host 能覆盖 profile 中的 map 和 list
+- [ ] `force([])` 能清空继承的 list
+- [ ] 同一个 component 可以挂载到多台 host，并按 architecture 选择唯一 source
+- [ ] component 与 host/profile 产生相同远端 identity 时 validate 报错
+- [ ] plan 输出用户层 v2 地址
+- [ ] apply 能正确执行 kernel module、sysctl、package
+- [ ] 每台 host 使用独立 state
+- [ ] validate 能发现 imports 循环、字段冲突、资源图环
+- [ ] 不需要写任何 `debian_*` 资源即可完成基础系统配置

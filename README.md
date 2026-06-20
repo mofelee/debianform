@@ -17,6 +17,7 @@ DebianForm v2 是对原 v1 原型的破坏式重设计。
 - [v2 requirements](docs/v2-requirements.md)
 - [v2 IR requirements](docs/v2-ir-requirements.zh.md)
 - [v2 plan format](docs/v2-plan-format.md)
+- [v2 implementation plan](docs/v2-implementation-plan.zh.md)
 
 ## v2 示例
 
