@@ -113,6 +113,26 @@ func TestBIRD2PlanJSONGolden(t *testing.T) {
 	}
 }
 
+func TestComponentBinaryPlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-component-binary.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-component-binary.dbf.hcl",
+		Host:        "tool1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-component-binary.golden.json", got)
+
+	if doc.Summary.Create != 2 {
+		t.Fatalf("create count = %d, want 2", doc.Summary.Create)
+	}
+}
+
 func TestPlanHTMLDoesNotLeakSecrets(t *testing.T) {
 	doc := planFixture(t, "../testdata/fixtures/v2-foundation.dbf.hcl", Options{
 		CommandFile: "../testdata/fixtures/v2-foundation.dbf.hcl",

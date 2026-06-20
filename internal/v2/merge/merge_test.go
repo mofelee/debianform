@@ -448,6 +448,173 @@ host "trixie1" {
 	}
 }
 
+func TestCompileComponentBinaryArtifactSelectsArchitecture(t *testing.T) {
+	program := compileInline(t, `
+component "rclone" {
+  type    = "binary"
+  version = "1.66.0"
+
+  source "amd64" {
+    url    = "https://downloads.example/rclone-amd64.zip"
+    sha256 = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"
+  }
+
+  source "arm64" {
+    url    = "https://downloads.example/rclone-arm64.zip"
+    sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  }
+
+  extract {
+    strip_components = 1
+    include          = "rclone"
+  }
+
+  install {
+    path = "/usr/local/bin/rclone"
+  }
+}
+
+host "tool1" {
+  components = [component.rclone]
+
+  system {
+    architecture = "arm64"
+  }
+}
+`)
+
+	component := program.Hosts[0].Components[0]
+	if component.ArtifactType != "binary" || component.Version != "1.66.0" {
+		t.Fatalf("artifact = %#v", component)
+	}
+	if component.SelectedSource == nil || component.SelectedSource.Architecture != "arm64" {
+		t.Fatalf("selected source = %#v", component.SelectedSource)
+	}
+	if component.SelectedSource.URL != "https://downloads.example/rclone-arm64.zip" {
+		t.Fatalf("selected url = %q", component.SelectedSource.URL)
+	}
+	if component.Extract == nil || component.Extract.Format != "zip" || component.Extract.StripComponents != 1 {
+		t.Fatalf("extract = %#v", component.Extract)
+	}
+	if component.Install == nil || component.Install.Owner != "root" || component.Install.Group != "root" || component.Install.Mode != "0755" {
+		t.Fatalf("install defaults = %#v", component.Install)
+	}
+}
+
+func TestCompileRejectsInvalidComponentArtifacts(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "invalid sha",
+			hcl: `
+component "rclone" {
+  type = "binary"
+
+  source {
+    url    = "https://downloads.example/rclone"
+    sha256 = "not-a-sha"
+  }
+
+  install {
+    path = "/usr/local/bin/rclone"
+  }
+}
+
+host "tool1" {
+  components = [component.rclone]
+}
+`,
+			want: "sha256 must be a 64 character hex string",
+		},
+		{
+			name: "missing host architecture",
+			hcl: `
+component "rclone" {
+  type = "binary"
+
+  source "amd64" {
+    url    = "https://downloads.example/rclone-amd64"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/usr/local/bin/rclone"
+  }
+}
+
+host "tool1" {
+  components = [component.rclone]
+}
+`,
+			want: "must declare system.architecture",
+		},
+		{
+			name: "mixed source labels",
+			hcl: `
+component "rclone" {
+  type = "binary"
+
+  source {
+    url    = "https://downloads.example/rclone"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  source "amd64" {
+    url    = "https://downloads.example/rclone-amd64"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/usr/local/bin/rclone"
+  }
+}
+
+host "tool1" {
+  components = [component.rclone]
+
+  system {
+    architecture = "amd64"
+  }
+}
+`,
+			want: "cannot mix unlabeled and architecture-labeled source blocks",
+		},
+		{
+			name: "relative install path",
+			hcl: `
+component "rclone" {
+  type = "binary"
+
+  source {
+    url    = "https://downloads.example/rclone"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "bin/rclone"
+  }
+}
+
+host "tool1" {
+  components = [component.rclone]
+}
+`,
+			want: "install path must be absolute",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestCompileRejectsInvalidComponentInputsAndConflicts(t *testing.T) {
 	tests := []struct {
 		name string
@@ -744,6 +911,10 @@ func TestCompileAPTRepositoryHostSpecGolden(t *testing.T) {
 
 func TestCompileBIRD2HostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-bird2.dbf.hcl", "../testdata/hostspec/v2-bird2.golden.json")
+}
+
+func TestCompileComponentBinaryHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../../../examples/v2-component-binary.dbf.hcl", "../testdata/hostspec/v2-component-binary.golden.json")
 }
 
 func TestCompileRejectsLoop3InvalidInputs(t *testing.T) {

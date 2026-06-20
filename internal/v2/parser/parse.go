@@ -43,6 +43,11 @@ type Component struct {
 	ModuleDir string
 	Body      *hclsyntax.Body
 	Inputs    map[string]ComponentInput
+	Type      string
+	Version   string
+	Sources   map[string]ComponentArtifactSource
+	Extract   *ComponentArtifactExtract
+	Install   *ComponentArtifactInstall
 }
 
 type ComponentInput struct {
@@ -51,6 +56,28 @@ type ComponentInput struct {
 	Default   *Value
 	Sensitive bool
 	Source    ir.SourceRef
+}
+
+type ComponentArtifactSource struct {
+	Architecture string
+	URL          string
+	SHA256       string
+	Source       ir.SourceRef
+}
+
+type ComponentArtifactExtract struct {
+	Format          string
+	StripComponents int
+	Include         string
+	Source          ir.SourceRef
+}
+
+type ComponentArtifactInstall struct {
+	Path   string
+	Owner  string
+	Group  string
+	Mode   string
+	Source ir.SourceRef
 }
 
 type ComponentInstance struct {
@@ -221,21 +248,210 @@ func parseComponent(file string, block *hclsyntax.Block, ctx EvalContext) (Compo
 		ModuleDir: filepath.Dir(file),
 		Body:      block.Body,
 		Inputs:    map[string]ComponentInput{},
+		Sources:   map[string]ComponentArtifactSource{},
+	}
+	for name, attr := range block.Body.Attributes {
+		switch name {
+		case "type":
+			value, err := parseStringAttribute(file, source.Path+"."+name, attr, ctx)
+			if err != nil {
+				return Component{}, err
+			}
+			component.Type = value
+		case "version":
+			value, err := parseStringAttribute(file, source.Path+"."+name, attr, ctx)
+			if err != nil {
+				return Component{}, err
+			}
+			component.Version = value
+		default:
+			return Component{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, source.Path, name)
+		}
 	}
 	for _, child := range block.Body.Blocks {
-		if child.Type != "input" {
-			continue
+		switch child.Type {
+		case "input":
+			input, err := parseComponentInputBlock(file, source.Path, child, ctx)
+			if err != nil {
+				return Component{}, err
+			}
+			if previous, exists := component.Inputs[input.Name]; exists {
+				return Component{}, fmt.Errorf("%s:%d: duplicate component input %q; first defined at %s:%d", file, input.Source.Line, input.Name, previous.Source.File, previous.Source.Line)
+			}
+			component.Inputs[input.Name] = input
+		case "source":
+			sourceBlock, err := parseComponentSourceBlock(file, source.Path, child, ctx)
+			if err != nil {
+				return Component{}, err
+			}
+			if previous, exists := component.Sources[sourceBlock.Architecture]; exists {
+				return Component{}, fmt.Errorf("%s:%d: duplicate component source %q; first defined at %s:%d", file, sourceBlock.Source.Line, sourceBlock.Architecture, previous.Source.File, previous.Source.Line)
+			}
+			component.Sources[sourceBlock.Architecture] = sourceBlock
+		case "extract":
+			if component.Extract != nil {
+				return Component{}, fmt.Errorf("%s:%d: duplicate %s.extract block", file, child.TypeRange.Start.Line, source.Path)
+			}
+			extract, err := parseComponentExtractBlock(file, source.Path, child, ctx)
+			if err != nil {
+				return Component{}, err
+			}
+			component.Extract = &extract
+		case "install":
+			if component.Install != nil {
+				return Component{}, fmt.Errorf("%s:%d: duplicate %s.install block", file, child.TypeRange.Start.Line, source.Path)
+			}
+			install, err := parseComponentInstallBlock(file, source.Path, child, ctx)
+			if err != nil {
+				return Component{}, err
+			}
+			component.Install = &install
 		}
-		input, err := parseComponentInputBlock(file, source.Path, child, ctx)
-		if err != nil {
-			return Component{}, err
-		}
-		if previous, exists := component.Inputs[input.Name]; exists {
-			return Component{}, fmt.Errorf("%s:%d: duplicate component input %q; first defined at %s:%d", file, input.Source.Line, input.Name, previous.Source.File, previous.Source.Line)
-		}
-		component.Inputs[input.Name] = input
 	}
 	return component, nil
+}
+
+func parseComponentSourceBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentArtifactSource, error) {
+	if len(block.Labels) > 1 {
+		return ComponentArtifactSource{}, fmt.Errorf("%s:%d: component source block accepts at most one architecture label", file, block.TypeRange.Start.Line)
+	}
+	architecture := ""
+	path := componentPath + ".source"
+	if len(block.Labels) == 1 {
+		architecture = block.Labels[0]
+		path = fmt.Sprintf("%s.source[%s]", componentPath, strconv.Quote(architecture))
+	}
+	if len(block.Body.Blocks) != 0 {
+		return ComponentArtifactSource{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	source := ComponentArtifactSource{Architecture: architecture, Source: ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}}
+	for name, attr := range block.Body.Attributes {
+		switch name {
+		case "url":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactSource{}, err
+			}
+			source.URL = value
+		case "sha256":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactSource{}, err
+			}
+			source.SHA256 = value
+		default:
+			return ComponentArtifactSource{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	return source, nil
+}
+
+func parseComponentExtractBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentArtifactExtract, error) {
+	path := componentPath + ".extract"
+	if len(block.Labels) != 0 {
+		return ComponentArtifactExtract{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return ComponentArtifactExtract{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	extract := ComponentArtifactExtract{Source: ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}}
+	for name, attr := range block.Body.Attributes {
+		switch name {
+		case "format":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactExtract{}, err
+			}
+			extract.Format = value
+		case "strip_components":
+			value, err := parseIntAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactExtract{}, err
+			}
+			extract.StripComponents = value
+		case "include":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactExtract{}, err
+			}
+			extract.Include = value
+		default:
+			return ComponentArtifactExtract{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	return extract, nil
+}
+
+func parseComponentInstallBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentArtifactInstall, error) {
+	path := componentPath + ".install"
+	if len(block.Labels) != 0 {
+		return ComponentArtifactInstall{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return ComponentArtifactInstall{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	install := ComponentArtifactInstall{Source: ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}}
+	for name, attr := range block.Body.Attributes {
+		switch name {
+		case "path":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactInstall{}, err
+			}
+			install.Path = value
+		case "owner":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactInstall{}, err
+			}
+			install.Owner = value
+		case "group":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactInstall{}, err
+			}
+			install.Group = value
+		case "mode":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactInstall{}, err
+			}
+			install.Mode = value
+		default:
+			return ComponentArtifactInstall{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	return install, nil
+}
+
+func parseStringAttribute(file, path string, attr *hclsyntax.Attribute, ctx EvalContext) (string, error) {
+	source := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path}
+	value, err := evalValue(attr.Expr, ctx, source)
+	if err != nil {
+		return "", fmt.Errorf("%s:%d: %s: %w", file, source.Line, path, err)
+	}
+	str, ok := value.StringValue()
+	if !ok {
+		return "", fmt.Errorf("%s:%d: %s must be a string", file, source.Line, path)
+	}
+	return str, nil
+}
+
+func parseIntAttribute(file, path string, attr *hclsyntax.Attribute, ctx EvalContext) (int, error) {
+	source := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path}
+	value, err := evalValue(attr.Expr, ctx, source)
+	if err != nil {
+		return 0, fmt.Errorf("%s:%d: %s: %w", file, source.Line, path, err)
+	}
+	str, ok := value.StringValue()
+	if !ok {
+		return 0, fmt.Errorf("%s:%d: %s must be an integer", file, source.Line, path)
+	}
+	n, err := strconv.Atoi(str)
+	if err != nil {
+		return 0, fmt.Errorf("%s:%d: %s must be an integer", file, source.Line, path)
+	}
+	return n, nil
 }
 
 func parseLabeledHeader(file, typ string, block *hclsyntax.Block) (ir.SourceRef, string, error) {
@@ -479,7 +695,7 @@ func ParseComponentBody(component Component, ctx EvalContext) (Value, error) {
 	for name, attr := range component.Body.Attributes {
 		switch name {
 		case "type", "version":
-			return Value{}, fmt.Errorf("%s:%d: %s.%s artifact attributes are not implemented yet", attr.NameRange.Filename, attr.NameRange.Start.Line, component.Source.Path, name)
+			continue
 		default:
 			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", attr.NameRange.Filename, attr.NameRange.Start.Line, component.Source.Path, name)
 		}
@@ -488,6 +704,8 @@ func ParseComponentBody(component Component, ctx EvalContext) (Value, error) {
 	for _, block := range component.Body.Blocks {
 		switch block.Type {
 		case "input":
+			continue
+		case "source", "extract", "install":
 			continue
 		case "apt", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services":
 			if len(block.Labels) != 0 {
@@ -501,8 +719,6 @@ func ParseComponentBody(component Component, ctx EvalContext) (Value, error) {
 				return Value{}, err
 			}
 			values[block.Type] = value
-		case "source", "extract", "install":
-			return Value{}, fmt.Errorf("%s:%d: component %s block is not implemented yet", component.Source.File, block.TypeRange.Start.Line, block.Type)
 		default:
 			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", component.Source.File, block.TypeRange.Start.Line, component.Source.Path, block.Type)
 		}

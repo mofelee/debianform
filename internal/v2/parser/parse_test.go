@@ -210,6 +210,52 @@ host "web1" {
 	}
 }
 
+func TestParseComponentArtifact(t *testing.T) {
+	file := writeConfig(t, `
+component "rclone" {
+  type    = "binary"
+  version = "1.66.0"
+
+  source "amd64" {
+    url    = "https://downloads.example/rclone-amd64.zip"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  extract {
+    format           = "zip"
+    strip_components = 1
+    include          = "rclone"
+  }
+
+  install {
+    path = "/usr/local/bin/rclone"
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	component := cfg.Components["rclone"]
+	if component.Type != "binary" || component.Version != "1.66.0" {
+		t.Fatalf("component artifact attrs = %#v", component)
+	}
+	source := component.Sources["amd64"]
+	if source.URL != "https://downloads.example/rclone-amd64.zip" {
+		t.Fatalf("source url = %q", source.URL)
+	}
+	if source.Source.Path != `component.rclone.source["amd64"]` {
+		t.Fatalf("source path = %q", source.Source.Path)
+	}
+	if component.Extract == nil || component.Extract.StripComponents != 1 || component.Extract.Include != "rclone" {
+		t.Fatalf("extract = %#v", component.Extract)
+	}
+	if component.Install == nil || component.Install.Path != "/usr/local/bin/rclone" {
+		t.Fatalf("install = %#v", component.Install)
+	}
+}
+
 func TestParseLifecycleBlock(t *testing.T) {
 	file := writeConfig(t, `
 host "web1" {

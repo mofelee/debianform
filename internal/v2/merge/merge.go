@@ -169,6 +169,9 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 		if err != nil {
 			return nil, err
 		}
+		if err := applyComponentArtifact(&component, template, target); err != nil {
+			return nil, err
+		}
 		component.Template = template.Name
 		component.InputValues = inputJSON
 		out = append(out, component)
@@ -244,6 +247,157 @@ func validateComponentInputType(input parser.ComponentInput, value parser.Value)
 		return fmt.Errorf("%s:%d:%s: unsupported component input type %q", input.Source.File, input.Source.Line, input.Source.Path, input.Type)
 	}
 	return nil
+}
+
+func applyComponentArtifact(spec *ir.ComponentInstanceSpec, template parser.Component, target ir.HostSpec) error {
+	if template.Type == "" && template.Version == "" && len(template.Sources) == 0 && template.Extract == nil && template.Install == nil {
+		return nil
+	}
+	if template.Type == "" {
+		return fmt.Errorf("%s:%d:%s.type: component artifact type is required when source, extract, install, or version is declared", template.Source.File, template.Source.Line, template.Source.Path)
+	}
+	if template.Type != "binary" {
+		return fmt.Errorf("%s:%d:%s.type: component artifact type %q is not supported yet", template.Source.File, template.Source.Line, template.Source.Path, template.Type)
+	}
+	source, err := selectComponentArtifactSource(template, target)
+	if err != nil {
+		return err
+	}
+	spec.ArtifactType = template.Type
+	spec.Version = template.Version
+	spec.SelectedSource = &ir.ComponentArtifactSourceSpec{
+		Architecture: source.Architecture,
+		URL:          source.URL,
+		SHA256:       strings.ToLower(source.SHA256),
+		Source:       source.Source,
+	}
+	if template.Extract != nil {
+		extract, err := componentArtifactExtractSpec(*template.Extract, source)
+		if err != nil {
+			return err
+		}
+		spec.Extract = extract
+	}
+	install, err := componentArtifactInstallSpec(template)
+	if err != nil {
+		return err
+	}
+	spec.Install = install
+	return nil
+}
+
+func selectComponentArtifactSource(template parser.Component, target ir.HostSpec) (parser.ComponentArtifactSource, error) {
+	if len(template.Sources) == 0 {
+		return parser.ComponentArtifactSource{}, fmt.Errorf("%s:%d:%s.source: binary component requires at least one source block", template.Source.File, template.Source.Line, template.Source.Path)
+	}
+	independent, hasIndependent := template.Sources[""]
+	if hasIndependent {
+		if len(template.Sources) != 1 {
+			return parser.ComponentArtifactSource{}, fmt.Errorf("%s:%d:%s.source: cannot mix unlabeled and architecture-labeled source blocks", independent.Source.File, independent.Source.Line, independent.Source.Path)
+		}
+		if err := validateComponentArtifactSource(independent); err != nil {
+			return parser.ComponentArtifactSource{}, err
+		}
+		return independent, nil
+	}
+	architecture := target.System.Architecture
+	if architecture == "" {
+		return parser.ComponentArtifactSource{}, fmt.Errorf("%s:%d:%s: host %q must declare system.architecture to select a component source", target.Source.File, target.Source.Line, target.Source.Path, target.Name)
+	}
+	source, ok := template.Sources[architecture]
+	if !ok {
+		return parser.ComponentArtifactSource{}, fmt.Errorf("%s:%d:%s: component.%s has no source for host %q architecture %q", template.Source.File, template.Source.Line, template.Source.Path, template.Name, target.Name, architecture)
+	}
+	if err := validateComponentArtifactSource(source); err != nil {
+		return parser.ComponentArtifactSource{}, err
+	}
+	return source, nil
+}
+
+func validateComponentArtifactSource(source parser.ComponentArtifactSource) error {
+	if source.URL == "" {
+		return fmt.Errorf("%s:%d:%s.url: source url must be non-empty", source.Source.File, source.Source.Line, source.Source.Path)
+	}
+	if source.SHA256 == "" {
+		return fmt.Errorf("%s:%d:%s.sha256: source url requires sha256", source.Source.File, source.Source.Line, source.Source.Path)
+	}
+	if !sha256Pattern.MatchString(source.SHA256) {
+		return fmt.Errorf("%s:%d:%s.sha256: sha256 must be a 64 character hex string", source.Source.File, source.Source.Line, source.Source.Path)
+	}
+	return nil
+}
+
+func componentArtifactExtractSpec(extract parser.ComponentArtifactExtract, source parser.ComponentArtifactSource) (*ir.ComponentArtifactExtractSpec, error) {
+	format := extract.Format
+	if format == "" {
+		format = inferArtifactFormat(source.URL)
+	}
+	if format == "" {
+		return nil, fmt.Errorf("%s:%d:%s.format: extract format is required when it cannot be inferred from source url", extract.Source.File, extract.Source.Line, extract.Source.Path)
+	}
+	if format != "zip" {
+		return nil, fmt.Errorf("%s:%d:%s.format: only zip extract is supported for binary components", extract.Source.File, extract.Source.Line, extract.Source.Path)
+	}
+	if extract.StripComponents < 0 {
+		return nil, fmt.Errorf("%s:%d:%s.strip_components: strip_components must be greater than or equal to 0", extract.Source.File, extract.Source.Line, extract.Source.Path)
+	}
+	if extract.Include == "" {
+		return nil, fmt.Errorf("%s:%d:%s.include: binary extract requires include", extract.Source.File, extract.Source.Line, extract.Source.Path)
+	}
+	return &ir.ComponentArtifactExtractSpec{
+		Format:          format,
+		StripComponents: extract.StripComponents,
+		Include:         extract.Include,
+		Source:          extract.Source,
+	}, nil
+}
+
+func componentArtifactInstallSpec(template parser.Component) (*ir.ComponentArtifactInstallSpec, error) {
+	if template.Install == nil {
+		return nil, fmt.Errorf("%s:%d:%s.install: binary component requires an install block", template.Source.File, template.Source.Line, template.Source.Path)
+	}
+	install := *template.Install
+	if install.Path == "" {
+		return nil, fmt.Errorf("%s:%d:%s.path: install path must be non-empty", install.Source.File, install.Source.Line, install.Source.Path)
+	}
+	if !filepath.IsAbs(install.Path) {
+		return nil, fmt.Errorf("%s:%d:%s.path: install path must be absolute", install.Source.File, install.Source.Line, install.Source.Path)
+	}
+	owner := install.Owner
+	if owner == "" {
+		owner = "root"
+	}
+	group := install.Group
+	if group == "" {
+		group = "root"
+	}
+	mode := install.Mode
+	if mode == "" {
+		mode = "0755"
+	}
+	if !modePattern.MatchString(mode) {
+		return nil, fmt.Errorf("%s:%d:%s.mode: mode must be a four digit octal string", install.Source.File, install.Source.Line, install.Source.Path)
+	}
+	return &ir.ComponentArtifactInstallSpec{
+		Path:   install.Path,
+		Owner:  owner,
+		Group:  group,
+		Mode:   mode,
+		Source: install.Source,
+	}, nil
+}
+
+func inferArtifactFormat(sourceURL string) string {
+	base := sourceURL
+	if i := strings.IndexAny(base, "?#"); i >= 0 {
+		base = base[:i]
+	}
+	switch {
+	case strings.HasSuffix(strings.ToLower(base), ".zip"):
+		return "zip"
+	default:
+		return ""
+	}
 }
 
 func parserValueToAny(value parser.Value) any {
@@ -1569,6 +1723,19 @@ func validateHostSpec(spec ir.HostSpec) error {
 	}
 
 	for _, component := range spec.Components {
+		if component.Install != nil {
+			path := component.Install.Path
+			if previous, exists := files[path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q binary path %q conflicts with file declared at %s:%d:%s", component.Install.Source.File, component.Install.Source.Line, component.Install.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)
+			}
+			if previous, exists := secrets[path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q binary path %q conflicts with secret declared at %s:%d:%s", component.Install.Source.File, component.Install.Source.Line, component.Install.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)
+			}
+			if previous, exists := directories[path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q binary path %q conflicts with directory declared at %s:%d:%s", component.Install.Source.File, component.Install.Source.Line, component.Install.Source.Path, component.Name, path, previous.Source.File, previous.Source.Line, previous.Source.Path)
+			}
+			files[path] = component.Install.Source
+		}
 		for path, file := range component.Files.Files {
 			if previous, exists := files[path]; exists {
 				return fmt.Errorf("%s:%d:%s: component %q file path %q conflicts with file declared at %s:%d:%s", file.Source.File, file.Source.Line, file.Source.Path, component.Name, path, previous.File, previous.Line, previous.Path)

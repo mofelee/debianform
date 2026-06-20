@@ -100,6 +100,22 @@ func TestCompileBIRD2ResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileComponentBinaryResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-component-binary.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-component-binary.golden.json", got)
+
+	installDeps := dependsOnFor(resourceGraph, `host.tool1.components.rclone.artifact.install["/usr/local/bin/rclone"]`)
+	if !containsString(installDeps, `host.tool1.components.rclone.artifact.download["amd64"]`) {
+		t.Fatalf("rclone install deps = %#v, want artifact download", installDeps)
+	}
+}
+
 func TestCompileServiceRestartOperation(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {

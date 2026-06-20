@@ -1,8 +1,9 @@
-# DebianForm v2 binary component 设计示例。
+# DebianForm v2 binary component 示例。
 #
-# v2 编译器尚未接入当前 CLI；本文件是设计夹具。
+# 本文件进入 validate/plan golden 测试；真实 apply 前需要把 sha256 换成
+# 上游下载物的真实 digest。
 #
-# 设计边界：
+# 行为边界：
 # - component 封装 artifact source、extract 和 install。
 # - source 按 target.system.architecture 选择。
 # - 下载必须先校验，再解压/安装，失败不能触碰目标路径。
@@ -13,12 +14,12 @@ component "rclone" {
 
   source "amd64" {
     url    = "https://downloads.rclone.org/v1.66.0/rclone-v1.66.0-linux-amd64.zip"
-    sha256 = "REPLACE_WITH_RCLONE_AMD64_SHA256"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   }
 
   source "arm64" {
     url    = "https://downloads.rclone.org/v1.66.0/rclone-v1.66.0-linux-arm64.zip"
-    sha256 = "REPLACE_WITH_RCLONE_ARM64_SHA256"
+    sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
   }
 
   extract {
@@ -53,5 +54,5 @@ host "tool1" {
 
 # 预期资源图：
 #
-# host.tool1.components.rclone.download["amd64"]
-#   -> host.tool1.components.rclone.install["/usr/local/bin/rclone"]
+# host.tool1.components.rclone.artifact.download["amd64"]
+#   -> host.tool1.components.rclone.artifact.install["/usr/local/bin/rclone"]

@@ -130,6 +130,113 @@ func TestNativeProviderAPTSigningKeyURL(t *testing.T) {
 	}
 }
 
+func TestNativeProviderComponentDownloadURL(t *testing.T) {
+	node := graph.Node{
+		Address: "host.server1.components.rclone.artifact.download[\"amd64\"]",
+		Host:    "server1",
+		Kind:    "component_download",
+		Desired: map[string]any{
+			"path":   "/var/cache/debianform/components/rclone/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/source",
+			"url":    "https://downloads.example/rclone.zip",
+			"sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"owner":  "root",
+			"group":  "root",
+			"mode":   "0644",
+			"ensure": "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "missing\n"}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing component download action = %q, want create", got.Action)
+	}
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[len(runner.scripts)-1]
+	for _, want := range []string{
+		"curl -fsSL 'https://downloads.example/rclone.zip'",
+		"sha256sum --check --status",
+		"install -o 'root' -g 'root' -m '0644'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("component download apply script missing %q:\n%s", want, applied)
+		}
+	}
+}
+
+func TestNativeProviderComponentBinaryZipInstall(t *testing.T) {
+	installedSHA := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	node := graph.Node{
+		Address: "host.server1.components.rclone.artifact.install[\"/usr/local/bin/rclone\"]",
+		Host:    "server1",
+		Kind:    "component_binary",
+		Desired: map[string]any{
+			"path":             "/usr/local/bin/rclone",
+			"cache_path":       "/var/cache/debianform/components/rclone/source",
+			"extract_format":   "zip",
+			"strip_components": 1,
+			"include":          "rclone",
+			"owner":            "root",
+			"group":            "root",
+			"mode":             "0755",
+			"ensure":           "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{
+		{Stdout: "missing\n"},
+		{},
+		{Stdout: "file\nroot\nroot\n755\n" + installedSHA + "\n"},
+	}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing component binary action = %q, want create", got.Action)
+	}
+	observed, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observed["sha256"] != installedSHA {
+		t.Fatalf("observed sha256 = %#v, want %s", observed["sha256"], installedSHA)
+	}
+	applied := runner.scripts[len(runner.scripts)-2]
+	for _, want := range []string{
+		"unzip -q '/var/cache/debianform/components/rclone/source'",
+		"include='rclone'",
+		"strip_components='1'",
+		"install -o 'root' -g 'root' -m '0755'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("component binary apply script missing %q:\n%s", want, applied)
+		}
+	}
+
+	prior := &v2state.Resource{
+		DesiredDigest: v2state.DesiredDigest(node.Desired),
+		Ownership:     "managed",
+		Observed:      map[string]any{"sha256": installedSHA},
+	}
+	runner = &recordingRunner{outputs: []Result{{Stdout: "file\nroot\nroot\n755\n" + installedSHA + "\n"}}}
+	provider = NewNativeProvider(runner)
+	got, err = provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionNoOp {
+		t.Fatalf("managed matching component binary action = %q, want no-op", got.Action)
+	}
+}
+
 func TestSSHRunnerExpandsHomeIdentityFile(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

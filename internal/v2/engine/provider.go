@@ -31,6 +31,10 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2stat
 		return p.planFileLike(ctx, node, prior)
 	case "apt_signing_key":
 		return p.planAPTSigningKey(ctx, node, prior)
+	case "component_download":
+		return p.planComponentDownload(ctx, node, prior)
+	case "component_binary":
+		return p.planComponentBinary(ctx, node, prior)
 	case "directory":
 		return p.planDirectory(ctx, node, prior)
 	case "package":
@@ -60,6 +64,10 @@ func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, e
 		return p.applyFileLike(ctx, step, true)
 	case "apt_signing_key":
 		return p.applyAPTSigningKey(ctx, step)
+	case "component_download":
+		return p.applyComponentDownload(ctx, step)
+	case "component_binary":
+		return p.applyComponentBinary(ctx, step)
 	case "directory":
 		return p.applyDirectory(ctx, step)
 	case "package":
@@ -88,7 +96,7 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 	desired := step.Prior.Desired
 	host := step.Prior.Host
 	switch step.Prior.Kind {
-	case "file", "secret", "apt_signing_key":
+	case "file", "secret", "apt_signing_key", "component_download", "component_binary":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), false)
 	case "systemd_unit":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), true)
@@ -299,6 +307,191 @@ func (p NativeProvider) applyAPTSigningKey(ctx context.Context, step Step) (map[
 		return nil, err
 	}
 	return map[string]any{"exists": true, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planComponentDownload(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	path := stringDesired(node, "path")
+	current, err := p.readPath(ctx, node.Host, path)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	if ensureAbsent(node) {
+		if current.Exists {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove component source " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent component source "+path, observed), nil
+	}
+	wantSHA := strings.ToLower(stringDesired(node, "sha256"))
+	if wantSHA == "" || stringDesired(node, "url") == "" {
+		return ProviderPlan{}, fmt.Errorf("%s component download requires url and sha256", node.Address)
+	}
+	if !current.Exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "download component source " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if current.IsDir ||
+		current.SHA256 != wantSHA ||
+		current.Owner != stringDesired(node, "owner") ||
+		current.Group != stringDesired(node, "group") ||
+		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update component source " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for component source "+path, observed), nil
+}
+
+func (p NativeProvider) applyComponentDownload(ctx context.Context, step Step) (map[string]any, error) {
+	path := stringDesired(step.Node, "path")
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		if err := p.removePath(ctx, step.Node.Host, path, false); err != nil {
+			return nil, err
+		}
+		return map[string]any{"exists": false}, nil
+	}
+	url := stringDesired(step.Node, "url")
+	sha := strings.ToLower(stringDesired(step.Node, "sha256"))
+	if url == "" || sha == "" {
+		return nil, fmt.Errorf("%s component download requires url and sha256", step.Address)
+	}
+	tmp := path + ".dbf-tmp"
+	lines := []string{
+		"set -eu",
+		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
+		"if ! command -v curl >/dev/null 2>&1; then",
+		"  export DEBIAN_FRONTEND=noninteractive",
+		"  apt-get update",
+		"  apt-get install -y ca-certificates curl",
+		"fi",
+		"curl -fsSL " + shellQuote(url) + " -o " + shellQuote(tmp),
+		"printf '%s  %s\\n' " + shellQuote(sha) + " " + shellQuote(tmp) + " | sha256sum --check --status",
+		"install -o " + shellQuote(stringDesired(step.Node, "owner")) +
+			" -g " + shellQuote(stringDesired(step.Node, "group")) +
+			" -m " + shellQuote(stringDesired(step.Node, "mode")) +
+			" " + shellQuote(tmp) + " " + shellQuote(path),
+		"rm -f -- " + shellQuote(tmp),
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"exists": true, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planComponentBinary(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	path := stringDesired(node, "path")
+	current, err := p.readPath(ctx, node.Host, path)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	if ensureAbsent(node) {
+		if current.Exists {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove component binary " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent component binary "+path, observed), nil
+	}
+	if !current.Exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "install component binary " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if current.IsDir ||
+		current.Owner != stringDesired(node, "owner") ||
+		current.Group != stringDesired(node, "group") ||
+		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update component binary " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	desiredDigest := v2state.DesiredDigest(node.Desired)
+	priorSHA := ""
+	if prior != nil {
+		priorSHA = stringMapValue(prior.Observed, "sha256")
+	}
+	if prior == nil || prior.DesiredDigest != desiredDigest || priorSHA == "" || priorSHA != current.SHA256 {
+		return ProviderPlan{Action: ActionUpdate, Summary: "reinstall component binary " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	observed["desired_digest"] = desiredDigest
+	return ProviderPlan{Action: ActionNoOp, Summary: "no changes for component binary " + path, Observed: observed, Ownership: ownership(prior)}, nil
+}
+
+func (p NativeProvider) applyComponentBinary(ctx context.Context, step Step) (map[string]any, error) {
+	path := stringDesired(step.Node, "path")
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		if err := p.removePath(ctx, step.Node.Host, path, false); err != nil {
+			return nil, err
+		}
+		return map[string]any{"exists": false}, nil
+	}
+	cachePath := stringDesired(step.Node, "cache_path")
+	if cachePath == "" {
+		return nil, fmt.Errorf("%s component binary requires cache_path", step.Address)
+	}
+	lines := []string{
+		"set -eu",
+		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
+	}
+	if format := stringDesired(step.Node, "extract_format"); format != "" {
+		if format != "zip" {
+			return nil, fmt.Errorf("%s unsupported component binary extract format %q", step.Address, format)
+		}
+		lines = append(lines, componentBinaryZipInstallScript(step.Node)...)
+	} else {
+		lines = append(lines,
+			"install -o "+shellQuote(stringDesired(step.Node, "owner"))+
+				" -g "+shellQuote(stringDesired(step.Node, "group"))+
+				" -m "+shellQuote(stringDesired(step.Node, "mode"))+
+				" "+shellQuote(cachePath)+" "+shellQuote(path),
+		)
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	current, err := p.readPath(ctx, step.Node.Host, path)
+	if err != nil {
+		return nil, err
+	}
+	observed := current.observed()
+	observed["desired_digest"] = v2state.DesiredDigest(step.Node.Desired)
+	return observed, nil
+}
+
+func componentBinaryZipInstallScript(node graph.Node) []string {
+	cachePath := stringDesired(node, "cache_path")
+	path := stringDesired(node, "path")
+	include := stringDesired(node, "include")
+	stripComponents := fmt.Sprintf("%v", node.Desired["strip_components"])
+	if stripComponents == "" || stripComponents == "<nil>" {
+		stripComponents = "0"
+	}
+	return []string{
+		"if ! command -v unzip >/dev/null 2>&1; then",
+		"  export DEBIAN_FRONTEND=noninteractive",
+		"  apt-get update",
+		"  apt-get install -y unzip",
+		"fi",
+		"work=$(mktemp -d)",
+		"trap 'rm -rf -- \"$work\"' EXIT",
+		"unzip -q " + shellQuote(cachePath) + " -d \"$work\"",
+		"include=" + shellQuote(include),
+		"strip_components=" + shellQuote(stripComponents),
+		"matches=\"$work/.dbf-matches\"",
+		": > \"$matches\"",
+		"find \"$work\" -type f | sort > \"$work/.dbf-files\"",
+		"while IFS= read -r file; do",
+		"  rel=${file#\"$work\"/}",
+		"  stripped=$rel",
+		"  i=0",
+		"  while [ \"$i\" -lt \"$strip_components\" ]; do",
+		"    case \"$stripped\" in */*) stripped=${stripped#*/} ;; *) stripped= ;; esac",
+		"    i=$((i + 1))",
+		"  done",
+		"  if [ \"$stripped\" = \"$include\" ]; then printf '%s\\n' \"$file\" >> \"$matches\"; fi",
+		"done < \"$work/.dbf-files\"",
+		"count=$(wc -l < \"$matches\" | tr -d ' ')",
+		"if [ \"$count\" != 1 ]; then echo \"component binary include matched $count files: $include\" >&2; exit 1; fi",
+		"src=$(sed -n '1p' \"$matches\")",
+		"install -o " + shellQuote(stringDesired(node, "owner")) +
+			" -g " + shellQuote(stringDesired(node, "group")) +
+			" -m " + shellQuote(stringDesired(node, "mode")) +
+			" \"$src\" " + shellQuote(path),
+	}
 }
 
 func (p NativeProvider) planDirectory(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {

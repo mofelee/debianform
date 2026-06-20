@@ -239,17 +239,44 @@ type ContentSummary struct {
 }
 
 type ComponentInstanceSpec struct {
-	Name        string         `json:"name"`
-	Template    string         `json:"template"`
-	InputValues map[string]any `json:"input_values,omitempty"`
-	APT         APTSpec        `json:"apt"`
-	Packages    PackageSpec    `json:"packages"`
-	Files       FileSpec       `json:"files"`
-	Secrets     SecretSpec     `json:"secrets"`
-	Directories DirectorySpec  `json:"directories"`
-	Groups      GroupSpec      `json:"groups"`
-	Users       UserSpec       `json:"users"`
-	Systemd     SystemdSpec    `json:"systemd"`
-	Services    ServiceSpec    `json:"services"`
-	Source      SourceRef      `json:"source,omitempty"`
+	Name           string                        `json:"name"`
+	Template       string                        `json:"template"`
+	InputValues    map[string]any                `json:"input_values,omitempty"`
+	ArtifactType   string                        `json:"artifact_type,omitempty"`
+	Version        string                        `json:"version,omitempty"`
+	SelectedSource *ComponentArtifactSourceSpec  `json:"selected_source,omitempty"`
+	Extract        *ComponentArtifactExtractSpec `json:"extract,omitempty"`
+	Install        *ComponentArtifactInstallSpec `json:"install,omitempty"`
+	APT            APTSpec                       `json:"apt"`
+	Packages       PackageSpec                   `json:"packages"`
+	Files          FileSpec                      `json:"files"`
+	Secrets        SecretSpec                    `json:"secrets"`
+	Directories    DirectorySpec                 `json:"directories"`
+	Groups         GroupSpec                     `json:"groups"`
+	Users          UserSpec                      `json:"users"`
+	Systemd        SystemdSpec                   `json:"systemd"`
+	Services       ServiceSpec                   `json:"services"`
+	Source         SourceRef                     `json:"source,omitempty"`
+}
+
+type ComponentArtifactSourceSpec struct {
+	Architecture string    `json:"architecture,omitempty"`
+	URL          string    `json:"url"`
+	SHA256       string    `json:"sha256"`
+	Source       SourceRef `json:"source,omitempty"`
+}
+
+type ComponentArtifactExtractSpec struct {
+	Format          string    `json:"format"`
+	StripComponents int       `json:"strip_components,omitempty"`
+	Include         string    `json:"include,omitempty"`
+	Source          SourceRef `json:"source,omitempty"`
+}
+
+type ComponentArtifactInstallSpec struct {
+	Path   string    `json:"path"`
+	Owner  string    `json:"owner"`
+	Group  string    `json:"group"`
+	Mode   string    `json:"mode"`
+	Source SourceRef `json:"source,omitempty"`
 }

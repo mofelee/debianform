@@ -354,6 +354,75 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 	}
 
+	for _, component := range host.Components {
+		if component.ArtifactType != "binary" || component.SelectedSource == nil || component.Install == nil {
+			continue
+		}
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		sourceLabel := componentArtifactSourceLabel(*component.SelectedSource)
+		cachePath := componentArtifactCachePath(component)
+		downloadAddress := fmt.Sprintf("%s.artifact.download[%s]", componentPrefix, strconv.Quote(sourceLabel))
+		downloadDesired := map[string]any{
+			"component":    component.Name,
+			"type":         component.ArtifactType,
+			"version":      component.Version,
+			"architecture": component.SelectedSource.Architecture,
+			"url":          component.SelectedSource.URL,
+			"sha256":       component.SelectedSource.SHA256,
+			"path":         cachePath,
+			"owner":        "root",
+			"group":        "root",
+			"mode":         "0644",
+			"ensure":       "present",
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         downloadAddress,
+			Kind:            "component_download",
+			Summary:         "download component " + component.Name + " source",
+			Source:          component.SelectedSource.Source,
+			Desired:         downloadDesired,
+			ProviderType:    "component_download",
+			ProviderAddress: "component_download." + providerName(host.Name, component.Name, sourceLabel),
+			ProviderPayload: downloadDesired,
+		})
+
+		installAddress := fmt.Sprintf("%s.artifact.install[%s]", componentPrefix, strconv.Quote(component.Install.Path))
+		installDesired := map[string]any{
+			"component":     component.Name,
+			"type":          component.ArtifactType,
+			"version":       component.Version,
+			"architecture":  component.SelectedSource.Architecture,
+			"source_url":    component.SelectedSource.URL,
+			"source_sha256": component.SelectedSource.SHA256,
+			"cache_path":    cachePath,
+			"path":          component.Install.Path,
+			"owner":         component.Install.Owner,
+			"group":         component.Install.Group,
+			"mode":          component.Install.Mode,
+			"ensure":        "present",
+		}
+		source := component.Install.Source
+		if component.Extract != nil {
+			installDesired["extract_format"] = component.Extract.Format
+			installDesired["strip_components"] = component.Extract.StripComponents
+			installDesired["include"] = component.Extract.Include
+			source = component.Extract.Source
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         installAddress,
+			Kind:            "component_binary",
+			Summary:         "install component " + component.Name + " binary " + component.Install.Path,
+			Source:          source,
+			Desired:         installDesired,
+			DependsOn:       []string{downloadAddress},
+			ProviderType:    "component_binary",
+			ProviderAddress: "component_binary." + providerName(host.Name, component.Name, component.Install.Path),
+			ProviderPayload: installDesired,
+		})
+	}
+
 	for _, path := range sortedKeys(host.Directories.Directories) {
 		item := host.Directories.Directories[path]
 		address := fmt.Sprintf("host.%s.directories.directory[%s]", host.Name, strconv.Quote(path))
@@ -705,6 +774,24 @@ func aptRepositorySourceContent(repo ir.APTRepositorySpec) string {
 		lines = append(lines, "Signed-By: "+repo.SigningKey.Path)
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func componentArtifactSourceLabel(source ir.ComponentArtifactSourceSpec) string {
+	if source.Architecture != "" {
+		return source.Architecture
+	}
+	return "default"
+}
+
+func componentArtifactCachePath(component ir.ComponentInstanceSpec) string {
+	if component.SelectedSource == nil {
+		return ""
+	}
+	name := providerName(component.Name)
+	if component.Template != "" && component.Template != component.Name {
+		name = providerName(component.Template, component.Name)
+	}
+	return "/var/cache/debianform/components/" + name + "/" + component.SelectedSource.SHA256 + "/source"
 }
 
 func sortedKeys[T any](values map[string]T) []string {
