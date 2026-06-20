@@ -221,7 +221,7 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext)
 
 	for _, block := range body.Blocks {
 		switch block.Type {
-		case "ssh", "state", "system", "kernel", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services":
+		case "ssh", "state", "system", "kernel", "packages", "apt", "files", "secrets", "directories", "groups", "users", "systemd", "services":
 			if len(block.Labels) != 0 {
 				return nil, Value{}, nil, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, block.Type)
 			}
@@ -317,17 +317,59 @@ func parseLabeledObjectBlock(file, domain, path string, block *hclsyntax.Block, 
 	}
 
 	for _, child := range block.Body.Blocks {
-		if child.Type != "lifecycle" {
+		switch child.Type {
+		case "lifecycle":
+			if _, exists := values["lifecycle"]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.lifecycle block", file, child.TypeRange.Start.Line, path)
+			}
+			lifecycle, err := parseLifecycleBlock(file, path+".lifecycle", child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values["lifecycle"] = lifecycle
+		case "signing_key":
+			if domain != "apt" || block.Type != "repository" {
+				return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if _, exists := values["signing_key"]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.signing_key block", file, child.TypeRange.Start.Line, path)
+			}
+			signingKey, err := parseSigningKeyBlock(file, path+".signing_key", child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values["signing_key"] = signingKey
+		default:
 			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
 		}
-		if _, exists := values["lifecycle"]; exists {
-			return Value{}, fmt.Errorf("%s:%d: duplicate %s.lifecycle block", file, child.TypeRange.Start.Line, path)
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseSigningKeyBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	if len(block.Labels) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	values := map[string]Value{}
+	for name, attr := range block.Body.Attributes {
+		switch name {
+		case "url", "content", "sha256", "path":
+		default:
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
 		}
-		lifecycle, err := parseLifecycleBlock(file, path+".lifecycle", child, ctx)
+		attrSource := ir.SourceRef{
+			File: file,
+			Line: attr.NameRange.Start.Line,
+			Path: path + "." + name,
+		}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
 		if err != nil {
-			return Value{}, err
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
 		}
-		values["lifecycle"] = lifecycle
+		values[name] = value
 	}
 	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
 }
@@ -408,7 +450,7 @@ func allowedDomainAttrs(domain string) map[string]struct{} {
 		return attrSet("modules", "sysctl")
 	case "packages":
 		return attrSet("install")
-	case "files", "secrets", "directories", "groups", "users", "systemd", "services":
+	case "apt", "files", "secrets", "directories", "groups", "users", "systemd", "services":
 		return attrSet()
 	default:
 		return map[string]struct{}{}
@@ -417,6 +459,8 @@ func allowedDomainAttrs(domain string) map[string]struct{} {
 
 func allowedDomainObjectBlocks(domain string) map[string]struct{} {
 	switch domain {
+	case "apt":
+		return attrSet("repository")
 	case "packages":
 		return attrSet("package")
 	case "files", "secrets":
@@ -438,6 +482,8 @@ func allowedDomainObjectBlocks(domain string) map[string]struct{} {
 
 func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struct{} {
 	switch domain + "." + blockType {
+	case "apt.repository":
+		return attrSet("uris", "suites", "components", "architectures", "ensure")
 	case "packages.package":
 		return attrSet("repositories")
 	case "files.file":

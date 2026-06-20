@@ -12,6 +12,7 @@ type HostSpec struct {
 	System      SystemSpec    `json:"system"`
 	Kernel      KernelSpec    `json:"kernel"`
 	Packages    PackageSpec   `json:"packages"`
+	APT         APTSpec       `json:"apt"`
 	Files       FileSpec      `json:"files"`
 	Secrets     SecretSpec    `json:"secrets"`
 	Directories DirectorySpec `json:"directories"`
@@ -86,6 +87,31 @@ type PackageItem struct {
 	Repositories []string       `json:"repositories,omitempty"`
 	Lifecycle    *LifecycleSpec `json:"lifecycle,omitempty"`
 	Source       SourceRef      `json:"source,omitempty"`
+}
+
+type APTSpec struct {
+	Repositories map[string]APTRepositorySpec `json:"repositories,omitempty"`
+	Source       SourceRef                    `json:"source,omitempty"`
+}
+
+type APTRepositorySpec struct {
+	Name          string             `json:"name"`
+	URIs          []string           `json:"uris"`
+	Suites        []string           `json:"suites"`
+	Components    []string           `json:"components"`
+	Architectures []string           `json:"architectures,omitempty"`
+	SigningKey    *APTSigningKeySpec `json:"signing_key,omitempty"`
+	Ensure        string             `json:"ensure"`
+	Lifecycle     *LifecycleSpec     `json:"lifecycle,omitempty"`
+	Source        SourceRef          `json:"source,omitempty"`
+}
+
+type APTSigningKeySpec struct {
+	URL     string    `json:"url,omitempty"`
+	Content string    `json:"content,omitempty"`
+	SHA256  string    `json:"sha256,omitempty"`
+	Path    string    `json:"path"`
+	Source  SourceRef `json:"source,omitempty"`
 }
 
 type FileSpec struct {

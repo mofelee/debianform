@@ -17,6 +17,7 @@ v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源
 - [v2 requirements](docs/v2-requirements.md)
 - [v2 IR requirements](docs/v2-ir-requirements.zh.md)
 - [v2 plan format](docs/v2-plan-format.md)
+- [v2 state](docs/v2-state.md)
 - [v2 implementation plan](docs/v2-implementation-plan.zh.md)
 
 ## v2 示例
@@ -25,6 +26,8 @@ v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源
 并可生成 plan：
 
 - `examples/v2-bbr.dbf.hcl`
+- `examples/v2-apt-repository.dbf.hcl`
+- `examples/v2-files-plan-preview.dbf.hcl`
 - `examples/v2-profile-merge.dbf.hcl`
 - `examples/v2-systemd-service.dbf.hcl`
 - `examples/v2-user-group.dbf.hcl`
@@ -32,7 +35,6 @@ v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源
 其他示例仍为 design-only fixture：
 
 - `examples/v2-fleet.dbf.hcl`
-- `examples/v2-apt-repository.dbf.hcl`
 - `examples/v2-bird2.dbf.hcl`
 - `examples/v2-component-binary.dbf.hcl`
 - `examples/v2-nftables.dbf.hcl`
@@ -63,10 +65,16 @@ Summary: 3 create, 0 update, 0 delete, 0 no-op, 0 operations
 dbf plan -f examples/v2-bbr.dbf.hcl --format json
 ```
 
+开发调试时可显式显示低阶 provider address：
+
+```bash
+dbf plan -f examples/v2-bbr.dbf.hcl --format json --debug
+```
+
 静态 HTML preview 可用：
 
 ```bash
-dbf plan -f examples/v2-bbr.dbf.hcl --html plan.html
+dbf plan -f examples/v2-files-plan-preview.dbf.hcl --html plan.html
 ```
 
 配置格式化会原地改写目标 HCL 文件：
@@ -74,6 +82,23 @@ dbf plan -f examples/v2-bbr.dbf.hcl --html plan.html
 ```bash
 dbf fmt -f examples/v2-bbr.dbf.hcl
 ```
+
+远端执行和 drift 检查：
+
+```bash
+dbf apply -f examples/v2-bbr.dbf.hcl --auto-approve
+dbf check -f examples/v2-bbr.dbf.hcl
+```
+
+`check` 在存在 create、update、delete、destroy 或 operation 时返回非零。
+
+多 host 配置可以限制 host 级并发：
+
+```bash
+dbf apply --parallel 4 --auto-approve
+```
+
+每台 host 内部仍按 ResourceGraph 的确定性顺序串行执行。
 
 基础系统配置示例：
 

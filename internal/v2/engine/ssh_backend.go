@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -14,13 +16,14 @@ import (
 )
 
 type SSHBackend struct {
-	Runner Runner
-	Owner  string
-	Now    func() time.Time
+	Runner   Runner
+	Owner    string
+	Now      func() time.Time
+	Warnings io.Writer
 }
 
 func NewSSHBackend(runner Runner) SSHBackend {
-	return SSHBackend{Runner: runner, Owner: "dbf"}
+	return SSHBackend{Runner: runner, Owner: "dbf", Warnings: os.Stderr}
 }
 
 func (b SSHBackend) Read(ctx context.Context, host ir.HostSpec) (v2state.State, error) {
@@ -120,8 +123,12 @@ __DBF_V2_LOCK__
   sleep 1
 done
 `, shellQuote(host.State.LockPath), shellQuote(lockDir), int(timeout.Seconds()), expiresAt.Unix(), owner, token, expiresAt.Format(time.RFC3339), expiresAt.Unix())
-	if _, err := b.Runner.Run(ctx, host.Name, script); err != nil {
+	result, err := b.Runner.Run(ctx, host.Name, script)
+	if err != nil {
 		return nil, err
+	}
+	if b.Warnings != nil && strings.TrimSpace(result.Stderr) != "" {
+		fmt.Fprintln(b.Warnings, strings.TrimSpace(result.Stderr))
 	}
 	return sshLock{backend: b, host: host, token: token}, nil
 }

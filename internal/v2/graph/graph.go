@@ -65,6 +65,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	operations := []Operation{}
 	moduleAddresses := map[string]string{}
 	packageAddresses := map[string]string{}
+	repositoryAddresses := map[string]string{}
+	repositoryTriggers := []string{}
 	groupAddresses := map[string]string{}
 	unitAddresses := map[string]string{}
 
@@ -118,9 +120,100 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		})
 	}
 
+	for _, name := range sortedKeys(host.APT.Repositories) {
+		item := host.APT.Repositories[name]
+		sourceAddress := fmt.Sprintf("host.%s.apt.repository[%s]", host.Name, strconv.Quote(name))
+		repositoryAddresses[name] = sourceAddress
+		sourcePath := aptRepositorySourcePath(name)
+		sourceDesired := map[string]any{
+			"name":   item.Name,
+			"path":   sourcePath,
+			"owner":  "root",
+			"group":  "root",
+			"mode":   "0644",
+			"ensure": item.Ensure,
+		}
+		var deps []string
+		if item.Ensure != "absent" {
+			sourceDesired["content"] = aptRepositorySourceContent(item)
+		}
+		if item.SigningKey != nil {
+			keyAddress := fmt.Sprintf("host.%s.apt.signing_key[%s]", host.Name, strconv.Quote(name))
+			keyDesired := map[string]any{
+				"name":   item.Name,
+				"path":   item.SigningKey.Path,
+				"owner":  "root",
+				"group":  "root",
+				"mode":   "0644",
+				"ensure": item.Ensure,
+			}
+			if item.SigningKey.URL != "" {
+				keyDesired["url"] = item.SigningKey.URL
+			}
+			if item.SigningKey.Content != "" {
+				keyDesired["content"] = item.SigningKey.Content
+			}
+			if item.SigningKey.SHA256 != "" {
+				keyDesired["sha256"] = item.SigningKey.SHA256
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         keyAddress,
+				Kind:            "apt_signing_key",
+				Summary:         "manage apt signing key " + item.Name,
+				Source:          item.SigningKey.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         keyDesired,
+				ProviderType:    "apt_signing_key",
+				ProviderAddress: "apt_signing_key." + providerName(host.Name, item.Name),
+				ProviderPayload: keyDesired,
+			})
+			deps = append(deps, keyAddress)
+			repositoryTriggers = append(repositoryTriggers, keyAddress)
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         sourceAddress,
+			Kind:            "file",
+			Summary:         "manage apt repository " + item.Name,
+			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
+			Desired:         sourceDesired,
+			DependsOn:       deps,
+			ProviderType:    "file",
+			ProviderAddress: "file." + providerName(host.Name, sourcePath),
+			ProviderPayload: sourceDesired,
+		})
+		repositoryTriggers = append(repositoryTriggers, sourceAddress)
+	}
+
+	aptCacheRefreshAddress := ""
+	if len(repositoryTriggers) > 0 {
+		aptCacheRefreshAddress = "host." + host.Name + ".apt.cache_refresh"
+		operations = append(operations, Operation{
+			Address:        aptCacheRefreshAddress,
+			Action:         "run",
+			Summary:        "refresh apt package cache",
+			DependsOn:      append([]string(nil), repositoryTriggers...),
+			TriggeredBy:    append([]string(nil), repositoryTriggers...),
+			CommandPreview: "apt-get update",
+			Source:         host.APT.Source,
+		})
+	}
+
 	for _, item := range host.Packages.Install {
 		address := fmt.Sprintf("host.%s.packages.install[%s]", host.Name, strconv.Quote(item.Name))
 		packageAddresses[item.Name] = address
+		deps := []string{}
+		for _, repository := range item.Repositories {
+			if repositoryAddress, ok := repositoryAddresses[repository]; ok {
+				deps = append(deps, repositoryAddress)
+			}
+		}
+		if len(deps) > 0 && aptCacheRefreshAddress != "" {
+			deps = append(deps, aptCacheRefreshAddress)
+		}
+		deps = dedupeStrings(deps)
 		desired := map[string]any{
 			"name":   item.Name,
 			"ensure": "present",
@@ -136,6 +229,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Source:          item.Source,
 			Lifecycle:       lifecyclePtr(item.Lifecycle),
 			Desired:         desired,
+			DependsOn:       deps,
 			ProviderType:    "package",
 			ProviderAddress: "package." + providerName(host.Name, item.Name),
 			ProviderPayload: desired,
@@ -415,6 +509,26 @@ func providerName(parts ...string) string {
 		return "resource"
 	}
 	return strings.ToLower(normalized)
+}
+
+func aptRepositorySourcePath(name string) string {
+	return "/etc/apt/sources.list.d/" + providerName(name) + ".sources"
+}
+
+func aptRepositorySourceContent(repo ir.APTRepositorySpec) string {
+	lines := []string{
+		"Types: deb",
+		"URIs: " + strings.Join(repo.URIs, " "),
+		"Suites: " + strings.Join(repo.Suites, " "),
+		"Components: " + strings.Join(repo.Components, " "),
+	}
+	if len(repo.Architectures) > 0 {
+		lines = append(lines, "Architectures: "+strings.Join(repo.Architectures, " "))
+	}
+	if repo.SigningKey != nil && repo.SigningKey.Path != "" {
+		lines = append(lines, "Signed-By: "+repo.SigningKey.Path)
+	}
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func sortedKeys[T any](values map[string]T) []string {

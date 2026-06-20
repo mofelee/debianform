@@ -121,6 +121,38 @@ func TestPlanV2BBRJSON(t *testing.T) {
 	}
 }
 
+func TestPlanV2BBRJSONDebug(t *testing.T) {
+	output := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--debug"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	var doc struct {
+		Changes []struct {
+			ProviderAddress string `json:"provider_address"`
+		} `json:"changes"`
+	}
+	if err := json.Unmarshal([]byte(output), &doc); err != nil {
+		t.Fatalf("debug plan JSON did not parse: %v\n%s", err, output)
+	}
+	if len(doc.Changes) == 0 || doc.Changes[0].ProviderAddress == "" {
+		t.Fatalf("debug plan does not contain provider addresses: %s", output)
+	}
+}
+
+func TestParallelFlagIsApplyOnlyAndPositive(t *testing.T) {
+	err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "2"})
+	if err == nil || !strings.Contains(err.Error(), "--parallel is only supported for v2 apply") {
+		t.Fatalf("plan --parallel error = %v", err)
+	}
+
+	err = run([]string{"apply", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "0", "--auto-approve"})
+	if err == nil || !strings.Contains(err.Error(), "--parallel must be at least 1") {
+		t.Fatalf("apply --parallel 0 error = %v", err)
+	}
+}
+
 func TestPlanV2BBRHTML(t *testing.T) {
 	dir := t.TempDir()
 	htmlPath := filepath.Join(dir, "plan.html")

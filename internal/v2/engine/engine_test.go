@@ -2,9 +2,11 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -98,6 +100,11 @@ func TestApplyWithMemoryProviderIsIdempotent(t *testing.T) {
 	if strings.Contains(string(data), "not-a-real-secret-token") {
 		t.Fatalf("state leaked secret content:\n%s", string(data))
 	}
+	for address, resource := range st.Resources {
+		if resource.ProviderAddress == "" {
+			t.Fatalf("state resource %s has no provider address", address)
+		}
+	}
 }
 
 func TestApplyPersistsOnlySuccessfulStepsOnFailure(t *testing.T) {
@@ -158,6 +165,121 @@ func TestApplyDestroysOrphanStateResource(t *testing.T) {
 	}
 	if _, ok := st.Resources[orphanAddress]; ok {
 		t.Fatalf("orphan still in state: %#v", st.Resources)
+	}
+}
+
+func TestApplyForgetsAdoptedOrphanWithoutDestroy(t *testing.T) {
+	program, _ := fixtureProgramAndGraph(t, "../../../examples/v2-bbr.dbf.hcl")
+	backend := NewMemoryBackend()
+	provider := NewMemoryProvider()
+	orphanAddress := `host.bbr1.packages.install["curl"]`
+	if err := backend.Write(context.Background(), program.Hosts[0], v2state.State{
+		Version: v2state.Version,
+		Host:    "bbr1",
+		Resources: map[string]v2state.Resource{
+			orphanAddress: {
+				Host:          "bbr1",
+				Kind:          "package",
+				Ownership:     "adopted",
+				DesiredDigest: "old",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	plan, err := engine.Apply(context.Background(), program, &graph.ResourceGraph{}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Steps) != 1 || plan.Steps[0].Action != ActionForget {
+		t.Fatalf("plan steps = %#v, want forget", plan.Steps)
+	}
+	if len(provider.Destroyed) != 0 {
+		t.Fatalf("destroyed = %#v, want no remote destroy", provider.Destroyed)
+	}
+	st, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.Resources[orphanAddress]; ok {
+		t.Fatalf("adopted orphan still in state: %#v", st.Resources)
+	}
+}
+
+func TestBBRMemoryApplyIsIdempotent(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-bbr.dbf.hcl")
+	engine := Engine{Backend: NewMemoryBackend(), Provider: NewMemoryProvider()}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	next, err := engine.Plan(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(next.Steps) != 0 {
+		t.Fatalf("second BBR plan steps = %#v, want no-op", next.Steps)
+	}
+}
+
+func TestPlanPropagatesObservedReadFailure(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-bbr.dbf.hcl")
+	engine := Engine{
+		Backend:  NewMemoryBackend(),
+		Provider: planErrorProvider{MemoryProvider: NewMemoryProvider()},
+	}
+
+	_, err := engine.Plan(context.Background(), program, resourceGraph, Options{})
+	if err == nil || !strings.Contains(err.Error(), "injected observed read failure") {
+		t.Fatalf("plan error = %v, want observed read failure", err)
+	}
+}
+
+func TestApplyRunsHostsInParallelWithDeterministicResultOrder(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `
+host "server2" {
+  files {
+    file "/tmp/server2" {
+      content = "server2"
+    }
+  }
+}
+
+host "server1" {
+  files {
+    file "/tmp/server1" {
+      content = "server1"
+    }
+  }
+}
+`))
+	backend := NewMemoryBackend()
+	provider := &concurrencyProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	plan, err := engine.Apply(context.Background(), program, resourceGraph, Options{Parallel: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if provider.maxActive < 2 {
+		t.Fatalf("max concurrent applies = %d, want at least 2", provider.maxActive)
+	}
+	if len(plan.Steps) != 2 {
+		t.Fatalf("steps = %#v, want 2", plan.Steps)
+	}
+	if plan.Steps[0].Host != "server1" || plan.Steps[1].Host != "server2" {
+		t.Fatalf("step host order = %s, %s; want server1, server2", plan.Steps[0].Host, plan.Steps[1].Host)
+	}
+	for _, host := range program.Hosts {
+		st, err := backend.Read(context.Background(), host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(st.Resources) != 1 {
+			t.Fatalf("host %s state resources = %#v, want 1", host.Name, st.Resources)
+		}
 	}
 }
 
@@ -252,4 +374,41 @@ func writeEngineConfig(t *testing.T, content string) string {
 		t.Fatal(err)
 	}
 	return file
+}
+
+type planErrorProvider struct {
+	*MemoryProvider
+}
+
+func (p planErrorProvider) Plan(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	return ProviderPlan{}, fmt.Errorf("injected observed read failure")
+}
+
+type concurrencyProvider struct {
+	*MemoryProvider
+	mu        sync.Mutex
+	active    int
+	maxActive int
+}
+
+func (p *concurrencyProvider) Apply(ctx context.Context, step Step) (map[string]any, error) {
+	p.mu.Lock()
+	p.active++
+	if p.active > p.maxActive {
+		p.maxActive = p.active
+	}
+	p.mu.Unlock()
+
+	defer func() {
+		p.mu.Lock()
+		p.active--
+		p.mu.Unlock()
+	}()
+
+	select {
+	case <-time.After(100 * time.Millisecond):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return p.MemoryProvider.Apply(ctx, step)
 }

@@ -246,7 +246,7 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 			Source: host.Source,
 		},
 		State: ir.StateSpec{
-			Path:     "/var/lib/debianform/state/" + host.Name + ".yaml",
+			Path:     "/var/lib/debianform/state/" + host.Name + ".json",
 			LockPath: "/var/lock/debianform/state/" + host.Name + ".lock",
 			Source:   host.Source,
 		},
@@ -256,6 +256,9 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 		},
 		Kernel: ir.KernelSpec{
 			Sysctl: map[string]ir.SysctlSpec{},
+		},
+		APT: ir.APTSpec{
+			Repositories: map[string]ir.APTRepositorySpec{},
 		},
 		Files: ir.FileSpec{
 			Files: map[string]ir.ManagedFile{},
@@ -378,6 +381,17 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 			return spec, err
 		}
 		spec.Packages.Install = install
+	}
+
+	if apt, ok, err := mapField(raw, "apt"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.APT.Source = apt.Source
+		repositories, err := aptRepositorySpecs(apt)
+		if err != nil {
+			return spec, err
+		}
+		spec.APT.Repositories = repositories
 	}
 
 	if files, ok, err := mapField(raw, "files"); err != nil {
@@ -675,6 +689,172 @@ func stringListField(root parser.Value, name string) ([]string, error) {
 		out = append(out, value)
 	}
 	return out, nil
+}
+
+func requiredStringListField(root parser.Value, name string) ([]string, error) {
+	value, ok := root.Map[name]
+	if !ok {
+		return nil, fmt.Errorf("%s:%d:%s.%s: required non-empty string list", root.Source.File, root.Source.Line, root.Source.Path, name)
+	}
+	values, err := stringListField(root, name)
+	if err != nil {
+		return nil, err
+	}
+	if len(values) == 0 {
+		return nil, fmt.Errorf("%s:%d:%s: required non-empty string list", value.Source.File, value.Source.Line, value.Source.Path)
+	}
+	return values, nil
+}
+
+func aptRepositorySpecs(apt parser.Value) (map[string]ir.APTRepositorySpec, error) {
+	objects, ok, err := objectCollection(apt, "repository")
+	if err != nil || !ok {
+		return map[string]ir.APTRepositorySpec{}, err
+	}
+	out := make(map[string]ir.APTRepositorySpec, len(objects))
+	for _, name := range sortedKeys(objects) {
+		item := objects[name]
+		if name == "" {
+			return nil, fmt.Errorf("%s:%d:%s: apt repository label must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		ensure, err := ensureField(item, "present")
+		if err != nil {
+			return nil, err
+		}
+		var uris, suites, components []string
+		if ensure == "present" {
+			uris, err = requiredStringListField(item, "uris")
+			if err != nil {
+				return nil, err
+			}
+			suites, err = requiredStringListField(item, "suites")
+			if err != nil {
+				return nil, err
+			}
+			components, err = requiredStringListField(item, "components")
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			uris, err = stringListField(item, "uris")
+			if err != nil {
+				return nil, err
+			}
+			suites, err = stringListField(item, "suites")
+			if err != nil {
+				return nil, err
+			}
+			components, err = stringListField(item, "components")
+			if err != nil {
+				return nil, err
+			}
+		}
+		architectures, err := stringListField(item, "architectures")
+		if err != nil {
+			return nil, err
+		}
+		signingKey, err := aptSigningKeySpec(name, item, ensure)
+		if err != nil {
+			return nil, err
+		}
+		lifecycle, err := lifecycleSpec(item)
+		if err != nil {
+			return nil, err
+		}
+		out[name] = ir.APTRepositorySpec{
+			Name:          name,
+			URIs:          uris,
+			Suites:        suites,
+			Components:    components,
+			Architectures: architectures,
+			SigningKey:    signingKey,
+			Ensure:        ensure,
+			Lifecycle:     lifecycle,
+			Source:        item.Source,
+		}
+	}
+	return out, nil
+}
+
+func aptSigningKeySpec(repoName string, repo parser.Value, ensure string) (*ir.APTSigningKeySpec, error) {
+	signingKey, ok, err := mapField(repo, "signing_key")
+	if err != nil || !ok {
+		return nil, err
+	}
+	url, hasURL, err := stringField(signingKey, "url")
+	if err != nil {
+		return nil, err
+	}
+	content, hasContent, err := stringField(signingKey, "content")
+	if err != nil {
+		return nil, err
+	}
+	sha, hasSHA, err := stringField(signingKey, "sha256")
+	if err != nil {
+		return nil, err
+	}
+	path, hasPath, err := stringField(signingKey, "path")
+	if err != nil {
+		return nil, err
+	}
+	if hasURL && url == "" {
+		return nil, fmt.Errorf("%s:%d:%s.url: signing key url must be non-empty", signingKey.Source.File, signingKey.Source.Line, signingKey.Source.Path)
+	}
+	if hasContent && content == "" {
+		return nil, fmt.Errorf("%s:%d:%s.content: signing key content must be non-empty", signingKey.Source.File, signingKey.Source.Line, signingKey.Source.Path)
+	}
+	if hasURL && hasContent {
+		return nil, fmt.Errorf("%s:%d:%s: signing_key requires exactly one of url or content", signingKey.Source.File, signingKey.Source.Line, signingKey.Source.Path)
+	}
+	if ensure == "present" && !hasURL && !hasContent {
+		return nil, fmt.Errorf("%s:%d:%s: signing_key requires exactly one of url or content when repository ensure is present", signingKey.Source.File, signingKey.Source.Line, signingKey.Source.Path)
+	}
+	if hasURL && (!hasSHA || sha == "") {
+		return nil, fmt.Errorf("%s:%d:%s.sha256: signing key url requires sha256", signingKey.Source.File, signingKey.Source.Line, signingKey.Source.Path)
+	}
+	if hasSHA && sha != "" {
+		if !sha256Pattern.MatchString(sha) {
+			return nil, fmt.Errorf("%s:%d:%s.sha256: sha256 must be a 64 character hex string", signingKey.Source.File, signingKey.Source.Line, signingKey.Source.Path)
+		}
+		sha = strings.ToLower(sha)
+		if hasContent && sha != contentSummary([]byte(content)).SHA256 {
+			return nil, fmt.Errorf("%s:%d:%s.sha256: sha256 does not match signing key content", signingKey.Source.File, signingKey.Source.Line, signingKey.Source.Path)
+		}
+	}
+	if !hasPath || path == "" {
+		path = defaultAPTSigningKeyPath(repoName)
+	}
+	if !filepath.IsAbs(path) {
+		return nil, fmt.Errorf("%s:%d:%s.path: signing key path must be absolute", signingKey.Source.File, signingKey.Source.Line, signingKey.Source.Path)
+	}
+	return &ir.APTSigningKeySpec{
+		URL:     url,
+		Content: content,
+		SHA256:  sha,
+		Path:    path,
+		Source:  signingKey.Source,
+	}, nil
+}
+
+func defaultAPTSigningKeyPath(name string) string {
+	return "/etc/apt/keyrings/" + safeAPTName(name) + ".asc"
+}
+
+func safeAPTName(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	out := strings.Trim(b.String(), "_")
+	if out == "" {
+		return "repository"
+	}
+	return strings.ToLower(out)
 }
 
 func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
@@ -1072,6 +1252,17 @@ func validateHostSpec(spec ir.HostSpec) error {
 			return fmt.Errorf("%s:%d:%s: user %q references missing primary group %q", user.Source.File, user.Source.Line, user.Source.Path, user.Name, user.PrimaryGroup)
 		}
 	}
+	for _, pkg := range spec.Packages.Install {
+		for _, repo := range pkg.Repositories {
+			repository, ok := spec.APT.Repositories[repo]
+			if !ok {
+				return fmt.Errorf("%s:%d:%s: package %q references missing apt.repository %q", pkg.Source.File, pkg.Source.Line, pkg.Source.Path, pkg.Name, repo)
+			}
+			if repository.Ensure == "absent" {
+				return fmt.Errorf("%s:%d:%s: package %q references absent apt.repository %q", pkg.Source.File, pkg.Source.Line, pkg.Source.Path, pkg.Name, repo)
+			}
+		}
+	}
 	return nil
 }
 
@@ -1126,7 +1317,10 @@ func modeFieldDefault(root parser.Value, name string, fallback string) (string, 
 	return mode, nil
 }
 
-var modePattern = regexp.MustCompile(`^0[0-7]{3}$`)
+var (
+	modePattern   = regexp.MustCompile(`^0[0-7]{3}$`)
+	sha256Pattern = regexp.MustCompile(`(?i)^[0-9a-f]{64}$`)
+)
 
 func validServiceState(state string) bool {
 	switch state {

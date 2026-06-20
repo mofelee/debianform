@@ -376,7 +376,7 @@ host "server1" {
   }
 
   state {
-    path      = "/var/lib/debianform/state/server1.yaml"
+    path      = "/var/lib/debianform/state/server1.json"
     lock_path = "/var/lock/debianform/state/server1.lock"
   }
 

@@ -170,7 +170,7 @@ name: ksvm213
 ssh:
   host: ksvm213
 state:
-  path: /var/lib/debianform/state/ksvm213.yaml
+  path: /var/lib/debianform/state/ksvm213.json
   lock_path: /var/lock/debianform/state/ksvm213.lock
 ```
 
@@ -233,7 +233,7 @@ type StateSpec struct {
 默认值：
 
 ```text
-path      = /var/lib/debianform/state/<host>.yaml
+path      = /var/lib/debianform/state/<host>.json
 lock_path = /var/lock/debianform/state/<host>.lock
 ```
 
@@ -241,24 +241,27 @@ lock_path = /var/lock/debianform/state/<host>.lock
 
 StateSpec 只描述 state 文件位置，不描述 state 文件内容。
 
-运行时 state 建议使用规范 YAML，由 DebianForm 机器写入：
+运行时 state 使用规范 JSON，由 DebianForm 机器写入：
 
-```yaml
-version: 2
-host: ksvm213
-serial: 17
-updated_at: "2026-06-19T12:00:00Z"
-resources:
-  host.ksvm213.packages.install["curl"]:
-    kind: package
-    provider: package
-    identity:
-      name: curl
-    ownership: created
-    desired:
-      ensure: present
-    observed:
-      version: "8.14.1-2"
+```json
+{
+  "version": 2,
+  "host": "ksvm213",
+  "serial": 17,
+  "updated_at": "2026-06-19T12:00:00Z",
+  "resources": {
+    "host.ksvm213.packages.install[\"curl\"]": {
+      "kind": "package",
+      "provider_type": "package",
+      "ownership": "managed",
+      "desired_digest": "sha256-summary",
+      "observed": {
+        "installed": true
+      },
+      "order": 0
+    }
+  }
+}
 ```
 
 state 记录的是 DebianForm 的管辖事实，不是 HostSpec 的完整拷贝。
@@ -271,20 +274,16 @@ adopted   接管前已经存在；从配置删除后解除管辖。
 external  只用于依赖或观测；从配置删除后只丢弃记录。
 ```
 
-lock 文件建议也是 YAML，但它不是 state 的一部分，只保存租约：
+lock 文件也是 JSON，但它不是 state 的一部分，只保存租约：
 
-```yaml
-version: 1
-host: ksvm213
-operation: apply
-owner:
-  user: mofe
-  hostname: macbook
-  pid: 12345
-token: "random-128-bit-token"
-created_at: "2026-06-19T12:00:00Z"
-expires_at: "2026-06-19T12:05:00Z"
-state_path: "/var/lib/debianform/state/ksvm213.yaml"
+```json
+{
+  "owner": "dbf",
+  "pid": "12345",
+  "token": "random-128-bit-token",
+  "expires_at": "2026-06-19T12:05:00Z",
+  "expires_at_unix": 1781870700
+}
 ```
 
 释放 lock 必须校验 token，避免误删其他进程持有的锁。
@@ -446,16 +445,16 @@ type APTRepositorySpec struct {
     Architectures []string
     SigningKey    *APTSigningKeySpec
     Ensure        Ensure
+    Lifecycle     *LifecycleSpec
     Source        SourceRef
 }
 
 type APTSigningKeySpec struct {
-    URL       string
-    Content   string
-    SHA256    string
-    Path      string
-    Sensitive bool
-    Source    SourceRef
+    URL     string
+    Content string
+    SHA256  string
+    Path    string
+    Source  SourceRef
 }
 ```
 
@@ -1106,8 +1105,9 @@ ResourceGraph:
 - 每个 host 必须有 SSH host。
 - 每个 host 必须有完整 state path 和 lock path。
 - packages.install 中包名不能重复。
-- package 引用的 repository 必须在同一 host 的最终 APTSpec 中存在。
-- repository label 必须唯一；远程 signing key 必须有 SHA-256。
+- package 引用的 repository 必须在同一 host 的最终 APTSpec 中存在，且
+  `ensure = present`。
+- repository label 必须唯一；远程 signing key 必须有 64 位 hex SHA-256。
 - nftables file label 必须唯一；最终 path 不能冲突。
 - nftables file 的 `content` 和 `source_path` 只能二选一。
 - nftables main ruleset 最多只能有一个；默认 path 为 `/etc/nftables.conf`。

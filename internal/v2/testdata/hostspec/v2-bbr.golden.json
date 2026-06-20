@@ -16,7 +16,7 @@
     }
   },
   "state": {
-    "path": "/var/lib/debianform/state/bbr1.yaml",
+    "path": "/var/lib/debianform/state/bbr1.json",
     "lock_path": "/var/lock/debianform/state/bbr1.lock",
     "source": {
       "file": "../../../examples/v2-bbr.dbf.hcl",
@@ -78,6 +78,9 @@
     }
   },
   "packages": {
+    "source": {}
+  },
+  "apt": {
     "source": {}
   },
   "files": {

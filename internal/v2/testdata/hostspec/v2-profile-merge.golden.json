@@ -16,7 +16,7 @@
     }
   },
   "state": {
-    "path": "/var/lib/debianform/state/merge1.yaml",
+    "path": "/var/lib/debianform/state/merge1.json",
     "lock_path": "/var/lock/debianform/state/merge1.lock",
     "source": {
       "file": "../../../examples/v2-profile-merge.dbf.hcl",
@@ -119,6 +119,9 @@
       "line": 51,
       "path": "host.merge1.packages"
     }
+  },
+  "apt": {
+    "source": {}
   },
   "files": {
     "source": {}

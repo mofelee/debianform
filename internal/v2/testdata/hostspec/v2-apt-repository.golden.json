@@ -1,0 +1,126 @@
+{
+  "name": "apt1",
+  "source": {
+    "file": "../../../examples/v2-apt-repository.dbf.hcl",
+    "line": 10,
+    "path": "host.apt1"
+  },
+  "ssh": {
+    "host": "apt1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../../../examples/v2-apt-repository.dbf.hcl",
+      "line": 11,
+      "path": "host.apt1.ssh"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/apt1.json",
+    "lock_path": "/var/lock/debianform/state/apt1.lock",
+    "source": {
+      "file": "../../../examples/v2-apt-repository.dbf.hcl",
+      "line": 10,
+      "path": "host.apt1"
+    }
+  },
+  "system": {
+    "hostname": "apt1",
+    "architecture": "amd64",
+    "codename": "trixie",
+    "source": {
+      "file": "../../../examples/v2-apt-repository.dbf.hcl",
+      "line": 15,
+      "path": "host.apt1.system"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "install": [
+      {
+        "name": "curl",
+        "source": {
+          "file": "../../../examples/v2-apt-repository.dbf.hcl",
+          "line": 37,
+          "path": "host.apt1.packages.install[0]"
+        }
+      },
+      {
+        "name": "example-tool",
+        "repositories": [
+          "example_tools"
+        ],
+        "source": {
+          "file": "../../../examples/v2-apt-repository.dbf.hcl",
+          "line": 40,
+          "path": "host.apt1.packages.package[\"example-tool\"]"
+        }
+      }
+    ],
+    "source": {
+      "file": "../../../examples/v2-apt-repository.dbf.hcl",
+      "line": 35,
+      "path": "host.apt1.packages"
+    }
+  },
+  "apt": {
+    "repositories": {
+      "example_tools": {
+        "name": "example_tools",
+        "uris": [
+          "https://example.com/debian"
+        ],
+        "suites": [
+          "trixie"
+        ],
+        "components": [
+          "main"
+        ],
+        "signing_key": {
+          "url": "https://example.com/debian/repository.asc",
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "path": "/etc/apt/keyrings/example-tools.asc",
+          "source": {
+            "file": "../../../examples/v2-apt-repository.dbf.hcl",
+            "line": 27,
+            "path": "host.apt1.apt.repository[\"example_tools\"].signing_key"
+          }
+        },
+        "ensure": "present",
+        "source": {
+          "file": "../../../examples/v2-apt-repository.dbf.hcl",
+          "line": 22,
+          "path": "host.apt1.apt.repository[\"example_tools\"]"
+        }
+      }
+    },
+    "source": {
+      "file": "../../../examples/v2-apt-repository.dbf.hcl",
+      "line": 21,
+      "path": "host.apt1.apt"
+    }
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  }
+}

@@ -168,6 +168,14 @@ host "server1" {
 func TestCompileMergesLabeledPackageBlocks(t *testing.T) {
 	program := compileInline(t, `
 profile "base" {
+  apt {
+    repository "base_repo" {
+      uris       = ["https://repo.example/base"]
+      suites     = ["trixie"]
+      components = ["main"]
+    }
+  }
+
   packages {
     package "bird2" {
       repositories = ["base_repo"]
@@ -177,6 +185,14 @@ profile "base" {
 
 host "server1" {
   imports = [profile.base]
+
+  apt {
+    repository "host_repo" {
+      uris       = ["https://repo.example/host"]
+      suites     = ["trixie"]
+      components = ["main"]
+    }
+  }
 
   packages {
     package "bird2" {
@@ -196,6 +212,143 @@ host "server1" {
 	wantRepositories := []string{"base_repo", "host_repo"}
 	if !reflect.DeepEqual(packages[0].Repositories, wantRepositories) {
 		t.Fatalf("repositories = %#v, want %#v", packages[0].Repositories, wantRepositories)
+	}
+}
+
+func TestCompileAPTRepository(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  apt {
+    repository "tools" {
+      uris          = ["https://repo.example/debian"]
+      suites        = ["trixie"]
+      components    = ["main"]
+      architectures = ["amd64"]
+
+      signing_key {
+        content = "-----BEGIN PGP PUBLIC KEY BLOCK-----\nexample\n-----END PGP PUBLIC KEY BLOCK-----\n"
+      }
+    }
+  }
+
+  packages {
+    package "example-tool" {
+      repositories = ["tools"]
+    }
+  }
+}
+`)
+
+	host := program.Hosts[0]
+	repository, ok := host.APT.Repositories["tools"]
+	if !ok {
+		t.Fatalf("apt repository tools was not compiled")
+	}
+	if repository.Name != "tools" || repository.Ensure != "present" {
+		t.Fatalf("repository = %#v", repository)
+	}
+	if !reflect.DeepEqual(repository.URIs, []string{"https://repo.example/debian"}) {
+		t.Fatalf("repository uris = %#v", repository.URIs)
+	}
+	if !reflect.DeepEqual(repository.Architectures, []string{"amd64"}) {
+		t.Fatalf("repository architectures = %#v", repository.Architectures)
+	}
+	if repository.SigningKey == nil {
+		t.Fatalf("signing key was not compiled")
+	}
+	if repository.SigningKey.Path != "/etc/apt/keyrings/tools.asc" {
+		t.Fatalf("signing key path = %q", repository.SigningKey.Path)
+	}
+	if got := host.Packages.Install[0].Repositories; !reflect.DeepEqual(got, []string{"tools"}) {
+		t.Fatalf("package repositories = %#v", got)
+	}
+}
+
+func TestCompileRejectsInvalidAPTRepository(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "missing referenced repository",
+			hcl: `
+host "server1" {
+  packages {
+    package "example-tool" {
+      repositories = ["missing"]
+    }
+  }
+}
+`,
+			want: `references missing apt.repository "missing"`,
+		},
+		{
+			name: "url key without sha",
+			hcl: `
+host "server1" {
+  apt {
+    repository "tools" {
+      uris       = ["https://repo.example/debian"]
+      suites     = ["trixie"]
+      components = ["main"]
+
+      signing_key {
+        url = "https://repo.example/key.asc"
+      }
+    }
+  }
+}
+`,
+			want: "signing key url requires sha256",
+		},
+		{
+			name: "invalid sha",
+			hcl: `
+host "server1" {
+  apt {
+    repository "tools" {
+      uris       = ["https://repo.example/debian"]
+      suites     = ["trixie"]
+      components = ["main"]
+
+      signing_key {
+        url    = "https://repo.example/key.asc"
+        sha256 = "not-a-sha"
+      }
+    }
+  }
+}
+`,
+			want: "sha256 must be a 64 character hex string",
+		},
+		{
+			name: "absent repository reference",
+			hcl: `
+host "server1" {
+  apt {
+    repository "tools" {
+      ensure = "absent"
+    }
+  }
+
+  packages {
+    package "example-tool" {
+      repositories = ["tools"]
+    }
+  }
+}
+`,
+			want: `references absent apt.repository "tools"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 
@@ -419,6 +572,10 @@ func TestCompileProfileMergeHostSpecGolden(t *testing.T) {
 
 func TestCompileFoundationHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../testdata/fixtures/v2-foundation.dbf.hcl", "../testdata/hostspec/v2-foundation.golden.json")
+}
+
+func TestCompileAPTRepositoryHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../../../examples/v2-apt-repository.dbf.hcl", "../testdata/hostspec/v2-apt-repository.golden.json")
 }
 
 func TestCompileRejectsLoop3InvalidInputs(t *testing.T) {

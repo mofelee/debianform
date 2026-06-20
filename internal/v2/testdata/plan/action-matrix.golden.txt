@@ -1,0 +1,26 @@
+Plan:
+  + host.server1.files.file["/tmp/create"]
+    create file /tmp/create
+    source: examples/action-matrix.dbf.hcl:12:host.server1.files.file["/tmp/example"]
+    + mode: "0644"
+    + path: "/tmp/create"
+  ~ host.server1.files.file["/tmp/update"]
+    update file /tmp/update
+    source: examples/action-matrix.dbf.hcl:12:host.server1.files.file["/tmp/example"]
+    ~ content
+      @@ -1,1 +1,1 @@
+      - old
+      + new
+    ~ mode: "0644" -> "0600"
+  - host.server1.files.file["/tmp/delete"]
+    delete file /tmp/delete
+    source: examples/action-matrix.dbf.hcl:12:host.server1.files.file["/tmp/example"]
+    - path: "/tmp/delete"
+  = host.server1.files.file["/tmp/no-op"]
+    no changes for file /tmp/no-op
+    source: examples/action-matrix.dbf.hcl:12:host.server1.files.file["/tmp/example"]
+  ! host.server1.systemd.daemon_reload
+    reload systemd manager configuration
+    triggered_by: host.server1.files.file["/tmp/update"]
+
+Summary: 1 create, 1 update, 1 delete, 1 no-op, 1 operations

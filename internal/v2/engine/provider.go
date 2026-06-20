@@ -29,6 +29,8 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2stat
 	switch node.Kind {
 	case "file", "secret", "systemd_unit":
 		return p.planFileLike(ctx, node, prior)
+	case "apt_signing_key":
+		return p.planAPTSigningKey(ctx, node, prior)
 	case "directory":
 		return p.planDirectory(ctx, node, prior)
 	case "package":
@@ -56,6 +58,8 @@ func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, e
 		return p.applyFileLike(ctx, step, false)
 	case "systemd_unit":
 		return p.applyFileLike(ctx, step, true)
+	case "apt_signing_key":
+		return p.applyAPTSigningKey(ctx, step)
 	case "directory":
 		return p.applyDirectory(ctx, step)
 	case "package":
@@ -84,7 +88,7 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 	desired := step.Prior.Desired
 	host := step.Prior.Host
 	switch step.Prior.Kind {
-	case "file", "secret":
+	case "file", "secret", "apt_signing_key":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), false)
 	case "systemd_unit":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), true)
@@ -221,6 +225,76 @@ func (p NativeProvider) applyFileLike(ctx context.Context, step Step, daemonRelo
 		lines = append(lines, "systemctl daemon-reload")
 	}
 	_, err = p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"exists": true, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planAPTSigningKey(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	path := stringDesired(node, "path")
+	current, err := p.readPath(ctx, node.Host, path)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	if ensureAbsent(node) {
+		if current.Exists {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove apt signing key " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent apt signing key "+path, observed), nil
+	}
+	wantSHA, err := desiredSigningKeySHA(node)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	if !current.Exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "install apt signing key " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if current.IsDir ||
+		current.SHA256 != wantSHA ||
+		current.Owner != stringDesired(node, "owner") ||
+		current.Group != stringDesired(node, "group") ||
+		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update apt signing key " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for apt signing key "+path, observed), nil
+}
+
+func (p NativeProvider) applyAPTSigningKey(ctx context.Context, step Step) (map[string]any, error) {
+	path := stringDesired(step.Node, "path")
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		if err := p.removePath(ctx, step.Node.Host, path, false); err != nil {
+			return nil, err
+		}
+		return map[string]any{"exists": false}, nil
+	}
+	if stringDesired(step.Node, "content") != "" {
+		return p.applyFileLike(ctx, step, false)
+	}
+	url := stringDesired(step.Node, "url")
+	sha := stringDesired(step.Node, "sha256")
+	if url == "" || sha == "" {
+		return nil, fmt.Errorf("%s apt signing key requires url and sha256 or content", step.Address)
+	}
+	tmp := path + ".dbf-tmp"
+	lines := []string{
+		"set -eu",
+		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
+		"if ! command -v curl >/dev/null 2>&1; then",
+		"  export DEBIAN_FRONTEND=noninteractive",
+		"  apt-get update",
+		"  apt-get install -y ca-certificates curl",
+		"fi",
+		"curl -fsSL " + shellQuote(url) + " -o " + shellQuote(tmp),
+		"printf '%s  %s\\n' " + shellQuote(sha) + " " + shellQuote(tmp) + " | sha256sum --check --status",
+		"install -o " + shellQuote(stringDesired(step.Node, "owner")) +
+			" -g " + shellQuote(stringDesired(step.Node, "group")) +
+			" -m " + shellQuote(stringDesired(step.Node, "mode")) +
+			" " + shellQuote(tmp) + " " + shellQuote(path),
+		"rm -f -- " + shellQuote(tmp),
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
 	if err != nil {
 		return nil, err
 	}
@@ -801,6 +875,16 @@ func desiredContentSHA(node graph.Node) (string, error) {
 		return "", err
 	}
 	return sha256Hex(content), nil
+}
+
+func desiredSigningKeySHA(node graph.Node) (string, error) {
+	if sha := stringDesired(node, "sha256"); sha != "" {
+		return strings.ToLower(sha), nil
+	}
+	if content := stringDesired(node, "content"); content != "" {
+		return sha256Hex([]byte(content)), nil
+	}
+	return "", fmt.Errorf("%s apt signing key requires sha256 or content", node.Address)
 }
 
 func inSyncPlan(node graph.Node, prior *v2state.Resource, summary string, observed map[string]any) ProviderPlan {

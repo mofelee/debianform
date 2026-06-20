@@ -1,8 +1,8 @@
-# DebianForm v2 APT repository 设计示例。
+# DebianForm v2 APT repository 示例。
 #
-# 设计夹具：apt.repository 会在后续 loop 接入 CLI。
+# 该示例覆盖已实现的 host/profile 级 apt.repository、显式 package repository
+# 依赖和 host-scoped APT cache refresh。
 #
-# 设计边界：
 # - APT repository 是 host/profile/component 内的 apt 领域对象。
 # - package 只依赖自己显式引用的 repository。
 # - 同一 host 多个 repository 变化时，只生成一次 APT cache refresh operation。
@@ -26,7 +26,7 @@ host "apt1" {
 
       signing_key {
         url    = "https://example.com/debian/repository.asc"
-        sha256 = "REPLACE_WITH_EXAMPLE_TOOLS_KEY_SHA256"
+        sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         path   = "/etc/apt/keyrings/example-tools.asc"
       }
     }

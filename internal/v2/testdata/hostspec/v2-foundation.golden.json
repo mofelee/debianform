@@ -16,7 +16,7 @@
     }
   },
   "state": {
-    "path": "/var/lib/debianform/state/foundation1.yaml",
+    "path": "/var/lib/debianform/state/foundation1.json",
     "lock_path": "/var/lock/debianform/state/foundation1.lock",
     "source": {
       "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
@@ -53,6 +53,9 @@
       "line": 2,
       "path": "profile.base.packages"
     }
+  },
+  "apt": {
+    "source": {}
   },
   "files": {
     "files": {

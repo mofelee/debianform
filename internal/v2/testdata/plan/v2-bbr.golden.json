@@ -27,12 +27,35 @@
         "kind": "object",
         "action": "create",
         "sensitive": false,
-        "before": null,
-        "after": {
-          "ensure": "present",
-          "name": "tcp_bbr",
-          "persist": true
-        }
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "tcp_bbr"
+          },
+          {
+            "path": [
+              "persist"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          }
+        ]
       }
     },
     {
@@ -49,13 +72,44 @@
         "kind": "object",
         "action": "create",
         "sensitive": false,
-        "before": null,
-        "after": {
-          "apply_runtime": true,
-          "key": "net.core.default_qdisc",
-          "persist": true,
-          "value": "fq"
-        }
+        "children": [
+          {
+            "path": [
+              "apply_runtime"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "key"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "net.core.default_qdisc"
+          },
+          {
+            "path": [
+              "persist"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "value"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "fq"
+          }
+        ]
       }
     },
     {
@@ -72,13 +126,44 @@
         "kind": "object",
         "action": "create",
         "sensitive": false,
-        "before": null,
-        "after": {
-          "apply_runtime": true,
-          "key": "net.ipv4.tcp_congestion_control",
-          "persist": true,
-          "value": "bbr"
-        }
+        "children": [
+          {
+            "path": [
+              "apply_runtime"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "key"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "net.ipv4.tcp_congestion_control"
+          },
+          {
+            "path": [
+              "persist"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "value"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "bbr"
+          }
+        ]
       }
     }
   ],

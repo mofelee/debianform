@@ -1,7 +1,7 @@
 # DebianForm v2 Plan Format
 
-本文档定义 v2 `dbf plan --format json` 的目标格式。它也是终端树状 diff 和
-HTML preview 的输入模型。
+本文档定义 v2 `dbf plan --format json` 的当前 alpha 格式。它也是终端树状 diff 和
+`dbf plan --html plan.html` 静态 preview 的输入模型。
 
 v2 plan format 的目标：
 
@@ -84,7 +84,7 @@ run
 要求：
 
 - `address` 使用用户可理解的稳定 v2 地址。
-- `provider_address` 只在 debug 模式输出；普通 JSON 可以省略或置空。
+- `provider_address` 只在 `dbf plan --debug` 时输出；普通 JSON、终端和 HTML 输出省略。
 - `source` 指向用户 DSL 的来源位置。
 - `diff` 使用 `DiffNode`。
 - `low_level_actions` 用于解释实际会执行的底层动作，但不替代 operation node。
@@ -118,6 +118,7 @@ sensitive
 
 规则：
 
+- 根节点使用 `kind = "object"`，字段变化位于排序稳定的 `children` 中。
 - object/map 按 key 递归 diff。
 - set 按元素 identity diff。
 - list 只有顺序有语义时才按 index diff。
@@ -125,6 +126,7 @@ sensitive
 - scalar diff 使用 `before` 和 `after`。
 - text diff 使用 `hunks`。
 - sensitive diff 不得输出明文。
+- terminal 和 HTML renderer 必须消费同一棵 `DiffNode`，不能各自重新计算差异。
 
 ## Text diff
 

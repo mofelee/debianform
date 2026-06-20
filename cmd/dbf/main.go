@@ -109,6 +109,8 @@ func runConfigCommand(cmd string, args []string) error {
 	host := fs.String("host", "", "limit execution to a host")
 	format := fs.String("format", "text", "plan output format: text or json")
 	htmlPath := fs.String("html", "", "write plan as static HTML")
+	debug := fs.Bool("debug", false, "show internal provider addresses in plan output")
+	parallel := fs.Int("parallel", 1, "maximum number of hosts to apply concurrently")
 	lockTimeout := fs.Duration("lock-timeout", 5*time.Minute, "state lock timeout")
 	autoApprove := fs.Bool("auto-approve", false, "skip apply confirmation")
 	if err := fs.Parse(args); err != nil {
@@ -119,10 +121,10 @@ func runConfigCommand(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *lockTimeout, *autoApprove)
+	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *debug, *parallel, *lockTimeout, *autoApprove)
 }
 
-func runV2ConfigCommand(cmd string, files []string, host string, format string, htmlPath string, lockTimeout time.Duration, autoApprove bool) error {
+func runV2ConfigCommand(cmd string, files []string, host string, format string, htmlPath string, debug bool, parallel int, lockTimeout time.Duration, autoApprove bool) error {
 	if format == "" {
 		format = "text"
 	}
@@ -134,6 +136,15 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 	}
 	if htmlPath != "" && format != "text" {
 		return fmt.Errorf("--html cannot be combined with --format")
+	}
+	if debug && cmd != "plan" {
+		return fmt.Errorf("--debug is only supported for v2 plan")
+	}
+	if parallel < 1 {
+		return fmt.Errorf("--parallel must be at least 1")
+	}
+	if parallel != 1 && cmd != "apply" {
+		return fmt.Errorf("--parallel is only supported for v2 apply")
 	}
 
 	program, err := loadV2Program(files, host)
@@ -156,6 +167,7 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 		doc := v2plan.New(resourceGraph, v2plan.Options{
 			CommandFile: commandFile(files),
 			Host:        commandHost(program, host),
+			Debug:       debug,
 		})
 		if htmlPath != "" {
 			if err := writePlanHTML(htmlPath, doc); err != nil {
@@ -184,7 +196,7 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 			Backend:  v2engine.NewSSHBackend(runner),
 			Provider: v2engine.NewNativeProvider(runner),
 		}
-		opts := v2engine.Options{Host: host, LockTimeout: lockTimeout}
+		opts := v2engine.Options{Host: host, LockTimeout: lockTimeout, Parallel: parallel}
 		onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, opts)
 		if err != nil {
 			return err
@@ -292,8 +304,8 @@ func usage() {
 
 Usage:
   dbf validate [-f file]
-  dbf plan     [-f file] [--host name] [--format text|json] [--html file]
-  dbf apply    [-f file] [--host name] [--auto-approve]
+  dbf plan     [-f file] [--host name] [--format text|json] [--html file] [--debug]
+  dbf apply    [-f file] [--host name] [--parallel n] [--auto-approve]
   dbf check    [-f file] [--host name]
   dbf fmt      [-f file]
   dbf version

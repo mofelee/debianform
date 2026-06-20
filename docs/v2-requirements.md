@@ -114,7 +114,7 @@ host "ksvm213" {}
 ```text
 host.name       = ksvm213
 ssh.host        = ksvm213
-state.path      = /var/lib/debianform/state/ksvm213.yaml
+state.path      = /var/lib/debianform/state/ksvm213.json
 state.lock_path = /var/lock/debianform/state/ksvm213.lock
 ```
 
@@ -160,7 +160,7 @@ host "ksvm213" {
 }
 ```
 
-v2 第一阶段需要重点实现：
+v2 主线领域范围：
 
 - `imports`
 - `components`
@@ -169,6 +169,7 @@ v2 第一阶段需要重点实现：
 - `system`
 - `kernel`
 - `packages`
+- `apt`
 - `files`
 - `secrets`
 - `directories`
@@ -177,7 +178,7 @@ v2 第一阶段需要重点实现：
 - `services`
 - `systemd`
 
-`apt`、`nftables`、`networking`、`security` 可以放到后续阶段。其中
+`nftables`、`networking`、`security` 可以放到后续阶段。其中
 `nftables` 是目标 DSL 的一等领域；第一版可以采用原生 nftables 文件管理，
 不需要先发明通用 firewall 抽象。
 
@@ -238,7 +239,7 @@ orphan cleanup 和 destroy 顺序。
 ```hcl
 host "ksvm213" {
   state {
-    path      = "/var/lib/debianform/state/ksvm213.yaml"
+    path      = "/var/lib/debianform/state/ksvm213.json"
     lock_path = "/var/lock/debianform/state/ksvm213.lock"
   }
 }
@@ -247,7 +248,7 @@ host "ksvm213" {
 默认值：
 
 ```text
-state.path      = /var/lib/debianform/state/<host>.yaml
+state.path      = /var/lib/debianform/state/<host>.json
 state.lock_path = /var/lock/debianform/state/<host>.lock
 ```
 
@@ -262,25 +263,34 @@ state.lock_path = /var/lock/debianform/state/<host>.lock
 
 state 记录 DebianForm 对远端主机的管辖事实，不是用户配置的副本。
 
-建议 state 使用机器写入的规范 YAML：
+state 使用机器写入的规范 JSON：
 
-```yaml
-version: 2
-host: ksvm213
-serial: 17
-updated_at: "2026-06-19T12:00:00Z"
-resources:
-  host.ksvm213.packages.install["curl"]:
-    kind: package
-    provider: package
-    identity:
-      name: curl
-    ownership: created
-    desired:
-      ensure: present
-    observed:
-      version: "8.14.1-2"
-    last_applied_at: "2026-06-19T12:00:00Z"
+```json
+{
+  "version": 2,
+  "host": "ksvm213",
+  "serial": 17,
+  "updated_at": "2026-06-19T12:00:00Z",
+  "resources": {
+    "host.ksvm213.packages.install[\"curl\"]": {
+      "host": "ksvm213",
+      "kind": "package",
+      "provider_type": "package",
+      "provider_address": "package.ksvm213_curl",
+      "ownership": "managed",
+      "desired": {
+        "ensure": "present",
+        "name": "curl"
+      },
+      "desired_digest": "sha256-summary",
+      "observed": {
+        "installed": true
+      },
+      "updated_at": "2026-06-19T12:00:00Z",
+      "order": 0
+    }
+  }
+}
 ```
 
 `ownership` 用于决定从配置中删除后是否销毁：
@@ -388,20 +398,16 @@ delete、destroy、replace、run 动作，`check` 返回非零。
 
 lock 文件只表示“当前有 apply/plan 正在持有 state 写锁”，不保存目标状态。
 
-建议 lock 也使用规范 YAML：
+lock 也使用机器写入的 JSON：
 
-```yaml
-version: 1
-host: ksvm213
-operation: apply
-owner:
-  user: mofe
-  hostname: macbook
-  pid: 12345
-token: "random-128-bit-token"
-created_at: "2026-06-19T12:00:00Z"
-expires_at: "2026-06-19T12:05:00Z"
-state_path: "/var/lib/debianform/state/ksvm213.yaml"
+```json
+{
+  "owner": "dbf",
+  "pid": "12345",
+  "token": "random-128-bit-token",
+  "expires_at": "2026-06-19T12:05:00Z",
+  "expires_at_unix": 1781870700
+}
 ```
 
 要求：
@@ -1143,7 +1149,7 @@ apt {
 
     signing_key {
       url    = "https://pkg.labs.nic.cz/gpg"
-      sha256 = "REPLACE_WITH_KEY_SHA256"
+      sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
       path   = "/etc/apt/keyrings/cznic-bird2.asc"
     }
   }
@@ -1155,13 +1161,14 @@ repository 要求：
 - repository label 是同一 host 内的稳定逻辑名。
 - 使用 deb822 `.sources` 作为默认输出格式。
 - `uris`、`suites`、`components` 使用 list，避免字段从单值升级到多值时破坏语法。
-- `signing_key` 的 `url` 和 `content` 二选一。
+- `signing_key` 可选；声明时 `url` 和 `content` 二选一。
 - 远程 signing key 必须声明 `sha256`；后续可以增加 fingerprint 验证。
+- `sha256` 必须是 64 位 hex；对内联 `content` 声明 `sha256` 时必须与内容匹配。
 - `path` 默认 `/etc/apt/keyrings/<repository>.asc`。
 - source 自动引用自己的 signing key path。
 - signing key 或 source 变化后，编译器生成 host-scoped APT cache refresh 节点。
 - 多个 repository 同时变化时，每个 host 最多执行一次 `apt-get update`。
-- repository 从配置删除时，先删除其 source/key，再刷新 APT cache。
+- `ensure = "absent"` 的 repository 会删除 source/key，并触发 APT cache refresh。
 
 package list 简写继续适合 Debian 官方仓库中的普通包：
 
@@ -1186,6 +1193,7 @@ packages {
 - `package "name"` 与 `install = ["name"]` 归一化成同一种 PackageItem。
 - 同一个包不能同时用 list 和 object 重复声明。
 - `repositories` 引用同一 host 最终配置中的 repository label。
+- `repositories` 只能引用存在且 `ensure = "present"` 的 repository。
 - package 只依赖自己显式引用的 repository，以及这些 repository 汇聚出的
   host-scoped cache refresh。
 - 不再沿用旧实验版本中“所有 package 自动依赖同一 host 的所有 repository”的宽泛规则。

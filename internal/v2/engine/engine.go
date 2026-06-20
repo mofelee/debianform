@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mofelee/debianform/internal/v2/graph"
@@ -57,6 +58,7 @@ type Observed struct {
 type Options struct {
 	Host        string
 	LockTimeout time.Duration
+	Parallel    int
 }
 
 type Engine struct {
@@ -175,6 +177,10 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 }
 
 func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
+	if opts.Host == "" && opts.Parallel > 1 && len(program.Hosts) > 1 {
+		return e.applyHostsParallel(ctx, program, resourceGraph, opts)
+	}
+
 	hosts := hostsByName(program)
 	for _, host := range program.Hosts {
 		if opts.Host != "" && host.Name != opts.Host {
@@ -233,6 +239,91 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		}
 	}
 	return plan, nil
+}
+
+func (e Engine) applyHostsParallel(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
+	parallel := opts.Parallel
+	if parallel > len(program.Hosts) {
+		parallel = len(program.Hosts)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type result struct {
+		index int
+		host  string
+		plan  Plan
+		err   error
+	}
+	jobs := make(chan int)
+	results := make(chan result, len(program.Hosts))
+	var workers sync.WaitGroup
+	for range parallel {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				host := program.Hosts[index]
+				plan, err := e.Apply(ctx, program, resourceGraph, Options{
+					Host:        host.Name,
+					LockTimeout: opts.LockTimeout,
+					Parallel:    1,
+				})
+				results <- result{index: index, host: host.Name, plan: plan, err: err}
+				if err != nil {
+					cancel()
+					return
+				}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for index := range program.Hosts {
+			select {
+			case jobs <- index:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	go func() {
+		workers.Wait()
+		close(results)
+	}()
+
+	plans := make([]Plan, len(program.Hosts))
+	completed := make([]bool, len(program.Hosts))
+	var firstErr error
+	for item := range results {
+		if item.err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("host %s apply failed: %w", item.host, item.err)
+		}
+		plans[item.index] = item.plan
+		completed[item.index] = item.err == nil
+	}
+	if firstErr != nil {
+		return combinePlans(plans, completed), firstErr
+	}
+	return combinePlans(plans, completed), nil
+}
+
+func combinePlans(plans []Plan, included []bool) Plan {
+	var combined Plan
+	for index, plan := range plans {
+		if !included[index] {
+			continue
+		}
+		combined.Steps = append(combined.Steps, plan.Steps...)
+		combined.Operations = append(combined.Operations, plan.Operations...)
+		combined.Summary.Create += plan.Summary.Create
+		combined.Summary.Update += plan.Summary.Update
+		combined.Summary.Delete += plan.Summary.Delete
+		combined.Summary.NoOp += plan.Summary.NoOp
+		combined.Summary.Operations += plan.Summary.Operations
+	}
+	return combined
 }
 
 func (e Engine) applyStep(ctx context.Context, st *v2state.State, step Step) error {
@@ -310,20 +401,26 @@ func Compare(node graph.Node, prior *v2state.Resource, observed Observed) Provid
 func (p Plan) Document(opts v2plan.Options) v2plan.Document {
 	changes := make([]v2plan.Change, 0, len(p.Steps))
 	for _, step := range p.Steps {
-		changes = append(changes, v2plan.Change{
+		before := any(step.Observed)
+		after := any(step.Node.Desired)
+		if step.Prior != nil && (step.Action == ActionDestroy || step.Action == ActionForget) {
+			before = step.Prior.Desired
+			after = nil
+		}
+		change := v2plan.Change{
 			Address: step.Address,
 			Action:  step.Action,
 			Summary: step.Summary,
 			Source:  step.Node.Source,
-			Diff: v2plan.DiffNode{
-				Path:      []string{},
-				Kind:      "object",
-				Action:    step.Action,
-				Sensitive: isSensitive(step.Node.Desired),
-				Before:    v2state.SanitizeObserved(step.Observed),
-				After:     v2state.SanitizeDesired(step.Node.Desired),
-			},
-		})
+			Diff:    v2plan.BuildDiff(step.Action, before, after),
+		}
+		if opts.Debug {
+			change.ProviderAddress = step.Node.ProviderAddress
+			if change.ProviderAddress == "" && step.Prior != nil {
+				change.ProviderAddress = step.Prior.ProviderAddress
+			}
+		}
+		changes = append(changes, change)
 	}
 	operations := make([]v2plan.OperationNode, 0, len(p.Operations))
 	for _, step := range p.Operations {
@@ -534,11 +631,6 @@ func identity(node graph.Node) string {
 		}
 	}
 	return node.Address
-}
-
-func isSensitive(values map[string]any) bool {
-	sensitive, _ := values["sensitive"].(bool)
-	return sensitive
 }
 
 func cloneMap(in map[string]any) map[string]any {

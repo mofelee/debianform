@@ -121,6 +121,42 @@ host "web1" {
 	}
 }
 
+func TestParseAPTSigningKeyBlockSourcePath(t *testing.T) {
+	file := writeConfig(t, `
+host "web1" {
+  apt {
+    repository "tools" {
+      uris       = ["https://repo.example/debian"]
+      suites     = ["trixie"]
+      components = ["main"]
+
+      signing_key {
+        url    = "https://repo.example/key.asc"
+        sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := cfg.Hosts["web1"].Body.Map["apt"].Map["repository"].Map["tools"]
+	if repository.Source.Path != `host.web1.apt.repository["tools"]` {
+		t.Fatalf("repository source path = %q", repository.Source.Path)
+	}
+	signingKey := repository.Map["signing_key"]
+	if signingKey.Source.Path != `host.web1.apt.repository["tools"].signing_key` {
+		t.Fatalf("signing key source path = %q", signingKey.Source.Path)
+	}
+	sha := signingKey.Map["sha256"]
+	if sha.Source.Path != `host.web1.apt.repository["tools"].signing_key.sha256` {
+		t.Fatalf("sha256 source path = %q", sha.Source.Path)
+	}
+}
+
 func TestParseLifecycleBlock(t *testing.T) {
 	file := writeConfig(t, `
 host "web1" {

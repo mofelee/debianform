@@ -54,6 +54,27 @@ func TestCompileFoundationResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileAPTRepositoryResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-apt-repository.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-apt-repository.golden.json", got)
+
+	packageDeps := dependsOnFor(resourceGraph, `host.apt1.packages.install["example-tool"]`)
+	for _, want := range []string{
+		`host.apt1.apt.repository["example_tools"]`,
+		`host.apt1.apt.cache_refresh`,
+	} {
+		if !containsString(packageDeps, want) {
+			t.Fatalf("example-tool deps = %#v, want %q", packageDeps, want)
+		}
+	}
+}
+
 func TestCompileServiceRestartOperation(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {
@@ -73,6 +94,74 @@ host "server1" {
 
 	if !hasOperation(resourceGraph, `host.server1.services.service["worker"].restart`) {
 		t.Fatalf("restart operation missing: %#v", resourceGraph.Operations)
+	}
+}
+
+func TestCompileAPTRepositoryDependencies(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "server1" {
+  apt {
+    repository "tools" {
+      uris          = ["https://repo.example/debian"]
+      suites        = ["trixie"]
+      components    = ["main"]
+      architectures = ["amd64"]
+
+      signing_key {
+        content = "-----BEGIN PGP PUBLIC KEY BLOCK-----\nexample\n-----END PGP PUBLIC KEY BLOCK-----\n"
+      }
+    }
+  }
+
+  packages {
+    install = ["curl"]
+
+    package "example-tool" {
+      repositories = ["tools"]
+    }
+  }
+}
+`)
+
+	repositoryAddress := `host.server1.apt.repository["tools"]`
+	keyAddress := `host.server1.apt.signing_key["tools"]`
+	refreshAddress := `host.server1.apt.cache_refresh`
+	packageAddress := `host.server1.packages.install["example-tool"]`
+
+	repository := nodeFor(resourceGraph, repositoryAddress)
+	if repository == nil {
+		t.Fatalf("repository node missing")
+	}
+	if !containsString(repository.DependsOn, keyAddress) {
+		t.Fatalf("repository deps = %#v, want signing key", repository.DependsOn)
+	}
+	content, _ := repository.Desired["content"].(string)
+	if !strings.Contains(content, "Signed-By: /etc/apt/keyrings/tools.asc") {
+		t.Fatalf("repository content missing Signed-By:\n%s", content)
+	}
+	if !strings.Contains(content, "Architectures: amd64") {
+		t.Fatalf("repository content missing Architectures:\n%s", content)
+	}
+
+	operation := operationFor(resourceGraph, refreshAddress)
+	if operation == nil {
+		t.Fatalf("apt cache refresh operation missing")
+	}
+	for _, want := range []string{keyAddress, repositoryAddress} {
+		if !containsString(operation.TriggeredBy, want) {
+			t.Fatalf("refresh triggered_by = %#v, want %q", operation.TriggeredBy, want)
+		}
+	}
+
+	packageDeps := dependsOnFor(resourceGraph, packageAddress)
+	for _, want := range []string{repositoryAddress, refreshAddress} {
+		if !containsString(packageDeps, want) {
+			t.Fatalf("package deps = %#v, want %q", packageDeps, want)
+		}
+	}
+	curlDeps := dependsOnFor(resourceGraph, `host.server1.packages.install["curl"]`)
+	if containsString(curlDeps, refreshAddress) {
+		t.Fatalf("unrelated package deps = %#v, did not want apt refresh", curlDeps)
 	}
 }
 
@@ -109,6 +198,24 @@ func dependsOnFor(resourceGraph *ResourceGraph, address string) []string {
 	for _, node := range resourceGraph.Nodes {
 		if node.Address == address {
 			return node.DependsOn
+		}
+	}
+	return nil
+}
+
+func nodeFor(resourceGraph *ResourceGraph, address string) *Node {
+	for i := range resourceGraph.Nodes {
+		if resourceGraph.Nodes[i].Address == address {
+			return &resourceGraph.Nodes[i]
+		}
+	}
+	return nil
+}
+
+func operationFor(resourceGraph *ResourceGraph, address string) *Operation {
+	for i := range resourceGraph.Operations {
+		if resourceGraph.Operations[i].Address == address {
+			return &resourceGraph.Operations[i]
 		}
 	}
 	return nil

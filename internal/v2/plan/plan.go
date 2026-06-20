@@ -18,6 +18,7 @@ const FormatVersion = "debianform.plan.v2alpha1"
 type Options struct {
 	CommandFile string
 	Host        string
+	Debug       bool
 	Now         func() time.Time
 }
 
@@ -49,18 +50,35 @@ type Change struct {
 	Action          string       `json:"action"`
 	Summary         string       `json:"summary"`
 	Source          ir.SourceRef `json:"source"`
+	ProviderAddress string       `json:"provider_address,omitempty"`
 	Diff            DiffNode     `json:"diff"`
 	LowLevelActions []string     `json:"low_level_actions,omitempty"`
 }
 
 type DiffNode struct {
-	Path      []string       `json:"path"`
-	Kind      string         `json:"kind"`
-	Action    string         `json:"action"`
-	Sensitive bool           `json:"sensitive"`
-	Before    any            `json:"before"`
-	After     map[string]any `json:"after,omitempty"`
-	Children  []DiffNode     `json:"children,omitempty"`
+	Path          []string       `json:"path"`
+	Kind          string         `json:"kind"`
+	Action        string         `json:"action"`
+	Sensitive     bool           `json:"sensitive"`
+	Before        any            `json:"before,omitempty"`
+	After         any            `json:"after,omitempty"`
+	BeforeSummary map[string]any `json:"before_summary,omitempty"`
+	AfterSummary  map[string]any `json:"after_summary,omitempty"`
+	Children      []DiffNode     `json:"children,omitempty"`
+	Hunks         []TextHunk     `json:"hunks,omitempty"`
+}
+
+type TextHunk struct {
+	OldStart int        `json:"old_start"`
+	OldLines int        `json:"old_lines"`
+	NewStart int        `json:"new_start"`
+	NewLines int        `json:"new_lines"`
+	Lines    []DiffLine `json:"lines"`
+}
+
+type DiffLine struct {
+	Op   string `json:"op"`
+	Text string `json:"text"`
 }
 
 type OperationNode struct {
@@ -92,13 +110,17 @@ func New(resourceGraph *graph.ResourceGraph, opts Options) Document {
 
 	changes := make([]Change, 0, len(nodes))
 	for _, node := range nodes {
-		changes = append(changes, Change{
+		change := Change{
 			Address: node.Address,
 			Action:  "create",
 			Summary: node.Summary,
 			Source:  node.Source,
 			Diff:    diffForNode(node),
-		})
+		}
+		if opts.Debug {
+			change.ProviderAddress = node.ProviderAddress
+		}
+		changes = append(changes, change)
 	}
 
 	operations := make([]OperationNode, 0, len(resourceGraph.Operations))
@@ -135,60 +157,7 @@ func New(resourceGraph *graph.ResourceGraph, opts Options) Document {
 }
 
 func diffForNode(node graph.Node) DiffNode {
-	if sensitive, ok := node.Desired["sensitive"].(bool); ok && sensitive {
-		return DiffNode{
-			Path:      []string{},
-			Kind:      "sensitive",
-			Action:    "create",
-			Sensitive: true,
-			Before:    nil,
-			After:     sanitizedSensitiveAfter(node.Desired),
-		}
-	}
-	if content, ok := node.Desired["content"].(string); ok && content != "" && node.Kind == "file" {
-		return DiffNode{
-			Path:      []string{"content"},
-			Kind:      "text",
-			Action:    "create",
-			Sensitive: false,
-			Before:    nil,
-			After: map[string]any{
-				"content": content,
-			},
-		}
-	}
-	return DiffNode{
-		Path:      []string{},
-		Kind:      "object",
-		Action:    "create",
-		Sensitive: false,
-		Before:    nil,
-		After:     sanitizedAfter(node.Desired),
-	}
-}
-
-func sanitizedAfter(desired map[string]any) map[string]any {
-	out := make(map[string]any, len(desired))
-	for key, value := range desired {
-		if key == "content" {
-			continue
-		}
-		out[key] = value
-	}
-	return out
-}
-
-func sanitizedSensitiveAfter(desired map[string]any) map[string]any {
-	out := make(map[string]any, len(desired))
-	for key, value := range desired {
-		switch key {
-		case "content", "source_path":
-			continue
-		default:
-			out[key] = value
-		}
-	}
-	return out
+	return BuildDiff("create", nil, node.Desired)
 }
 
 func PrintText(w io.Writer, doc Document) {
@@ -204,6 +173,13 @@ func PrintText(w io.Writer, doc Document) {
 		if change.Summary != "" {
 			fmt.Fprintf(w, "    %s\n", change.Summary)
 		}
+		if source := sourceText(change.Source); source != "" {
+			fmt.Fprintf(w, "    source: %s\n", source)
+		}
+		if change.ProviderAddress != "" {
+			fmt.Fprintf(w, "    provider: %s\n", change.ProviderAddress)
+		}
+		printDiffChildren(w, change.Diff.Children, 4)
 	}
 	for _, op := range doc.Operations {
 		fmt.Fprintf(w, "  ! %s\n", op.Address)
@@ -228,6 +204,7 @@ func PrintHTML(w io.Writer, doc Document) error {
 	tmpl, err := template.New("plan").Funcs(template.FuncMap{
 		"sourceText": sourceText,
 		"hostText":   hostFromAddress,
+		"diffText":   diffText,
 		"actionText": func(action string) string {
 			if action == "" {
 				return "unknown"
@@ -268,6 +245,94 @@ func printSummary(w io.Writer, summary Summary) {
 		summary.NoOp,
 		summary.Operations,
 	)
+}
+
+func printDiffChildren(w io.Writer, children []DiffNode, indent int) {
+	for _, child := range children {
+		printDiffNode(w, child, indent)
+	}
+}
+
+func printDiffNode(w io.Writer, node DiffNode, indent int) {
+	padding := strings.Repeat(" ", indent)
+	label := diffPathLabel(node.Path)
+	switch node.Kind {
+	case "object", "map", "list", "set":
+		fmt.Fprintf(w, "%s%s %s\n", padding, actionSymbol(node.Action), label)
+		printDiffChildren(w, node.Children, indent+2)
+	case "text":
+		fmt.Fprintf(w, "%s%s %s\n", padding, actionSymbol(node.Action), label)
+		for _, hunk := range node.Hunks {
+			fmt.Fprintf(w, "%s  @@ -%d,%d +%d,%d @@\n", padding, hunk.OldStart, hunk.OldLines, hunk.NewStart, hunk.NewLines)
+			for _, line := range hunk.Lines {
+				fmt.Fprintf(w, "%s  %s %s\n", padding, actionSymbol(line.Op), line.Text)
+			}
+		}
+	case "sensitive":
+		fmt.Fprintf(w, "%s%s %s: %s\n", padding, actionSymbol(node.Action), label, sensitiveSummaryText(node))
+	default:
+		fmt.Fprintf(w, "%s%s %s%s\n", padding, actionSymbol(node.Action), label, scalarDiffText(node))
+	}
+}
+
+func diffText(node DiffNode) string {
+	var out strings.Builder
+	printDiffChildren(&out, node.Children, 0)
+	return strings.TrimRight(out.String(), "\n")
+}
+
+func diffPathLabel(path []string) string {
+	if len(path) == 0 {
+		return "value"
+	}
+	return strings.Join(path, ".")
+}
+
+func scalarDiffText(node DiffNode) string {
+	switch node.Action {
+	case "create":
+		return ": " + formatDiffValue(node.After)
+	case "delete":
+		return ": " + formatDiffValue(node.Before)
+	default:
+		return ": " + formatDiffValue(node.Before) + " -> " + formatDiffValue(node.After)
+	}
+}
+
+func formatDiffValue(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%v", value)
+	}
+	return string(data)
+}
+
+func sensitiveSummaryText(node DiffNode) string {
+	switch node.Action {
+	case "create":
+		return "<sensitive " + summaryText(node.AfterSummary) + ">"
+	case "delete":
+		return "<sensitive " + summaryText(node.BeforeSummary) + ">"
+	default:
+		return "<sensitive " + summaryText(node.BeforeSummary) + " -> " + summaryText(node.AfterSummary) + ">"
+	}
+}
+
+func summaryText(summary map[string]any) string {
+	if len(summary) == 0 {
+		return "changed"
+	}
+	parts := []string{}
+	if sha, ok := summary["sha256"]; ok {
+		parts = append(parts, "sha256="+fmt.Sprint(sha))
+	}
+	if size, ok := summary["bytes"]; ok {
+		parts = append(parts, fmt.Sprint(size)+" bytes")
+	}
+	if len(parts) == 0 {
+		return "changed"
+	}
+	return strings.Join(parts, ", ")
 }
 
 func sourceText(source ir.SourceRef) string {
@@ -363,6 +428,9 @@ const planHTMLTemplate = `<!doctype html>
     th { background: var(--panel); font-weight: 600; }
     tr:last-child td { border-bottom: 0; }
     code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+    details { margin-top: 8px; }
+    summary { cursor: pointer; color: var(--muted); }
+    pre { margin: 8px 0 0; padding: 10px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; }
     .action { font-weight: 700; text-transform: uppercase; white-space: nowrap; }
     .action-create, .action-adopt { color: var(--create); }
     .action-update { color: var(--update); }
@@ -412,7 +480,7 @@ const planHTMLTemplate = `<!doctype html>
         <tr data-plan-row data-action="{{.Action}}" data-host="{{hostText .Address}}" data-search="{{.Address}} {{.Summary}} {{sourceText .Source}}">
           <td><span class="action action-{{.Action}}">{{actionText .Action}}</span></td>
           <td><code>{{.Address}}</code></td>
-          <td>{{.Summary}}</td>
+          <td>{{.Summary}}{{if .ProviderAddress}}<div class="source">provider: <code>{{.ProviderAddress}}</code></div>{{end}}{{with diffText .Diff}}<details><summary>Field diff</summary><pre>{{.}}</pre></details>{{end}}</td>
           <td class="source">{{sourceText .Source}}</td>
         </tr>
       {{end}}
