@@ -7,16 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/hashicorp/hcl/v2/hclparse"
-	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/mofelee/debianform/internal/v1/config"
-	"github.com/mofelee/debianform/internal/v1/engine"
-	"github.com/mofelee/debianform/internal/v1/sshx"
-	"github.com/mofelee/debianform/internal/v1/state"
 	v2engine "github.com/mofelee/debianform/internal/v2/engine"
 	v2graph "github.com/mofelee/debianform/internal/v2/graph"
 	v2ir "github.com/mofelee/debianform/internal/v2/ir"
@@ -81,10 +74,10 @@ func runFmt(args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := config.Load(files); err != nil {
+	if _, err := loadV2Program(files, ""); err != nil {
 		return err
 	}
-	fmt.Println("fmt: no-op for MVP parser; configuration parsed successfully")
+	fmt.Println("fmt: no-op for v2 parser; configuration parsed successfully")
 	return nil
 }
 
@@ -104,75 +97,7 @@ func runConfigCommand(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	isV2, err := looksLikeV2(files)
-	if err != nil {
-		return err
-	}
-	if isV2 {
-		return runV2ConfigCommand(cmd, files, *host, *format, *lockTimeout, *autoApprove)
-	}
-	if *format != "text" {
-		return fmt.Errorf("--format is only supported for v2 plan")
-	}
-
-	cfg, err := config.Load(files)
-	if err != nil {
-		return err
-	}
-
-	if cmd == "validate" {
-		fmt.Printf("configuration is valid: %d host(s), %d resource(s)\n", len(cfg.Hosts), len(cfg.Resources))
-		return nil
-	}
-
-	runner := sshx.NewRunner(cfg.Hosts)
-	backend := state.NewSSHBackend(cfg.State, runner)
-	e := engine.New(cfg, runner, backend)
-	ctx := context.Background()
-
-	switch cmd {
-	case "plan":
-		plan, err := e.Plan(ctx, engine.Options{Host: *host})
-		if err != nil {
-			return err
-		}
-		engine.PrintPlan(os.Stdout, plan)
-		return nil
-	case "check":
-		plan, err := e.Plan(ctx, engine.Options{Host: *host})
-		if err != nil {
-			return err
-		}
-		engine.PrintPlan(os.Stdout, plan)
-		if plan.HasChanges() {
-			return fmt.Errorf("remote state does not match configuration")
-		}
-		return nil
-	case "apply":
-		if !*autoApprove {
-			preview, err := e.Plan(ctx, engine.Options{Host: *host})
-			if err != nil {
-				return err
-			}
-			engine.PrintPlan(os.Stdout, preview)
-			if !preview.HasChanges() {
-				return nil
-			}
-			if !confirmApply() {
-				return fmt.Errorf("apply cancelled")
-			}
-		}
-		plan, err := e.Apply(ctx, engine.Options{Host: *host, LockTimeout: *lockTimeout})
-		if err != nil {
-			return err
-		}
-		engine.PrintPlan(os.Stdout, plan)
-		fmt.Println("apply complete")
-		return nil
-	default:
-		return fmt.Errorf("unsupported command %q", cmd)
-	}
+	return runV2ConfigCommand(cmd, files, *host, *format, *lockTimeout, *autoApprove)
 }
 
 func runV2ConfigCommand(cmd string, files []string, host string, format string, lockTimeout time.Duration, autoApprove bool) error {
@@ -219,10 +144,10 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 		if err != nil {
 			return err
 		}
-		runner := sshx.NewRunner(v2Hosts(program))
+		runner := v2engine.NewSSHRunner(v2engine.HostsFromProgram(program))
 		engine := v2engine.Engine{
 			Backend:  v2engine.NewSSHBackend(runner),
-			Provider: v2engine.NewV1Provider(runner),
+			Provider: v2engine.NewNativeProvider(runner),
 		}
 		opts := v2engine.Options{Host: host, LockTimeout: lockTimeout}
 		onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, opts)
@@ -260,27 +185,6 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 	default:
 		return fmt.Errorf("unsupported command %q", cmd)
 	}
-}
-
-func v2Hosts(program *v2ir.Program) map[string]config.Host {
-	hosts := map[string]config.Host{}
-	for _, host := range program.Hosts {
-		hosts[host.Name] = config.Host{
-			Name:          host.Name,
-			Address:       host.SSH.Host,
-			Port:          portString(host.SSH.Port),
-			IdentityFile:  host.SSH.IdentityFile,
-			SSHConfigHost: host.SSH.Host,
-		}
-	}
-	return hosts
-}
-
-func portString(port int) string {
-	if port == 0 || port == 22 {
-		return ""
-	}
-	return strconv.Itoa(port)
 }
 
 func loadV2Program(files []string, host string) (*v2ir.Program, error) {
@@ -322,39 +226,6 @@ func commandHost(program *v2ir.Program, host string) string {
 		return program.Hosts[0].Name
 	}
 	return ""
-}
-
-func looksLikeV2(files []string) (bool, error) {
-	parser := hclparse.NewParser()
-	for _, file := range files {
-		parsed, diags := parser.ParseHCLFile(file)
-		if diags.HasErrors() {
-			return false, fmt.Errorf("%s", diags.Error())
-		}
-		body, ok := parsed.Body.(*hclsyntax.Body)
-		if !ok {
-			return false, fmt.Errorf("%s: unsupported HCL body type %T", file, parsed.Body)
-		}
-		for _, block := range body.Blocks {
-			switch block.Type {
-			case "profile", "component":
-				return true, nil
-			case "host":
-				for name := range block.Body.Attributes {
-					if name == "imports" || name == "components" {
-						return true, nil
-					}
-				}
-				for _, nested := range block.Body.Blocks {
-					switch nested.Type {
-					case "ssh", "state", "system", "kernel", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services", "assert":
-						return true, nil
-					}
-				}
-			}
-		}
-	}
-	return false, nil
 }
 
 func configFiles(file string) ([]string, error) {

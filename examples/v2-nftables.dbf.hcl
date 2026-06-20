@@ -1,7 +1,6 @@
 # DebianForm v2 nftables 设计示例。
 #
-# v2 编译器尚未接入当前 CLI；legacy v1 原生 nftables 参考见
-# ../legacy/v1/examples/system-native.dbf.hcl。
+# 设计夹具：nftables 领域会在后续 loop 接入 CLI。
 #
 # 设计边界：
 # - v2 的主路径是 nftables 原生配置，不是通用 firewall 抽象。

@@ -75,7 +75,7 @@ run
     "line": 560,
     "path": "host.server1.nftables.file[\"20-services\"]"
   },
-  "provider_address": "debian_nftables_file.server1_20_services",
+  "provider_address": "nftables_file.server1_20_services",
   "diff": {},
   "low_level_actions": []
 }

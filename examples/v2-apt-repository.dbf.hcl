@@ -1,7 +1,6 @@
 # DebianForm v2 APT repository 设计示例。
 #
-# v2 编译器尚未接入当前 CLI；legacy v1 高阶 APT 参考见
-# ../legacy/v1/examples/bird2.dbf.hcl。
+# 设计夹具：apt.repository 会在后续 loop 接入 CLI。
 #
 # 设计边界：
 # - APT repository 是 host/profile/component 内的 apt 领域对象。

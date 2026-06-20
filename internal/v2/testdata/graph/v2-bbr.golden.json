@@ -15,8 +15,8 @@
         "name": "tcp_bbr",
         "persist": true
       },
-      "provider_type": "debian_kernel_module",
-      "provider_address": "debian_kernel_module.bbr1_tcp_bbr",
+      "provider_type": "kernel_module",
+      "provider_address": "kernel_module.bbr1_tcp_bbr",
       "provider_payload": {
         "ensure": "present",
         "name": "tcp_bbr",
@@ -39,8 +39,8 @@
         "persist": true,
         "value": "fq"
       },
-      "provider_type": "debian_sysctl",
-      "provider_address": "debian_sysctl.bbr1_net_core_default_qdisc",
+      "provider_type": "sysctl",
+      "provider_address": "sysctl.bbr1_net_core_default_qdisc",
       "provider_payload": {
         "apply_runtime": true,
         "key": "net.core.default_qdisc",
@@ -64,8 +64,8 @@
         "persist": true,
         "value": "bbr"
       },
-      "provider_type": "debian_sysctl",
-      "provider_address": "debian_sysctl.bbr1_net_ipv4_tcp_congestion_control",
+      "provider_type": "sysctl",
+      "provider_address": "sysctl.bbr1_net_ipv4_tcp_congestion_control",
       "provider_payload": {
         "apply_runtime": true,
         "key": "net.ipv4.tcp_congestion_control",

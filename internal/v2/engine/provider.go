@@ -1,0 +1,995 @@
+package engine
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"sort"
+	"strings"
+
+	"github.com/mofelee/debianform/internal/v2/graph"
+	v2state "github.com/mofelee/debianform/internal/v2/state"
+)
+
+type NativeProvider struct {
+	Runner Runner
+}
+
+func NewNativeProvider(runner Runner) NativeProvider {
+	return NativeProvider{Runner: runner}
+}
+
+func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	if p.Runner == nil {
+		return ProviderPlan{}, fmt.Errorf("v2 provider runner is required")
+	}
+	switch node.Kind {
+	case "file", "secret", "systemd_unit":
+		return p.planFileLike(ctx, node, prior)
+	case "directory":
+		return p.planDirectory(ctx, node, prior)
+	case "package":
+		return p.planPackage(ctx, node, prior)
+	case "kernel_module":
+		return p.planKernelModule(ctx, node, prior)
+	case "sysctl":
+		return p.planSysctl(ctx, node, prior)
+	case "group":
+		return p.planGroup(ctx, node, prior)
+	case "user":
+		return p.planUser(ctx, node, prior)
+	case "ssh_authorized_key":
+		return p.planAuthorizedKey(ctx, node, prior)
+	case "service":
+		return p.planService(ctx, node, prior)
+	default:
+		return ProviderPlan{}, fmt.Errorf("%s unsupported resource kind %q", node.Address, node.Kind)
+	}
+}
+
+func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, error) {
+	switch step.Node.Kind {
+	case "file", "secret":
+		return p.applyFileLike(ctx, step, false)
+	case "systemd_unit":
+		return p.applyFileLike(ctx, step, true)
+	case "directory":
+		return p.applyDirectory(ctx, step)
+	case "package":
+		return p.applyPackage(ctx, step)
+	case "kernel_module":
+		return p.applyKernelModule(ctx, step)
+	case "sysctl":
+		return p.applySysctl(ctx, step)
+	case "group":
+		return p.applyGroup(ctx, step)
+	case "user":
+		return p.applyUser(ctx, step)
+	case "ssh_authorized_key":
+		return p.applyAuthorizedKey(ctx, step)
+	case "service":
+		return p.applyService(ctx, step)
+	default:
+		return nil, fmt.Errorf("%s unsupported resource kind %q", step.Address, step.Node.Kind)
+	}
+}
+
+func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
+	if step.Prior == nil {
+		return nil
+	}
+	desired := step.Prior.Desired
+	host := step.Prior.Host
+	switch step.Prior.Kind {
+	case "file", "secret":
+		return p.removePath(ctx, host, stringMapValue(desired, "path"), false)
+	case "systemd_unit":
+		return p.removePath(ctx, host, stringMapValue(desired, "path"), true)
+	case "directory":
+		path := stringMapValue(desired, "path")
+		if path == "" || path == "/" {
+			return nil
+		}
+		_, err := p.Runner.Run(ctx, host, "rm -rf -- "+shellQuote(path)+"\n")
+		return err
+	case "package":
+		name := stringMapValue(desired, "name")
+		if name == "" {
+			return nil
+		}
+		_, err := p.Runner.Run(ctx, host, "set -eu\nexport DEBIAN_FRONTEND=noninteractive\napt-get remove -y "+shellQuote(name)+"\n")
+		return err
+	case "kernel_module":
+		name := stringMapValue(desired, "name")
+		if name == "" {
+			return nil
+		}
+		script := "set -eu\nrm -f -- " + shellQuote(modulePath(name)) + "\nmodprobe -r " + shellQuote(name) + " 2>/dev/null || true\n"
+		_, err := p.Runner.Run(ctx, host, script)
+		return err
+	case "sysctl":
+		key := stringMapValue(desired, "key")
+		if key == "" {
+			return nil
+		}
+		return p.removePath(ctx, host, sysctlPath(key), false)
+	case "group":
+		name := stringMapValue(desired, "name")
+		if name == "" {
+			return nil
+		}
+		_, err := p.Runner.Run(ctx, host, "if getent group "+shellQuote(name)+" >/dev/null; then groupdel "+shellQuote(name)+"; fi\n")
+		return err
+	case "user":
+		name := stringMapValue(desired, "name")
+		if name == "" {
+			return nil
+		}
+		_, err := p.Runner.Run(ctx, host, "if getent passwd "+shellQuote(name)+" >/dev/null; then userdel "+shellQuote(name)+"; fi\n")
+		return err
+	case "ssh_authorized_key":
+		user := stringMapValue(desired, "user")
+		key := stringMapValue(desired, "key")
+		if user == "" || key == "" {
+			return nil
+		}
+		node := graph.Node{Host: host, Desired: map[string]any{"user": user, "key": key, "ensure": "absent"}}
+		_, err := p.applyAuthorizedKey(ctx, Step{Node: node})
+		return err
+	case "service":
+		name := stringMapValue(desired, "name")
+		if name == "" {
+			return nil
+		}
+		_, err := p.Runner.Run(ctx, host, "systemctl disable --now "+shellQuote(name)+" 2>/dev/null || true\n")
+		return err
+	default:
+		return fmt.Errorf("%s unsupported prior kind %q", step.Address, step.Prior.Kind)
+	}
+}
+
+func (p NativeProvider) RunOperation(ctx context.Context, operation graph.Operation) error {
+	if operation.CommandPreview == "" {
+		return nil
+	}
+	host := hostFromAddress(operation.Address)
+	if host == "" {
+		return fmt.Errorf("cannot infer host from operation address %s", operation.Address)
+	}
+	_, err := p.Runner.RunCommand(ctx, host, operation.CommandPreview)
+	return err
+}
+
+func (p NativeProvider) planFileLike(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	path := stringDesired(node, "path")
+	current, err := p.readPath(ctx, node.Host, path)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	if ensureAbsent(node) {
+		if current.Exists {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove " + node.Kind + " " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent "+node.Kind+" "+path, observed), nil
+	}
+	wantSHA, err := desiredContentSHA(node)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	if !current.Exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "write file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if current.IsDir ||
+		current.SHA256 != wantSHA ||
+		current.Owner != stringDesired(node, "owner") ||
+		current.Group != stringDesired(node, "group") ||
+		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for file "+path, observed), nil
+}
+
+func (p NativeProvider) applyFileLike(ctx context.Context, step Step, daemonReload bool) (map[string]any, error) {
+	path := stringDesired(step.Node, "path")
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		if err := p.removePath(ctx, step.Node.Host, path, daemonReload); err != nil {
+			return nil, err
+		}
+		return map[string]any{"exists": false}, nil
+	}
+	content, err := desiredContent(step.Node)
+	if err != nil {
+		return nil, err
+	}
+	encoded := base64.StdEncoding.EncodeToString(content)
+	tmp := path + ".dbf-tmp"
+	lines := []string{
+		"set -eu",
+		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
+		"base64 -d > " + shellQuote(tmp) + " <<'__DBF_FILE__'\n" + encoded + "\n__DBF_FILE__",
+		"install -o " + shellQuote(stringDesired(step.Node, "owner")) +
+			" -g " + shellQuote(stringDesired(step.Node, "group")) +
+			" -m " + shellQuote(stringDesired(step.Node, "mode")) +
+			" " + shellQuote(tmp) + " " + shellQuote(path),
+		"rm -f -- " + shellQuote(tmp),
+	}
+	if daemonReload {
+		lines = append(lines, "systemctl daemon-reload")
+	}
+	_, err = p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"exists": true, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planDirectory(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	path := stringDesired(node, "path")
+	current, err := p.readPath(ctx, node.Host, path)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	if ensureAbsent(node) {
+		if current.Exists {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove directory " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent directory "+path, observed), nil
+	}
+	if !current.Exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "create directory " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if !current.IsDir ||
+		current.Owner != stringDesired(node, "owner") ||
+		current.Group != stringDesired(node, "group") ||
+		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update directory " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for directory "+path, observed), nil
+}
+
+func (p NativeProvider) applyDirectory(ctx context.Context, step Step) (map[string]any, error) {
+	path := stringDesired(step.Node, "path")
+	if path == "" || path == "/" {
+		return nil, fmt.Errorf("%s refuses to manage unsafe directory path %q", step.Address, path)
+	}
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		_, err := p.Runner.Run(ctx, step.Node.Host, "rm -rf -- "+shellQuote(path)+"\n")
+		return map[string]any{"exists": false}, err
+	}
+	lines := []string{
+		"set -eu",
+		"mkdir -p -- " + shellQuote(path),
+		"chown " + shellQuote(stringDesired(step.Node, "owner")+":"+stringDesired(step.Node, "group")) + " -- " + shellQuote(path),
+		"chmod " + shellQuote(stringDesired(step.Node, "mode")) + " -- " + shellQuote(path),
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"exists": true, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planPackage(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	name := stringDesired(node, "name")
+	result, err := p.Runner.Run(ctx, node.Host, "dpkg-query -W -f='${Status}\\t${Version}\\n' "+shellQuote(name)+" 2>/dev/null || true\n")
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	installed := strings.Contains(result.Stdout, "install ok installed")
+	observed := map[string]any{"installed": installed}
+	if ensureAbsent(node) {
+		if installed {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove package " + name, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent package "+name, observed), nil
+	}
+	if !installed {
+		return ProviderPlan{Action: ActionCreate, Summary: "install package " + name, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for package "+name, observed), nil
+}
+
+func (p NativeProvider) applyPackage(ctx context.Context, step Step) (map[string]any, error) {
+	name := stringDesired(step.Node, "name")
+	if (ensureAbsent(step.Node) || step.Action == ActionDelete) && !boolObserved(step, "installed") {
+		return map[string]any{"installed": false}, nil
+	}
+	lines := []string{"set -eu", "export DEBIAN_FRONTEND=noninteractive"}
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		lines = append(lines, "apt-get remove -y "+shellQuote(name))
+	} else {
+		lines = append(lines, "apt-get install -y "+shellQuote(name))
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"installed": !ensureAbsent(step.Node), "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planKernelModule(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	name := stringDesired(node, "name")
+	path := modulePath(name)
+	script := fmt.Sprintf(`module=%s
+kmod=$(printf '%%s' "$module" | tr '-' '_')
+if awk -v m="$kmod" '$1 == m { found = 1 } END { exit found ? 0 : 1 }' /proc/modules; then echo loaded; else echo missing; fi
+if [ -f %s ]; then sha256sum %s | awk '{print $1}'; else echo ''; fi
+`, shellQuote(name), shellQuote(path), shellQuote(path))
+	result, err := p.Runner.Run(ctx, node.Host, script)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	lines := nonEmptyLines(result.Stdout)
+	loaded := len(lines) > 0 && lines[0] == "loaded"
+	persisted := len(lines) > 1 && lines[1] == sha256Hex([]byte(name+"\n"))
+	observed := map[string]any{"loaded": loaded, "persisted": persisted}
+	if ensureAbsent(node) {
+		if loaded || persisted {
+			return ProviderPlan{Action: ActionDelete, Summary: "unload kernel module " + name, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent kernel module "+name, observed), nil
+	}
+	if !loaded || !persisted {
+		return ProviderPlan{Action: ActionUpdate, Summary: "modprobe " + name + " and write " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for kernel module "+name, observed), nil
+}
+
+func (p NativeProvider) applyKernelModule(ctx context.Context, step Step) (map[string]any, error) {
+	name := stringDesired(step.Node, "name")
+	path := modulePath(name)
+	var lines []string
+	lines = append(lines, "set -eu")
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		lines = append(lines, "rm -f -- "+shellQuote(path), "modprobe -r "+shellQuote(name)+" 2>/dev/null || true")
+	} else {
+		lines = append(lines,
+			"modprobe "+shellQuote(name),
+			"mkdir -p -- \"$(dirname "+shellQuote(path)+")\"",
+			"printf '%s\\n' "+shellQuote(name)+" > "+shellQuote(path),
+			"chown root:root "+shellQuote(path),
+			"chmod 0644 "+shellQuote(path),
+		)
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"loaded": !ensureAbsent(step.Node), "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planSysctl(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	key := stringDesired(node, "key")
+	value := stringDesired(node, "value")
+	path := sysctlPath(key)
+	script := fmt.Sprintf(`sysctl -n %s 2>/dev/null || true
+if [ -f %s ]; then sha256sum %s | awk '{print $1}'; else echo ''; fi
+`, shellQuote(key), shellQuote(path), shellQuote(path))
+	result, err := p.Runner.Run(ctx, node.Host, script)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	lines := strings.Split(strings.TrimRight(result.Stdout, "\n"), "\n")
+	current := ""
+	if len(lines) > 0 {
+		current = strings.TrimSpace(lines[0])
+	}
+	persisted := len(lines) > 1 && strings.TrimSpace(lines[1]) == sha256Hex([]byte(key+" = "+value+"\n"))
+	observed := map[string]any{"value": current, "persisted": persisted}
+	if ensureAbsent(node) {
+		if persisted {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove sysctl " + key, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent sysctl "+key, observed), nil
+	}
+	if current != value || !persisted {
+		return ProviderPlan{Action: ActionUpdate, Summary: "sysctl -w " + key + "=" + value + " and write " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for sysctl "+key, observed), nil
+}
+
+func (p NativeProvider) applySysctl(ctx context.Context, step Step) (map[string]any, error) {
+	key := stringDesired(step.Node, "key")
+	value := stringDesired(step.Node, "value")
+	path := sysctlPath(key)
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		if err := p.removePath(ctx, step.Node.Host, path, false); err != nil {
+			return nil, err
+		}
+		return map[string]any{"persisted": false, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+	}
+	lines := []string{
+		"set -eu",
+		"sysctl -w " + shellQuote(key+"="+value),
+		"mkdir -p -- \"$(dirname " + shellQuote(path) + ")\"",
+		"printf '%s\\n' " + shellQuote(key+" = "+value) + " > " + shellQuote(path),
+		"chown root:root " + shellQuote(path),
+		"chmod 0644 " + shellQuote(path),
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"value": value, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planGroup(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	name := stringDesired(node, "name")
+	result, err := p.Runner.Run(ctx, node.Host, "getent group "+shellQuote(name)+" || true\n")
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	line := strings.TrimSpace(result.Stdout)
+	exists := line != ""
+	gid := ""
+	if fields := strings.Split(line, ":"); len(fields) >= 3 {
+		gid = fields[2]
+	}
+	observed := map[string]any{"exists": exists, "gid": gid}
+	if ensureAbsent(node) {
+		if exists {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove group " + name, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent group "+name, observed), nil
+	}
+	wantGID := stringDesired(node, "gid")
+	if !exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "create group " + name, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if wantGID != "" && gid != wantGID {
+		return ProviderPlan{Action: ActionUpdate, Summary: "set group " + name + " gid to " + wantGID, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for group "+name, observed), nil
+}
+
+func (p NativeProvider) applyGroup(ctx context.Context, step Step) (map[string]any, error) {
+	name := stringDesired(step.Node, "name")
+	quoted := shellQuote(name)
+	lines := []string{"set -eu"}
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		lines = append(lines, "if getent group "+quoted+" >/dev/null; then groupdel "+quoted+"; fi")
+	} else {
+		add := "groupadd"
+		if boolDesired(step.Node, "system") {
+			add += " -r"
+		}
+		if gid := stringDesired(step.Node, "gid"); gid != "" {
+			add += " -g " + shellQuote(gid)
+		}
+		add += " " + quoted
+		mod := ":"
+		if gid := stringDesired(step.Node, "gid"); gid != "" {
+			mod = "groupmod -g " + shellQuote(gid) + " " + quoted
+		}
+		lines = append(lines, "if getent group "+quoted+" >/dev/null; then "+mod+"; else "+add+"; fi")
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"exists": !ensureAbsent(step.Node), "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planUser(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	name := stringDesired(node, "name")
+	cur, err := p.readUser(ctx, node.Host, name)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := map[string]any{"exists": cur.exists, "uid": cur.uid, "group": cur.primaryGroup, "home": cur.home, "shell": cur.shell, "groups": cur.groups}
+	if ensureAbsent(node) {
+		if cur.exists {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove user " + name, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent user "+name, observed), nil
+	}
+	if !cur.exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "create user " + name, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	var reasons []string
+	if want := stringDesired(node, "uid"); want != "" && cur.uid != want {
+		reasons = append(reasons, "uid")
+	}
+	if want := stringDesired(node, "group"); want != "" && want != cur.gidNum && want != cur.primaryGroup {
+		reasons = append(reasons, "primary group")
+	}
+	if want := stringDesired(node, "home"); want != "" && cur.home != want {
+		reasons = append(reasons, "home")
+	}
+	if want := stringDesired(node, "shell"); want != "" && cur.shell != want {
+		reasons = append(reasons, "shell")
+	}
+	if want := stringListDesired(node, "groups"); len(want) > 0 && !sameStringSet(want, cur.groups) {
+		reasons = append(reasons, "groups")
+	}
+	if len(reasons) > 0 {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update user " + name + " (" + strings.Join(reasons, ", ") + ")", Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for user "+name, observed), nil
+}
+
+func (p NativeProvider) applyUser(ctx context.Context, step Step) (map[string]any, error) {
+	name := stringDesired(step.Node, "name")
+	quoted := shellQuote(name)
+	lines := []string{"set -eu"}
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		lines = append(lines, "if getent passwd "+quoted+" >/dev/null; then userdel "+quoted+"; fi")
+	} else {
+		flags := userFlags(step.Node)
+		add := "useradd"
+		if boolDesired(step.Node, "system") {
+			add += " -r"
+		} else {
+			add += " -m"
+		}
+		add += flags + " " + quoted
+		mod := ":"
+		if flags != "" {
+			mod = "usermod" + flags + " " + quoted
+		}
+		lines = append(lines, "if getent passwd "+quoted+" >/dev/null; then "+mod+"; else "+add+"; fi")
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"exists": !ensureAbsent(step.Node), "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planAuthorizedKey(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	keytype, keyblob, err := splitAuthorizedKey(stringDesired(node, "key"))
+	if err != nil {
+		return ProviderPlan{}, fmt.Errorf("%s %w", node.Address, err)
+	}
+	script := authorizedKeyPreamble(node.Desired) +
+		"if [ -n \"$home\" ] && [ -f \"$file\" ] && awk -v t=" + shellQuote(keytype) +
+		" -v b=" + shellQuote(keyblob) +
+		" '($1==t && $2==b){f=1} END{exit f?0:1}' \"$file\"; then echo present; else echo absent; fi\n"
+	result, err := p.Runner.Run(ctx, node.Host, script)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	present := strings.Contains(result.Stdout, "present")
+	observed := map[string]any{"present": present}
+	if ensureAbsent(node) {
+		if present {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove authorized key for " + stringDesired(node, "user"), Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent authorized key", observed), nil
+	}
+	if !present {
+		return ProviderPlan{Action: ActionCreate, Summary: "add authorized key for " + stringDesired(node, "user"), Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for authorized key", observed), nil
+}
+
+func (p NativeProvider) applyAuthorizedKey(ctx context.Context, step Step) (map[string]any, error) {
+	key := stringDesired(step.Node, "key")
+	keytype, keyblob, err := splitAuthorizedKey(key)
+	if err != nil {
+		return nil, err
+	}
+	match := "awk -v t=" + shellQuote(keytype) + " -v b=" + shellQuote(keyblob)
+	var body string
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		body = "if [ -z \"$home\" ]; then exit 0; fi\n" +
+			"if [ -f \"$file\" ]; then\n" +
+			"  tmp=$(mktemp)\n" +
+			"  " + match + " '!($1==t && $2==b)' \"$file\" > \"$tmp\"\n" +
+			"  cat \"$tmp\" > \"$file\"\n" +
+			"  rm -f \"$tmp\"\n" +
+			"fi\n"
+	} else {
+		body = "dir=$(dirname \"$file\")\n" +
+			"group=$(id -gn \"$user\")\n" +
+			"mkdir -p \"$dir\"\n" +
+			"chmod 0700 \"$dir\"\n" +
+			"if ! { [ -f \"$file\" ] && " + match + " '($1==t && $2==b){f=1} END{exit f?0:1}' \"$file\"; }; then\n" +
+			"  printf '%s\\n' " + shellQuote(key) + " >> \"$file\"\n" +
+			"fi\n" +
+			"chmod 0600 \"$file\"\n" +
+			"chown \"$user\":\"$group\" \"$dir\" \"$file\"\n"
+	}
+	_, err = p.Runner.Run(ctx, step.Node.Host, "set -eu\n"+authorizedKeyPreamble(step.Node.Desired)+body)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"present": !ensureAbsent(step.Node), "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planService(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	name := stringDesired(node, "unit")
+	result, err := p.Runner.Run(ctx, node.Host, "printf 'enabled='; systemctl is-enabled "+shellQuote(name)+" 2>/dev/null || true\nprintf 'active='; systemctl is-active "+shellQuote(name)+" 2>/dev/null || true\n")
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	enabled := strings.Contains(result.Stdout, "enabled=enabled")
+	active := strings.Contains(result.Stdout, "active=active")
+	observed := map[string]any{"enabled": enabled, "active": active}
+	var changes []string
+	if want, ok := node.Desired["enabled"].(bool); ok && enabled != want {
+		if want {
+			changes = append(changes, "enable")
+		} else {
+			changes = append(changes, "disable")
+		}
+	}
+	switch stringDesired(node, "state") {
+	case "running":
+		if !active {
+			changes = append(changes, "start")
+		}
+	case "stopped":
+		if active {
+			changes = append(changes, "stop")
+		}
+	case "restarted":
+		changes = append(changes, "restart")
+	case "reloaded":
+		changes = append(changes, "reload")
+	}
+	if len(changes) > 0 {
+		return ProviderPlan{Action: ActionUpdate, Summary: strings.Join(changes, " ") + " service " + name, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for service "+name, observed), nil
+}
+
+func (p NativeProvider) applyService(ctx context.Context, step Step) (map[string]any, error) {
+	name := stringDesired(step.Node, "unit")
+	lines := []string{"set -eu"}
+	if enabled, ok := step.Node.Desired["enabled"].(bool); ok {
+		if enabled {
+			lines = append(lines, "systemctl enable "+shellQuote(name))
+		} else {
+			lines = append(lines, "systemctl disable "+shellQuote(name))
+		}
+	}
+	switch stringDesired(step.Node, "state") {
+	case "running":
+		lines = append(lines, "systemctl start "+shellQuote(name))
+	case "stopped":
+		lines = append(lines, "systemctl stop "+shellQuote(name))
+	case "restarted":
+		lines = append(lines, "systemctl restart "+shellQuote(name))
+	case "reloaded":
+		lines = append(lines, "systemctl reload "+shellQuote(name))
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) removePath(ctx context.Context, host, path string, daemonReload bool) error {
+	if path == "" {
+		return nil
+	}
+	script := "set -eu\nrm -f -- " + shellQuote(path) + "\n"
+	if daemonReload {
+		script += "systemctl daemon-reload\n"
+	}
+	_, err := p.Runner.Run(ctx, host, script)
+	return err
+}
+
+type pathState struct {
+	Exists bool
+	IsDir  bool
+	Owner  string
+	Group  string
+	Mode   string
+	SHA256 string
+}
+
+func (s pathState) observed() map[string]any {
+	return map[string]any{
+		"exists": s.Exists,
+		"is_dir": s.IsDir,
+		"owner":  s.Owner,
+		"group":  s.Group,
+		"mode":   s.Mode,
+		"sha256": s.SHA256,
+	}
+}
+
+func (p NativeProvider) readPath(ctx context.Context, host, path string) (pathState, error) {
+	if path == "" {
+		return pathState{}, nil
+	}
+	script := fmt.Sprintf(`set -eu
+if [ ! -e %s ]; then
+  echo missing
+  exit 0
+fi
+if [ -d %s ]; then echo dir; else echo file; fi
+stat -c '%%U' %s
+stat -c '%%G' %s
+stat -c '%%a' %s
+if [ -f %s ]; then sha256sum %s | awk '{print $1}'; else echo ''; fi
+`, shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path))
+	result, err := p.Runner.Run(ctx, host, script)
+	if err != nil {
+		return pathState{}, err
+	}
+	lines := strings.Split(strings.TrimRight(result.Stdout, "\n"), "\n")
+	if len(lines) == 0 || lines[0] == "missing" {
+		return pathState{}, nil
+	}
+	st := pathState{Exists: true, IsDir: lines[0] == "dir"}
+	if len(lines) > 1 {
+		st.Owner = lines[1]
+	}
+	if len(lines) > 2 {
+		st.Group = lines[2]
+	}
+	if len(lines) > 3 {
+		st.Mode = lines[3]
+	}
+	if len(lines) > 4 {
+		st.SHA256 = lines[4]
+	}
+	return st, nil
+}
+
+type userState struct {
+	exists       bool
+	uid          string
+	gidNum       string
+	primaryGroup string
+	home         string
+	shell        string
+	groups       []string
+}
+
+func (p NativeProvider) readUser(ctx context.Context, host, name string) (userState, error) {
+	quoted := shellQuote(name)
+	script := "if getent passwd " + quoted + " >/dev/null 2>&1; then\n" +
+		"  getent passwd " + quoted + "\n" +
+		"  id -gn " + quoted + "\n" +
+		"  id -nG " + quoted + "\n" +
+		"else\n" +
+		"  echo __ABSENT__\n" +
+		"fi\n"
+	result, err := p.Runner.Run(ctx, host, script)
+	if err != nil {
+		return userState{}, err
+	}
+	lines := strings.Split(strings.TrimRight(result.Stdout, "\n"), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "__ABSENT__" || strings.TrimSpace(lines[0]) == "" {
+		return userState{}, nil
+	}
+	st := userState{exists: true}
+	fields := strings.Split(lines[0], ":")
+	if len(fields) >= 7 {
+		st.uid = fields[2]
+		st.gidNum = fields[3]
+		st.home = fields[5]
+		st.shell = fields[6]
+	}
+	if len(lines) > 1 {
+		st.primaryGroup = strings.TrimSpace(lines[1])
+	}
+	if len(lines) > 2 {
+		for _, group := range strings.Fields(lines[2]) {
+			if group != st.primaryGroup {
+				st.groups = append(st.groups, group)
+			}
+		}
+	}
+	return st, nil
+}
+
+func desiredContent(node graph.Node) ([]byte, error) {
+	if content, ok := node.Desired["content"].(string); ok {
+		return []byte(content), nil
+	}
+	if source, ok := node.Desired["source_path"].(string); ok && source != "" {
+		return os.ReadFile(source)
+	}
+	return nil, fmt.Errorf("%s requires content or source_path", node.Address)
+}
+
+func desiredContentSHA(node graph.Node) (string, error) {
+	content, err := desiredContent(node)
+	if err != nil {
+		return "", err
+	}
+	return sha256Hex(content), nil
+}
+
+func inSyncPlan(node graph.Node, prior *v2state.Resource, summary string, observed map[string]any) ProviderPlan {
+	if observed == nil {
+		observed = map[string]any{}
+	}
+	observed = cloneMap(observed)
+	observed["desired_digest"] = v2state.DesiredDigest(node.Desired)
+	if prior == nil {
+		return ProviderPlan{Action: ActionAdopt, Summary: "adopt existing " + node.Kind + " " + identity(node), Observed: observed, Ownership: "adopted"}
+	}
+	return ProviderPlan{Action: ActionNoOp, Summary: summary, Observed: observed, Ownership: ownership(prior)}
+}
+
+func absentInSyncPlan(prior *v2state.Resource, summary string, observed map[string]any) ProviderPlan {
+	if observed == nil {
+		observed = map[string]any{}
+	}
+	if prior != nil {
+		return ProviderPlan{Action: ActionDelete, Summary: summary, Observed: cloneMap(observed), Ownership: ownership(prior)}
+	}
+	return ProviderPlan{Action: ActionNoOp, Summary: summary, Observed: cloneMap(observed), Ownership: ownership(prior)}
+}
+
+func ownership(prior *v2state.Resource) string {
+	if prior != nil && prior.Ownership != "" {
+		return prior.Ownership
+	}
+	return "managed"
+}
+
+func ensureAbsent(node graph.Node) bool {
+	return stringDesired(node, "ensure") == "absent"
+}
+
+func stringDesired(node graph.Node, name string) string {
+	return stringMapValue(node.Desired, name)
+}
+
+func stringMapValue(values map[string]any, name string) string {
+	if value, ok := values[name]; ok {
+		switch v := value.(type) {
+		case string:
+			return v
+		case fmt.Stringer:
+			return v.String()
+		}
+	}
+	return ""
+}
+
+func boolDesired(node graph.Node, name string) bool {
+	value, _ := node.Desired[name].(bool)
+	return value
+}
+
+func boolObserved(step Step, name string) bool {
+	value, _ := step.Observed[name].(bool)
+	return value
+}
+
+func stringListDesired(node graph.Node, name string) []string {
+	value, ok := node.Desired[name]
+	if !ok || value == nil {
+		return nil
+	}
+	switch v := value.(type) {
+	case []string:
+		return append([]string(nil), v...)
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if str, ok := item.(string); ok {
+				out = append(out, str)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func userFlags(node graph.Node) string {
+	var flags string
+	if uid := stringDesired(node, "uid"); uid != "" {
+		flags += " -u " + shellQuote(uid)
+	}
+	if group := stringDesired(node, "group"); group != "" {
+		flags += " -g " + shellQuote(group)
+	}
+	if groups := stringListDesired(node, "groups"); len(groups) > 0 {
+		flags += " -G " + shellQuote(strings.Join(groups, ","))
+	}
+	if home := stringDesired(node, "home"); home != "" {
+		flags += " -d " + shellQuote(home)
+	}
+	if shell := stringDesired(node, "shell"); shell != "" {
+		flags += " -s " + shellQuote(shell)
+	}
+	return flags
+}
+
+func authorizedKeyPreamble(desired map[string]any) string {
+	preamble := "user=" + shellQuote(stringMapValue(desired, "user")) + "\n" +
+		"home=$(getent passwd \"$user\" | cut -d: -f6) || home=\n"
+	if path := stringMapValue(desired, "path"); path != "" {
+		preamble += "file=" + shellQuote(path) + "\n"
+	} else {
+		preamble += "file=\"$home/.ssh/authorized_keys\"\n"
+	}
+	return preamble
+}
+
+func splitAuthorizedKey(key string) (keytype, keyblob string, err error) {
+	fields := strings.Fields(strings.TrimSpace(key))
+	if len(fields) < 2 {
+		return "", "", fmt.Errorf("authorized key must contain a type and body")
+	}
+	return fields[0], fields[1], nil
+}
+
+func hostFromAddress(address string) string {
+	if !strings.HasPrefix(address, "host.") {
+		return ""
+	}
+	rest := strings.TrimPrefix(address, "host.")
+	if idx := strings.Index(rest, "."); idx >= 0 {
+		return rest[:idx]
+	}
+	return ""
+}
+
+func modulePath(name string) string {
+	return "/etc/modules-load.d/dbf-" + safeName(name) + ".conf"
+}
+
+func sysctlPath(key string) string {
+	return "/etc/sysctl.d/99-dbf-" + safeName(key) + ".conf"
+}
+
+func safeName(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	out := strings.Trim(b.String(), "_")
+	if out == "" {
+		return "resource"
+	}
+	return strings.ToLower(out)
+}
+
+func sha256Hex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func normalizeMode(mode string) string {
+	return strings.TrimLeft(mode, "0")
+}
+
+func nonEmptyLines(output string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	as := append([]string(nil), a...)
+	bs := append([]string(nil), b...)
+	sort.Strings(as)
+	sort.Strings(bs)
+	for i := range as {
+		if as[i] != bs[i] {
+			return false
+		}
+	}
+	return true
+}

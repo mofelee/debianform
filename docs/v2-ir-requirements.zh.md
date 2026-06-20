@@ -251,7 +251,7 @@ updated_at: "2026-06-19T12:00:00Z"
 resources:
   host.ksvm213.packages.install["curl"]:
     kind: package
-    provider: debian_package
+    provider: package
     identity:
       name: curl
     ownership: created
@@ -352,9 +352,9 @@ kernel:
 编译到资源图时再展开为：
 
 ```text
-debian_kernel_module.tcp_bbr
-debian_sysctl.bbr_qdisc
-debian_sysctl.bbr_congestion_control
+kernel_module.tcp_bbr
+sysctl.bbr_qdisc
+sysctl.bbr_congestion_control
 ```
 
 ## PackageSpec
@@ -394,8 +394,8 @@ packages:
 编译到资源图：
 
 ```text
-debian_package.curl
-debian_package.vim
+package.curl
+package.vim
 ```
 
 包从配置中删除时，是否卸载由 state 中的 ownership 决定：
@@ -1010,11 +1010,11 @@ host.server1.nftables.activate
 编译成低阶资源时，低阶资源应记录来源地址：
 
 ```text
-compiled resource address: debian_sysctl.ksvm213_bbr_congestion_control
+compiled resource address: sysctl.ksvm213_bbr_congestion_control
 source address:           host.ksvm213.kernel.sysctl["net.ipv4.tcp_congestion_control"]
 ```
 
-v2 不需要兼容 v1 state address。第一版建议 state 优先记录中间地址，并保留低阶
+v2 不需要兼容旧 state address。第一版建议 state 优先记录中间地址，并保留低阶
 resource address 作为调试信息。这样 plan、state 和用户配置的主地址保持一致。
 
 ## 编译到资源图
@@ -1091,12 +1091,12 @@ HostSpec:
   host.ksvm213.kernel.sysctl["net.ipv4.tcp_congestion_control"] = "bbr"
 
 ResourceGraph:
-  node debian_kernel_module.ksvm213_tcp_bbr
+  node kernel_module.ksvm213_tcp_bbr
     source = host.ksvm213.kernel.module["tcp_bbr"]
 
-  node debian_sysctl.ksvm213_net_ipv4_tcp_congestion_control
+  node sysctl.ksvm213_net_ipv4_tcp_congestion_control
     source = host.ksvm213.kernel.sysctl["net.ipv4.tcp_congestion_control"]
-    depends_on = [debian_kernel_module.ksvm213_tcp_bbr]
+    depends_on = [kernel_module.ksvm213_tcp_bbr]
 ```
 
 ## 编译前验证
@@ -1232,12 +1232,12 @@ Plan:
 - JSON renderer 直接输出结构化 plan。
 - HTML renderer 读取同一结构化 plan，提供过滤、搜索、折叠和颜色标记。
 
-## 与 v1 的关系
+## 与旧实验格式的关系
 
-v2 是破坏式重设计，不要求渐进式迁移，也不要求 v1 `debian_*` 配置继续作为用户语法
+v2 是破坏式重设计，不要求渐进式迁移，也不要求旧 `低阶 provider 资源` 配置继续作为用户语法
 存在。
 
-v1 的 provider 实现可以作为内部执行代码复用，但不能决定 v2 的用户模型。
+v2 拥有独立的 provider 执行路径。旧实现不作为 v2 的运行时依赖，也不能决定 v2 的用户模型。
 
 v2 的唯一主路径是：
 

@@ -1,17 +1,16 @@
 # DebianForm
 
-DebianForm v2 是对原 v1 原型的破坏式重设计。
+DebianForm 是面向 Debian 主机的 v2 配置工具。
 
-当前仓库处于过渡状态：
+当前仓库以 v2 为唯一主线：
 
-- v2 是当前设计方向。
 - v2 用户语法记录在 `docs/`，设计夹具位于 `examples/v2-*.dbf.hcl`。
-- `dbf validate` 和 `dbf plan` 已接入 v2 Loop 3 路径，可解析 profile/host 合并、
-  生成 HostSpec、ResourceGraph 和 create-only plan；`apply`/`check` 的 v2 路径尚未实现。
-- legacy v1 示例、文档和 libvirt 集成测试已归档到 `legacy/v1/`。
+- `dbf validate` 和 `dbf plan` 可解析 profile/host 合并，生成 HostSpec、
+  ResourceGraph 和 plan。
+- `dbf apply` 和 `dbf check` 已接入 v2 SSH 执行路径、v2 state 和 observed 检测。
+- libvirt 集成测试位于 `test/integration/libvirt/`，用于在 Debian 13 VM 中验证 v2。
 
-新的 v2 工作不要以旧的 `debian_*` 资源语法作为用户模型。它只作为 provider、SSH
-执行、远端 state 和 libvirt 测试启动方式的实现参考保留。
+v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源语法。
 
 ## v2 设计文档
 
@@ -22,8 +21,8 @@ DebianForm v2 是对原 v1 原型的破坏式重设计。
 
 ## v2 示例
 
-`examples/` 中的文件是 v2 设计夹具，当前还不能由 legacy CLI 执行。
-Loop 3 已支持以下示例通过 v2 validate，并可生成 create-only plan：
+`examples/` 中的文件是 v2 示例和设计夹具。当前已支持以下示例通过 v2 validate，
+并可生成 plan：
 
 - `examples/v2-bbr.dbf.hcl`
 - `examples/v2-profile-merge.dbf.hcl`
@@ -93,25 +92,19 @@ host "service1" {
 }
 ```
 
-`files.file sensitive = true` 和 `secrets.file` 不会在 plan 中输出明文；当前 plan 只输出
+`files.file sensitive = true` 和 `secrets.file` 不会在 plan 中输出明文；plan 只输出
 hash、长度等摘要。`services.service.state` 支持 `running`、`stopped`、`restarted`
 和 `reloaded`。
 
-## Legacy v1 归档
+## 集成测试
 
-可复用的 v1 参考材料已移出主文档和主示例路径：
-
-- `legacy/v1/README.md`
-- `legacy/v1/examples/`
-- `legacy/v1/test/integration/libvirt/`
-- `internal/v1/`
-
-libvirt runner 仍可作为参考代码运行：
+libvirt 集成测试会启动全新的 Debian 13 cloud VM，并执行 v2 `validate`、`apply` 和
+`check`：
 
 ```bash
-make test-legacy-v1-integration-layout
-make test-legacy-v1-integration-case CASE=files
-make test-legacy-v1-integration
+make test-integration-layout
+make test-integration-case CASE=files
+make test-integration
 ```
 
 ## 开发
@@ -122,5 +115,5 @@ make test
 make update-golden
 ```
 
-`make test` 当前会运行过渡代码库的 Go 测试，包括 legacy v1 包。
+`make test` 运行 v2 Go 测试。
 `make update-golden` 使用 `UPDATE_GOLDEN=1` 刷新 snapshot/golden 测试输出。

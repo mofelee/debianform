@@ -1,6 +1,6 @@
 # DebianForm v2 BBR 设计示例。
 #
-# v2 编译器尚未接入当前 CLI；legacy v1 参考版本见 ../legacy/v1/examples/bbr.dbf.hcl。
+# 可通过当前 v2 CLI validate/plan。
 #
 # 设计边界：
 # - kernel.modules 和 kernel.sysctl 保持领域结构。

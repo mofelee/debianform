@@ -9,18 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mofelee/debianform/internal/v1/sshx"
 	"github.com/mofelee/debianform/internal/v2/ir"
 	v2state "github.com/mofelee/debianform/internal/v2/state"
 )
 
 type SSHBackend struct {
-	Runner *sshx.Runner
+	Runner Runner
 	Owner  string
 	Now    func() time.Time
 }
 
-func NewSSHBackend(runner *sshx.Runner) SSHBackend {
+func NewSSHBackend(runner Runner) SSHBackend {
 	return SSHBackend{Runner: runner, Owner: "dbf"}
 }
 
@@ -32,7 +31,7 @@ func (b SSHBackend) Read(ctx context.Context, host ir.HostSpec) (v2state.State, 
 if [ -f %s ]; then
   cat %s
 fi
-`, sshx.ShellQuote(host.State.Path), sshx.ShellQuote(host.State.Path))
+`, shellQuote(host.State.Path), shellQuote(host.State.Path))
 	result, err := b.Runner.Run(ctx, host.Name, script)
 	if err != nil {
 		return v2state.State{}, err
@@ -64,7 +63,7 @@ base64 -d > %s <<'__DBF_V2_STATE__'
 %s
 __DBF_V2_STATE__
 mv %s %s
-`, sshx.ShellQuote(host.State.Path), sshx.ShellQuote(tmp), payload, sshx.ShellQuote(tmp), sshx.ShellQuote(host.State.Path))
+`, shellQuote(host.State.Path), shellQuote(tmp), payload, shellQuote(tmp), shellQuote(host.State.Path))
 	_, err = b.Runner.Run(ctx, host.Name, script)
 	return err
 }
@@ -120,7 +119,7 @@ __DBF_V2_LOCK__
   fi
   sleep 1
 done
-`, sshx.ShellQuote(host.State.LockPath), sshx.ShellQuote(lockDir), int(timeout.Seconds()), expiresAt.Unix(), owner, token, expiresAt.Format(time.RFC3339), expiresAt.Unix())
+`, shellQuote(host.State.LockPath), shellQuote(lockDir), int(timeout.Seconds()), expiresAt.Unix(), owner, token, expiresAt.Format(time.RFC3339), expiresAt.Unix())
 	if _, err := b.Runner.Run(ctx, host.Name, script); err != nil {
 		return nil, err
 	}
@@ -149,7 +148,7 @@ else
   printf 'state lock token mismatch for %%s\n' "$lock_path" >&2
   exit 1
 fi
-`, sshx.ShellQuote(l.host.State.LockPath), sshx.ShellQuote(lockDir), sshx.ShellQuote(l.token))
+`, shellQuote(l.host.State.LockPath), shellQuote(lockDir), shellQuote(l.token))
 	_, err := l.backend.Runner.Run(ctx, l.host.Name, script)
 	return err
 }

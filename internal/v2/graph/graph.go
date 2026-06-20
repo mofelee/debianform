@@ -82,8 +82,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Summary:         "create kernel module " + module.Name,
 			Source:          module.Source,
 			Desired:         desired,
-			ProviderType:    "debian_kernel_module",
-			ProviderAddress: "debian_kernel_module." + providerName(host.Name, module.Name),
+			ProviderType:    "kernel_module",
+			ProviderAddress: "kernel_module." + providerName(host.Name, module.Name),
 			ProviderPayload: desired,
 		})
 	}
@@ -111,8 +111,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Source:          sysctl.Source,
 			Desired:         desired,
 			DependsOn:       deps,
-			ProviderType:    "debian_sysctl",
-			ProviderAddress: "debian_sysctl." + providerName(host.Name, sysctl.Key),
+			ProviderType:    "sysctl",
+			ProviderAddress: "sysctl." + providerName(host.Name, sysctl.Key),
 			ProviderPayload: desired,
 		})
 	}
@@ -134,8 +134,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Summary:         "create package " + item.Name,
 			Source:          item.Source,
 			Desired:         desired,
-			ProviderType:    "debian_package",
-			ProviderAddress: "debian_package." + providerName(host.Name, item.Name),
+			ProviderType:    "package",
+			ProviderAddress: "package." + providerName(host.Name, item.Name),
 			ProviderPayload: desired,
 		})
 	}
@@ -151,8 +151,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Summary:         "create directory " + item.Path,
 			Source:          item.Source,
 			Desired:         desired,
-			ProviderType:    "debian_directory",
-			ProviderAddress: "debian_directory." + providerName(host.Name, item.Path),
+			ProviderType:    "directory",
+			ProviderAddress: "directory." + providerName(host.Name, item.Path),
 			ProviderPayload: desired,
 		})
 	}
@@ -182,8 +182,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Summary:         "create file " + item.Path,
 			Source:          item.Source,
 			Desired:         desired,
-			ProviderType:    "debian_file",
-			ProviderAddress: "debian_file." + providerName(host.Name, item.Path),
+			ProviderType:    "file",
+			ProviderAddress: "file." + providerName(host.Name, item.Path),
 			ProviderPayload: desired,
 		})
 	}
@@ -208,8 +208,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Summary:         "create secret file " + item.Path,
 			Source:          item.Source,
 			Desired:         desired,
-			ProviderType:    "debian_file",
-			ProviderAddress: "debian_file." + providerName(host.Name, item.Path),
+			ProviderType:    "file",
+			ProviderAddress: "file." + providerName(host.Name, item.Path),
 			ProviderPayload: desired,
 		})
 	}
@@ -226,8 +226,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Summary:         "create group " + item.Name,
 			Source:          item.Source,
 			Desired:         desired,
-			ProviderType:    "debian_group",
-			ProviderAddress: "debian_group." + providerName(host.Name, item.Name),
+			ProviderType:    "group",
+			ProviderAddress: "group." + providerName(host.Name, item.Name),
 			ProviderPayload: desired,
 		})
 	}
@@ -264,8 +264,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Source:          item.Source,
 			Desired:         desired,
 			DependsOn:       deps,
-			ProviderType:    "debian_user",
-			ProviderAddress: "debian_user." + providerName(host.Name, item.Name),
+			ProviderType:    "user",
+			ProviderAddress: "user." + providerName(host.Name, item.Name),
 			ProviderPayload: desired,
 		})
 		for _, key := range item.SSHAuthorizedKeys {
@@ -280,8 +280,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				Source:          item.Source,
 				Desired:         keyDesired,
 				DependsOn:       []string{address},
-				ProviderType:    "debian_authorized_key",
-				ProviderAddress: "debian_authorized_key." + providerName(host.Name, item.Name, keyID),
+				ProviderType:    "ssh_authorized_key",
+				ProviderAddress: "ssh_authorized_key." + providerName(host.Name, item.Name, keyID),
 				ProviderPayload: keyDesired,
 			})
 		}
@@ -313,8 +313,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Summary:         "create systemd unit " + item.Name,
 			Source:          item.Source,
 			Desired:         desired,
-			ProviderType:    "debian_systemd_unit",
-			ProviderAddress: "debian_systemd_unit." + providerName(host.Name, item.Name),
+			ProviderType:    "systemd_unit",
+			ProviderAddress: "systemd_unit." + providerName(host.Name, item.Name),
 			ProviderPayload: desired,
 		})
 	}
@@ -364,8 +364,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Source:          item.Source,
 			Desired:         desired,
 			DependsOn:       deps,
-			ProviderType:    "debian_service",
-			ProviderAddress: "debian_service." + providerName(host.Name, item.Name),
+			ProviderType:    "service",
+			ProviderAddress: "service." + providerName(host.Name, item.Name),
 			ProviderPayload: desired,
 		})
 		switch item.State {

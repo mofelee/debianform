@@ -1,6 +1,6 @@
 # DebianForm v2 BIRD2 设计示例。
 #
-# v2 编译器尚未接入当前 CLI；legacy v1 参考版本见 ../legacy/v1/examples/bird2.dbf.hcl。
+# 设计夹具：component 和 apt 领域会在后续 loop 接入 CLI。
 #
 # 设计边界：
 # - APT repository 是 apt 领域对象，不是顶层 component。

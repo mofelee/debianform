@@ -17,8 +17,8 @@
         "owner": "root",
         "path": "/etc/myapp"
       },
-      "provider_type": "debian_directory",
-      "provider_address": "debian_directory.foundation1__etc_myapp",
+      "provider_type": "directory",
+      "provider_address": "directory.foundation1__etc_myapp",
       "provider_payload": {
         "ensure": "present",
         "group": "root",
@@ -50,8 +50,8 @@
           "bytes": 23
         }
       },
-      "provider_type": "debian_file",
-      "provider_address": "debian_file.foundation1__etc_myapp_config_yaml",
+      "provider_type": "file",
+      "provider_address": "file.foundation1__etc_myapp_config_yaml",
       "provider_payload": {
         "content": "listen: 127.0.0.1:8080\n",
         "ensure": "present",
@@ -82,8 +82,8 @@
         "name": "deploy",
         "system": true
       },
-      "provider_type": "debian_group",
-      "provider_address": "debian_group.foundation1_deploy",
+      "provider_type": "group",
+      "provider_address": "group.foundation1_deploy",
       "provider_payload": {
         "ensure": "present",
         "gid": "",
@@ -105,8 +105,8 @@
         "ensure": "present",
         "name": "curl"
       },
-      "provider_type": "debian_package",
-      "provider_address": "debian_package.foundation1_curl",
+      "provider_type": "package",
+      "provider_address": "package.foundation1_curl",
       "provider_payload": {
         "ensure": "present",
         "name": "curl"
@@ -135,8 +135,8 @@
           "bytes": 24
         }
       },
-      "provider_type": "debian_file",
-      "provider_address": "debian_file.foundation1__etc_myapp_token",
+      "provider_type": "file",
+      "provider_address": "file.foundation1__etc_myapp_token",
       "provider_payload": {
         "ensure": "present",
         "group": "root",
@@ -168,8 +168,8 @@
         "state": "running",
         "unit": "myapp.service"
       },
-      "provider_type": "debian_service",
-      "provider_address": "debian_service.foundation1_myapp",
+      "provider_type": "service",
+      "provider_address": "service.foundation1_myapp",
       "provider_payload": {
         "enabled": true,
         "name": "myapp",
@@ -207,8 +207,8 @@
           "bytes": 100
         }
       },
-      "provider_type": "debian_systemd_unit",
-      "provider_address": "debian_systemd_unit.foundation1_myapp_service",
+      "provider_type": "systemd_unit",
+      "provider_address": "systemd_unit.foundation1_myapp_service",
       "provider_payload": {
         "content": "[Unit]\nDescription=My App\n\n[Service]\nExecStart=/usr/local/bin/myapp --config /etc/myapp/config.yaml\n",
         "ensure": "present",
@@ -247,8 +247,8 @@
         "system": false,
         "uid": ""
       },
-      "provider_type": "debian_user",
-      "provider_address": "debian_user.foundation1_deploy",
+      "provider_type": "user",
+      "provider_address": "user.foundation1_deploy",
       "provider_payload": {
         "ensure": "present",
         "group": "deploy",
@@ -281,8 +281,8 @@
         "key": "ssh-ed25519 AAAATESTKEY deploy@example",
         "user": "deploy"
       },
-      "provider_type": "debian_authorized_key",
-      "provider_address": "debian_authorized_key.foundation1_deploy_ab6a85a3317fb10f",
+      "provider_type": "ssh_authorized_key",
+      "provider_address": "ssh_authorized_key.foundation1_deploy_ab6a85a3317fb10f",
       "provider_payload": {
         "ensure": "present",
         "key": "ssh-ed25519 AAAATESTKEY deploy@example",
