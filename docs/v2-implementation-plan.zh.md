@@ -23,10 +23,10 @@
 - [ ] v2 CLI 尚未接入
 - [ ] v2 plan/apply 尚未实现
 
-## Loop 1: BBR 最小编译闭环
+## Loop 1a: 解析、合并与 HostSpec
 
-目标：让 `examples/v2-bbr.dbf.hcl` 可以通过 v2 路径完成 validate 和 plan，不需要写任何
-`debian_*` 用户资源。
+目标：让 `examples/v2-bbr.dbf.hcl` 可以通过 v2 路径完成 `validate`，打通 parser、merge 和
+HostSpec 这条前半截编译链，但还不生成 ResourceGraph 和 plan。
 
 范围：
 
@@ -53,6 +53,7 @@
 - `services`
 - `apt`
 - `nftables`
+- ResourceGraph 和 plan（放到 Loop 1b）
 - HTML preview
 
 代码：
@@ -71,14 +72,8 @@
 - [ ] 归一化 `kernel.modules`
 - [ ] 归一化 `kernel.sysctl`
 - [ ] 归一化 `packages.install`
-- [ ] 新增 `internal/v2/graph`，从 HostSpec 编译 ResourceGraph
-- [ ] 生成稳定 v2 地址，例如 `host.bbr1.kernel.module["tcp_bbr"]`
-- [ ] 生成低阶 provider payload，但不暴露给普通用户 plan
-- [ ] 推导 BBR 依赖：`tcp_congestion_control = "bbr"` 依赖 `tcp_bbr` module
-- [ ] 新增 `internal/v2/plan`，生成结构化 plan 模型
+- [ ] 选定 snapshot/golden 测试框架，并提供 `make update-golden` 统一刷新机制
 - [ ] 支持 `dbf validate -f examples/v2-bbr.dbf.hcl` 走 v2 路径
-- [ ] 支持 `dbf plan -f examples/v2-bbr.dbf.hcl`
-- [ ] 支持 `dbf plan -f examples/v2-bbr.dbf.hcl --format json`
 - [ ] 保留 legacy v1 CLI 测试通过
 
 测试：
@@ -89,9 +84,6 @@
 - [ ] merge modifier 单测覆盖 `force`、`before`、`after`、`unset`
 - [ ] merge 负例覆盖 profile import cycle
 - [ ] HostSpec snapshot 覆盖 `examples/v2-bbr.dbf.hcl`
-- [ ] ResourceGraph snapshot 覆盖 BBR module/sysctl 地址和依赖边
-- [ ] plan JSON golden 覆盖 BBR create plan
-- [ ] CLI smoke 覆盖 validate、plan text、plan JSON
 
 示例：
 
@@ -100,13 +92,46 @@
 
 文档：
 
-- [ ] README 标记 BBR v2 路径已可 validate/plan
 - [ ] 在 v2 docs 中注明本轮支持范围和暂不支持范围
-- [ ] 增加 BBR plan 输出样例
 
 验收：
 
 - [ ] `dbf validate -f examples/v2-bbr.dbf.hcl` 成功
+- [ ] profile 合并 fixture 的 HostSpec snapshot 稳定
+- [ ] `make test` 成功
+
+## Loop 1b: ResourceGraph 与 BBR plan
+
+目标：在 Loop 1a 的 HostSpec 基础上编译 ResourceGraph 并生成结构化 plan，让
+`examples/v2-bbr.dbf.hcl` 可以走完 `plan`，不需要写任何 `debian_*` 用户资源。
+
+说明：本轮 plan 是 create-only 预览，所有资源都按“远端为空”假设输出 create，尚未读取
+observed。真正的 desired/state/observed 三元比对在 Loop 4 接入，届时本轮的 plan golden 会
+按新模型重写。
+
+代码：
+
+- [ ] 新增 `internal/v2/graph`，从 HostSpec 编译 ResourceGraph
+- [ ] 生成稳定 v2 地址，例如 `host.bbr1.kernel.module["tcp_bbr"]`
+- [ ] 生成低阶 provider payload，但不暴露给普通用户 plan
+- [ ] 推导 BBR 依赖：`tcp_congestion_control = "bbr"` 依赖 `tcp_bbr` module
+- [ ] 新增 `internal/v2/plan`，生成结构化 plan 模型
+- [ ] 支持 `dbf plan -f examples/v2-bbr.dbf.hcl`
+- [ ] 支持 `dbf plan -f examples/v2-bbr.dbf.hcl --format json`
+
+测试：
+
+- [ ] ResourceGraph snapshot 覆盖 BBR module/sysctl 地址和依赖边
+- [ ] plan JSON golden 覆盖 BBR create plan
+- [ ] CLI smoke 覆盖 validate、plan text、plan JSON
+
+文档：
+
+- [ ] README 标记 BBR v2 路径已可 validate/plan
+- [ ] 增加 BBR plan 输出样例
+
+验收：
+
 - [ ] `dbf plan -f examples/v2-bbr.dbf.hcl` 输出 v2 用户地址
 - [ ] `dbf plan -f examples/v2-bbr.dbf.hcl --format json` 输出 `debianform.plan.v2alpha1`
 - [ ] `make test` 成功
@@ -126,6 +151,11 @@
 - [ ] 检测同一 package 重复声明
 - [ ] 检测空 sysctl key 和空 kernel module
 - [ ] 检测 `unset()` 用在 list 上并报错
+- [ ] 解析 host 内重复 `assert` block，`condition` 为 HCL boolean 表达式
+- [ ] 在 profile merge 和默认值填充后、ResourceGraph 编译前求值 assert
+- [ ] `self` 指向合并后的 host 视图；assert 不能读取远端运行时状态
+- [ ] assert 失败时 validate/plan/apply 停止并指向 source location
+- [ ] 校验 `message` 为非空字符串
 
 测试：
 
@@ -135,6 +165,8 @@
 - [ ] 负例覆盖 import cycle 的完整路径
 - [ ] 负例覆盖 profile 中非法 host-only 字段
 - [ ] 负例覆盖重复 package、空 key、非法 modifier
+- [ ] assert 单测覆盖 `self` 视图求值通过
+- [ ] assert 负例覆盖条件为 false、空 message、读取非法字段
 - [ ] 错误消息测试覆盖 file:line:path
 
 示例：
@@ -151,6 +183,7 @@
 
 - [ ] profile 合并 fixture 的 HostSpec snapshot 稳定
 - [ ] 所有负例返回可读 source location
+- [ ] assert 失败能指向用户 DSL 行号
 - [ ] `make test` 成功
 
 ## Loop 3: 第一批日常领域块
@@ -164,8 +197,16 @@
 - `directories`
 - `groups`
 - `users`
-- `systemd`
+- `systemd`（仅 raw unit 文件）
 - `services`
+
+范围说明：
+
+- 本轮 `systemd` 只做 raw unit 文件管理。结构化 `service "app"` / `timer "app"` 语法，
+  以及 `systemd.networkd`/`resolved`/`journald` 的一对一序列化为后续阶段。
+- 第一版用 raw `systemd` unit + `files` 覆盖 networkd 用例；
+  `examples/v2-systemd-networkd-wireguard.dbf.hcl` 暂作 design-only fixture，不进入第一版
+  golden，直到 networkd 结构化语法单独排期。
 
 代码：
 
@@ -195,6 +236,7 @@
 - [ ] ResourceGraph snapshot 覆盖语义依赖边
 - [ ] plan golden 覆盖 file text diff
 - [ ] 负例覆盖重复 path、非法 mode、缺失 group 引用、secret source 不存在
+- [ ] 引入 secrets 的同时建立断言：plan、日志、state 不出现 secret 明文，只输出摘要
 
 示例：
 
@@ -213,6 +255,7 @@
 
 - [ ] 新增示例均可 validate
 - [ ] plan 显示 files、secrets、users、services 的 v2 地址
+- [ ] plan/state/日志 不包含 secret 明文（本轮即建立，不等到 Loop 5）
 - [ ] `make test` 成功
 
 ## Loop 4: v2 state 和 apply
@@ -224,6 +267,10 @@
 - [ ] 定义 v2 state 文件 schema
 - [ ] 定义 desired/state/observed 状态对比模型
 - [ ] 每个 host 使用独立 state path 和 lock path
+- [ ] 实现远端原子获取 lock，写入 owner/pid/token/expires_at
+- [ ] 释放 lock 时校验 token，避免误删其他进程的锁
+- [ ] stale lock 过期后可被新操作接管，并在输出中提示
+- [ ] lock 文件不进入 plan diff，也不进入 state
 - [ ] state resource key 优先使用 v2 地址
 - [ ] state 保留低阶 provider address 作为 debug 信息
 - [ ] state 保存上次 desired 摘要和必要 observed 摘要
@@ -237,6 +284,7 @@
 - [ ] 实现单 host 串行 apply
 - [ ] 实现多 host 并行 apply 的 CLI 参数接口
 - [ ] apply 失败后停止依赖它的后续节点
+- [ ] apply 部分失败时持久化已成功节点到 state，保证 state 与远端一致
 - [ ] `check` 在 plan 有变更时返回非零
 - [ ] 防止 `prevent_destroy` 资源被 delete/destroy/replace
 
@@ -248,6 +296,9 @@
 - [ ] drift 检测测试覆盖 state 显示上次一致但 observed 已变化
 - [ ] observed 读取失败测试覆盖明确诊断
 - [ ] apply dry-run 或 fake runner 测试
+- [ ] lock 获取/释放/token 校验/stale 接管测试
+- [ ] 幂等性测试：fake runner apply 后立即 plan 应为 no-op
+- [ ] 部分失败后 state 只包含已成功节点的测试
 - [ ] prevent_destroy 负例测试
 - [ ] check 命令返回码测试
 - [ ] v1 legacy 测试保持通过
@@ -268,6 +319,8 @@
 - [ ] fake runner apply 能写入 v2 state
 - [ ] plan 不只比较 desired 和 state，必须读取 observed
 - [ ] plan 能正确报告 create、update、delete、destroy、解除管辖、adopted ownership、no-op
+- [ ] fake runner apply 后立即 plan 输出 no-op
+- [ ] apply 部分失败后 state 与已执行结果一致
 - [ ] `dbf check` 能检测 drift 或变更
 - [ ] `make test` 成功
 
@@ -346,6 +399,8 @@
 - [ ] IR 增加 APTSpec 和 ComponentTemplateSpec
 - [ ] component input 支持 string、number、bool、list(string)、map(string)
 - [ ] component instance 校验缺失 input 和未知 input
+- [ ] 实现 component 内只读 `input.<name>` 表达式求值与模板渲染
+- [ ] 实现 component 内只读 `target` 上下文（如 `target.system.codename`），禁止借此修改 host
 - [ ] 按 host architecture 选择唯一 source
 - [ ] 远程 URL source 必须声明 sha256
 - [ ] repository signing_key 支持 url/content 二选一
@@ -363,6 +418,8 @@
 - [ ] APT ResourceGraph snapshot 覆盖 cache refresh 汇聚
 - [ ] component parser 单测
 - [ ] component architecture selection 单测
+- [ ] component `input.<name>` 渲染单测
+- [ ] component `target` 上下文读取单测（bird2 `suites` 选 `target.system.codename`）
 - [ ] component input validation 负例
 - [ ] artifact sha256 负例
 - [ ] identity 冲突负例
@@ -444,6 +501,7 @@
 - [ ] 实现 per-host 并发限制
 - [ ] 增加资源类型 safe_parallel 标记
 - [ ] 失败节点阻止依赖节点执行
+- [ ] 第一版不实现用户 `depends_on`；依赖由编译器语义推导，`depends_on` 逃生口留待后续单独设计
 
 测试：
 
@@ -471,6 +529,7 @@
 代码：
 
 - [ ] CLI 默认路径切到 v2
+- [ ] 实现 `dbf fmt`，对 v2 DSL 做规范化格式化
 - [ ] legacy v1 保留在 `legacy/v1` 或显式兼容入口中
 - [ ] 清理 v2 中不再需要的临时 feature gate
 - [ ] 错误信息统一使用 v2 用户术语
@@ -478,8 +537,9 @@
 
 测试：
 
-- [ ] 所有 v2 examples 进入 validate 测试
+- [ ] 所有第一版 v2 examples 进入 validate 测试（design-only fixture 除外）
 - [ ] 小型 golden examples 覆盖 parser、HostSpec、ResourceGraph、plan
+- [ ] `dbf fmt` 幂等性测试
 - [ ] `v2-fleet` 只作为组合压力测试
 - [ ] legacy v1 归档测试仍可按需运行
 
@@ -518,6 +578,8 @@
 - [ ] component 与 host/profile 产生相同远端 identity 时 validate 报错
 - [ ] plan 输出用户层 v2 地址
 - [ ] apply 能正确执行 kernel module、sysctl、package
-- [ ] 每台 host 使用独立 state
+- [ ] apply 后再次 plan 为 no-op（幂等）
+- [ ] 每台 host 使用独立 state，并通过 lock 保证并发安全
 - [ ] validate 能发现 imports 循环、字段冲突、资源图环
+- [ ] assert 能在 ResourceGraph 编译前拦截非法组合并指向来源
 - [ ] 不需要写任何 `debian_*` 资源即可完成基础系统配置
