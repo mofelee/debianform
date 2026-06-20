@@ -1,0 +1,52 @@
+package state
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func TestSanitizeDesiredRedactsContentAndSensitiveSource(t *testing.T) {
+	desired := map[string]any{
+		"path":        "/etc/app/token",
+		"content":     "not-a-real-secret-token",
+		"source_path": "fixtures/app-token.txt",
+		"sensitive":   true,
+	}
+
+	got := SanitizeDesired(desired)
+	data, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+
+	if strings.Contains(text, "not-a-real-secret-token") {
+		t.Fatalf("sanitized desired leaked content: %s", text)
+	}
+	if strings.Contains(text, "fixtures/app-token.txt") {
+		t.Fatalf("sanitized desired leaked sensitive source path: %s", text)
+	}
+	if got["content_sha256"] == "" {
+		t.Fatalf("content_sha256 missing from sanitized desired: %#v", got)
+	}
+	if got["content_bytes"] != len("not-a-real-secret-token") {
+		t.Fatalf("content_bytes = %#v", got["content_bytes"])
+	}
+}
+
+func TestStateDecodeDefaultsToVersionTwo(t *testing.T) {
+	st, err := Decode([]byte(`{"resources":{}}`), "server1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Version != Version {
+		t.Fatalf("version = %d, want %d", st.Version, Version)
+	}
+	if st.Host != "server1" {
+		t.Fatalf("host = %q, want server1", st.Host)
+	}
+	if st.Resources == nil {
+		t.Fatalf("resources map was not initialized")
+	}
+}

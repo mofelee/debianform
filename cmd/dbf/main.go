@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/mofelee/debianform/internal/v1/engine"
 	"github.com/mofelee/debianform/internal/v1/sshx"
 	"github.com/mofelee/debianform/internal/v1/state"
+	v2engine "github.com/mofelee/debianform/internal/v2/engine"
 	v2graph "github.com/mofelee/debianform/internal/v2/graph"
 	v2ir "github.com/mofelee/debianform/internal/v2/ir"
 	v2merge "github.com/mofelee/debianform/internal/v2/merge"
@@ -108,7 +110,7 @@ func runConfigCommand(cmd string, args []string) error {
 		return err
 	}
 	if isV2 {
-		return runV2ConfigCommand(cmd, files, *host, *format)
+		return runV2ConfigCommand(cmd, files, *host, *format, *lockTimeout, *autoApprove)
 	}
 	if *format != "text" {
 		return fmt.Errorf("--format is only supported for v2 plan")
@@ -173,7 +175,7 @@ func runConfigCommand(cmd string, args []string) error {
 	}
 }
 
-func runV2ConfigCommand(cmd string, files []string, host string, format string) error {
+func runV2ConfigCommand(cmd string, files []string, host string, format string, lockTimeout time.Duration, autoApprove bool) error {
 	if format == "" {
 		format = "text"
 	}
@@ -209,11 +211,76 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string) 
 			v2plan.PrintText(os.Stdout, doc)
 			return nil
 		}
-	case "apply", "check":
-		return fmt.Errorf("v2 %s is not implemented yet; supported commands: validate, plan", cmd)
+	case "check", "apply":
+		if format != "text" {
+			return fmt.Errorf("--format is only supported for v2 plan")
+		}
+		resourceGraph, err := v2graph.Compile(program)
+		if err != nil {
+			return err
+		}
+		runner := sshx.NewRunner(v2Hosts(program))
+		engine := v2engine.Engine{
+			Backend:  v2engine.NewSSHBackend(runner),
+			Provider: v2engine.NewV1Provider(runner),
+		}
+		opts := v2engine.Options{Host: host, LockTimeout: lockTimeout}
+		onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, opts)
+		if err != nil {
+			return err
+		}
+		doc := onlinePlan.Document(v2plan.Options{
+			CommandFile: commandFile(files),
+			Host:        commandHost(program, host),
+		})
+		v2plan.PrintText(os.Stdout, doc)
+		if cmd == "check" {
+			if len(onlinePlan.Steps) > 0 || len(onlinePlan.Operations) > 0 {
+				return fmt.Errorf("remote state does not match v2 configuration")
+			}
+			return nil
+		}
+		if len(onlinePlan.Steps) == 0 && len(onlinePlan.Operations) == 0 {
+			return nil
+		}
+		if !autoApprove && !confirmApply() {
+			return fmt.Errorf("apply cancelled")
+		}
+		applied, err := engine.Apply(context.Background(), program, resourceGraph, opts)
+		if err != nil {
+			return err
+		}
+		appliedDoc := applied.Document(v2plan.Options{
+			CommandFile: commandFile(files),
+			Host:        commandHost(program, host),
+		})
+		v2plan.PrintText(os.Stdout, appliedDoc)
+		fmt.Println("apply complete")
+		return nil
 	default:
 		return fmt.Errorf("unsupported command %q", cmd)
 	}
+}
+
+func v2Hosts(program *v2ir.Program) map[string]config.Host {
+	hosts := map[string]config.Host{}
+	for _, host := range program.Hosts {
+		hosts[host.Name] = config.Host{
+			Name:          host.Name,
+			Address:       host.SSH.Host,
+			Port:          portString(host.SSH.Port),
+			IdentityFile:  host.SSH.IdentityFile,
+			SSHConfigHost: host.SSH.Host,
+		}
+	}
+	return hosts
+}
+
+func portString(port int) string {
+	if port == 0 || port == 22 {
+		return ""
+	}
+	return strconv.Itoa(port)
 }
 
 func loadV2Program(files []string, host string) (*v2ir.Program, error) {

@@ -199,7 +199,7 @@ func PrintText(w io.Writer, doc Document) {
 		return
 	}
 	for _, change := range doc.Changes {
-		fmt.Fprintf(w, "  + %s\n", change.Address)
+		fmt.Fprintf(w, "  %s %s\n", actionSymbol(change.Action), change.Address)
 		if change.Summary != "" {
 			fmt.Fprintf(w, "    %s\n", change.Summary)
 		}
@@ -221,6 +221,21 @@ func PrintJSON(w io.Writer, doc Document) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(doc)
+}
+
+func actionSymbol(action string) string {
+	switch action {
+	case "create", "adopt":
+		return "+"
+	case "update":
+		return "~"
+	case "delete", "destroy", "forget":
+		return "-"
+	case "no-op":
+		return "="
+	default:
+		return "?"
+	}
 }
 
 func printSummary(w io.Writer, summary Summary) {
