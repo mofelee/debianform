@@ -266,6 +266,10 @@ component "restic" {
   type    = "binary"
   version = "0.16.5"
 
+  input "environment_source" {
+    type = string
+  }
+
   source "amd64" {
     url    = "https://github.com/restic/restic/releases/download/v0.16.5/restic_0.16.5_linux_amd64.bz2"
     sha256 = "REPLACE_WITH_RESTIC_AMD64_SHA256"
@@ -295,15 +299,16 @@ component "restic" {
     }
   }
 
-  files {
+  secrets {
     file "/etc/restic/environment" {
-      owner     = "root"
-      group     = "root"
-      mode      = "0600"
-      sensitive = true
-      content   = file("secrets/server1-restic-environment")
+      source = input.environment_source
+      owner  = "root"
+      group  = "root"
+      mode   = "0600"
     }
+  }
 
+  files {
     file "/usr/local/bin/restic-backup" {
       owner = "root"
       group = "root"
@@ -356,8 +361,15 @@ host "server1" {
     component.rclone,
     component.company_ca,
     component.myapp,
-    component.restic,
   ]
+
+  component "restic" {
+    source = component.restic
+
+    inputs = {
+      environment_source = "secrets/server1-restic-environment"
+    }
+  }
 
   ssh {
     host = "server1"
@@ -402,15 +414,16 @@ host "server1" {
     }
   }
 
-  files {
+  secrets {
     file "/etc/wireguard/private.key" {
-      owner     = "root"
-      group     = "systemd-network"
-      mode      = "0640"
-      sensitive = true
-      content   = file("secrets/server1-wireguard.key")
+      source = "secrets/server1-wireguard.key"
+      owner  = "root"
+      group  = "systemd-network"
+      mode   = "0640"
     }
+  }
 
+  files {
     file "/opt/app/docker-compose.yml" {
       owner = "deploy"
       group = "deploy"
@@ -664,13 +677,12 @@ host "server2" {
     codename     = "trixie"
   }
 
-  files {
+  secrets {
     file "/etc/wireguard/private.key" {
-      owner     = "root"
-      group     = "systemd-network"
-      mode      = "0640"
-      sensitive = true
-      content   = file("secrets/server2-wireguard.key")
+      source = "secrets/server2-wireguard.key"
+      owner  = "root"
+      group  = "systemd-network"
+      mode   = "0640"
     }
   }
 

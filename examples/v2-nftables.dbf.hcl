@@ -41,8 +41,8 @@ host "edge1" {
       EOF
     }
 
-    file "10-filter" {
-      path = "/etc/nftables.d/10-filter.nft"
+    file "10-base" {
+      path = "/etc/nftables.d/10-base.nft"
 
       content = <<-EOF
         table inet filter {
@@ -51,8 +51,6 @@ host "edge1" {
 
             ct state established,related accept
             iifname "lo" accept
-
-            tcp dport { 22, 80, 443 } accept
 
             counter drop
           }
@@ -68,8 +66,16 @@ host "edge1" {
       EOF
     }
 
-    file "20-wireguard" {
-      path = "/etc/nftables.d/20-wireguard.nft"
+    file "20-services" {
+      path = "/etc/nftables.d/20-services.nft"
+
+      content = <<-EOF
+        add rule inet filter input tcp dport { 22, 80, 443 } accept
+      EOF
+    }
+
+    file "30-wireguard" {
+      path = "/etc/nftables.d/30-wireguard.nft"
 
       content = <<-EOF
         add rule inet filter input udp dport 51820 accept
@@ -82,17 +88,18 @@ host "edge1" {
 #
 # host.edge1.packages.install["nftables"]
 #   -> host.edge1.nftables.file["main"]
-#   -> host.edge1.nftables.file["10-filter"]
-#   -> host.edge1.nftables.file["20-wireguard"]
+#   -> host.edge1.nftables.file["10-base"]
+#   -> host.edge1.nftables.file["20-services"]
+#   -> host.edge1.nftables.file["30-wireguard"]
 #   -> host.edge1.nftables.validate
 #   -> host.edge1.nftables.activate
 #
 # 示例 plan 片段：
 #
-#   ~ host.edge1.nftables.file["10-filter"]
+#   ~ host.edge1.nftables.file["20-services"]
 #     ~ content
-#       - tcp dport { 22, 80 } accept
-#       + tcp dport { 22, 80, 443 } accept
+#       - add rule inet filter input tcp dport { 22, 80 } accept
+#       + add rule inet filter input tcp dport { 22, 80, 443 } accept
 #
 #     validates: nft -c -f /etc/nftables.conf
 #     activates: nft -f /etc/nftables.conf

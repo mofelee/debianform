@@ -29,6 +29,9 @@ v2 应遵循这些原则：
 - 默认合并行为应该适合“追加配置”，只有显式 `force()` 才清空并覆盖。
 - 用户表达目标状态和必要依赖，调度器决定可并行的执行层。
 - 中间表达和资源图是内部编译边界，方便校验、解释 plan 和扩展功能。
+- 对已经有稳定原生配置格式的系统组件，DebianForm 不重新发明高阶抽象；
+  主路径应是薄封装：管理文件、校验、激活、依赖、diff 和组合能力。例如
+  `nftables`、`systemd.networkd`、systemd unit、sysctl 和 modules-load。
 - v2 不要求兼容 v1 配置语法，允许重新设计 state 地址和资源地址。
 
 ## 非目标
@@ -145,6 +148,7 @@ host "ksvm213" {
   packages {}
   apt {}
   files {}
+  secrets {}
   directories {}
   users {}
   groups {}
@@ -166,6 +170,7 @@ v2 第一阶段需要重点实现：
 - `kernel`
 - `packages`
 - `files`
+- `secrets`
 - `directories`
 - `users`
 - `groups`
@@ -285,6 +290,46 @@ created   DebianForm 创建或安装的资源；从配置删除后应销毁。
 adopted   DebianForm 接管时已经存在的资源；从配置删除后默认只解除管辖。
 external  只作为依赖或观测对象记录；不销毁。
 ```
+
+“从配置删除”和“配置中显式声明 `ensure = "absent"`”语义不同：
+
+- 从配置删除：表示 DebianForm 不再管理该对象；是否销毁由 state ownership 和
+  lifecycle 决定。
+- `ensure = "absent"`：表示用户明确要求远端对象不存在；只要没有
+  `prevent_destroy` 阻止，plan 应生成删除动作。
+
+默认删除策略：
+
+| kind | ownership=created 时从配置删除 | ownership=adopted/external 时从配置删除 |
+| --- | --- | --- |
+| package | 卸载 | 解除管辖 |
+| file/secret/nftables file/systemd unit | 删除远端文件 | 解除管辖 |
+| service state | 停止管理 enable/running 状态 | 解除管辖 |
+| user/group/directory | 可销毁，但必须在 plan 中高亮；建议用户对关键对象设置 `prevent_destroy` | 解除管辖 |
+| operation node | 不作为长期资源销毁 | 不作为长期资源销毁 |
+
+DebianForm 提供最小 lifecycle 保护，不引入 Terraform 完整 lifecycle 语义：
+
+```hcl
+files {
+  file "/etc/nftables.conf" {
+    content = file("nftables.conf")
+
+    lifecycle {
+      prevent_destroy = true
+    }
+  }
+}
+```
+
+要求：
+
+- `lifecycle.prevent_destroy` 默认 false。
+- 当资源从配置删除、`ensure = "absent"` 或 replace 需要销毁旧对象时，如果
+  `prevent_destroy = true`，plan 必须失败并指向来源位置。
+- `prevent_destroy` 只阻止 destroy/delete/replace，不阻止普通 update。
+- high-risk domain 可以在文档中建议用户开启 `prevent_destroy`，但默认值必须明确。
+- 后续如需要 `ignore_changes`、`replace_triggered_by` 等能力，必须单独设计；第一版不做。
 
 state 至少应保存：
 
@@ -438,6 +483,42 @@ host "server1" {
 }
 ```
 
+参数化示例：
+
+```hcl
+component "myapp" {
+  input "listen_addr" {
+    type    = string
+    default = "127.0.0.1:8080"
+  }
+
+  input "data_dir" {
+    type    = string
+    default = "/var/lib/myapp"
+  }
+
+  files {
+    file "/etc/myapp/config.yaml" {
+      content = <<-EOF
+        listen: ${input.listen_addr}
+        data_dir: ${input.data_dir}
+      EOF
+    }
+  }
+}
+
+host "server1" {
+  component "myapp" {
+    source = component.myapp
+
+    inputs = {
+      listen_addr = "127.0.0.1:9090"
+      data_dir    = "/srv/myapp"
+    }
+  }
+}
+```
+
 第一批 component artifact 类型建议为：
 
 ```text
@@ -451,7 +532,16 @@ ca_certificate  安装 CA 证书，并在内容变化后生成 update-ca-certifi
 
 - component label 在程序内唯一。
 - component 不能包含 `ssh`、`state`、`imports` 或 host 选择逻辑。
-- component 只有被 host 的 `components` 引用时才实例化。
+- component 只有被 host 的 `components` 引用，或被 host 内的 `component "<instance>"`
+  block 引用时才实例化。
+- `components = [component.rclone]` 是无参数单实例 shorthand；实例名默认等于模板名。
+- 需要传参或同一模板多实例时，必须使用 host 内的 `component "<instance>"` block。
+- host 内的 component instance label 在同一 host 内唯一，并进入 v2 地址。
+- component input 必须显式声明类型；第一版支持 `string`、`number`、`bool`、
+  `list(string)` 和 `map(string)`。
+- input 没有 default 时，所有实例必须传值。
+- 实例传入未知 input 或遗漏必填 input 时 validate 报错。
+- component 内部通过只读 `input.<name>` 访问参数。
 - component 表达式可以通过只读的 `target` 访问完成 profile merge 和默认值填充后的
   host，例如 `target.system.codename`；不能通过该上下文修改 host。
 - component 可以只包含领域对象，不要求必须声明下载 artifact。
@@ -730,6 +820,37 @@ files {
 - `sensitive` 默认 false。为 true 时，plan、日志和 state 不能记录明文内容，只能
   记录 hash、长度等非敏感摘要。
 - 同一路径合并后只能有一个最终定义。
+
+## Secrets 功能
+
+`secrets` 管理本地 secret 输入到远端敏感文件。它是 `files.file sensitive = true`
+的清晰语义化入口，适合 WireGuard private key、restic environment、应用密钥等。
+
+建议语法：
+
+```hcl
+secrets {
+  file "/etc/wireguard/private.key" {
+    source = "secrets/server1-wireguard.key"
+    owner  = "root"
+    group  = "systemd-network"
+    mode   = "0640"
+  }
+}
+```
+
+要求：
+
+- secret file label 是远端绝对路径，也是稳定 identity。
+- `source` 是本地文件路径，相对当前配置文件所在目录解析。
+- 第一版只支持本地文件 source；后续可增加外部 secret provider。
+- `owner` 默认 `root`，`group` 默认 `root`，`mode` 默认 `0600`。
+- secret 文件内容可以在当前进程内用于渲染和上传，但 plan、日志和 state 不能记录明文。
+- plan 只能显示 secret 是否变化、hash、长度等非敏感摘要。
+- state 只能记录远端 path、content hash、mode、owner/group 和 ownership。
+- `secrets.file` 与 `files.file` 不能管理同一个远端 path。
+- 示例中的 `examples/secrets/` 必须被 `.gitignore` 忽略；文档和示例不能提交真实 secret。
+- external secret provider 后续必须遵循同样的 plan/state 不落明文规则。
 
 ## Directories 功能
 
@@ -1085,6 +1206,19 @@ nftables {
 - 第一版不提供通用 `firewall` 主块。后续如增加 helper，也只能编译成明确的
   nftables snippet，不能成为替代 nftables 的第二套语义。
 
+推荐组合约束：
+
+- `main` 只负责 `flush ruleset` 和 `include "/etc/nftables.d/*.nft"`。
+- 一个基础 snippet（例如 `10-base`）负责定义 table、chain、hook 和默认 policy。
+- 其他 snippet 优先使用 `add rule inet filter input ...` 追加规则，避免重复定义同一
+  table/chain。
+- snippet label 建议使用数字前缀表达加载顺序，例如 `10-base`、`20-wireguard`、
+  `30-services`。
+- DebianForm 不深度解析 nft 语言，不尝试提前判断所有语义冲突；最终以
+  `nft -c -f /etc/nftables.conf` 作为权威校验。
+- 如果多个 component 都需要开放端口，优先让它们贡献各自的 snippet，而不是修改
+  同一个共享文件。
+
 完整示例见
 [examples/v2-nftables.dbf.hcl](../examples/v2-nftables.dbf.hcl)。
 
@@ -1122,7 +1256,7 @@ HCL AST
 - `HostSpec` 中没有 merge modifier。
 - `HostSpec` 中保留 source location，用于错误提示和 plan 输出。
 - `HostSpec` 保留领域结构，不直接等于 provider resource。
-- `ResourceGraph` 才包含低阶 provider resource。
+- `ResourceGraph` 才包含低阶 provider resource 和有语义的 operation node。
 
 详细设计见 [v2-ir-requirements.zh.md](v2-ir-requirements.zh.md)。
 
@@ -1153,6 +1287,30 @@ host.ksvm213.components.rclone.install["/usr/local/bin/rclone"]
 - 低阶资源地址可以作为 debug 信息展示。
 - state 应优先记录稳定的 v2 地址。
 - v2 不需要兼容 v1 address。
+
+## Operation 节点
+
+有些动作不是长期存在的远端对象，但必须进入依赖图，否则会退化成 provider side
+effect。例如：
+
+```text
+host.server1.apt.cache_refresh
+host.server1.nftables.validate
+host.server1.nftables.activate
+host.server1.systemd.daemon_reload
+host.server1.services.service["myapp"].restart
+host.server1.ca_certificates.update
+```
+
+要求：
+
+- 这类动作统一建模为 `OperationNode`。
+- `OperationNode` 是 ResourceGraph 中的一等 DAG 节点，有稳定 v2 地址。
+- `OperationNode` 只能由领域语义生成，不能作为用户任意 shell hook。
+- 多个上游变化需要同一个动作时，编译器必须按 host 或作用域汇聚成一个节点。
+- plan 必须展示 operation 的触发来源和执行预览。
+- apply 必须按 DAG 执行 operation，失败后停止依赖它的后续节点。
+- state 可以记录 operation 的最近执行摘要，但不能把 operation 当成长期资源所有权。
 
 ## 调度语义
 
@@ -1233,6 +1391,8 @@ Plan:
 - HTML preview 必须是可独立打开的静态文件，支持按 host、component、action 过滤，
   支持折叠/展开、搜索字段路径，并展示 source location。
 - 交互式 TUI 可以后续增加，不作为第一版要求。
+
+JSON 格式详见 [v2-plan-format.md](v2-plan-format.md)。
 
 ## CLI 需求
 
@@ -1416,6 +1576,10 @@ dbf fmt
 - user/group/authorized_key 示例。
 - systemd service 示例。
 - 多 host/profile 示例。
+- 小型 golden examples 覆盖 BBR、APT repository、BIRD2 component、binary component、
+  nftables、plan preview、systemd-networkd/WireGuard。
+- golden examples 应进入 parser、HostSpec、ResourceGraph 和 plan snapshot 测试。
+- `v2-fleet` 只作为组合压力示例，不应成为所有单元测试的唯一输入。
 - 迁移说明只解释 v1 已废弃，不提供兼容承诺。
 
 ## 验收标准

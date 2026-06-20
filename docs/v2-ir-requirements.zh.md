@@ -112,6 +112,7 @@ type HostSpec struct {
     Packages    PackageSpec
     APT         APTSpec
     Files       FileSpec
+    Secrets     SecretSpec
     Directories DirectorySpec
     Users       UserSpec
     Groups      GroupSpec
@@ -133,6 +134,18 @@ type SourceRef struct {
     Imports []string
 }
 ```
+
+`LifecycleSpec` 是所有会生成长期资源的领域对象可选携带的保护规则：
+
+```go
+type LifecycleSpec struct {
+    PreventDestroy bool
+    Source         SourceRef
+}
+```
+
+第一版只支持 `PreventDestroy`。它会被编译到 ResourceGraph 节点，用于阻止
+delete/destroy/replace，不影响普通 update。
 
 ## HostSpec
 
@@ -356,6 +369,7 @@ type PackageSpec struct {
 type PackageItem struct {
     Name         string
     Repositories []string
+    Lifecycle    LifecycleSpec
     Source       SourceRef
 }
 ```
@@ -490,6 +504,7 @@ type NftablesFileSpec struct {
     Validate  bool
     Activate  bool
     Ensure    Ensure
+    Lifecycle LifecycleSpec
     Source    SourceRef
 }
 ```
@@ -573,6 +588,7 @@ type ManagedFile struct {
     Mode       string
     Sensitive  bool
     Ensure     Ensure
+    Lifecycle  LifecycleSpec
     Source     SourceRef
 }
 ```
@@ -595,6 +611,58 @@ networkd object。
 `Sensitive` 为 true 时，中间表达可以在当前进程内持有渲染所需内容，但 plan、
 日志和持久化 state 不得输出明文。state 只允许保存内容 hash、长度和远端 identity。
 
+## SecretSpec
+
+SecretSpec 是敏感文件的语义化入口。它和 FileSpec 最终都可能编译成文件类低阶资源，
+但 SecretSpec 默认禁止 plan、state 和日志写入明文。
+
+```go
+type SecretSpec struct {
+    Files map[string]SecretFileSpec
+}
+
+type SecretFileSpec struct {
+    Path       string
+    SourcePath string
+    Owner      string
+    Group      string
+    Mode       string
+    Ensure     Ensure
+    Lifecycle  LifecycleSpec
+    Source     SourceRef
+}
+```
+
+用户 DSL：
+
+```hcl
+secrets {
+  file "/etc/wireguard/private.key" {
+    source = "secrets/server1-wireguard.key"
+    owner  = "root"
+    group  = "systemd-network"
+    mode   = "0640"
+  }
+}
+```
+
+中间表达：
+
+```yaml
+secrets:
+  files:
+    /etc/wireguard/private.key:
+      path: /etc/wireguard/private.key
+      source_path: secrets/server1-wireguard.key
+      owner: root
+      group: systemd-network
+      mode: "0640"
+      ensure: present
+```
+
+SecretSpec 只保存本地 source path 和目标 metadata。执行时可以读取 source 内容并计算
+hash；plan、state 和日志只能保存 hash、长度和是否变化等摘要。
+
 ## ComponentSpec
 
 顶层 `component` 是部署单元模板，不是 provider resource，也不是可独立 apply 的对象。
@@ -608,6 +676,7 @@ type ComponentTemplateSpec struct {
     Name    string
     Type    ArtifactType
     Version string
+    Inputs  map[string]ComponentInputSpec
     Sources map[string]DownloadSourceSpec // key 为空表示架构无关
     Extract *ExtractSpec
     Install *InstallSpec
@@ -618,6 +687,7 @@ type ComponentTemplateSpec struct {
     Groups      GroupSpec
     Users       UserSpec
     Files       FileSpec
+    Secrets     SecretSpec
     Directories DirectorySpec
     Systemd     SystemdSpec
     Nftables    NftablesSpec
@@ -627,10 +697,12 @@ type ComponentTemplateSpec struct {
 
 type ComponentInstanceSpec struct {
     Name         string
+    Template     string
     Type         ArtifactType
     Version      string
     Host         string
     Architecture string
+    InputValues  map[string]Value
 
     SelectedSource *DownloadSourceSpec
     Extract        *ExtractSpec
@@ -642,11 +714,20 @@ type ComponentInstanceSpec struct {
     Groups      GroupSpec
     Users       UserSpec
     Files       FileSpec
+    Secrets     SecretSpec
     Directories DirectorySpec
     Systemd     SystemdSpec
     Nftables    NftablesSpec
 
     Source SourceRef
+}
+
+type ComponentInputSpec struct {
+    Name      string
+    Type      ValueType
+    Default   *Value
+    Sensitive bool
+    Source    SourceRef
 }
 
 type DownloadSourceSpec struct {
@@ -669,6 +750,49 @@ type InstallSpec struct {
     Mode  string
 }
 ```
+
+host 中无参数引用：
+
+```hcl
+components = [
+  component.rclone,
+]
+```
+
+归一化为：
+
+```yaml
+components:
+  - name: rclone
+    template: rclone
+    input_values: {}
+```
+
+需要传参或同一模板多实例时，使用 host 内的 component instance block：
+
+```hcl
+component "api" {
+  source = component.myapp
+
+  inputs = {
+    listen_addr = "127.0.0.1:8080"
+  }
+}
+```
+
+归一化为：
+
+```yaml
+components:
+  - name: api
+    template: myapp
+    input_values:
+      listen_addr: "127.0.0.1:8080"
+```
+
+实例化 component 时，编译器先校验 input，再用 `input.<name>` 只读上下文求值
+component 内部表达式。`target` 仍然表示完成 profile merge 和默认值填充后的 host
+只读视图。`input` 和 `target` 都不能修改 host。
 
 归一化规则：
 
@@ -907,7 +1031,7 @@ Program/HostSpec
 
 ```text
 ResourceGraph
-  nodes: provider resources
+  nodes: provider resources and operation nodes
   edges: dependencies
 ```
 
@@ -919,6 +1043,45 @@ ResourceGraph
 - 生成显式依赖边。
 - 生成语义依赖边。
 - 保留 source address。
+
+建议结构：
+
+```go
+type ResourceGraph struct {
+    Nodes []GraphNode
+    Edges []GraphEdge
+}
+
+type GraphNode struct {
+    Address         string
+    Kind            GraphNodeKind // resource or operation
+    Source          SourceRef
+    Lifecycle       LifecycleSpec
+    ProviderAddress string
+    ProviderPayload  any
+    Operation       *OperationSpec
+}
+
+type OperationSpec struct {
+    OperationKind  string
+    CommandPreview string
+    TriggeredBy    []string
+    Scope          string // host, component, service, file 等
+}
+```
+
+OperationNode 示例：
+
+```text
+host.server1.apt.cache_refresh
+host.server1.nftables.validate
+host.server1.nftables.activate
+host.server1.systemd.daemon_reload
+host.server1.services.service["myapp"].restart
+```
+
+OperationNode 是有语义的 DAG 节点，不是任意 shell hook。编译器应将同一 host 或同一
+作用域内的重复 operation 汇聚为一个稳定地址，并通过 `TriggeredBy` 记录触发来源。
 
 编译结果示例：
 
@@ -949,12 +1112,19 @@ ResourceGraph:
 - nftables file 的 `content` 和 `source_path` 只能二选一。
 - nftables main ruleset 最多只能有一个；默认 path 为 `/etc/nftables.conf`。
 - file 同一路径不能出现冲突定义。
+- secrets.file 和 files.file 不能管理同一个远端 path。
+- secret source 必须能读取，且不能把明文写入 plan、state 或日志。
 - sensitive file 不能把明文写入 plan 或 state。
+- lifecycle 第一版只允许 `prevent_destroy`；未知 lifecycle 字段必须报错。
 - user 引用的 primary group 如果在配置内声明，应存在。
 - service 引用的 package 如果在配置内声明，应能解析。
 - sysctl key 不能为空。
 - kernel module 名不能为空。
 - host 引用的 component 必须存在且不能重复实例化。
+- component input 名称必须唯一，类型必须受支持。
+- component instance 的 `source` 必须引用已声明 component。
+- component instance 不能传入未声明 input，不能遗漏无 default 的 input。
+- component instance input value 必须符合 input 声明类型。
 - host 架构必须能选择唯一 component source。
 - component 的 URL、SHA-256、安装路径和解压参数必须通过对应类型校验。
 - host/profile/component 之间不能产生远端 identity 冲突。
