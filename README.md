@@ -1519,6 +1519,13 @@ dbf apply --lock-timeout 15m
 | [examples/ksvm-fleet-smoke.dbf.hcl](examples/ksvm-fleet-smoke.dbf.hcl) | `for_each` 多主机 smoke test |
 | [examples/ksvm-handler-smoke.dbf.hcl](examples/ksvm-handler-smoke.dbf.hcl) | handler 去重与变更触发 |
 
+v2 仍处于设计阶段，以下文件用于冻结目标 DSL，当前执行器不能 apply：
+
+| 文件 | 内容 |
+| --- | --- |
+| [examples/v2-bird2.dbf.hcl](examples/v2-bird2.dbf.hcl) | component、APT repository、显式 package 来源依赖和服务 |
+| [examples/v2-fleet.dbf.hcl](examples/v2-fleet.dbf.hcl) | profile、component、多主机、systemd 和 networkd 完整组合 |
+
 运行示例前必须修改：
 
 - SSH host alias。

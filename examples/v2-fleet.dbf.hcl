@@ -4,7 +4,7 @@
 # 示例刻意同时展示两种复用边界：
 #
 # - profile：复用并合并主机基线配置。
-# - resource：复用一个可部署组件，并在挂载它的 host 上展开资源图。
+# - component：复用一个部署单元，并在挂载它的 host 上展开资源图。
 #
 # `REPLACE_*`、示例域名和公钥都是待替换占位符；正式 validate 应拒绝它们。
 # secrets/ 下的文件只表示本地 secret 输入，不能提交到版本库。DebianForm 的
@@ -115,7 +115,7 @@ profile "wireguard" {
   }
 }
 
-resource "rclone" {
+component "rclone" {
   type    = "binary"
   version = "1.66.0"
 
@@ -143,7 +143,7 @@ resource "rclone" {
   }
 }
 
-resource "company_ca" {
+component "company_ca" {
   type    = "ca_certificate"
   version = "2026.06.20"
 
@@ -163,7 +163,7 @@ resource "company_ca" {
   # update-ca-certificates 激活动作，不需要用户写 after_install shell。
 }
 
-resource "myapp" {
+component "myapp" {
   type    = "archive"
   version = "2026.06.20"
 
@@ -262,7 +262,7 @@ resource "myapp" {
   }
 }
 
-resource "restic" {
+component "restic" {
   type    = "binary"
   version = "0.16.5"
 
@@ -352,11 +352,11 @@ host "server1" {
     profile.wireguard,
   ]
 
-  resources = [
-    resource.rclone,
-    resource.company_ca,
-    resource.myapp,
-    resource.restic,
+  components = [
+    component.rclone,
+    component.company_ca,
+    component.myapp,
+    component.restic,
   ]
 
   ssh {
@@ -371,6 +371,7 @@ host "server1" {
   system {
     hostname     = "server1"
     architecture = "amd64"
+    codename     = "trixie"
   }
 
   packages {
@@ -617,9 +618,9 @@ host "server2" {
     profile.wireguard,
   ]
 
-  resources = [
-    resource.rclone,
-    resource.company_ca,
+  components = [
+    component.rclone,
+    component.company_ca,
   ]
 
   ssh {
@@ -629,6 +630,7 @@ host "server2" {
   system {
     hostname     = "server2"
     architecture = "amd64"
+    codename     = "trixie"
   }
 
   files {
