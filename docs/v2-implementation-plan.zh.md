@@ -222,9 +222,16 @@
 代码：
 
 - [ ] 定义 v2 state 文件 schema
+- [ ] 定义 desired/state/observed 状态对比模型
 - [ ] 每个 host 使用独立 state path 和 lock path
 - [ ] state resource key 优先使用 v2 地址
 - [ ] state 保留低阶 provider address 作为 debug 信息
+- [ ] state 保存上次 desired 摘要和必要 observed 摘要
+- [ ] provider 支持按 ResourceGraph 读取 observed 状态
+- [ ] plan 基于 desired、state、observed 三者生成 create/update/delete/destroy/no-op
+- [ ] plan 能区分远端不存在、远端已存在可接管、远端 drift 三种情况
+- [ ] desired 缺失但 state 存在时，根据 ownership 计划 destroy 或解除管辖
+- [ ] observed 读取失败时返回明确诊断，不假设远端状态等于 state
 - [ ] 复用或适配 v1 SSH runner
 - [ ] 复用或适配 v1 provider 实现
 - [ ] 实现单 host 串行 apply
@@ -236,6 +243,10 @@
 测试：
 
 - [ ] state read/write 单测
+- [ ] 状态对比单测覆盖 desired/state/observed 判断矩阵
+- [ ] 状态对比单测覆盖 create、update、delete、destroy、解除管辖、adopted ownership、no-op
+- [ ] drift 检测测试覆盖 state 显示上次一致但 observed 已变化
+- [ ] observed 读取失败测试覆盖明确诊断
 - [ ] apply dry-run 或 fake runner 测试
 - [ ] prevent_destroy 负例测试
 - [ ] check 命令返回码测试
@@ -255,6 +266,8 @@
 验收：
 
 - [ ] fake runner apply 能写入 v2 state
+- [ ] plan 不只比较 desired 和 state，必须读取 observed
+- [ ] plan 能正确报告 create、update、delete、destroy、解除管辖、adopted ownership、no-op
 - [ ] `dbf check` 能检测 drift 或变更
 - [ ] `make test` 成功
 

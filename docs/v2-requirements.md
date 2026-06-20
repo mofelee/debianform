@@ -350,6 +350,40 @@ state 不应保存：
 - lock 租约。
 - 任意命令输出日志。
 
+### 状态对比模型
+
+v2 plan、check 和 apply 必须基于三类状态输入，而不能只比较当前配置和上次写入的
+state：
+
+```text
+desired   当前 HCL 经过解析、profile 合并、component 展开后生成的 HostSpec 和 ResourceGraph。
+state     远端 state 文件中记录的 DebianForm 管辖事实。
+observed  provider 在计划或执行前从目标主机实时读取的实际状态。
+```
+
+三者职责不同：
+
+- `desired` 是本次用户声明的目标状态，来自当前配置文件；它不是持久化 state 的完整副本。
+- `state` 是 DebianForm 上次 apply 后保存的资源管辖事实，用于判断 ownership、orphan
+  cleanup、destroy 顺序和上次 desired/observed 摘要。
+- `observed` 是目标主机当前真实状态，由 provider 按需读取；它用于发现 drift，决定
+  create、update、delete、destroy 或 no-op 等计划动作，以及 adopt 或解除管辖等
+  state 处理语义。
+
+plan/check 的比较规则：
+
+- desired 有、state 没有：读取 observed；远端不存在时计划 create，远端已存在时根据
+  provider 策略计划 update 或记录为 adopted ownership。
+- desired 有、observed 与 desired 不同：计划 update；如果 state 显示上次已一致，则该
+  update 同时表示 drift 修复。
+- state 有、desired 没有：根据 ownership 和 lifecycle 计划 destroy；对
+  adopted/external 资源默认只解除管辖并清理 state 记录，不改变远端对象。
+- desired、state 和 observed 都一致：计划 no-op。
+- observed 读取失败时，provider 必须返回明确诊断；不能静默假设远端状态等于 state。
+
+`check` 必须复用同一套状态对比逻辑。如果存在 drift 或 plan 有任何 create、update、
+delete、destroy、replace、run 动作，`check` 返回非零。
+
 ### Lock 文件内容
 
 lock 文件只表示“当前有 apply/plan 正在持有 state 写锁”，不保存目标状态。
