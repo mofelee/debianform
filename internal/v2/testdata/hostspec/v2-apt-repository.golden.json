@@ -5,14 +5,21 @@
     "line": 10,
     "path": "host.apt1"
   },
+  "facts": {
+    "system": {
+      "hostname": "apt1",
+      "architecture": "amd64",
+      "codename": "trixie"
+    }
+  },
   "ssh": {
     "host": "apt1",
     "port": 22,
     "user": "root",
     "source": {
       "file": "../../../examples/v2-apt-repository.dbf.hcl",
-      "line": 11,
-      "path": "host.apt1.ssh"
+      "line": 10,
+      "path": "host.apt1"
     }
   },
   "state": {
@@ -30,8 +37,8 @@
     "codename": "trixie",
     "source": {
       "file": "../../../examples/v2-apt-repository.dbf.hcl",
-      "line": 15,
-      "path": "host.apt1.system"
+      "line": 10,
+      "path": "host.apt1"
     }
   },
   "kernel": {
@@ -43,7 +50,7 @@
         "name": "curl",
         "source": {
           "file": "../../../examples/v2-apt-repository.dbf.hcl",
-          "line": 37,
+          "line": 27,
           "path": "host.apt1.packages.install[0]"
         }
       },
@@ -54,14 +61,14 @@
         ],
         "source": {
           "file": "../../../examples/v2-apt-repository.dbf.hcl",
-          "line": 40,
+          "line": 30,
           "path": "host.apt1.packages.package[\"example-tool\"]"
         }
       }
     ],
     "source": {
       "file": "../../../examples/v2-apt-repository.dbf.hcl",
-      "line": 35,
+      "line": 25,
       "path": "host.apt1.packages"
     }
   },
@@ -84,21 +91,21 @@
           "path": "/etc/apt/keyrings/example-tools.asc",
           "source": {
             "file": "../../../examples/v2-apt-repository.dbf.hcl",
-            "line": 27,
+            "line": 17,
             "path": "host.apt1.apt.repository[\"example_tools\"].signing_key"
           }
         },
         "ensure": "present",
         "source": {
           "file": "../../../examples/v2-apt-repository.dbf.hcl",
-          "line": 22,
+          "line": 12,
           "path": "host.apt1.apt.repository[\"example_tools\"]"
         }
       }
     },
     "source": {
       "file": "../../../examples/v2-apt-repository.dbf.hcl",
-      "line": 21,
+      "line": 11,
       "path": "host.apt1.apt"
     }
   },

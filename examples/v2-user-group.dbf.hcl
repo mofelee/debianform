@@ -1,16 +1,6 @@
 # DebianForm v2 user/group/authorized_key 示例。
 
 host "users1" {
-  ssh {
-    host = "users1"
-  }
-
-  system {
-    hostname     = "users1"
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   groups {
     group "deploy" {
       system = true

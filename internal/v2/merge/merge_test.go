@@ -501,6 +501,58 @@ host "tool1" {
 	}
 }
 
+func TestCompileUsesRuntimeFactsForTargetAndArtifactSelection(t *testing.T) {
+	cfg := parseInline(t, `
+component "tools" {
+  type = "binary"
+
+  source "amd64" {
+    url    = "https://downloads.example/tools-amd64"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/usr/local/bin/tools"
+  }
+
+  apt {
+    repository "tools_repo" {
+      uris       = ["https://repo.example/debian"]
+      suites     = [target.system.codename]
+      components = ["main"]
+    }
+  }
+}
+
+host "server1" {
+  components = [component.tools]
+}
+`)
+	program, err := CompileWithOptions(cfg, CompileOptions{
+		HostFacts: map[string]ir.HostFacts{
+			"server1": {System: ir.SystemFacts{
+				Hostname:     "server1",
+				Architecture: "amd64",
+				Codename:     "trixie",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := program.Hosts[0]
+	if host.System.Architecture != "amd64" || host.System.Codename != "trixie" {
+		t.Fatalf("system facts were not applied: %#v", host.System)
+	}
+	component := host.Components[0]
+	if component.SelectedSource == nil || component.SelectedSource.Architecture != "amd64" {
+		t.Fatalf("selected source = %#v", component.SelectedSource)
+	}
+	if got := component.APT.Repositories["tools_repo"].Suites; !reflect.DeepEqual(got, []string{"trixie"}) {
+		t.Fatalf("repository suites = %#v", got)
+	}
+}
+
 func TestCompileComponentTemplateSpecAndArtifactTypes(t *testing.T) {
 	program := compileInline(t, `
 component "artifact_file" {
@@ -1133,7 +1185,7 @@ func assertHostSpecGolden(t *testing.T, fixture string, golden string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	program, err := Compile(cfg)
+	program, err := CompileWithOptions(cfg, CompileOptions{HostFacts: testHostFacts()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1214,6 +1266,28 @@ func parseOrCompileFiles(files []string) (*ir.Program, error) {
 		return nil, err
 	}
 	return Compile(cfg)
+}
+
+func testHostFacts() map[string]ir.HostFacts {
+	out := map[string]ir.HostFacts{}
+	for _, name := range []string{
+		"apt1",
+		"bbr1",
+		"foundation1",
+		"merge1",
+		"preview1",
+		"router1",
+		"server1",
+		"server2",
+		"tool1",
+	} {
+		out[name] = ir.HostFacts{System: ir.SystemFacts{
+			Hostname:     name,
+			Architecture: "amd64",
+			Codename:     "trixie",
+		}}
+	}
+	return out
 }
 
 func packageNames(items []ir.PackageItem) []string {

@@ -5,14 +5,21 @@
     "line": 37,
     "path": "host.merge1"
   },
+  "facts": {
+    "system": {
+      "hostname": "merge1",
+      "architecture": "amd64",
+      "codename": "trixie"
+    }
+  },
   "ssh": {
     "host": "merge1",
     "port": 22,
     "user": "root",
     "source": {
       "file": "../../../examples/v2-profile-merge.dbf.hcl",
-      "line": 40,
-      "path": "host.merge1.ssh"
+      "line": 37,
+      "path": "host.merge1"
     }
   },
   "state": {
@@ -32,7 +39,7 @@
     "locale": "en_US.UTF-8",
     "source": {
       "file": "../../../examples/v2-profile-merge.dbf.hcl",
-      "line": 44,
+      "line": 40,
       "path": "host.merge1.system"
     }
   },
@@ -109,14 +116,14 @@
         "name": "sudo",
         "source": {
           "file": "../../../examples/v2-profile-merge.dbf.hcl",
-          "line": 52,
+          "line": 45,
           "path": "host.merge1.packages.install[0]"
         }
       }
     ],
     "source": {
       "file": "../../../examples/v2-profile-merge.dbf.hcl",
-      "line": 51,
+      "line": 44,
       "path": "host.merge1.packages"
     }
   },

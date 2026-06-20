@@ -137,6 +137,10 @@ func (p *MemoryProvider) RunOperation(ctx context.Context, operation graph.Opera
 
 func cloneState(st v2state.State) v2state.State {
 	out := st
+	if st.Facts != nil {
+		facts := *st.Facts
+		out.Facts = &facts
+	}
 	out.Resources = make(map[string]v2state.Resource, len(st.Resources))
 	for address, resource := range st.Resources {
 		resource.Desired = cloneMap(resource.Desired)

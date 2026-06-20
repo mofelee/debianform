@@ -8,6 +8,7 @@ type Program struct {
 type HostSpec struct {
 	Name        string                  `json:"name"`
 	Source      SourceRef               `json:"source"`
+	Facts       HostFacts               `json:"facts,omitempty"`
 	SSH         SSHSpec                 `json:"ssh"`
 	State       StateSpec               `json:"state"`
 	System      SystemSpec              `json:"system"`
@@ -28,6 +29,17 @@ type SourceRef struct {
 	File string `json:"file,omitempty"`
 	Line int    `json:"line,omitempty"`
 	Path string `json:"path,omitempty"`
+}
+
+type HostFacts struct {
+	System SystemFacts `json:"system,omitempty"`
+}
+
+type SystemFacts struct {
+	Hostname     string `json:"hostname,omitempty"`
+	Architecture string `json:"architecture,omitempty"`
+	Codename     string `json:"codename,omitempty"`
+	DetectedAt   string `json:"detected_at,omitempty"`
 }
 
 type LifecycleSpec struct {

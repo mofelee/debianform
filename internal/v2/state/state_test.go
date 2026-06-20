@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/mofelee/debianform/internal/v2/ir"
 )
 
 func TestSanitizeDesiredRedactsContentAndSensitiveSource(t *testing.T) {
@@ -48,5 +50,20 @@ func TestStateDecodeDefaultsToVersionTwo(t *testing.T) {
 	}
 	if st.Resources == nil {
 		t.Fatalf("resources map was not initialized")
+	}
+}
+
+func TestStateEncodesRuntimeFacts(t *testing.T) {
+	st := Empty("server1")
+	st.Facts = &ir.HostFacts{System: ir.SystemFacts{
+		Architecture: "amd64",
+		Codename:     "trixie",
+	}}
+	data, err := Encode(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"facts"`) || !strings.Contains(string(data), `"architecture": "amd64"`) {
+		t.Fatalf("encoded state missing facts:\n%s", data)
 	}
 }

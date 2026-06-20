@@ -1,11 +1,6 @@
 # Runnable v2 plan preview fixture for text and sensitive diffs.
 
 host "preview1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   files {
     file "/etc/debianform/preview.conf" {
       mode = "0644"

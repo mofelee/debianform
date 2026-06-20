@@ -32,6 +32,8 @@ state 顶层字段：
 - `host`: host label。
 - `serial`: 每次成功写入时递增。
 - `updated_at`: UTC RFC3339。
+- `facts`: 运行时探测到的主机事实，例如 `system.architecture`、`system.codename`
+  和远端 hostname。
 - `resources`: 以稳定 v2 address 为 key 的资源记录。
 
 资源记录保存：

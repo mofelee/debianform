@@ -37,15 +37,8 @@ profile "bbr" {
 host "merge1" {
   imports = [profile.bbr]
 
-  ssh {
-    host = "merge1"
-  }
-
   system {
-    hostname     = "merge1"
-    architecture = "amd64"
-    codename     = "trixie"
-    timezone     = "Asia/Shanghai"
+    timezone = "Asia/Shanghai"
   }
 
   packages {

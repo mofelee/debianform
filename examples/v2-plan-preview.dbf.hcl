@@ -8,16 +8,6 @@
 # - 假设远端 secret hash 与本地 source 不同，plan 只能显示摘要变化，不能显示明文。
 
 host "preview1" {
-  ssh {
-    host = "preview1"
-  }
-
-  system {
-    hostname     = "preview1"
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   secrets {
     file "/etc/app/token" {
       source = "secrets/preview1-app-token"

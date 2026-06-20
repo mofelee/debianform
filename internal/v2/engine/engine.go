@@ -192,6 +192,9 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		}
 		defer lock.Unlock(ctx)
 	}
+	if err := e.persistHostFacts(ctx, program, opts); err != nil {
+		return Plan{}, err
+	}
 
 	plan, err := e.Plan(ctx, program, resourceGraph, opts)
 	if err != nil {
@@ -239,6 +242,38 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		}
 	}
 	return plan, nil
+}
+
+func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts Options) error {
+	if program == nil {
+		return nil
+	}
+	for _, host := range program.Hosts {
+		if opts.Host != "" && host.Name != opts.Host {
+			continue
+		}
+		if !hasHostFacts(host.Facts) {
+			continue
+		}
+		st, err := e.Backend.Read(ctx, host)
+		if err != nil {
+			return err
+		}
+		v2state.Normalize(&st, host.Name)
+		facts := host.Facts
+		st.Facts = &facts
+		if err := e.Backend.Write(ctx, host, st); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func hasHostFacts(facts ir.HostFacts) bool {
+	return facts.System.Hostname != "" ||
+		facts.System.Architecture != "" ||
+		facts.System.Codename != "" ||
+		facts.System.DetectedAt != ""
 }
 
 func (e Engine) applyHostsParallel(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {

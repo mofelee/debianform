@@ -8,16 +8,6 @@
 # - 同一 host 多个 repository 变化时，只生成一次 APT cache refresh operation。
 
 host "apt1" {
-  ssh {
-    host = "apt1"
-  }
-
-  system {
-    hostname     = "apt1"
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   apt {
     repository "example_tools" {
       uris       = ["https://example.com/debian"]

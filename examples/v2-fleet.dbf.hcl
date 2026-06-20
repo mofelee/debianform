@@ -371,19 +371,9 @@ host "server1" {
     }
   }
 
-  ssh {
-    host = "server1"
-  }
-
   state {
     path      = "/var/lib/debianform/state/server1.json"
     lock_path = "/var/lock/debianform/state/server1.lock"
-  }
-
-  system {
-    hostname     = "server1"
-    architecture = "amd64"
-    codename     = "trixie"
   }
 
   packages {
@@ -666,16 +656,6 @@ host "server2" {
     component.rclone,
     component.company_ca,
   ]
-
-  ssh {
-    host = "server2"
-  }
-
-  system {
-    hostname     = "server2"
-    architecture = "amd64"
-    codename     = "trixie"
-  }
 
   secrets {
     file "/etc/wireguard/private.key" {

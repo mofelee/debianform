@@ -5,14 +5,21 @@
     "line": 10,
     "path": "host.bbr1"
   },
+  "facts": {
+    "system": {
+      "hostname": "bbr1",
+      "architecture": "amd64",
+      "codename": "trixie"
+    }
+  },
   "ssh": {
     "host": "bbr1",
     "port": 22,
     "user": "root",
     "source": {
       "file": "../../../examples/v2-bbr.dbf.hcl",
-      "line": 11,
-      "path": "host.bbr1.ssh"
+      "line": 10,
+      "path": "host.bbr1"
     }
   },
   "state": {
@@ -30,8 +37,8 @@
     "codename": "trixie",
     "source": {
       "file": "../../../examples/v2-bbr.dbf.hcl",
-      "line": 15,
-      "path": "host.bbr1.system"
+      "line": 10,
+      "path": "host.bbr1"
     }
   },
   "kernel": {
@@ -42,7 +49,7 @@
         "ensure": "present",
         "source": {
           "file": "../../../examples/v2-bbr.dbf.hcl",
-          "line": 23,
+          "line": 13,
           "path": "host.bbr1.kernel.modules[0]"
         }
       }
@@ -55,7 +62,7 @@
         "apply_runtime": true,
         "source": {
           "file": "../../../examples/v2-bbr.dbf.hcl",
-          "line": 27,
+          "line": 17,
           "path": "host.bbr1.kernel.sysctl[\"net.core.default_qdisc\"]"
         }
       },
@@ -66,14 +73,14 @@
         "apply_runtime": true,
         "source": {
           "file": "../../../examples/v2-bbr.dbf.hcl",
-          "line": 28,
+          "line": 18,
           "path": "host.bbr1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]"
         }
       }
     },
     "source": {
       "file": "../../../examples/v2-bbr.dbf.hcl",
-      "line": 21,
+      "line": 11,
       "path": "host.bbr1.kernel"
     }
   },

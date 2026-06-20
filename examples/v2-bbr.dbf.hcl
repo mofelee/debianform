@@ -8,16 +8,6 @@
 # - plan 使用用户层地址展示字段级变化。
 
 host "bbr1" {
-  ssh {
-    host = "bbr1"
-  }
-
-  system {
-    hostname     = "bbr1"
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   kernel {
     modules = [
       "tcp_bbr",

@@ -79,9 +79,31 @@ func TestValidateV2BBR(t *testing.T) {
 	}
 }
 
+func TestValidateV2StillRejectsComponentInputErrors(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(config, []byte(`
+component "tools" {
+  input "repo_uri" {
+    type = string
+  }
+}
+
+host "server1" {
+  components = [component.tools]
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	err := run([]string{"validate", "-f", config})
+	if err == nil || !strings.Contains(err.Error(), `input "repo_uri" is required`) {
+		t.Fatalf("validate error = %v, want missing input", err)
+	}
+}
+
 func TestPlanV2BBRText(t *testing.T) {
 	output := captureStdout(t, func() {
-		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl"}); err != nil {
+		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -99,7 +121,7 @@ func TestPlanV2BBRText(t *testing.T) {
 
 func TestPlanV2BBRJSON(t *testing.T) {
 	output := captureStdout(t, func() {
-		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json"}); err != nil {
+		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--offline"}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -123,7 +145,7 @@ func TestPlanV2BBRJSON(t *testing.T) {
 
 func TestPlanV2BBRJSONDebug(t *testing.T) {
 	output := captureStdout(t, func() {
-		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--debug"}); err != nil {
+		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -141,10 +163,22 @@ func TestPlanV2BBRJSONDebug(t *testing.T) {
 	}
 }
 
+func TestOfflinePlanExplainsRuntimeFactsDependency(t *testing.T) {
+	err := run([]string{"plan", "-f", "../../examples/v2-bird2.dbf.hcl", "--offline"})
+	if err == nil || !strings.Contains(err.Error(), "offline plan cannot resolve runtime facts") {
+		t.Fatalf("plan --offline error = %v, want runtime facts explanation", err)
+	}
+}
+
 func TestParallelFlagIsApplyOnlyAndPositive(t *testing.T) {
 	err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "2"})
 	if err == nil || !strings.Contains(err.Error(), "--parallel is only supported for v2 apply") {
 		t.Fatalf("plan --parallel error = %v", err)
+	}
+
+	err = run([]string{"check", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"})
+	if err == nil || !strings.Contains(err.Error(), "--offline is only supported for v2 plan") {
+		t.Fatalf("check --offline error = %v", err)
 	}
 
 	err = run([]string{"apply", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "0", "--auto-approve"})
@@ -157,7 +191,7 @@ func TestPlanV2BBRHTML(t *testing.T) {
 	dir := t.TempDir()
 	htmlPath := filepath.Join(dir, "plan.html")
 	output := captureStdout(t, func() {
-		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--html", htmlPath}); err != nil {
+		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--html", htmlPath, "--offline"}); err != nil {
 			t.Fatal(err)
 		}
 	})

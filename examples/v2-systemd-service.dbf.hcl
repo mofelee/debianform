@@ -1,16 +1,6 @@
 # DebianForm v2 raw systemd unit + service 示例。
 
 host "service1" {
-  ssh {
-    host = "service1"
-  }
-
-  system {
-    hostname     = "service1"
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   files {
     file "/etc/myapp/config.yaml" {
       owner   = "root"

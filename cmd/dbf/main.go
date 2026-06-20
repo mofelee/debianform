@@ -76,7 +76,7 @@ func runFmt(args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := loadV2Program(files, ""); err != nil {
+	if _, err := loadV2Program(files, "", v2merge.CompileOptions{SkipComponents: true}); err != nil {
 		return err
 	}
 	changed := 0
@@ -110,6 +110,7 @@ func runConfigCommand(cmd string, args []string) error {
 	format := fs.String("format", "text", "plan output format: text or json")
 	htmlPath := fs.String("html", "", "write plan as static HTML")
 	debug := fs.Bool("debug", false, "show internal provider addresses in plan output")
+	offline := fs.Bool("offline", false, "render plan without SSH, state, or runtime facts discovery")
 	parallel := fs.Int("parallel", 1, "maximum number of hosts to apply concurrently")
 	lockTimeout := fs.Duration("lock-timeout", 5*time.Minute, "state lock timeout")
 	autoApprove := fs.Bool("auto-approve", false, "skip apply confirmation")
@@ -121,10 +122,10 @@ func runConfigCommand(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *debug, *parallel, *lockTimeout, *autoApprove)
+	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *debug, *offline, *parallel, *lockTimeout, *autoApprove)
 }
 
-func runV2ConfigCommand(cmd string, files []string, host string, format string, htmlPath string, debug bool, parallel int, lockTimeout time.Duration, autoApprove bool) error {
+func runV2ConfigCommand(cmd string, files []string, host string, format string, htmlPath string, debug bool, offline bool, parallel int, lockTimeout time.Duration, autoApprove bool) error {
 	if format == "" {
 		format = "text"
 	}
@@ -140,6 +141,9 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 	if debug && cmd != "plan" {
 		return fmt.Errorf("--debug is only supported for v2 plan")
 	}
+	if offline && cmd != "plan" {
+		return fmt.Errorf("--offline is only supported for v2 plan")
+	}
 	if parallel < 1 {
 		return fmt.Errorf("--parallel must be at least 1")
 	}
@@ -147,51 +151,77 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 		return fmt.Errorf("--parallel is only supported for v2 apply")
 	}
 
-	program, err := loadV2Program(files, host)
+	cfg, err := v2parser.ParseFiles(files)
 	if err != nil {
 		return err
 	}
 
 	switch cmd {
 	case "validate":
+		program, err := compileV2ValidationProgram(cfg, host)
+		if err != nil {
+			return err
+		}
 		if format != "text" {
 			return fmt.Errorf("--format is only supported for v2 plan")
 		}
 		fmt.Printf("v2 configuration is valid: %d host(s)\n", len(program.Hosts))
 		return nil
 	case "plan":
-		resourceGraph, err := v2graph.Compile(program)
-		if err != nil {
-			return err
-		}
-		doc := v2plan.New(resourceGraph, v2plan.Options{
-			CommandFile: commandFile(files),
-			Host:        commandHost(program, host),
-			Debug:       debug,
-		})
-		if htmlPath != "" {
-			if err := writePlanHTML(htmlPath, doc); err != nil {
+		var doc v2plan.Document
+		if offline {
+			program, err := compileV2Program(cfg, host, v2merge.CompileOptions{})
+			if err != nil {
+				if isRuntimeFactCompileError(err) {
+					return fmt.Errorf("offline plan cannot resolve runtime facts; run dbf plan without --offline or declare matching system facts: %w", err)
+				}
 				return err
 			}
-			fmt.Printf("wrote HTML plan to %s\n", htmlPath)
-			return nil
+			resourceGraph, err := v2graph.Compile(program)
+			if err != nil {
+				return err
+			}
+			doc = v2plan.New(resourceGraph, v2plan.Options{
+				CommandFile: commandFile(files),
+				Host:        commandHost(program, host),
+				Debug:       debug,
+			})
+		} else {
+			program, runner, err := loadOnlineV2Program(context.Background(), cfg, host)
+			if err != nil {
+				return err
+			}
+			resourceGraph, err := v2graph.Compile(program)
+			if err != nil {
+				return err
+			}
+			engine := v2engine.Engine{
+				Backend:  v2engine.NewSSHBackend(runner),
+				Provider: v2engine.NewNativeProvider(runner),
+			}
+			onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, v2engine.Options{Host: host})
+			if err != nil {
+				return err
+			}
+			doc = onlinePlan.Document(v2plan.Options{
+				CommandFile: commandFile(files),
+				Host:        commandHost(program, host),
+				Debug:       debug,
+			})
 		}
-		switch format {
-		case "json":
-			return v2plan.PrintJSON(os.Stdout, doc)
-		default:
-			v2plan.PrintText(os.Stdout, doc)
-			return nil
-		}
+		return printPlanDocument(doc, format, htmlPath)
 	case "check", "apply":
 		if format != "text" {
 			return fmt.Errorf("--format is only supported for v2 plan")
 		}
+		program, runner, err := loadOnlineV2Program(context.Background(), cfg, host)
+		if err != nil {
+			return err
+		}
 		resourceGraph, err := v2graph.Compile(program)
 		if err != nil {
 			return err
 		}
-		runner := v2engine.NewSSHRunner(v2engine.HostsFromProgram(program))
 		engine := v2engine.Engine{
 			Backend:  v2engine.NewSSHBackend(runner),
 			Provider: v2engine.NewNativeProvider(runner),
@@ -234,28 +264,80 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 	}
 }
 
-func loadV2Program(files []string, host string) (*v2ir.Program, error) {
+func printPlanDocument(doc v2plan.Document, format string, htmlPath string) error {
+	if htmlPath != "" {
+		if err := writePlanHTML(htmlPath, doc); err != nil {
+			return err
+		}
+		fmt.Printf("wrote HTML plan to %s\n", htmlPath)
+		return nil
+	}
+	switch format {
+	case "json":
+		return v2plan.PrintJSON(os.Stdout, doc)
+	default:
+		v2plan.PrintText(os.Stdout, doc)
+		return nil
+	}
+}
+
+func loadV2Program(files []string, host string, opts v2merge.CompileOptions) (*v2ir.Program, error) {
 	cfg, err := v2parser.ParseFiles(files)
 	if err != nil {
 		return nil, err
 	}
-	program, err := v2merge.Compile(cfg)
+	return compileV2Program(cfg, host, opts)
+}
+
+func compileV2Program(cfg *v2parser.Config, host string, opts v2merge.CompileOptions) (*v2ir.Program, error) {
+	opts.HostFilter = host
+	program, err := v2merge.CompileWithOptions(cfg, opts)
 	if err != nil {
 		return nil, err
 	}
-	return filterV2Program(program, host)
+	if host != "" && len(program.Hosts) == 0 {
+		return nil, fmt.Errorf("host %q not found", host)
+	}
+	return program, nil
 }
 
-func filterV2Program(program *v2ir.Program, host string) (*v2ir.Program, error) {
-	if host == "" {
+func compileV2ValidationProgram(cfg *v2parser.Config, host string) (*v2ir.Program, error) {
+	program, err := compileV2Program(cfg, host, v2merge.CompileOptions{})
+	if err == nil {
 		return program, nil
 	}
-	for _, candidate := range program.Hosts {
-		if candidate.Name == host {
-			return &v2ir.Program{Hosts: []v2ir.HostSpec{candidate}}, nil
-		}
+	if !isRuntimeFactCompileError(err) {
+		return nil, err
 	}
-	return nil, fmt.Errorf("host %q not found", host)
+	return compileV2Program(cfg, host, v2merge.CompileOptions{SkipComponents: true})
+}
+
+func isRuntimeFactCompileError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "must declare system.architecture") {
+		return true
+	}
+	return strings.Contains(msg, ".suites") && strings.Contains(msg, "non-empty")
+}
+
+func loadOnlineV2Program(ctx context.Context, cfg *v2parser.Config, host string) (*v2ir.Program, *v2engine.SSHRunner, error) {
+	base, err := compileV2Program(cfg, host, v2merge.CompileOptions{SkipComponents: true})
+	if err != nil {
+		return nil, nil, err
+	}
+	runner := v2engine.NewSSHRunner(v2engine.HostsFromProgram(base))
+	facts, err := v2engine.DiscoverProgramFacts(ctx, runner, base, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	resolved, err := compileV2Program(cfg, host, v2merge.CompileOptions{HostFacts: facts})
+	if err != nil {
+		return nil, nil, err
+	}
+	return resolved, runner, nil
 }
 
 func commandFile(files []string) string {

@@ -16,7 +16,17 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+type CompileOptions struct {
+	HostFilter     string
+	HostFacts      map[string]ir.HostFacts
+	SkipComponents bool
+}
+
 func Compile(cfg *parser.Config) (*ir.Program, error) {
+	return CompileWithOptions(cfg, CompileOptions{})
+}
+
+func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, error) {
 	compiler := &compiler{
 		cfg:          cfg,
 		profileCache: map[string]resolvedProfile{},
@@ -34,6 +44,9 @@ func Compile(cfg *parser.Config) (*ir.Program, error) {
 		Components: componentTemplateSpecs(cfg.Components),
 	}
 	for _, name := range names {
+		if opts.HostFilter != "" && name != opts.HostFilter {
+			continue
+		}
 		host := cfg.Hosts[name]
 		raw := parser.MapValue(nil, host.Source)
 		asserts := []parser.Assert{}
@@ -58,11 +71,18 @@ func Compile(cfg *parser.Config) (*ir.Program, error) {
 		if err != nil {
 			return nil, err
 		}
-		components, err := compiler.instantiateComponents(host.Components, spec)
-		if err != nil {
-			return nil, err
+		if facts, ok := opts.HostFacts[host.Name]; ok {
+			if err := applyHostFacts(&spec, facts); err != nil {
+				return nil, err
+			}
 		}
-		spec.Components = components
+		if !opts.SkipComponents {
+			components, err := compiler.instantiateComponents(host.Components, spec)
+			if err != nil {
+				return nil, err
+			}
+			spec.Components = components
+		}
 		if err := validateHostSpec(spec); err != nil {
 			return nil, err
 		}
@@ -901,6 +921,24 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 	}
 
 	return spec, nil
+}
+
+func applyHostFacts(spec *ir.HostSpec, facts ir.HostFacts) error {
+	system := facts.System
+	if system.Architecture != "" {
+		if spec.System.Architecture != "" && spec.System.Architecture != system.Architecture {
+			return fmt.Errorf("%s:%d:%s.system.architecture: declared architecture %q does not match detected architecture %q", spec.Source.File, spec.Source.Line, spec.Source.Path, spec.System.Architecture, system.Architecture)
+		}
+		spec.System.Architecture = system.Architecture
+	}
+	if system.Codename != "" {
+		if spec.System.Codename != "" && spec.System.Codename != system.Codename {
+			return fmt.Errorf("%s:%d:%s.system.codename: declared codename %q does not match detected codename %q", spec.Source.File, spec.Source.Line, spec.Source.Path, spec.System.Codename, system.Codename)
+		}
+		spec.System.Codename = system.Codename
+	}
+	spec.Facts = facts
+	return nil
 }
 
 func buildComponentSpec(instance parser.ComponentInstance, raw parser.Value) (ir.ComponentInstanceSpec, error) {

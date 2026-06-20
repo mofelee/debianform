@@ -40,16 +40,6 @@ host "tool1" {
   components = [
     component.rclone,
   ]
-
-  ssh {
-    host = "tool1"
-  }
-
-  system {
-    hostname     = "tool1"
-    architecture = "amd64"
-    codename     = "trixie"
-  }
 }
 
 # 预期资源图：

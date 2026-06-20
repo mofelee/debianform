@@ -8,16 +8,6 @@
 # - RouteTable = "off" 明确禁止根据 AllowedIPs 自动写系统路由表。
 
 host "wg1" {
-  ssh {
-    host = "wg1"
-  }
-
-  system {
-    hostname     = "wg1"
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   packages {
     install = [
       "wireguard-tools",

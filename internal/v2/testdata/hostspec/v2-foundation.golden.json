@@ -5,6 +5,13 @@
     "line": 13,
     "path": "host.foundation1"
   },
+  "facts": {
+    "system": {
+      "hostname": "foundation1",
+      "architecture": "amd64",
+      "codename": "trixie"
+    }
+  },
   "ssh": {
     "host": "foundation1",
     "port": 22,

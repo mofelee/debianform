@@ -320,7 +320,7 @@ func planFixture(t *testing.T, fixture string, opts Options) Document {
 	if err != nil {
 		t.Fatal(err)
 	}
-	program, err := merge.Compile(cfg)
+	program, err := merge.CompileWithOptions(cfg, merge.CompileOptions{HostFacts: testHostFacts()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,6 +329,27 @@ func planFixture(t *testing.T, fixture string, opts Options) Document {
 		t.Fatal(err)
 	}
 	return New(resourceGraph, opts)
+}
+
+func testHostFacts() map[string]ir.HostFacts {
+	out := map[string]ir.HostFacts{}
+	for _, name := range []string{
+		"apt1",
+		"bbr1",
+		"foundation1",
+		"preview1",
+		"router1",
+		"server1",
+		"server2",
+		"tool1",
+	} {
+		out[name] = ir.HostFacts{System: ir.SystemFacts{
+			Hostname:     name,
+			Architecture: "amd64",
+			Codename:     "trixie",
+		}}
+	}
+	return out
 }
 
 func assertGolden(t *testing.T, golden string, got string) {

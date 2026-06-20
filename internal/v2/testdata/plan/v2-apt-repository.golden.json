@@ -19,7 +19,7 @@
       "summary": "manage apt repository example_tools",
       "source": {
         "file": "../../../examples/v2-apt-repository.dbf.hcl",
-        "line": 22,
+        "line": 12,
         "path": "host.apt1.apt.repository[\"example_tools\"]"
       },
       "diff": {
@@ -129,7 +129,7 @@
       "summary": "manage apt signing key example_tools",
       "source": {
         "file": "../../../examples/v2-apt-repository.dbf.hcl",
-        "line": 27,
+        "line": 17,
         "path": "host.apt1.apt.repository[\"example_tools\"].signing_key"
       },
       "diff": {
@@ -219,7 +219,7 @@
       "summary": "create package curl",
       "source": {
         "file": "../../../examples/v2-apt-repository.dbf.hcl",
-        "line": 37,
+        "line": 27,
         "path": "host.apt1.packages.install[0]"
       },
       "diff": {
@@ -255,7 +255,7 @@
       "summary": "create package example-tool",
       "source": {
         "file": "../../../examples/v2-apt-repository.dbf.hcl",
-        "line": 40,
+        "line": 30,
         "path": "host.apt1.packages.package[\"example-tool\"]"
       },
       "diff": {
@@ -322,7 +322,7 @@
       "command_preview": "apt-get update",
       "source": {
         "file": "../../../examples/v2-apt-repository.dbf.hcl",
-        "line": 21,
+        "line": 11,
         "path": "host.apt1.apt"
       }
     }

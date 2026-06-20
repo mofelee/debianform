@@ -205,27 +205,26 @@ users {
 
 ## System
 
-`system` 描述主机自身的基础属性：
+`system` 描述用户希望管理的基础系统配置；主机架构和 Debian codename 属于运行时
+facts，通常不需要在 DSL 中手写：
 
 ```hcl
 system {
-  hostname     = "server1"
-  architecture = "amd64"
-  codename     = "trixie"
-  timezone     = "Asia/Tokyo"
-  locale       = "en_US.UTF-8"
+  timezone = "Asia/Tokyo"
+  locale   = "en_US.UTF-8"
 }
 ```
 
 要求：
 
 - `hostname` 默认等于 host label。
-- `architecture` 使用 DebianForm 规范架构名，例如 `amd64`、`arm64`。
-- `architecture` 可以省略并在连接目标后探测；显式声明时必须与探测结果一致。
-- `codename` 是 Debian release codename，例如 `bookworm`、`trixie`；也可以在连接后
-  从 `/etc/os-release` 探测。
-- 离线 `validate` 不依赖 SSH，但带多架构 source 的 component 只有在 architecture
-  已知时才能完成 source 选择检查。
+- `architecture` 使用 DebianForm 规范架构名，例如 `amd64`、`arm64`，由在线
+  `plan`/`check`/`apply` 在连接目标后探测；显式声明时必须与探测结果一致。
+- `codename` 是 Debian release codename，例如 `bookworm`、`trixie`，由在线
+  `plan`/`check`/`apply` 从 `/etc/os-release` 或 `lsb_release` 探测。
+- 探测到的 `architecture`、`codename` 和远端 `hostname` 写入 state 顶层
+  `facts.system`，并在 component 实例化前注入 `target.system` 只读视图。
+- 离线 `validate` 不依赖 SSH；`plan --offline` 只生成纯本地预览。
 - `timezone` 和 `locale` 可由 profile 提供。
 - `hostname`、`architecture` 和 `codename` 只能在 host 中声明，profile 中声明应报错。
 
@@ -1491,6 +1490,7 @@ v2 CLI 第一阶段：
 ```text
 dbf validate
 dbf plan
+dbf plan --offline
 dbf plan --format json
 dbf plan --html plan.html
 dbf apply
@@ -1501,7 +1501,9 @@ dbf fmt
 要求：
 
 - `validate` 执行 HCL 解析、profile 合并、HostSpec 校验、ResourceGraph 校验。
-- `plan` 生成并展示按 v2 地址组织的计划。
+- `plan` 先探测 runtime facts、读取 state 和 observed，再展示按 v2 地址组织的计划；
+  不写 state，不执行变更。
+- `plan --offline` 不连接 SSH，只生成静态本地预览。
 - `plan --format json` 输出结构化 plan，供 CI、审计和外部 viewer 使用。
 - `plan --html <file>` 生成静态 HTML preview，不改变远端状态。
 - `apply` 先 plan，再按 ResourceGraph 执行。

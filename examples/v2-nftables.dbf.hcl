@@ -9,16 +9,6 @@
 # - plan 应展示 nft 文件的行级 diff；HTML preview 可折叠大段上下文。
 
 host "edge1" {
-  ssh {
-    host = "edge1"
-  }
-
-  system {
-    hostname     = "edge1"
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   packages {
     install = [
       "nftables",

@@ -5,14 +5,21 @@
     "line": 39,
     "path": "host.tool1"
   },
+  "facts": {
+    "system": {
+      "hostname": "tool1",
+      "architecture": "amd64",
+      "codename": "trixie"
+    }
+  },
   "ssh": {
     "host": "tool1",
     "port": 22,
     "user": "root",
     "source": {
       "file": "../../../examples/v2-component-binary.dbf.hcl",
-      "line": 44,
-      "path": "host.tool1.ssh"
+      "line": 39,
+      "path": "host.tool1"
     }
   },
   "state": {
@@ -30,8 +37,8 @@
     "codename": "trixie",
     "source": {
       "file": "../../../examples/v2-component-binary.dbf.hcl",
-      "line": 48,
-      "path": "host.tool1.system"
+      "line": 39,
+      "path": "host.tool1"
     }
   },
   "kernel": {

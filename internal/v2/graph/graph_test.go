@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mofelee/debianform/internal/v2/ir"
 	"github.com/mofelee/debianform/internal/v2/merge"
 	"github.com/mofelee/debianform/internal/v2/parser"
 )
@@ -309,7 +310,7 @@ func compileGraphFixture(t *testing.T, fixture string) *ResourceGraph {
 	if err != nil {
 		t.Fatal(err)
 	}
-	program, err := merge.Compile(cfg)
+	program, err := merge.CompileWithOptions(cfg, merge.CompileOptions{HostFacts: testHostFacts()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,6 +319,27 @@ func compileGraphFixture(t *testing.T, fixture string) *ResourceGraph {
 		t.Fatal(err)
 	}
 	return resourceGraph
+}
+
+func testHostFacts() map[string]ir.HostFacts {
+	out := map[string]ir.HostFacts{}
+	for _, name := range []string{
+		"apt1",
+		"bbr1",
+		"foundation1",
+		"preview1",
+		"router1",
+		"server1",
+		"server2",
+		"tool1",
+	} {
+		out[name] = ir.HostFacts{System: ir.SystemFacts{
+			Hostname:     name,
+			Architecture: "amd64",
+			Codename:     "trixie",
+		}}
+	}
+	return out
 }
 
 func compileGraphInline(t *testing.T, content string) *ResourceGraph {

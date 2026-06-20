@@ -19,7 +19,7 @@
       "summary": "create kernel module tcp_bbr",
       "source": {
         "file": "../../../examples/v2-bbr.dbf.hcl",
-        "line": 23,
+        "line": 13,
         "path": "host.bbr1.kernel.modules[0]"
       },
       "diff": {
@@ -64,7 +64,7 @@
       "summary": "create sysctl net.core.default_qdisc",
       "source": {
         "file": "../../../examples/v2-bbr.dbf.hcl",
-        "line": 27,
+        "line": 17,
         "path": "host.bbr1.kernel.sysctl[\"net.core.default_qdisc\"]"
       },
       "diff": {
@@ -118,7 +118,7 @@
       "summary": "create sysctl net.ipv4.tcp_congestion_control",
       "source": {
         "file": "../../../examples/v2-bbr.dbf.hcl",
-        "line": 28,
+        "line": 18,
         "path": "host.bbr1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]"
       },
       "diff": {

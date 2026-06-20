@@ -42,16 +42,6 @@ host "router1" {
   components = [
     component.bird2,
   ]
-
-  ssh {
-    host = "router1"
-  }
-
-  system {
-    hostname     = "router1"
-    architecture = "amd64"
-    codename     = "trixie"
-  }
 }
 
 # 预期资源图：

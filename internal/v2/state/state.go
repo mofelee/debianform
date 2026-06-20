@@ -18,6 +18,7 @@ type State struct {
 	Host      string              `json:"host"`
 	Serial    int                 `json:"serial"`
 	UpdatedAt string              `json:"updated_at,omitempty"`
+	Facts     *ir.HostFacts       `json:"facts,omitempty"`
 	Resources map[string]Resource `json:"resources"`
 }
 
