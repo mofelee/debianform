@@ -6,8 +6,8 @@ DebianForm v2 是对原 v1 原型的破坏式重设计。
 
 - v2 是当前设计方向。
 - v2 用户语法记录在 `docs/`，设计夹具位于 `examples/v2-*.dbf.hcl`。
-- `dbf validate` 已接入 v2 Loop 1a 路径，可解析 profile/host 合并并生成 HostSpec；
-  `plan`/`apply` 仍临时使用 `internal/v1/` 中的 legacy v1 执行器构建。
+- `dbf validate` 和 `dbf plan` 已接入 v2 Loop 1b 路径，可解析 profile/host 合并、
+  生成 HostSpec、ResourceGraph 和 create-only plan；`apply`/`check` 的 v2 路径尚未实现。
 - legacy v1 示例、文档和 libvirt 集成测试已归档到 `legacy/v1/`。
 
 新的 v2 工作不要以旧的 `debian_*` 资源语法作为用户模型。它只作为 provider、SSH
@@ -23,7 +23,7 @@ DebianForm v2 是对原 v1 原型的破坏式重设计。
 ## v2 示例
 
 `examples/` 中的文件是 v2 设计夹具，当前还不能由 legacy CLI 执行。
-Loop 1a 已支持以下示例通过 v2 validate：
+Loop 1b 已支持以下示例通过 v2 validate，并可生成 create-only plan：
 
 - `examples/v2-bbr.dbf.hcl`
 - `examples/v2-profile-merge.dbf.hcl`
@@ -37,6 +37,30 @@ Loop 1a 已支持以下示例通过 v2 validate：
 - `examples/v2-nftables.dbf.hcl`
 - `examples/v2-plan-preview.dbf.hcl`
 - `examples/v2-systemd-networkd-wireguard.dbf.hcl`
+
+BBR v2 plan 示例：
+
+```bash
+dbf plan -f examples/v2-bbr.dbf.hcl
+```
+
+```text
+Plan:
+  + host.bbr1.kernel.module["tcp_bbr"]
+    create kernel module tcp_bbr
+  + host.bbr1.kernel.sysctl["net.core.default_qdisc"]
+    create sysctl net.core.default_qdisc
+  + host.bbr1.kernel.sysctl["net.ipv4.tcp_congestion_control"]
+    create sysctl net.ipv4.tcp_congestion_control
+
+Summary: 3 create, 0 update, 0 delete, 0 no-op, 0 operations
+```
+
+结构化 plan 可用：
+
+```bash
+dbf plan -f examples/v2-bbr.dbf.hcl --format json
+```
 
 ## Legacy v1 归档
 

@@ -16,8 +16,11 @@ import (
 	"github.com/mofelee/debianform/internal/v1/engine"
 	"github.com/mofelee/debianform/internal/v1/sshx"
 	"github.com/mofelee/debianform/internal/v1/state"
+	v2graph "github.com/mofelee/debianform/internal/v2/graph"
+	v2ir "github.com/mofelee/debianform/internal/v2/ir"
 	v2merge "github.com/mofelee/debianform/internal/v2/merge"
 	v2parser "github.com/mofelee/debianform/internal/v2/parser"
+	v2plan "github.com/mofelee/debianform/internal/v2/plan"
 	"github.com/mofelee/debianform/internal/version"
 )
 
@@ -88,6 +91,7 @@ func runConfigCommand(cmd string, args []string) error {
 	fs.SetOutput(os.Stderr)
 	file := fs.String("f", "", "configuration file")
 	host := fs.String("host", "", "limit execution to a host")
+	format := fs.String("format", "text", "plan output format: text or json")
 	lockTimeout := fs.Duration("lock-timeout", 5*time.Minute, "state lock timeout")
 	autoApprove := fs.Bool("auto-approve", false, "skip apply confirmation")
 	if err := fs.Parse(args); err != nil {
@@ -104,7 +108,10 @@ func runConfigCommand(cmd string, args []string) error {
 		return err
 	}
 	if isV2 {
-		return runV2ConfigCommand(cmd, files)
+		return runV2ConfigCommand(cmd, files, *host, *format)
+	}
+	if *format != "text" {
+		return fmt.Errorf("--format is only supported for v2 plan")
 	}
 
 	cfg, err := config.Load(files)
@@ -166,21 +173,88 @@ func runConfigCommand(cmd string, args []string) error {
 	}
 }
 
-func runV2ConfigCommand(cmd string, files []string) error {
-	if cmd != "validate" {
-		return fmt.Errorf("v2 %s is not implemented yet; supported command: validate", cmd)
+func runV2ConfigCommand(cmd string, files []string, host string, format string) error {
+	if format == "" {
+		format = "text"
+	}
+	if format != "text" && format != "json" {
+		return fmt.Errorf("unsupported v2 plan format %q", format)
 	}
 
-	cfg, err := v2parser.ParseFiles(files)
+	program, err := loadV2Program(files, host)
 	if err != nil {
 		return err
+	}
+
+	switch cmd {
+	case "validate":
+		if format != "text" {
+			return fmt.Errorf("--format is only supported for v2 plan")
+		}
+		fmt.Printf("v2 configuration is valid: %d host(s)\n", len(program.Hosts))
+		return nil
+	case "plan":
+		resourceGraph, err := v2graph.Compile(program)
+		if err != nil {
+			return err
+		}
+		doc := v2plan.New(resourceGraph, v2plan.Options{
+			CommandFile: commandFile(files),
+			Host:        commandHost(program, host),
+		})
+		switch format {
+		case "json":
+			return v2plan.PrintJSON(os.Stdout, doc)
+		default:
+			v2plan.PrintText(os.Stdout, doc)
+			return nil
+		}
+	case "apply", "check":
+		return fmt.Errorf("v2 %s is not implemented yet; supported commands: validate, plan", cmd)
+	default:
+		return fmt.Errorf("unsupported command %q", cmd)
+	}
+}
+
+func loadV2Program(files []string, host string) (*v2ir.Program, error) {
+	cfg, err := v2parser.ParseFiles(files)
+	if err != nil {
+		return nil, err
 	}
 	program, err := v2merge.Compile(cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	fmt.Printf("v2 configuration is valid: %d host(s)\n", len(program.Hosts))
-	return nil
+	return filterV2Program(program, host)
+}
+
+func filterV2Program(program *v2ir.Program, host string) (*v2ir.Program, error) {
+	if host == "" {
+		return program, nil
+	}
+	for _, candidate := range program.Hosts {
+		if candidate.Name == host {
+			return &v2ir.Program{Hosts: []v2ir.HostSpec{candidate}}, nil
+		}
+	}
+	return nil, fmt.Errorf("host %q not found", host)
+}
+
+func commandFile(files []string) string {
+	if len(files) == 1 {
+		return files[0]
+	}
+	return strings.Join(files, ",")
+}
+
+func commandHost(program *v2ir.Program, host string) string {
+	if host != "" {
+		return host
+	}
+	if len(program.Hosts) == 1 {
+		return program.Hosts[0].Name
+	}
+	return ""
 }
 
 func looksLikeV2(files []string) (bool, error) {
@@ -245,7 +319,7 @@ func usage() {
 
 Usage:
   dbf validate [-f file]
-  dbf plan     [-f file] [--host name]
+  dbf plan     [-f file] [--host name] [--format text|json]
   dbf apply    [-f file] [--host name] [--auto-approve]
   dbf check    [-f file] [--host name]
   dbf fmt      [-f file]

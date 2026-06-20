@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -75,6 +76,48 @@ func TestValidateV2BBR(t *testing.T) {
 
 	if !strings.Contains(output, "v2 configuration is valid: 1 host(s)") {
 		t.Fatalf("validate output = %q", output)
+	}
+}
+
+func TestPlanV2BBRText(t *testing.T) {
+	output := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	for _, want := range []string{
+		`host.bbr1.kernel.module["tcp_bbr"]`,
+		`host.bbr1.kernel.sysctl["net.ipv4.tcp_congestion_control"]`,
+		"Summary: 3 create",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("plan output %q does not contain %q", output, want)
+		}
+	}
+}
+
+func TestPlanV2BBRJSON(t *testing.T) {
+	output := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	var doc struct {
+		FormatVersion string `json:"format_version"`
+		Summary       struct {
+			Create int `json:"create"`
+		} `json:"summary"`
+	}
+	if err := json.Unmarshal([]byte(output), &doc); err != nil {
+		t.Fatalf("plan JSON did not parse: %v\n%s", err, output)
+	}
+	if doc.FormatVersion != "debianform.plan.v2alpha1" {
+		t.Fatalf("format_version = %q", doc.FormatVersion)
+	}
+	if doc.Summary.Create != 3 {
+		t.Fatalf("summary.create = %d, want 3", doc.Summary.Create)
 	}
 }
 

@@ -1,0 +1,87 @@
+{
+  "format_version": "debianform.plan.v2alpha1",
+  "generated_at": "2026-06-20T12:00:00Z",
+  "command": {
+    "file": "../../../examples/v2-bbr.dbf.hcl",
+    "host": "bbr1"
+  },
+  "summary": {
+    "create": 3,
+    "update": 0,
+    "delete": 0,
+    "no_op": 0,
+    "operations": 0
+  },
+  "changes": [
+    {
+      "address": "host.bbr1.kernel.module[\"tcp_bbr\"]",
+      "action": "create",
+      "summary": "create kernel module tcp_bbr",
+      "source": {
+        "file": "../../../examples/v2-bbr.dbf.hcl",
+        "line": 23,
+        "path": "host.bbr1.kernel.modules[0]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "before": null,
+        "after": {
+          "ensure": "present",
+          "name": "tcp_bbr",
+          "persist": true
+        }
+      }
+    },
+    {
+      "address": "host.bbr1.kernel.sysctl[\"net.core.default_qdisc\"]",
+      "action": "create",
+      "summary": "create sysctl net.core.default_qdisc",
+      "source": {
+        "file": "../../../examples/v2-bbr.dbf.hcl",
+        "line": 27,
+        "path": "host.bbr1.kernel.sysctl[\"net.core.default_qdisc\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "before": null,
+        "after": {
+          "apply_runtime": true,
+          "key": "net.core.default_qdisc",
+          "persist": true,
+          "value": "fq"
+        }
+      }
+    },
+    {
+      "address": "host.bbr1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]",
+      "action": "create",
+      "summary": "create sysctl net.ipv4.tcp_congestion_control",
+      "source": {
+        "file": "../../../examples/v2-bbr.dbf.hcl",
+        "line": 28,
+        "path": "host.bbr1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "before": null,
+        "after": {
+          "apply_runtime": true,
+          "key": "net.ipv4.tcp_congestion_control",
+          "persist": true,
+          "value": "bbr"
+        }
+      }
+    }
+  ],
+  "operations": [],
+  "diagnostics": []
+}
