@@ -1,7 +1,12 @@
 package merge
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -252,6 +257,27 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 		Kernel: ir.KernelSpec{
 			Sysctl: map[string]ir.SysctlSpec{},
 		},
+		Files: ir.FileSpec{
+			Files: map[string]ir.ManagedFile{},
+		},
+		Secrets: ir.SecretSpec{
+			Files: map[string]ir.SecretFile{},
+		},
+		Directories: ir.DirectorySpec{
+			Directories: map[string]ir.ManagedDirectory{},
+		},
+		Groups: ir.GroupSpec{
+			Groups: map[string]ir.ManagedGroup{},
+		},
+		Users: ir.UserSpec{
+			Users: map[string]ir.ManagedUser{},
+		},
+		Systemd: ir.SystemdSpec{
+			Units: map[string]ir.SystemdUnit{},
+		},
+		Services: ir.ServiceSpec{
+			Services: map[string]ir.ManagedService{},
+		},
 	}
 
 	if ssh, ok, err := mapField(raw, "ssh"); err != nil {
@@ -354,6 +380,87 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 		spec.Packages.Install = install
 	}
 
+	if files, ok, err := mapField(raw, "files"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Files.Source = files.Source
+		managedFiles, err := fileSpecs(files)
+		if err != nil {
+			return spec, err
+		}
+		spec.Files.Files = managedFiles
+	}
+
+	if secrets, ok, err := mapField(raw, "secrets"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Secrets.Source = secrets.Source
+		secretFiles, err := secretSpecs(secrets)
+		if err != nil {
+			return spec, err
+		}
+		spec.Secrets.Files = secretFiles
+	}
+
+	if directories, ok, err := mapField(raw, "directories"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Directories.Source = directories.Source
+		managedDirectories, err := directorySpecs(directories)
+		if err != nil {
+			return spec, err
+		}
+		spec.Directories.Directories = managedDirectories
+	}
+
+	if groups, ok, err := mapField(raw, "groups"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Groups.Source = groups.Source
+		managedGroups, err := groupSpecs(groups)
+		if err != nil {
+			return spec, err
+		}
+		spec.Groups.Groups = managedGroups
+	}
+
+	if users, ok, err := mapField(raw, "users"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Users.Source = users.Source
+		managedUsers, err := userSpecs(users)
+		if err != nil {
+			return spec, err
+		}
+		spec.Users.Users = managedUsers
+	}
+
+	if systemd, ok, err := mapField(raw, "systemd"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Systemd.Source = systemd.Source
+		units, err := systemdSpecs(systemd)
+		if err != nil {
+			return spec, err
+		}
+		spec.Systemd.Units = units
+	}
+
+	if services, ok, err := mapField(raw, "services"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Services.Source = services.Source
+		managedServices, err := serviceSpecs(services)
+		if err != nil {
+			return spec, err
+		}
+		spec.Services.Services = managedServices
+	}
+
+	if err := validateHostSpec(spec); err != nil {
+		return spec, err
+	}
+
 	return spec, nil
 }
 
@@ -399,6 +506,17 @@ func intField(root parser.Value, name string) (int, bool, error) {
 	return n, true, nil
 }
 
+func boolField(root parser.Value, name string) (bool, bool, error) {
+	value, ok := root.Map[name]
+	if !ok {
+		return false, false, nil
+	}
+	if value.Kind != parser.KindBool {
+		return false, false, fmt.Errorf("%s:%d:%s: must be a boolean", value.Source.File, value.Source.Line, value.Source.Path)
+	}
+	return value.Bool, true, nil
+}
+
 func listField(root parser.Value, name string) (parser.Value, bool, error) {
 	value, ok := root.Map[name]
 	if !ok {
@@ -408,6 +526,17 @@ func listField(root parser.Value, name string) (parser.Value, bool, error) {
 		return parser.Value{}, false, fmt.Errorf("%s:%d: %s must be a list", value.Source.File, value.Source.Line, value.Source.Path)
 	}
 	return value, true, nil
+}
+
+func objectCollection(root parser.Value, field string) (map[string]parser.Value, bool, error) {
+	collection, ok := root.Map[field]
+	if !ok {
+		return nil, false, nil
+	}
+	if !collection.IsMap() {
+		return nil, false, fmt.Errorf("%s:%d:%s: must be a map", collection.Source.File, collection.Source.Line, collection.Source.Path)
+	}
+	return collection.Map, true, nil
 }
 
 func moduleSpecs(kernel parser.Value) ([]ir.KernelModuleSpec, error) {
@@ -542,4 +671,453 @@ func stringListField(root parser.Value, name string) ([]string, error) {
 		out = append(out, value)
 	}
 	return out, nil
+}
+
+func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
+	objects, ok, err := objectCollection(files, "file")
+	if err != nil || !ok {
+		return map[string]ir.ManagedFile{}, err
+	}
+	out := make(map[string]ir.ManagedFile, len(objects))
+	for _, path := range sortedKeys(objects) {
+		item := objects[path]
+		if path == "" || !filepath.IsAbs(path) {
+			return nil, fmt.Errorf("%s:%d:%s: file path must be absolute and non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		ensure, err := ensureField(item, "present")
+		if err != nil {
+			return nil, err
+		}
+		content, hasContent, err := stringField(item, "content")
+		if err != nil {
+			return nil, err
+		}
+		sourcePath, hasSource, err := stringField(item, "source")
+		if err != nil {
+			return nil, err
+		}
+		if ensure == "present" && hasContent == hasSource {
+			return nil, fmt.Errorf("%s:%d:%s: files.file requires exactly one of content or source when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		owner, err := stringFieldDefault(item, "owner", "root")
+		if err != nil {
+			return nil, err
+		}
+		group, err := stringFieldDefault(item, "group", "root")
+		if err != nil {
+			return nil, err
+		}
+		mode, err := modeFieldDefault(item, "mode", "0644")
+		if err != nil {
+			return nil, err
+		}
+		sensitive, ok, err := boolField(item, "sensitive")
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			sensitive = false
+		}
+		managed := ir.ManagedFile{
+			Path:       path,
+			Content:    content,
+			SourcePath: resolvePath(item.Source.File, sourcePath),
+			Owner:      owner,
+			Group:      group,
+			Mode:       mode,
+			Sensitive:  sensitive,
+			Ensure:     ensure,
+			Source:     item.Source,
+		}
+		if hasContent {
+			managed.Summary = contentSummary([]byte(content))
+		} else if hasSource {
+			summary, err := fileSummary(managed.SourcePath, item.Source)
+			if err != nil {
+				return nil, err
+			}
+			managed.Summary = summary
+		}
+		out[path] = managed
+	}
+	return out, nil
+}
+
+func secretSpecs(secrets parser.Value) (map[string]ir.SecretFile, error) {
+	objects, ok, err := objectCollection(secrets, "file")
+	if err != nil || !ok {
+		return map[string]ir.SecretFile{}, err
+	}
+	out := make(map[string]ir.SecretFile, len(objects))
+	for _, path := range sortedKeys(objects) {
+		item := objects[path]
+		if path == "" || !filepath.IsAbs(path) {
+			return nil, fmt.Errorf("%s:%d:%s: secret path must be absolute and non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		ensure, err := ensureField(item, "present")
+		if err != nil {
+			return nil, err
+		}
+		sourcePath, hasSource, err := stringField(item, "source")
+		if err != nil {
+			return nil, err
+		}
+		if ensure == "present" && !hasSource {
+			return nil, fmt.Errorf("%s:%d:%s: secrets.file requires source when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		owner, err := stringFieldDefault(item, "owner", "root")
+		if err != nil {
+			return nil, err
+		}
+		group, err := stringFieldDefault(item, "group", "root")
+		if err != nil {
+			return nil, err
+		}
+		mode, err := modeFieldDefault(item, "mode", "0600")
+		if err != nil {
+			return nil, err
+		}
+		secret := ir.SecretFile{
+			Path:       path,
+			SourcePath: resolvePath(item.Source.File, sourcePath),
+			Owner:      owner,
+			Group:      group,
+			Mode:       mode,
+			Ensure:     ensure,
+			Source:     item.Source,
+		}
+		if hasSource {
+			summary, err := fileSummary(secret.SourcePath, item.Source)
+			if err != nil {
+				return nil, err
+			}
+			secret.Summary = summary
+		}
+		out[path] = secret
+	}
+	return out, nil
+}
+
+func directorySpecs(directories parser.Value) (map[string]ir.ManagedDirectory, error) {
+	objects, ok, err := objectCollection(directories, "directory")
+	if err != nil || !ok {
+		return map[string]ir.ManagedDirectory{}, err
+	}
+	out := make(map[string]ir.ManagedDirectory, len(objects))
+	for _, path := range sortedKeys(objects) {
+		item := objects[path]
+		if path == "" || !filepath.IsAbs(path) {
+			return nil, fmt.Errorf("%s:%d:%s: directory path must be absolute and non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		owner, err := stringFieldDefault(item, "owner", "root")
+		if err != nil {
+			return nil, err
+		}
+		group, err := stringFieldDefault(item, "group", "root")
+		if err != nil {
+			return nil, err
+		}
+		mode, err := modeFieldDefault(item, "mode", "0755")
+		if err != nil {
+			return nil, err
+		}
+		ensure, err := ensureField(item, "present")
+		if err != nil {
+			return nil, err
+		}
+		out[path] = ir.ManagedDirectory{Path: path, Owner: owner, Group: group, Mode: mode, Ensure: ensure, Source: item.Source}
+	}
+	return out, nil
+}
+
+func groupSpecs(groups parser.Value) (map[string]ir.ManagedGroup, error) {
+	objects, ok, err := objectCollection(groups, "group")
+	if err != nil || !ok {
+		return map[string]ir.ManagedGroup{}, err
+	}
+	out := make(map[string]ir.ManagedGroup, len(objects))
+	for _, name := range sortedKeys(objects) {
+		item := objects[name]
+		if name == "" {
+			return nil, fmt.Errorf("%s:%d:%s: group name must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		system, ok, err := boolField(item, "system")
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			system = false
+		}
+		gid, _, err := stringField(item, "gid")
+		if err != nil {
+			return nil, err
+		}
+		ensure, err := ensureField(item, "present")
+		if err != nil {
+			return nil, err
+		}
+		out[name] = ir.ManagedGroup{Name: name, GID: gid, System: system, Ensure: ensure, Source: item.Source}
+	}
+	return out, nil
+}
+
+func userSpecs(users parser.Value) (map[string]ir.ManagedUser, error) {
+	objects, ok, err := objectCollection(users, "user")
+	if err != nil || !ok {
+		return map[string]ir.ManagedUser{}, err
+	}
+	out := make(map[string]ir.ManagedUser, len(objects))
+	for _, name := range sortedKeys(objects) {
+		item := objects[name]
+		if name == "" {
+			return nil, fmt.Errorf("%s:%d:%s: user name must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		system, ok, err := boolField(item, "system")
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			system = false
+		}
+		uid, _, err := stringField(item, "uid")
+		if err != nil {
+			return nil, err
+		}
+		home, _, err := stringField(item, "home")
+		if err != nil {
+			return nil, err
+		}
+		shell, _, err := stringField(item, "shell")
+		if err != nil {
+			return nil, err
+		}
+		primaryGroup, _, err := stringField(item, "group")
+		if err != nil {
+			return nil, err
+		}
+		groups, err := stringListField(item, "groups")
+		if err != nil {
+			return nil, err
+		}
+		keys, err := stringListField(item, "ssh_authorized_keys")
+		if err != nil {
+			return nil, err
+		}
+		ensure, err := ensureField(item, "present")
+		if err != nil {
+			return nil, err
+		}
+		out[name] = ir.ManagedUser{
+			Name:              name,
+			UID:               uid,
+			PrimaryGroup:      primaryGroup,
+			Groups:            groups,
+			System:            system,
+			Home:              home,
+			Shell:             shell,
+			SSHAuthorizedKeys: keys,
+			Ensure:            ensure,
+			Source:            item.Source,
+		}
+	}
+	return out, nil
+}
+
+func systemdSpecs(systemd parser.Value) (map[string]ir.SystemdUnit, error) {
+	objects, ok, err := objectCollection(systemd, "unit")
+	if err != nil || !ok {
+		return map[string]ir.SystemdUnit{}, err
+	}
+	out := make(map[string]ir.SystemdUnit, len(objects))
+	for _, name := range sortedKeys(objects) {
+		item := objects[name]
+		if name == "" {
+			return nil, fmt.Errorf("%s:%d:%s: systemd unit name must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		ensure, err := ensureField(item, "present")
+		if err != nil {
+			return nil, err
+		}
+		content, hasContent, err := stringField(item, "content")
+		if err != nil {
+			return nil, err
+		}
+		sourcePath, hasSource, err := stringField(item, "source")
+		if err != nil {
+			return nil, err
+		}
+		if ensure == "present" && hasContent == hasSource {
+			return nil, fmt.Errorf("%s:%d:%s: systemd.unit requires exactly one of content or source when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		owner, err := stringFieldDefault(item, "owner", "root")
+		if err != nil {
+			return nil, err
+		}
+		group, err := stringFieldDefault(item, "group", "root")
+		if err != nil {
+			return nil, err
+		}
+		mode, err := modeFieldDefault(item, "mode", "0644")
+		if err != nil {
+			return nil, err
+		}
+		unit := ir.SystemdUnit{
+			Name:       name,
+			Path:       "/etc/systemd/system/" + name,
+			Content:    content,
+			SourcePath: resolvePath(item.Source.File, sourcePath),
+			Owner:      owner,
+			Group:      group,
+			Mode:       mode,
+			Ensure:     ensure,
+			Source:     item.Source,
+		}
+		if hasContent {
+			unit.Summary = contentSummary([]byte(content))
+		} else if hasSource {
+			summary, err := fileSummary(unit.SourcePath, item.Source)
+			if err != nil {
+				return nil, err
+			}
+			unit.Summary = summary
+		}
+		out[name] = unit
+	}
+	return out, nil
+}
+
+func serviceSpecs(services parser.Value) (map[string]ir.ManagedService, error) {
+	objects, ok, err := objectCollection(services, "service")
+	if err != nil || !ok {
+		return map[string]ir.ManagedService{}, err
+	}
+	out := make(map[string]ir.ManagedService, len(objects))
+	for _, name := range sortedKeys(objects) {
+		item := objects[name]
+		if name == "" {
+			return nil, fmt.Errorf("%s:%d:%s: service name must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		pkg, _, err := stringField(item, "package")
+		if err != nil {
+			return nil, err
+		}
+		enabledValue, hasEnabled, err := boolField(item, "enabled")
+		if err != nil {
+			return nil, err
+		}
+		var enabled *bool
+		if hasEnabled {
+			enabled = &enabledValue
+		}
+		state, _, err := stringField(item, "state")
+		if err != nil {
+			return nil, err
+		}
+		if state != "" && !validServiceState(state) {
+			return nil, fmt.Errorf("%s:%d:%s.state: service state must be running, stopped, restarted, or reloaded", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		out[name] = ir.ManagedService{Name: name, Unit: serviceUnitName(name), Package: pkg, Enabled: enabled, State: state, Source: item.Source}
+	}
+	return out, nil
+}
+
+func validateHostSpec(spec ir.HostSpec) error {
+	for path, secret := range spec.Secrets.Files {
+		if file, exists := spec.Files.Files[path]; exists {
+			return fmt.Errorf("%s:%d:%s: file path %q conflicts with secret declared at %s:%d:%s", file.Source.File, file.Source.Line, file.Source.Path, path, secret.Source.File, secret.Source.Line, secret.Source.Path)
+		}
+	}
+
+	for _, user := range spec.Users.Users {
+		if user.PrimaryGroup == "" {
+			continue
+		}
+		if _, ok := spec.Groups.Groups[user.PrimaryGroup]; !ok && user.PrimaryGroup != user.Name {
+			return fmt.Errorf("%s:%d:%s: user %q references missing primary group %q", user.Source.File, user.Source.Line, user.Source.Path, user.Name, user.PrimaryGroup)
+		}
+	}
+	return nil
+}
+
+func stringFieldDefault(root parser.Value, name string, fallback string) (string, error) {
+	value, ok, err := stringField(root, name)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return fallback, nil
+	}
+	return value, nil
+}
+
+func ensureField(root parser.Value, fallback string) (string, error) {
+	ensure, ok, err := stringField(root, "ensure")
+	if err != nil {
+		return "", err
+	}
+	if !ok || ensure == "" {
+		return fallback, nil
+	}
+	if ensure != "present" && ensure != "absent" {
+		return "", fmt.Errorf("%s:%d:%s.ensure: ensure must be present or absent", root.Source.File, root.Source.Line, root.Source.Path)
+	}
+	return ensure, nil
+}
+
+func modeFieldDefault(root parser.Value, name string, fallback string) (string, error) {
+	mode, err := stringFieldDefault(root, name, fallback)
+	if err != nil {
+		return "", err
+	}
+	if !modePattern.MatchString(mode) {
+		return "", fmt.Errorf("%s:%d:%s.%s: mode must be a four digit octal string", root.Source.File, root.Source.Line, root.Source.Path, name)
+	}
+	return mode, nil
+}
+
+var modePattern = regexp.MustCompile(`^0[0-7]{3}$`)
+
+func validServiceState(state string) bool {
+	switch state {
+	case "running", "stopped", "restarted", "reloaded":
+		return true
+	default:
+		return false
+	}
+}
+
+func serviceUnitName(name string) string {
+	if strings.Contains(name, ".") {
+		return name
+	}
+	return name + ".service"
+}
+
+func resolvePath(sourceFile string, value string) string {
+	if value == "" || filepath.IsAbs(value) {
+		return value
+	}
+	return filepath.Join(filepath.Dir(sourceFile), value)
+}
+
+func fileSummary(path string, source ir.SourceRef) (ir.ContentSummary, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ir.ContentSummary{}, fmt.Errorf("%s:%d:%s: read source %q: %w", source.File, source.Line, source.Path, path, err)
+	}
+	return contentSummary(data), nil
+}
+
+func contentSummary(data []byte) ir.ContentSummary {
+	sum := sha256.Sum256(data)
+	return ir.ContentSummary{SHA256: hex.EncodeToString(sum[:]), Bytes: int64(len(data))}
+}
+
+func sortedKeys[T any](values map[string]T) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }

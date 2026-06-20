@@ -41,12 +41,19 @@ func evaluateAssertions(asserts []parser.Assert, host ir.HostSpec) error {
 
 func hostSpecToCty(host ir.HostSpec) cty.Value {
 	return cty.ObjectVal(map[string]cty.Value{
-		"name":     cty.StringVal(host.Name),
-		"ssh":      sshSpecToCty(host.SSH),
-		"state":    stateSpecToCty(host.State),
-		"system":   systemSpecToCty(host.System),
-		"kernel":   kernelSpecToCty(host.Kernel),
-		"packages": packageSpecToCty(host.Packages),
+		"name":        cty.StringVal(host.Name),
+		"ssh":         sshSpecToCty(host.SSH),
+		"state":       stateSpecToCty(host.State),
+		"system":      systemSpecToCty(host.System),
+		"kernel":      kernelSpecToCty(host.Kernel),
+		"packages":    packageSpecToCty(host.Packages),
+		"files":       fileSpecToCty(host.Files),
+		"secrets":     secretSpecToCty(host.Secrets),
+		"directories": directorySpecToCty(host.Directories),
+		"groups":      groupSpecToCty(host.Groups),
+		"users":       userSpecToCty(host.Users),
+		"systemd":     systemdSpecToCty(host.Systemd),
+		"services":    serviceSpecToCty(host.Services),
 	})
 }
 
@@ -108,6 +115,123 @@ func packageSpecToCty(spec ir.PackageSpec) cty.Value {
 	})
 }
 
+func fileSpecToCty(spec ir.FileSpec) cty.Value {
+	files := make(map[string]cty.Value, len(spec.Files))
+	for _, path := range sortedMapKeys(spec.Files) {
+		item := spec.Files[path]
+		files[path] = cty.ObjectVal(map[string]cty.Value{
+			"path":        cty.StringVal(item.Path),
+			"owner":       cty.StringVal(item.Owner),
+			"group":       cty.StringVal(item.Group),
+			"mode":        cty.StringVal(item.Mode),
+			"sensitive":   cty.BoolVal(item.Sensitive),
+			"ensure":      cty.StringVal(item.Ensure),
+			"source_path": cty.StringVal(item.SourcePath),
+		})
+	}
+	return cty.ObjectVal(map[string]cty.Value{"files": objectOrEmpty(files)})
+}
+
+func secretSpecToCty(spec ir.SecretSpec) cty.Value {
+	files := make(map[string]cty.Value, len(spec.Files))
+	for _, path := range sortedMapKeys(spec.Files) {
+		item := spec.Files[path]
+		files[path] = cty.ObjectVal(map[string]cty.Value{
+			"path":        cty.StringVal(item.Path),
+			"owner":       cty.StringVal(item.Owner),
+			"group":       cty.StringVal(item.Group),
+			"mode":        cty.StringVal(item.Mode),
+			"ensure":      cty.StringVal(item.Ensure),
+			"source_path": cty.StringVal(item.SourcePath),
+		})
+	}
+	return cty.ObjectVal(map[string]cty.Value{"files": objectOrEmpty(files)})
+}
+
+func directorySpecToCty(spec ir.DirectorySpec) cty.Value {
+	directories := make(map[string]cty.Value, len(spec.Directories))
+	for _, path := range sortedMapKeys(spec.Directories) {
+		item := spec.Directories[path]
+		directories[path] = cty.ObjectVal(map[string]cty.Value{
+			"path":   cty.StringVal(item.Path),
+			"owner":  cty.StringVal(item.Owner),
+			"group":  cty.StringVal(item.Group),
+			"mode":   cty.StringVal(item.Mode),
+			"ensure": cty.StringVal(item.Ensure),
+		})
+	}
+	return cty.ObjectVal(map[string]cty.Value{"directories": objectOrEmpty(directories)})
+}
+
+func groupSpecToCty(spec ir.GroupSpec) cty.Value {
+	groups := make(map[string]cty.Value, len(spec.Groups))
+	for _, name := range sortedMapKeys(spec.Groups) {
+		item := spec.Groups[name]
+		groups[name] = cty.ObjectVal(map[string]cty.Value{
+			"name":   cty.StringVal(item.Name),
+			"gid":    cty.StringVal(item.GID),
+			"system": cty.BoolVal(item.System),
+			"ensure": cty.StringVal(item.Ensure),
+		})
+	}
+	return cty.ObjectVal(map[string]cty.Value{"groups": objectOrEmpty(groups)})
+}
+
+func userSpecToCty(spec ir.UserSpec) cty.Value {
+	users := make(map[string]cty.Value, len(spec.Users))
+	for _, name := range sortedMapKeys(spec.Users) {
+		item := spec.Users[name]
+		users[name] = cty.ObjectVal(map[string]cty.Value{
+			"name":                cty.StringVal(item.Name),
+			"uid":                 cty.StringVal(item.UID),
+			"group":               cty.StringVal(item.PrimaryGroup),
+			"groups":              stringListToCty(item.Groups),
+			"system":              cty.BoolVal(item.System),
+			"home":                cty.StringVal(item.Home),
+			"shell":               cty.StringVal(item.Shell),
+			"ssh_authorized_keys": stringListToCty(item.SSHAuthorizedKeys),
+			"ensure":              cty.StringVal(item.Ensure),
+		})
+	}
+	return cty.ObjectVal(map[string]cty.Value{"users": objectOrEmpty(users)})
+}
+
+func systemdSpecToCty(spec ir.SystemdSpec) cty.Value {
+	units := make(map[string]cty.Value, len(spec.Units))
+	for _, name := range sortedMapKeys(spec.Units) {
+		item := spec.Units[name]
+		units[name] = cty.ObjectVal(map[string]cty.Value{
+			"name":        cty.StringVal(item.Name),
+			"path":        cty.StringVal(item.Path),
+			"owner":       cty.StringVal(item.Owner),
+			"group":       cty.StringVal(item.Group),
+			"mode":        cty.StringVal(item.Mode),
+			"ensure":      cty.StringVal(item.Ensure),
+			"source_path": cty.StringVal(item.SourcePath),
+		})
+	}
+	return cty.ObjectVal(map[string]cty.Value{"units": objectOrEmpty(units)})
+}
+
+func serviceSpecToCty(spec ir.ServiceSpec) cty.Value {
+	services := make(map[string]cty.Value, len(spec.Services))
+	for _, name := range sortedMapKeys(spec.Services) {
+		item := spec.Services[name]
+		enabled := cty.NullVal(cty.Bool)
+		if item.Enabled != nil {
+			enabled = cty.BoolVal(*item.Enabled)
+		}
+		services[name] = cty.ObjectVal(map[string]cty.Value{
+			"name":    cty.StringVal(item.Name),
+			"unit":    cty.StringVal(item.Unit),
+			"package": cty.StringVal(item.Package),
+			"enabled": enabled,
+			"state":   cty.StringVal(item.State),
+		})
+	}
+	return cty.ObjectVal(map[string]cty.Value{"services": objectOrEmpty(services)})
+}
+
 func stringTuple(values []cty.Value) cty.Value {
 	if len(values) == 0 {
 		return cty.EmptyTupleVal
@@ -120,6 +244,23 @@ func objectOrEmpty(values map[string]cty.Value) cty.Value {
 		return cty.EmptyObjectVal
 	}
 	return cty.ObjectVal(values)
+}
+
+func stringListToCty(values []string) cty.Value {
+	out := make([]cty.Value, 0, len(values))
+	for _, value := range values {
+		out = append(out, cty.StringVal(value))
+	}
+	return stringTuple(out)
+}
+
+func sortedMapKeys[T any](values map[string]T) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func containsFunction() function.Function {

@@ -1,0 +1,315 @@
+{
+  "nodes": [
+    {
+      "host": "foundation1",
+      "address": "host.foundation1.directories.directory[\"/etc/myapp\"]",
+      "kind": "directory",
+      "summary": "create directory /etc/myapp",
+      "source": {
+        "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
+        "line": 27,
+        "path": "host.foundation1.directories.directory[\"/etc/myapp\"]"
+      },
+      "desired": {
+        "ensure": "present",
+        "group": "root",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/etc/myapp"
+      },
+      "provider_type": "debian_directory",
+      "provider_address": "debian_directory.foundation1__etc_myapp",
+      "provider_payload": {
+        "ensure": "present",
+        "group": "root",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/etc/myapp"
+      }
+    },
+    {
+      "host": "foundation1",
+      "address": "host.foundation1.files.file[\"/etc/myapp/config.yaml\"]",
+      "kind": "file",
+      "summary": "create file /etc/myapp/config.yaml",
+      "source": {
+        "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
+        "line": 47,
+        "path": "host.foundation1.files.file[\"/etc/myapp/config.yaml\"]"
+      },
+      "desired": {
+        "content": "listen: 127.0.0.1:8080\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/myapp/config.yaml",
+        "sensitive": false,
+        "summary": {
+          "sha256": "d39d0ff40a9b3871880999a1ba603e8cb11e841856d7f7f92f51dcaba2bb6eda",
+          "bytes": 23
+        }
+      },
+      "provider_type": "debian_file",
+      "provider_address": "debian_file.foundation1__etc_myapp_config_yaml",
+      "provider_payload": {
+        "content": "listen: 127.0.0.1:8080\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/myapp/config.yaml",
+        "sensitive": false,
+        "summary": {
+          "sha256": "d39d0ff40a9b3871880999a1ba603e8cb11e841856d7f7f92f51dcaba2bb6eda",
+          "bytes": 23
+        }
+      }
+    },
+    {
+      "host": "foundation1",
+      "address": "host.foundation1.groups.group[\"deploy\"]",
+      "kind": "group",
+      "summary": "create group deploy",
+      "source": {
+        "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
+        "line": 7,
+        "path": "profile.base.groups.group[\"deploy\"]"
+      },
+      "desired": {
+        "ensure": "present",
+        "gid": "",
+        "name": "deploy",
+        "system": true
+      },
+      "provider_type": "debian_group",
+      "provider_address": "debian_group.foundation1_deploy",
+      "provider_payload": {
+        "ensure": "present",
+        "gid": "",
+        "name": "deploy",
+        "system": true
+      }
+    },
+    {
+      "host": "foundation1",
+      "address": "host.foundation1.packages.install[\"curl\"]",
+      "kind": "package",
+      "summary": "create package curl",
+      "source": {
+        "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
+        "line": 3,
+        "path": "profile.base.packages.install[0]"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "curl"
+      },
+      "provider_type": "debian_package",
+      "provider_address": "debian_package.foundation1_curl",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "curl"
+      }
+    },
+    {
+      "host": "foundation1",
+      "address": "host.foundation1.secrets.file[\"/etc/myapp/token\"]",
+      "kind": "secret",
+      "summary": "create secret file /etc/myapp/token",
+      "source": {
+        "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
+        "line": 59,
+        "path": "host.foundation1.secrets.file[\"/etc/myapp/token\"]"
+      },
+      "desired": {
+        "ensure": "present",
+        "group": "root",
+        "mode": "0600",
+        "owner": "root",
+        "path": "/etc/myapp/token",
+        "sensitive": true,
+        "source_path": "../testdata/fixtures/app-token.txt",
+        "summary": {
+          "sha256": "f807665a6313f37a4f9c7885876d603d78999ed82a816fbb4c805d4ecfe21fa6",
+          "bytes": 24
+        }
+      },
+      "provider_type": "debian_file",
+      "provider_address": "debian_file.foundation1__etc_myapp_token",
+      "provider_payload": {
+        "ensure": "present",
+        "group": "root",
+        "mode": "0600",
+        "owner": "root",
+        "path": "/etc/myapp/token",
+        "sensitive": true,
+        "source_path": "../testdata/fixtures/app-token.txt",
+        "summary": {
+          "sha256": "f807665a6313f37a4f9c7885876d603d78999ed82a816fbb4c805d4ecfe21fa6",
+          "bytes": 24
+        }
+      }
+    },
+    {
+      "host": "foundation1",
+      "address": "host.foundation1.services.service[\"myapp\"]",
+      "kind": "service",
+      "summary": "manage service myapp",
+      "source": {
+        "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
+        "line": 77,
+        "path": "host.foundation1.services.service[\"myapp\"]"
+      },
+      "desired": {
+        "enabled": true,
+        "name": "myapp",
+        "package": "curl",
+        "state": "running",
+        "unit": "myapp.service"
+      },
+      "provider_type": "debian_service",
+      "provider_address": "debian_service.foundation1_myapp",
+      "provider_payload": {
+        "enabled": true,
+        "name": "myapp",
+        "package": "curl",
+        "state": "running",
+        "unit": "myapp.service"
+      },
+      "depends_on": [
+        "host.foundation1.packages.install[\"curl\"]",
+        "host.foundation1.systemd.unit[\"myapp.service\"]",
+        "host.foundation1.systemd.daemon_reload"
+      ]
+    },
+    {
+      "host": "foundation1",
+      "address": "host.foundation1.systemd.unit[\"myapp.service\"]",
+      "kind": "systemd_unit",
+      "summary": "create systemd unit myapp.service",
+      "source": {
+        "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
+        "line": 65,
+        "path": "host.foundation1.systemd.unit[\"myapp.service\"]"
+      },
+      "desired": {
+        "content": "[Unit]\nDescription=My App\n\n[Service]\nExecStart=/usr/local/bin/myapp --config /etc/myapp/config.yaml\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "myapp.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/myapp.service",
+        "source_path": "",
+        "summary": {
+          "sha256": "6f062c170b9b86c43cbd33a7406c7ce69a2043aac850076d373582b7ae9c8e63",
+          "bytes": 100
+        }
+      },
+      "provider_type": "debian_systemd_unit",
+      "provider_address": "debian_systemd_unit.foundation1_myapp_service",
+      "provider_payload": {
+        "content": "[Unit]\nDescription=My App\n\n[Service]\nExecStart=/usr/local/bin/myapp --config /etc/myapp/config.yaml\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "myapp.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/myapp.service",
+        "source_path": "",
+        "summary": {
+          "sha256": "6f062c170b9b86c43cbd33a7406c7ce69a2043aac850076d373582b7ae9c8e63",
+          "bytes": 100
+        }
+      }
+    },
+    {
+      "host": "foundation1",
+      "address": "host.foundation1.users.user[\"deploy\"]",
+      "kind": "user",
+      "summary": "create user deploy",
+      "source": {
+        "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
+        "line": 35,
+        "path": "host.foundation1.users.user[\"deploy\"]"
+      },
+      "desired": {
+        "ensure": "present",
+        "group": "deploy",
+        "groups": [],
+        "home": "/home/deploy",
+        "name": "deploy",
+        "shell": "/bin/bash",
+        "ssh_authorized_keys": [
+          "ssh-ed25519 AAAATESTKEY deploy@example"
+        ],
+        "system": false,
+        "uid": ""
+      },
+      "provider_type": "debian_user",
+      "provider_address": "debian_user.foundation1_deploy",
+      "provider_payload": {
+        "ensure": "present",
+        "group": "deploy",
+        "groups": [],
+        "home": "/home/deploy",
+        "name": "deploy",
+        "shell": "/bin/bash",
+        "ssh_authorized_keys": [
+          "ssh-ed25519 AAAATESTKEY deploy@example"
+        ],
+        "system": false,
+        "uid": ""
+      },
+      "depends_on": [
+        "host.foundation1.groups.group[\"deploy\"]"
+      ]
+    },
+    {
+      "host": "foundation1",
+      "address": "host.foundation1.users.user[\"deploy\"].ssh_authorized_key[\"ab6a85a3317fb10f\"]",
+      "kind": "ssh_authorized_key",
+      "summary": "create authorized key for deploy",
+      "source": {
+        "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
+        "line": 35,
+        "path": "host.foundation1.users.user[\"deploy\"]"
+      },
+      "desired": {
+        "ensure": "present",
+        "key": "ssh-ed25519 AAAATESTKEY deploy@example",
+        "user": "deploy"
+      },
+      "provider_type": "debian_authorized_key",
+      "provider_address": "debian_authorized_key.foundation1_deploy_ab6a85a3317fb10f",
+      "provider_payload": {
+        "ensure": "present",
+        "key": "ssh-ed25519 AAAATESTKEY deploy@example",
+        "user": "deploy"
+      },
+      "depends_on": [
+        "host.foundation1.users.user[\"deploy\"]"
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.foundation1.systemd.daemon_reload",
+      "action": "run",
+      "summary": "reload systemd manager configuration",
+      "depends_on": [
+        "host.foundation1.systemd.unit[\"myapp.service\"]"
+      ],
+      "triggered_by": [
+        "host.foundation1.systemd.unit[\"myapp.service\"]"
+      ],
+      "command_preview": "systemctl daemon-reload",
+      "source": {
+        "file": "../testdata/fixtures/v2-foundation.dbf.hcl",
+        "line": 64,
+        "path": "host.foundation1.systemd"
+      }
+    }
+  ]
+}

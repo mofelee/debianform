@@ -280,7 +280,7 @@ func looksLikeV2(files []string) (bool, error) {
 				}
 				for _, nested := range block.Body.Blocks {
 					switch nested.Type {
-					case "ssh", "state", "system", "kernel", "packages", "assert":
+					case "ssh", "state", "system", "kernel", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services", "assert":
 						return true, nil
 					}
 				}

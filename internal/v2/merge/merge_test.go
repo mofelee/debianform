@@ -417,6 +417,91 @@ func TestCompileProfileMergeHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-profile-merge.dbf.hcl", "../testdata/hostspec/v2-profile-merge.golden.json")
 }
 
+func TestCompileFoundationHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../testdata/fixtures/v2-foundation.dbf.hcl", "../testdata/hostspec/v2-foundation.golden.json")
+}
+
+func TestCompileRejectsLoop3InvalidInputs(t *testing.T) {
+	tests := []struct {
+		name  string
+		files map[string]string
+		hcl   string
+		want  string
+	}{
+		{
+			name: "file secret path conflict",
+			files: map[string]string{
+				"token.txt": "not-real-secret",
+			},
+			hcl: `
+host "server1" {
+  files {
+    file "/etc/app/token" {
+      content = "plain"
+    }
+  }
+
+  secrets {
+    file "/etc/app/token" {
+      source = "token.txt"
+    }
+  }
+}
+`,
+			want: "conflicts with secret",
+		},
+		{
+			name: "illegal mode",
+			hcl: `
+host "server1" {
+  files {
+    file "/etc/app/config" {
+      content = "hello"
+      mode    = "9999"
+    }
+  }
+}
+`,
+			want: "mode must be a four digit octal string",
+		},
+		{
+			name: "missing group reference",
+			hcl: `
+host "server1" {
+  users {
+    user "deploy" {
+      group = "missing"
+    }
+  }
+}
+`,
+			want: `references missing primary group "missing"`,
+		},
+		{
+			name: "secret source missing",
+			hcl: `
+host "server1" {
+  secrets {
+    file "/etc/app/token" {
+      source = "missing-token.txt"
+    }
+  }
+}
+`,
+			want: "read source",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInlineWithFiles(t, tt.hcl, tt.files)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func assertHostSpecGolden(t *testing.T, fixture string, golden string) {
 	t.Helper()
 
@@ -480,10 +565,21 @@ func parseInline(t *testing.T, content string) *parser.Config {
 func parseOrCompileInline(t *testing.T, content string) (*ir.Program, error) {
 	t.Helper()
 
+	return parseOrCompileInlineWithFiles(t, content, nil)
+}
+
+func parseOrCompileInlineWithFiles(t *testing.T, content string, extraFiles map[string]string) (*ir.Program, error) {
+	t.Helper()
+
 	dir := t.TempDir()
 	file := filepath.Join(dir, "main.dbf.hcl")
 	if err := os.WriteFile(file, []byte(strings.TrimPrefix(content, "\n")), 0644); err != nil {
 		t.Fatal(err)
+	}
+	for name, data := range extraFiles {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return parseOrCompileFiles([]string{file})
 }

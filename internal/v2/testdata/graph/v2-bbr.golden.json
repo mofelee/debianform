@@ -1,6 +1,7 @@
 {
   "nodes": [
     {
+      "host": "bbr1",
       "address": "host.bbr1.kernel.module[\"tcp_bbr\"]",
       "kind": "kernel_module",
       "summary": "create kernel module tcp_bbr",
@@ -23,6 +24,7 @@
       }
     },
     {
+      "host": "bbr1",
       "address": "host.bbr1.kernel.sysctl[\"net.core.default_qdisc\"]",
       "kind": "sysctl",
       "summary": "create sysctl net.core.default_qdisc",
@@ -47,6 +49,7 @@
       }
     },
     {
+      "host": "bbr1",
       "address": "host.bbr1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]",
       "kind": "sysctl",
       "summary": "create sysctl net.ipv4.tcp_congestion_control",

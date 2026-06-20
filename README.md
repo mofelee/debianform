@@ -6,7 +6,7 @@ DebianForm v2 是对原 v1 原型的破坏式重设计。
 
 - v2 是当前设计方向。
 - v2 用户语法记录在 `docs/`，设计夹具位于 `examples/v2-*.dbf.hcl`。
-- `dbf validate` 和 `dbf plan` 已接入 v2 Loop 1b 路径，可解析 profile/host 合并、
+- `dbf validate` 和 `dbf plan` 已接入 v2 Loop 3 路径，可解析 profile/host 合并、
   生成 HostSpec、ResourceGraph 和 create-only plan；`apply`/`check` 的 v2 路径尚未实现。
 - legacy v1 示例、文档和 libvirt 集成测试已归档到 `legacy/v1/`。
 
@@ -23,10 +23,12 @@ DebianForm v2 是对原 v1 原型的破坏式重设计。
 ## v2 示例
 
 `examples/` 中的文件是 v2 设计夹具，当前还不能由 legacy CLI 执行。
-Loop 1b 已支持以下示例通过 v2 validate，并可生成 create-only plan：
+Loop 3 已支持以下示例通过 v2 validate，并可生成 create-only plan：
 
 - `examples/v2-bbr.dbf.hcl`
 - `examples/v2-profile-merge.dbf.hcl`
+- `examples/v2-systemd-service.dbf.hcl`
+- `examples/v2-user-group.dbf.hcl`
 
 其他示例仍为 design-only fixture：
 
@@ -61,6 +63,39 @@ Summary: 3 create, 0 update, 0 delete, 0 no-op, 0 operations
 ```bash
 dbf plan -f examples/v2-bbr.dbf.hcl --format json
 ```
+
+基础系统配置示例：
+
+```hcl
+host "service1" {
+  files {
+    file "/etc/myapp/config.yaml" {
+      mode    = "0644"
+      content = "listen: 127.0.0.1:8080\n"
+    }
+  }
+
+  systemd {
+    unit "myapp.service" {
+      content = <<-EOF
+        [Service]
+        ExecStart=/usr/local/bin/myapp --config /etc/myapp/config.yaml
+      EOF
+    }
+  }
+
+  services {
+    service "myapp" {
+      enabled = true
+      state   = "running"
+    }
+  }
+}
+```
+
+`files.file sensitive = true` 和 `secrets.file` 不会在 plan 中输出明文；当前 plan 只输出
+hash、长度等摘要。`services.service.state` 支持 `running`、`stopped`、`restarted`
+和 `reloaded`。
 
 ## Legacy v1 归档
 

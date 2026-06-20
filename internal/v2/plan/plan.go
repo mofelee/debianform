@@ -96,14 +96,20 @@ func New(resourceGraph *graph.ResourceGraph, opts Options) Document {
 			Action:  "create",
 			Summary: node.Summary,
 			Source:  node.Source,
-			Diff: DiffNode{
-				Path:      []string{},
-				Kind:      "object",
-				Action:    "create",
-				Sensitive: false,
-				Before:    nil,
-				After:     node.Desired,
-			},
+			Diff:    diffForNode(node),
+		})
+	}
+
+	operations := make([]OperationNode, 0, len(resourceGraph.Operations))
+	for _, operation := range resourceGraph.Operations {
+		operations = append(operations, OperationNode{
+			Address:        operation.Address,
+			Action:         operation.Action,
+			Summary:        operation.Summary,
+			DependsOn:      operation.DependsOn,
+			TriggeredBy:    operation.TriggeredBy,
+			CommandPreview: operation.CommandPreview,
+			Source:         operation.Source,
 		})
 	}
 
@@ -119,12 +125,69 @@ func New(resourceGraph *graph.ResourceGraph, opts Options) Document {
 			Update:     0,
 			Delete:     0,
 			NoOp:       0,
-			Operations: 0,
+			Operations: len(operations),
 		},
 		Changes:     changes,
-		Operations:  []OperationNode{},
+		Operations:  operations,
 		Diagnostics: []Diagnostic{},
 	}
+}
+
+func diffForNode(node graph.Node) DiffNode {
+	if sensitive, ok := node.Desired["sensitive"].(bool); ok && sensitive {
+		return DiffNode{
+			Path:      []string{},
+			Kind:      "sensitive",
+			Action:    "create",
+			Sensitive: true,
+			Before:    nil,
+			After:     sanitizedSensitiveAfter(node.Desired),
+		}
+	}
+	if content, ok := node.Desired["content"].(string); ok && content != "" && node.Kind == "file" {
+		return DiffNode{
+			Path:      []string{"content"},
+			Kind:      "text",
+			Action:    "create",
+			Sensitive: false,
+			Before:    nil,
+			After: map[string]any{
+				"content": content,
+			},
+		}
+	}
+	return DiffNode{
+		Path:      []string{},
+		Kind:      "object",
+		Action:    "create",
+		Sensitive: false,
+		Before:    nil,
+		After:     sanitizedAfter(node.Desired),
+	}
+}
+
+func sanitizedAfter(desired map[string]any) map[string]any {
+	out := make(map[string]any, len(desired))
+	for key, value := range desired {
+		if key == "content" {
+			continue
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func sanitizedSensitiveAfter(desired map[string]any) map[string]any {
+	out := make(map[string]any, len(desired))
+	for key, value := range desired {
+		switch key {
+		case "content", "source_path":
+			continue
+		default:
+			out[key] = value
+		}
+	}
+	return out
 }
 
 func PrintText(w io.Writer, doc Document) {

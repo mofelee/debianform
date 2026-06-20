@@ -119,5 +119,26 @@
       "line": 51,
       "path": "host.merge1.packages"
     }
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
   }
 }

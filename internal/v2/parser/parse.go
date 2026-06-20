@@ -221,7 +221,7 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext)
 
 	for _, block := range body.Blocks {
 		switch block.Type {
-		case "ssh", "state", "system", "kernel", "packages":
+		case "ssh", "state", "system", "kernel", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services":
 			if len(block.Labels) != 0 {
 				return nil, Value{}, nil, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, block.Type)
 			}
@@ -372,6 +372,8 @@ func allowedDomainAttrs(domain string) map[string]struct{} {
 		return attrSet("modules", "sysctl")
 	case "packages":
 		return attrSet("install")
+	case "files", "secrets", "directories", "groups", "users", "systemd", "services":
+		return attrSet()
 	default:
 		return map[string]struct{}{}
 	}
@@ -381,6 +383,18 @@ func allowedDomainObjectBlocks(domain string) map[string]struct{} {
 	switch domain {
 	case "packages":
 		return attrSet("package")
+	case "files", "secrets":
+		return attrSet("file")
+	case "directories":
+		return attrSet("directory")
+	case "groups":
+		return attrSet("group")
+	case "users":
+		return attrSet("user")
+	case "systemd":
+		return attrSet("unit")
+	case "services":
+		return attrSet("service")
 	default:
 		return map[string]struct{}{}
 	}
@@ -390,6 +404,20 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 	switch domain + "." + blockType {
 	case "packages.package":
 		return attrSet("repositories")
+	case "files.file":
+		return attrSet("content", "source", "owner", "group", "mode", "ensure", "sensitive")
+	case "secrets.file":
+		return attrSet("source", "owner", "group", "mode", "ensure")
+	case "directories.directory":
+		return attrSet("owner", "group", "mode", "ensure")
+	case "groups.group":
+		return attrSet("gid", "system", "ensure")
+	case "users.user":
+		return attrSet("uid", "home", "shell", "group", "groups", "system", "ssh_authorized_keys", "ensure")
+	case "systemd.unit":
+		return attrSet("content", "source", "owner", "group", "mode", "ensure")
+	case "services.service":
+		return attrSet("package", "enabled", "state")
 	default:
 		return map[string]struct{}{}
 	}

@@ -79,5 +79,26 @@
   },
   "packages": {
     "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
   }
 }
