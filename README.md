@@ -31,6 +31,8 @@ v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源
 - `examples/v2-bird2.dbf.hcl`
 - `examples/v2-component-binary.dbf.hcl`（真实 apply 前需替换为上游下载物真实 sha256）
 - `examples/v2-files-plan-preview.dbf.hcl`
+- `examples/v2-nftables.dbf.hcl`
+- `examples/v2-plan-preview.dbf.hcl`
 - `examples/v2-profile-merge.dbf.hcl`
 - `examples/v2-systemd-service.dbf.hcl`
 - `examples/v2-user-group.dbf.hcl`
@@ -38,8 +40,6 @@ v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源
 其他示例仍为 design-only fixture：
 
 - `examples/v2-fleet.dbf.hcl`
-- `examples/v2-nftables.dbf.hcl`
-- `examples/v2-plan-preview.dbf.hcl`
 - `examples/v2-systemd-networkd-wireguard.dbf.hcl`
 
 BBR v2 离线 plan 预览示例：
@@ -93,6 +93,36 @@ component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
 不能和带 label 的 source 混用。
 远程 URL source 必须声明 64 位 sha256，plan 会生成 download 和 install 节点；
 `ca_certificate` 变化会额外触发 `update-ca-certificates` operation。
+
+nftables 使用原生 ruleset/snippet 文件作为主路径，不提供通用 firewall 抽象。
+多个 nftables 文件变化时，同一 host 只执行一次 validate 和 activate：
+
+```hcl
+host "edge1" {
+  packages {
+    install = ["nftables"]
+  }
+
+  nftables {
+    enable = true
+
+    main {
+      content = <<-EOF
+        flush ruleset
+        include "/etc/nftables.d/*.nft"
+      EOF
+    }
+
+    file "20-services" {
+      content = "add rule inet filter input tcp dport { 22, 80, 443 } accept\n"
+    }
+  }
+}
+```
+
+```bash
+dbf plan -f examples/v2-nftables.dbf.hcl --offline
+```
 
 配置格式化会原地改写目标 HCL 文件：
 

@@ -55,6 +55,7 @@ func hostSpecToCty(host ir.HostSpec) cty.Value {
 		"users":       userSpecToCty(host.Users),
 		"systemd":     systemdSpecToCty(host.Systemd),
 		"services":    serviceSpecToCty(host.Services),
+		"nftables":    nftablesSpecToCty(host.Nftables),
 	})
 }
 
@@ -247,6 +248,41 @@ func serviceSpecToCty(spec ir.ServiceSpec) cty.Value {
 		})
 	}
 	return cty.ObjectVal(map[string]cty.Value{"services": objectOrEmpty(services)})
+}
+
+func nftablesSpecToCty(spec ir.NftablesSpec) cty.Value {
+	files := make(map[string]cty.Value, len(spec.Files))
+	for _, label := range sortedMapKeys(spec.Files) {
+		files[label] = nftablesFileToCty(spec.Files[label])
+	}
+	values := map[string]cty.Value{
+		"enable": cty.BoolVal(false),
+		"files":  objectOrEmpty(files),
+	}
+	if spec.Enable != nil {
+		values["enable"] = cty.BoolVal(*spec.Enable)
+	}
+	if spec.Main != nil {
+		values["main"] = nftablesFileToCty(*spec.Main)
+	} else {
+		values["main"] = cty.NullVal(cty.DynamicPseudoType)
+	}
+	return cty.ObjectVal(values)
+}
+
+func nftablesFileToCty(item ir.NftablesFileSpec) cty.Value {
+	return cty.ObjectVal(map[string]cty.Value{
+		"label":       cty.StringVal(item.Label),
+		"path":        cty.StringVal(item.Path),
+		"owner":       cty.StringVal(item.Owner),
+		"group":       cty.StringVal(item.Group),
+		"mode":        cty.StringVal(item.Mode),
+		"sensitive":   cty.BoolVal(item.Sensitive),
+		"validate":    cty.BoolVal(item.Validate),
+		"activate":    cty.BoolVal(item.Activate),
+		"ensure":      cty.StringVal(item.Ensure),
+		"source_path": cty.StringVal(item.SourcePath),
+	})
 }
 
 func stringTuple(values []cty.Value) cty.Value {

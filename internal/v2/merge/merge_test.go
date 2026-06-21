@@ -264,6 +264,39 @@ host "server1" {
 	}
 }
 
+func TestCompileNftablesDefaults(t *testing.T) {
+	program := compileInline(t, `
+host "edge1" {
+  nftables {
+    enable = true
+
+    main {
+      content = "flush ruleset\n"
+    }
+
+    file "20-services" {
+      content = "add rule inet filter input tcp dport 443 accept\n"
+    }
+  }
+}
+`)
+
+	host := program.Hosts[0]
+	if host.Nftables.Enable == nil || !*host.Nftables.Enable {
+		t.Fatalf("nftables enable = %#v, want true", host.Nftables.Enable)
+	}
+	if host.Nftables.Main == nil {
+		t.Fatal("nftables main missing")
+	}
+	if host.Nftables.Main.Path != "/etc/nftables.conf" || !host.Nftables.Main.Validate || !host.Nftables.Main.Activate {
+		t.Fatalf("nftables main defaults = %#v", host.Nftables.Main)
+	}
+	snippet := host.Nftables.Files["20-services"]
+	if snippet.Path != "/etc/nftables.d/20-services.nft" || snippet.Owner != "root" || snippet.Group != "root" || snippet.Mode != "0644" {
+		t.Fatalf("nftables snippet defaults = %#v", snippet)
+	}
+}
+
 func TestCompileRejectsInvalidAPTRepository(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1097,6 +1130,10 @@ func TestCompileComponentBinaryHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-component-binary.dbf.hcl", "../testdata/hostspec/v2-component-binary.golden.json")
 }
 
+func TestCompileNftablesHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../../../examples/v2-nftables.dbf.hcl", "../testdata/hostspec/v2-nftables.golden.json")
+}
+
 func TestCompileRejectsLoop3InvalidInputs(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -1171,6 +1208,55 @@ host "server1" {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := parseOrCompileInlineWithFiles(t, tt.hcl, tt.files)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompileRejectsLoop7InvalidInputs(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "duplicate nftables path",
+			hcl: `
+host "edge1" {
+  nftables {
+    main {
+      content = "flush ruleset\n"
+    }
+
+    file "same" {
+      path    = "/etc/nftables.conf"
+      content = "add rule inet filter input tcp dport 443 accept\n"
+    }
+  }
+}
+`,
+			want: "nftables file path",
+		},
+		{
+			name: "content and source",
+			hcl: `
+host "edge1" {
+  nftables {
+    file "20-services" {
+      content = "add rule inet filter input tcp dport 443 accept\n"
+      source  = "services.nft"
+    }
+  }
+}
+`,
+			want: "requires exactly one of content or source",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("error = %v, want %q", err, tt.want)
 			}
@@ -1273,6 +1359,7 @@ func testHostFacts() map[string]ir.HostFacts {
 	for _, name := range []string{
 		"apt1",
 		"bbr1",
+		"edge1",
 		"foundation1",
 		"merge1",
 		"preview1",

@@ -1,6 +1,4 @@
-# DebianForm v2 plan preview 设计示例。
-#
-# v2 编译器尚未接入当前 CLI；本文件是设计夹具。
+# DebianForm v2 plan preview fixture for nftables text diffs and secret summaries.
 #
 # 设计边界：
 # - 本文件用于固定结构化 plan、终端树状 diff 和 HTML preview 的展示目标。
@@ -10,7 +8,7 @@
 host "preview1" {
   secrets {
     file "/etc/app/token" {
-      source = "secrets/preview1-app-token"
+      source = "../internal/v2/testdata/fixtures/app-token.txt"
       owner  = "root"
       group  = "root"
       mode   = "0600"

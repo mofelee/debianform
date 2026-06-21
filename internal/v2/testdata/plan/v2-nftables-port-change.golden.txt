@@ -1,0 +1,16 @@
+Plan:
+  ~ host.preview1.nftables.file["20-services"]
+    update nftables snippet 20-services
+    source: examples/v2-plan-preview.dbf.hcl:29:host.preview1.nftables.file["20-services"]
+    ~ content
+      @@ -1,1 +1,1 @@
+      - add rule inet filter input tcp dport { 22, 80 } accept
+      + add rule inet filter input tcp dport { 22, 80, 443 } accept
+  ! host.preview1.nftables.validate
+    validate nftables ruleset
+    triggered_by: host.preview1.nftables.file["20-services"]
+  ! host.preview1.nftables.activate
+    activate nftables ruleset
+    triggered_by: host.preview1.nftables.file["20-services"]
+
+Summary: 0 create, 1 update, 0 delete, 0 no-op, 2 operations

@@ -310,6 +310,45 @@ host "web1" {
 	}
 }
 
+func TestParseNftablesMainAndFileSourcePath(t *testing.T) {
+	file := writeConfig(t, `
+host "edge1" {
+  nftables {
+    enable = true
+
+    main {
+      content = "flush ruleset\n"
+    }
+
+    file "20-services" {
+      content = "add rule inet filter input tcp dport 443 accept\n"
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nftables := cfg.Hosts["edge1"].Body.Map["nftables"]
+	if nftables.Map["enable"].Source.Path != "host.edge1.nftables.enable" {
+		t.Fatalf("enable source path = %q", nftables.Map["enable"].Source.Path)
+	}
+	main := nftables.Map["main"]
+	if main.Source.Path != "host.edge1.nftables.main" {
+		t.Fatalf("main source path = %q", main.Source.Path)
+	}
+	snippet := nftables.Map["file"].Map["20-services"]
+	if snippet.Source.Path != `host.edge1.nftables.file["20-services"]` {
+		t.Fatalf("snippet source path = %q", snippet.Source.Path)
+	}
+	content := snippet.Map["content"]
+	if content.Source.Path != `host.edge1.nftables.file["20-services"].content` {
+		t.Fatalf("snippet content source path = %q", content.Source.Path)
+	}
+}
+
 func writeConfig(t *testing.T, content string) string {
 	t.Helper()
 

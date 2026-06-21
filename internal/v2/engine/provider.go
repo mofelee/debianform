@@ -27,7 +27,7 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2stat
 		return ProviderPlan{}, fmt.Errorf("v2 provider runner is required")
 	}
 	switch node.Kind {
-	case "file", "secret", "systemd_unit":
+	case "file", "secret", "systemd_unit", "nftables_file":
 		return p.planFileLike(ctx, node, prior)
 	case "apt_signing_key":
 		return p.planAPTSigningKey(ctx, node, prior)
@@ -62,7 +62,7 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2stat
 
 func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, error) {
 	switch step.Node.Kind {
-	case "file", "secret":
+	case "file", "secret", "nftables_file":
 		return p.applyFileLike(ctx, step, false)
 	case "systemd_unit":
 		return p.applyFileLike(ctx, step, true)
@@ -104,7 +104,7 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 	desired := step.Prior.Desired
 	host := step.Prior.Host
 	switch step.Prior.Kind {
-	case "file", "secret", "apt_signing_key", "component_download", "component_binary", "component_file", "component_ca_certificate":
+	case "file", "secret", "nftables_file", "apt_signing_key", "component_download", "component_binary", "component_file", "component_ca_certificate":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), false)
 	case "component_archive":
 		return p.removeDirectory(ctx, host, stringMapValue(desired, "path"))

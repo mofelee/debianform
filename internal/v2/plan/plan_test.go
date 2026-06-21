@@ -90,6 +90,32 @@ func TestAPTRepositoryPlanJSONGolden(t *testing.T) {
 	}
 }
 
+func TestNftablesPlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-nftables.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-nftables.dbf.hcl",
+		Host:        "edge1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-nftables.golden.json", got)
+
+	if doc.Summary.Create != 6 {
+		t.Fatalf("create count = %d, want 6", doc.Summary.Create)
+	}
+	if doc.Summary.Operations != 2 {
+		t.Fatalf("operations = %d, want 2", doc.Summary.Operations)
+	}
+	if !hasOperation(doc, "host.edge1.nftables.validate") || !hasOperation(doc, "host.edge1.nftables.activate") {
+		t.Fatalf("nftables operations missing: %#v", doc.Operations)
+	}
+}
+
 func TestBIRD2PlanJSONGolden(t *testing.T) {
 	doc := planFixture(t, "../../../examples/v2-bird2.dbf.hcl", Options{
 		CommandFile: "../../../examples/v2-bird2.dbf.hcl",
@@ -223,6 +249,81 @@ func TestFilesPlanPreviewHasTextAndSensitiveDiffs(t *testing.T) {
 	}
 }
 
+func TestNftablesPlanPreviewDoesNotLeakSecret(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-plan-preview.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-plan-preview.dbf.hcl",
+		Host:        "preview1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	if doc.Summary.Create != 4 || doc.Summary.Operations != 2 {
+		t.Fatalf("summary = %#v, want 4 creates and 2 operations", doc.Summary)
+	}
+	data, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "not-a-real-secret-token") {
+		t.Fatalf("nftables preview leaked secret content: %s", data)
+	}
+	if !hasChange(doc, `host.preview1.nftables.file["20-services"]`) {
+		t.Fatalf("nftables snippet change missing: %#v", doc.Changes)
+	}
+	if !hasChange(doc, `host.preview1.secrets.file["/etc/app/token"]`) {
+		t.Fatalf("secret change missing: %#v", doc.Changes)
+	}
+}
+
+func TestNftablesPortChangeTextDiffGolden(t *testing.T) {
+	source := ir.SourceRef{
+		File: "examples/v2-plan-preview.dbf.hcl",
+		Line: 29,
+		Path: `host.preview1.nftables.file["20-services"]`,
+	}
+	doc := Document{
+		FormatVersion: FormatVersion,
+		GeneratedAt:   "2026-06-20T12:00:00Z",
+		Command:       Command{File: "examples/v2-plan-preview.dbf.hcl", Host: "preview1"},
+		Summary:       Summary{Update: 1, Operations: 2},
+		Changes: []Change{
+			{
+				Address: `host.preview1.nftables.file["20-services"]`,
+				Action:  "update",
+				Summary: "update nftables snippet 20-services",
+				Source:  source,
+				Diff: BuildDiff("update",
+					map[string]any{"content": "add rule inet filter input tcp dport { 22, 80 } accept\n"},
+					map[string]any{"content": "add rule inet filter input tcp dport { 22, 80, 443 } accept\n"},
+				),
+			},
+		},
+		Operations: []OperationNode{
+			{
+				Address:        "host.preview1.nftables.validate",
+				Action:         "run",
+				Summary:        "validate nftables ruleset",
+				TriggeredBy:    []string{`host.preview1.nftables.file["20-services"]`},
+				CommandPreview: "nft -c -f /etc/nftables.conf",
+				Source:         source,
+			},
+			{
+				Address:        "host.preview1.nftables.activate",
+				Action:         "run",
+				Summary:        "activate nftables ruleset",
+				DependsOn:      []string{"host.preview1.nftables.validate"},
+				TriggeredBy:    []string{`host.preview1.nftables.file["20-services"]`},
+				CommandPreview: "nft -f /etc/nftables.conf",
+				Source:         source,
+			},
+		},
+		Diagnostics: []Diagnostic{},
+	}
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	assertGolden(t, "../testdata/plan/v2-nftables-port-change.golden.txt", text.String())
+}
+
 func TestPlanDebugIncludesProviderAddress(t *testing.T) {
 	doc := planFixture(t, "../../../examples/v2-bbr.dbf.hcl", Options{
 		CommandFile: "../../../examples/v2-bbr.dbf.hcl",
@@ -336,6 +437,7 @@ func testHostFacts() map[string]ir.HostFacts {
 	for _, name := range []string{
 		"apt1",
 		"bbr1",
+		"edge1",
 		"foundation1",
 		"preview1",
 		"router1",
@@ -350,6 +452,24 @@ func testHostFacts() map[string]ir.HostFacts {
 		}}
 	}
 	return out
+}
+
+func hasOperation(doc Document, address string) bool {
+	for _, operation := range doc.Operations {
+		if operation.Address == address {
+			return true
+		}
+	}
+	return false
+}
+
+func hasChange(doc Document, address string) bool {
+	for _, change := range doc.Changes {
+		if change.Address == address {
+			return true
+		}
+	}
+	return false
 }
 
 func assertGolden(t *testing.T, golden string, got string) {

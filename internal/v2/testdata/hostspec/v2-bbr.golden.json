@@ -110,5 +110,8 @@
   },
   "services": {
     "source": {}
+  },
+  "nftables": {
+    "source": {}
   }
 }

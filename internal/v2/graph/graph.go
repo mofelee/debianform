@@ -384,6 +384,111 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 	}
 
+	nftablesTriggers := []string{}
+	nftablesSource := host.Nftables.Source
+	nftablesMainPath := "/etc/nftables.conf"
+	nftablesValidate := false
+	nftablesActivate := false
+	nftablesFileDeps := []string{}
+	if packageAddress, ok := packageAddresses["nftables"]; ok {
+		nftablesFileDeps = append(nftablesFileDeps, packageAddress)
+	}
+	if host.Nftables.Main != nil {
+		item := *host.Nftables.Main
+		nftablesMainPath = item.Path
+		nftablesValidate = nftablesValidate || (item.Ensure != "absent" && item.Validate)
+		nftablesActivate = nftablesActivate || (item.Ensure != "absent" && item.Activate)
+		if nftablesSource.File == "" {
+			nftablesSource = item.Source
+		}
+		address := fmt.Sprintf("host.%s.nftables.file[%s]", host.Name, strconv.Quote(item.Label))
+		nodes = append(nodes, nftablesFileNode(host.Name, address, item, nftablesFileDeps))
+		nftablesTriggers = append(nftablesTriggers, address)
+	}
+	for _, label := range sortedKeys(host.Nftables.Files) {
+		item := host.Nftables.Files[label]
+		nftablesValidate = nftablesValidate || (item.Ensure != "absent" && item.Validate)
+		nftablesActivate = nftablesActivate || (item.Ensure != "absent" && item.Activate)
+		if nftablesSource.File == "" {
+			nftablesSource = item.Source
+		}
+		address := fmt.Sprintf("host.%s.nftables.file[%s]", host.Name, strconv.Quote(item.Label))
+		nodes = append(nodes, nftablesFileNode(host.Name, address, item, nftablesFileDeps))
+		nftablesTriggers = append(nftablesTriggers, address)
+	}
+	nftablesActivateAddress := ""
+	if len(nftablesTriggers) > 0 && nftablesValidate {
+		validateAddress := "host." + host.Name + ".nftables.validate"
+		operations = append(operations, Operation{
+			Address:        validateAddress,
+			Action:         "run",
+			Summary:        "validate nftables ruleset",
+			DependsOn:      append([]string(nil), nftablesTriggers...),
+			TriggeredBy:    append([]string(nil), nftablesTriggers...),
+			CommandPreview: "nft -c -f " + nftablesMainPath,
+			Source:         nftablesSource,
+		})
+		if nftablesActivate {
+			nftablesActivateAddress = "host." + host.Name + ".nftables.activate"
+			operations = append(operations, Operation{
+				Address:        nftablesActivateAddress,
+				Action:         "run",
+				Summary:        "activate nftables ruleset",
+				DependsOn:      []string{validateAddress},
+				TriggeredBy:    append([]string(nil), nftablesTriggers...),
+				CommandPreview: "nft -f " + nftablesMainPath,
+				Source:         nftablesSource,
+			})
+		}
+	} else if len(nftablesTriggers) > 0 && nftablesActivate {
+		nftablesActivateAddress = "host." + host.Name + ".nftables.activate"
+		operations = append(operations, Operation{
+			Address:        nftablesActivateAddress,
+			Action:         "run",
+			Summary:        "activate nftables ruleset",
+			DependsOn:      append([]string(nil), nftablesTriggers...),
+			TriggeredBy:    append([]string(nil), nftablesTriggers...),
+			CommandPreview: "nft -f " + nftablesMainPath,
+			Source:         nftablesSource,
+		})
+	}
+	if host.Nftables.Enable != nil {
+		address := "host." + host.Name + ".nftables.enable"
+		deps := []string{}
+		if packageAddress, ok := packageAddresses["nftables"]; ok {
+			deps = append(deps, packageAddress)
+		}
+		if *host.Nftables.Enable && nftablesActivateAddress != "" {
+			deps = append(deps, nftablesActivateAddress)
+		}
+		state := "stopped"
+		if *host.Nftables.Enable {
+			state = "running"
+		}
+		desired := map[string]any{
+			"name":    "nftables",
+			"unit":    "nftables.service",
+			"enabled": *host.Nftables.Enable,
+			"state":   state,
+		}
+		summary := "disable nftables service"
+		if *host.Nftables.Enable {
+			summary = "enable nftables service"
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         address,
+			Kind:            "service",
+			Summary:         summary,
+			Source:          host.Nftables.Source,
+			Desired:         desired,
+			DependsOn:       dedupeStrings(deps),
+			ProviderType:    "service",
+			ProviderAddress: "service." + providerName(host.Name, "nftables"),
+			ProviderPayload: desired,
+		})
+	}
+
 	caCertificateTriggers := []string{}
 	caCertificateSource := ir.SourceRef{}
 	for _, component := range host.Components {
@@ -1049,6 +1154,42 @@ func aptRepositorySourceContent(repo ir.APTRepositorySpec) string {
 		lines = append(lines, "Signed-By: "+repo.SigningKey.Path)
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func nftablesFileNode(hostName string, address string, item ir.NftablesFileSpec, deps []string) Node {
+	desired := map[string]any{
+		"label":     item.Label,
+		"path":      item.Path,
+		"owner":     item.Owner,
+		"group":     item.Group,
+		"mode":      item.Mode,
+		"ensure":    item.Ensure,
+		"sensitive": item.Sensitive,
+		"summary":   item.Summary,
+	}
+	if item.Content != "" {
+		desired["content"] = item.Content
+	}
+	if item.SourcePath != "" {
+		desired["source_path"] = item.SourcePath
+	}
+	summary := "manage nftables snippet " + item.Label
+	if item.Label == "main" {
+		summary = "manage nftables main ruleset"
+	}
+	return Node{
+		Host:            hostName,
+		Address:         address,
+		Kind:            "nftables_file",
+		Summary:         summary,
+		Source:          item.Source,
+		Lifecycle:       lifecyclePtr(item.Lifecycle),
+		Desired:         desired,
+		DependsOn:       dedupeStrings(deps),
+		ProviderType:    "nftables_file",
+		ProviderAddress: "nftables_file." + providerName(hostName, item.Label),
+		ProviderPayload: desired,
+	}
 }
 
 func componentArtifactSourceLabel(source ir.ComponentArtifactSourceSpec) string {

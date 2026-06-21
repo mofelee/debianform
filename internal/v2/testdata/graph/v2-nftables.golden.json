@@ -1,0 +1,275 @@
+{
+  "nodes": [
+    {
+      "host": "edge1",
+      "address": "host.edge1.nftables.enable",
+      "kind": "service",
+      "summary": "enable nftables service",
+      "source": {
+        "file": "../../../examples/v2-nftables.dbf.hcl",
+        "line": 16,
+        "path": "host.edge1.nftables"
+      },
+      "desired": {
+        "enabled": true,
+        "name": "nftables",
+        "state": "running",
+        "unit": "nftables.service"
+      },
+      "provider_type": "service",
+      "provider_address": "service.edge1_nftables",
+      "provider_payload": {
+        "enabled": true,
+        "name": "nftables",
+        "state": "running",
+        "unit": "nftables.service"
+      },
+      "depends_on": [
+        "host.edge1.packages.install[\"nftables\"]",
+        "host.edge1.nftables.activate"
+      ]
+    },
+    {
+      "host": "edge1",
+      "address": "host.edge1.nftables.file[\"10-base\"]",
+      "kind": "nftables_file",
+      "summary": "manage nftables snippet 10-base",
+      "source": {
+        "file": "../../../examples/v2-nftables.dbf.hcl",
+        "line": 31,
+        "path": "host.edge1.nftables.file[\"10-base\"]"
+      },
+      "desired": {
+        "content": "table inet filter {\n  chain input {\n    type filter hook input priority 0; policy drop;\n\n    ct state established,related accept\n    iifname \"lo\" accept\n\n    counter drop\n  }\n\n  chain forward {\n    type filter hook forward priority 0; policy drop;\n  }\n\n  chain output {\n    type filter hook output priority 0; policy accept;\n  }\n}\n",
+        "ensure": "present",
+        "group": "root",
+        "label": "10-base",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/nftables.d/10-base.nft",
+        "sensitive": false,
+        "summary": {
+          "sha256": "aac9973deb96dc91a17ff62371c185c837ffa3206171e8fbc38dd70a35ac32ae",
+          "bytes": 331
+        }
+      },
+      "provider_type": "nftables_file",
+      "provider_address": "nftables_file.edge1_10_base",
+      "provider_payload": {
+        "content": "table inet filter {\n  chain input {\n    type filter hook input priority 0; policy drop;\n\n    ct state established,related accept\n    iifname \"lo\" accept\n\n    counter drop\n  }\n\n  chain forward {\n    type filter hook forward priority 0; policy drop;\n  }\n\n  chain output {\n    type filter hook output priority 0; policy accept;\n  }\n}\n",
+        "ensure": "present",
+        "group": "root",
+        "label": "10-base",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/nftables.d/10-base.nft",
+        "sensitive": false,
+        "summary": {
+          "sha256": "aac9973deb96dc91a17ff62371c185c837ffa3206171e8fbc38dd70a35ac32ae",
+          "bytes": 331
+        }
+      },
+      "depends_on": [
+        "host.edge1.packages.install[\"nftables\"]"
+      ]
+    },
+    {
+      "host": "edge1",
+      "address": "host.edge1.nftables.file[\"20-services\"]",
+      "kind": "nftables_file",
+      "summary": "manage nftables snippet 20-services",
+      "source": {
+        "file": "../../../examples/v2-nftables.dbf.hcl",
+        "line": 56,
+        "path": "host.edge1.nftables.file[\"20-services\"]"
+      },
+      "desired": {
+        "content": "add rule inet filter input tcp dport { 22, 80, 443 } accept\n",
+        "ensure": "present",
+        "group": "root",
+        "label": "20-services",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/nftables.d/20-services.nft",
+        "sensitive": false,
+        "summary": {
+          "sha256": "83401d5e9b3d8c8bd8bf12e4ec0797693f32d32d9cd0edc140ff366ab286b291",
+          "bytes": 60
+        }
+      },
+      "provider_type": "nftables_file",
+      "provider_address": "nftables_file.edge1_20_services",
+      "provider_payload": {
+        "content": "add rule inet filter input tcp dport { 22, 80, 443 } accept\n",
+        "ensure": "present",
+        "group": "root",
+        "label": "20-services",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/nftables.d/20-services.nft",
+        "sensitive": false,
+        "summary": {
+          "sha256": "83401d5e9b3d8c8bd8bf12e4ec0797693f32d32d9cd0edc140ff366ab286b291",
+          "bytes": 60
+        }
+      },
+      "depends_on": [
+        "host.edge1.packages.install[\"nftables\"]"
+      ]
+    },
+    {
+      "host": "edge1",
+      "address": "host.edge1.nftables.file[\"30-wireguard\"]",
+      "kind": "nftables_file",
+      "summary": "manage nftables snippet 30-wireguard",
+      "source": {
+        "file": "../../../examples/v2-nftables.dbf.hcl",
+        "line": 64,
+        "path": "host.edge1.nftables.file[\"30-wireguard\"]"
+      },
+      "desired": {
+        "content": "add rule inet filter input udp dport 51820 accept\n",
+        "ensure": "present",
+        "group": "root",
+        "label": "30-wireguard",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/nftables.d/30-wireguard.nft",
+        "sensitive": false,
+        "summary": {
+          "sha256": "a4291d798de5507fe4d6b1dff16db0f17730bc24b007f90e19f3e1cf944db732",
+          "bytes": 50
+        }
+      },
+      "provider_type": "nftables_file",
+      "provider_address": "nftables_file.edge1_30_wireguard",
+      "provider_payload": {
+        "content": "add rule inet filter input udp dport 51820 accept\n",
+        "ensure": "present",
+        "group": "root",
+        "label": "30-wireguard",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/nftables.d/30-wireguard.nft",
+        "sensitive": false,
+        "summary": {
+          "sha256": "a4291d798de5507fe4d6b1dff16db0f17730bc24b007f90e19f3e1cf944db732",
+          "bytes": 50
+        }
+      },
+      "depends_on": [
+        "host.edge1.packages.install[\"nftables\"]"
+      ]
+    },
+    {
+      "host": "edge1",
+      "address": "host.edge1.nftables.file[\"main\"]",
+      "kind": "nftables_file",
+      "summary": "manage nftables main ruleset",
+      "source": {
+        "file": "../../../examples/v2-nftables.dbf.hcl",
+        "line": 19,
+        "path": "host.edge1.nftables.main"
+      },
+      "desired": {
+        "content": "flush ruleset\n\ninclude \"/etc/nftables.d/*.nft\"\n",
+        "ensure": "present",
+        "group": "root",
+        "label": "main",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/nftables.conf",
+        "sensitive": false,
+        "summary": {
+          "sha256": "2cf0161d9b7411aac2b58d3ca5bc713b0e58971aca5a07e9ed439aba154410ba",
+          "bytes": 47
+        }
+      },
+      "provider_type": "nftables_file",
+      "provider_address": "nftables_file.edge1_main",
+      "provider_payload": {
+        "content": "flush ruleset\n\ninclude \"/etc/nftables.d/*.nft\"\n",
+        "ensure": "present",
+        "group": "root",
+        "label": "main",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/nftables.conf",
+        "sensitive": false,
+        "summary": {
+          "sha256": "2cf0161d9b7411aac2b58d3ca5bc713b0e58971aca5a07e9ed439aba154410ba",
+          "bytes": 47
+        }
+      },
+      "depends_on": [
+        "host.edge1.packages.install[\"nftables\"]"
+      ]
+    },
+    {
+      "host": "edge1",
+      "address": "host.edge1.packages.install[\"nftables\"]",
+      "kind": "package",
+      "summary": "create package nftables",
+      "source": {
+        "file": "../../../examples/v2-nftables.dbf.hcl",
+        "line": 12,
+        "path": "host.edge1.packages.install[0]"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "nftables"
+      },
+      "provider_type": "package",
+      "provider_address": "package.edge1_nftables",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "nftables"
+      }
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.edge1.nftables.activate",
+      "action": "run",
+      "summary": "activate nftables ruleset",
+      "depends_on": [
+        "host.edge1.nftables.validate"
+      ],
+      "triggered_by": [
+        "host.edge1.nftables.file[\"main\"]",
+        "host.edge1.nftables.file[\"10-base\"]",
+        "host.edge1.nftables.file[\"20-services\"]",
+        "host.edge1.nftables.file[\"30-wireguard\"]"
+      ],
+      "command_preview": "nft -f /etc/nftables.conf",
+      "source": {
+        "file": "../../../examples/v2-nftables.dbf.hcl",
+        "line": 16,
+        "path": "host.edge1.nftables"
+      }
+    },
+    {
+      "address": "host.edge1.nftables.validate",
+      "action": "run",
+      "summary": "validate nftables ruleset",
+      "depends_on": [
+        "host.edge1.nftables.file[\"main\"]",
+        "host.edge1.nftables.file[\"10-base\"]",
+        "host.edge1.nftables.file[\"20-services\"]",
+        "host.edge1.nftables.file[\"30-wireguard\"]"
+      ],
+      "triggered_by": [
+        "host.edge1.nftables.file[\"main\"]",
+        "host.edge1.nftables.file[\"10-base\"]",
+        "host.edge1.nftables.file[\"20-services\"]",
+        "host.edge1.nftables.file[\"30-wireguard\"]"
+      ],
+      "command_preview": "nft -c -f /etc/nftables.conf",
+      "source": {
+        "file": "../../../examples/v2-nftables.dbf.hcl",
+        "line": 16,
+        "path": "host.edge1.nftables"
+      }
+    }
+  ]
+}

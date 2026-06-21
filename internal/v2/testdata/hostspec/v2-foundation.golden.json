@@ -227,5 +227,8 @@
       "line": 76,
       "path": "host.foundation1.services"
     }
+  },
+  "nftables": {
+    "source": {}
   }
 }

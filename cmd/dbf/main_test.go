@@ -119,6 +119,25 @@ func TestPlanV2BBRText(t *testing.T) {
 	}
 }
 
+func TestPlanV2NftablesText(t *testing.T) {
+	output := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", "../../examples/v2-nftables.dbf.hcl", "--offline"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	for _, want := range []string{
+		`host.edge1.nftables.file["20-services"]`,
+		`host.edge1.nftables.validate`,
+		`host.edge1.nftables.activate`,
+		"Summary: 6 create",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("plan output %q does not contain %q", output, want)
+		}
+	}
+}
+
 func TestPlanV2BBRJSON(t *testing.T) {
 	output := captureStdout(t, func() {
 		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--offline"}); err != nil {

@@ -71,6 +71,9 @@
   "services": {
     "source": {}
   },
+  "nftables": {
+    "source": {}
+  },
   "components": [
     {
       "name": "bird2",

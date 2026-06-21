@@ -177,10 +177,10 @@ v2 主线领域范围：
 - `groups`
 - `services`
 - `systemd`
+- `nftables`
 
-`nftables`、`networking`、`security` 可以放到后续阶段。其中
-`nftables` 是目标 DSL 的一等领域；第一版可以采用原生 nftables 文件管理，
-不需要先发明通用 firewall 抽象。
+`networking`、`security` 可以放到后续阶段。`nftables` 是目标 DSL 的一等领域；
+当前第一版采用原生 nftables 文件管理，不发明通用 firewall 抽象。
 
 完整目标语法还可以包含 `environment`、`sudo`、`sshd`、`nftables`、`docker`
 以及重复的 `assert` 块。它们在
@@ -1291,7 +1291,8 @@ nftables {
 - `activate` 默认 true；通过校验后执行 `nft -f /etc/nftables.conf`。
 - 多个 nftables 文件变化时，同一 host 只校验和激活一次主 ruleset。
 - plan 必须展示 nft 文件的文本 diff；sensitive snippet 不显示明文。
-- component/profile 可以贡献 snippet，但同一 host 最终 path 不能冲突。
+- profile 可以贡献 snippet，但同一 host 最终 path 不能冲突；component 贡献
+  nftables snippet 留给后续 component 领域扩展。
 - 第一版不提供通用 `firewall` 主块。后续如增加 helper，也只能编译成明确的
   nftables snippet，不能成为替代 nftables 的第二套语义。
 

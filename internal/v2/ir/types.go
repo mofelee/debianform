@@ -22,6 +22,7 @@ type HostSpec struct {
 	Users       UserSpec                `json:"users"`
 	Systemd     SystemdSpec             `json:"systemd"`
 	Services    ServiceSpec             `json:"services"`
+	Nftables    NftablesSpec            `json:"nftables"`
 	Components  []ComponentInstanceSpec `json:"components,omitempty"`
 }
 
@@ -244,6 +245,30 @@ type ManagedService struct {
 	State     string         `json:"state,omitempty"`
 	Lifecycle *LifecycleSpec `json:"lifecycle,omitempty"`
 	Source    SourceRef      `json:"source,omitempty"`
+}
+
+type NftablesSpec struct {
+	Enable *bool                       `json:"enable,omitempty"`
+	Main   *NftablesFileSpec           `json:"main,omitempty"`
+	Files  map[string]NftablesFileSpec `json:"files,omitempty"`
+	Source SourceRef                   `json:"source,omitempty"`
+}
+
+type NftablesFileSpec struct {
+	Label      string         `json:"label"`
+	Path       string         `json:"path"`
+	Content    string         `json:"content,omitempty"`
+	SourcePath string         `json:"source_path,omitempty"`
+	Owner      string         `json:"owner"`
+	Group      string         `json:"group"`
+	Mode       string         `json:"mode"`
+	Sensitive  bool           `json:"sensitive,omitempty"`
+	Validate   bool           `json:"validate"`
+	Activate   bool           `json:"activate"`
+	Ensure     string         `json:"ensure"`
+	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
+	Summary    ContentSummary `json:"summary,omitempty"`
+	Source     SourceRef      `json:"source,omitempty"`
 }
 
 type ContentSummary struct {

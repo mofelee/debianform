@@ -493,7 +493,7 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext,
 
 	for _, block := range body.Blocks {
 		switch block.Type {
-		case "ssh", "state", "system", "kernel", "packages", "apt", "files", "secrets", "directories", "groups", "users", "systemd", "services":
+		case "ssh", "state", "system", "kernel", "packages", "apt", "files", "secrets", "directories", "groups", "users", "systemd", "services", "nftables":
 			if len(block.Labels) != 0 {
 				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, block.Type)
 			}
@@ -747,6 +747,17 @@ func parseDomainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext
 	}
 
 	for _, child := range block.Body.Blocks {
+		if block.Type == "nftables" && child.Type == "main" {
+			if _, exists := values["main"]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.main block", file, child.TypeRange.Start.Line, path)
+			}
+			main, err := parseNftablesMainBlock(file, path+".main", child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values["main"] = main
+			continue
+		}
 		if _, ok := allowedBlocks[child.Type]; !ok {
 			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
 		}
@@ -770,6 +781,46 @@ func parseDomainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext
 		values[child.Type] = collection
 	}
 
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseNftablesMainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	if len(block.Labels) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	values := map[string]Value{}
+	allowed := attrSet("path", "content", "source", "owner", "group", "mode", "ensure", "sensitive", "validate", "activate")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{
+			File: file,
+			Line: attr.NameRange.Start.Line,
+			Path: path + "." + name,
+		}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "lifecycle":
+			if _, exists := values["lifecycle"]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.lifecycle block", file, child.TypeRange.Start.Line, path)
+			}
+			lifecycle, err := parseLifecycleBlock(file, path+".lifecycle", child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values["lifecycle"] = lifecycle
+		default:
+			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
 	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
 }
 
@@ -928,6 +979,8 @@ func allowedDomainAttrs(domain string) map[string]struct{} {
 		return attrSet("install")
 	case "apt", "files", "secrets", "directories", "groups", "users", "systemd", "services":
 		return attrSet()
+	case "nftables":
+		return attrSet("enable")
 	default:
 		return map[string]struct{}{}
 	}
@@ -951,6 +1004,8 @@ func allowedDomainObjectBlocks(domain string) map[string]struct{} {
 		return attrSet("unit")
 	case "services":
 		return attrSet("service")
+	case "nftables":
+		return attrSet("file")
 	default:
 		return map[string]struct{}{}
 	}
@@ -976,6 +1031,8 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 		return attrSet("content", "source", "owner", "group", "mode", "ensure")
 	case "services.service":
 		return attrSet("package", "enabled", "state")
+	case "nftables.file":
+		return attrSet("path", "content", "source", "owner", "group", "mode", "ensure", "sensitive", "validate", "activate")
 	default:
 		return map[string]struct{}{}
 	}

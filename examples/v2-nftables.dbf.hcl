@@ -1,6 +1,4 @@
-# DebianForm v2 nftables 设计示例。
-#
-# 设计夹具：nftables 领域会在后续 loop 接入 CLI。
+# DebianForm v2 nftables runnable example.
 #
 # 设计边界：
 # - v2 的主路径是 nftables 原生配置，不是通用 firewall 抽象。
@@ -82,6 +80,7 @@ host "edge1" {
 #   -> host.edge1.nftables.file["30-wireguard"]
 #   -> host.edge1.nftables.validate
 #   -> host.edge1.nftables.activate
+#   -> host.edge1.nftables.enable
 #
 # 示例 plan 片段：
 #
