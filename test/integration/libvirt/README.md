@@ -13,6 +13,7 @@ Run one case:
 
 ```bash
 make test-integration-case CASE=files
+make test-integration-case CASE=nftables
 ```
 
 Validate the case layout without starting a VM:
