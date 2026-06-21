@@ -1417,6 +1417,25 @@ host.server1.ca_certificates.update
 同一 wave 内按并发策略执行
 ```
 
+wave 示例：
+
+```text
+wave 0:
+  host.web1.packages.install["nginx"]
+  host.web1.systemd.unit["nginx.service"]
+  host.web2.files.file["/etc/motd"]
+
+wave 1:
+  host.web1.systemd.daemon_reload
+
+wave 2:
+  host.web1.services.service["nginx"]
+```
+
+调度器只把本次 plan 中需要执行的资源和 operation 放入 active wave；已经 no-op
+的依赖视为已满足。若某个资源或 operation 失败，依赖它的后续 active 节点会被跳过，
+同一 wave 或后续 wave 中与它无依赖关系的节点仍可继续执行并写入各自 host 的 state。
+
 默认并发策略：
 
 ```text
@@ -1424,6 +1443,11 @@ host.server1.ca_certificates.update
 单 host 默认串行
 后续允许部分资源类型声明 safe_parallel
 ```
+
+`--parallel` 是全局并发上限。每个 host 默认仍只允许一个节点执行；内部调度器可为
+测试或后续 CLI 暴露单独的 per-host 上限。只有标记为 `safe_parallel` 的资源类型能在同
+一 host 内占用单个 host slot；operation、package、service、user、group、kernel 和
+sysctl 这类会触碰共享系统状态的节点按 host 独占执行。
 
 要求：
 

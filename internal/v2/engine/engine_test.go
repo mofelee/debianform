@@ -283,6 +283,87 @@ host "server1" {
 	}
 }
 
+func TestApplyHonorsDefaultPerHostSerialExecution(t *testing.T) {
+	program, resourceGraph := twoFileProgramAndGraph("server1")
+	provider := &concurrencyProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{Parallel: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if provider.maxActive != 1 {
+		t.Fatalf("max concurrent applies = %d, want default per-host serial execution", provider.maxActive)
+	}
+}
+
+func TestApplyAllowsSafeParallelWithinHostWhenConfigured(t *testing.T) {
+	program, resourceGraph := twoFileProgramAndGraph("server1")
+	provider := &concurrencyProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{Parallel: 2, PerHostParallel: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if provider.maxActive < 2 {
+		t.Fatalf("max concurrent applies = %d, want safe same-host resources to run in parallel", provider.maxActive)
+	}
+}
+
+func TestApplyGlobalParallelLimit(t *testing.T) {
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}, {Name: "server2"}, {Name: "server3"}}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{
+		fileNode("server1", "/tmp/server1", nil),
+		fileNode("server2", "/tmp/server2", nil),
+		fileNode("server3", "/tmp/server3", nil),
+	}}
+	provider := &concurrencyProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{Parallel: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if provider.maxActive != 2 {
+		t.Fatalf("max concurrent applies = %d, want global limit 2", provider.maxActive)
+	}
+}
+
+func TestApplySkipsDependentsAfterFailure(t *testing.T) {
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}}}
+	failing := `host.server1.files.file["/tmp/failing"]`
+	dependent := `host.server1.files.file["/tmp/dependent"]`
+	independent := `host.server1.files.file["/tmp/independent"]`
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{
+		fileNode("server1", "/tmp/failing", nil),
+		fileNode("server1", "/tmp/independent", nil),
+		fileNode("server1", "/tmp/dependent", []string{failing}),
+	}}
+	backend := NewMemoryBackend()
+	provider := NewMemoryProvider()
+	provider.FailApplyAt = failing
+	engine := Engine{Backend: backend, Provider: provider}
+
+	_, err := engine.Apply(context.Background(), program, resourceGraph, Options{Parallel: 2, PerHostParallel: 2})
+	if err == nil || !strings.Contains(err.Error(), failing) {
+		t.Fatalf("apply error = %v, want failing resource", err)
+	}
+	if containsString(provider.Applied, dependent) {
+		t.Fatalf("dependent resource was applied after failed dependency: %#v", provider.Applied)
+	}
+	if !containsString(provider.Applied, independent) {
+		t.Fatalf("independent resource was not applied after unrelated failure: %#v", provider.Applied)
+	}
+	st, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.Resources[independent]; !ok {
+		t.Fatalf("independent resource was not persisted: %#v", st.Resources)
+	}
+	if _, ok := st.Resources[dependent]; ok {
+		t.Fatalf("dependent resource was persisted despite skipped dependency: %#v", st.Resources)
+	}
+}
+
 func TestPreventDestroyBlocksOrphanDestroy(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `
 host "server1" {
@@ -363,6 +444,40 @@ func fixtureProgramAndGraph(t *testing.T, fixture string) (*ir.Program, *graph.R
 		t.Fatal(err)
 	}
 	return program, resourceGraph
+}
+
+func twoFileProgramAndGraph(host string) (*ir.Program, *graph.ResourceGraph) {
+	return &ir.Program{Hosts: []ir.HostSpec{{Name: host}}}, &graph.ResourceGraph{Nodes: []graph.Node{
+		fileNode(host, "/tmp/a", nil),
+		fileNode(host, "/tmp/b", nil),
+	}}
+}
+
+func fileNode(host, path string, deps []string) graph.Node {
+	return graph.Node{
+		Host:      host,
+		Address:   "host." + host + ".files.file[" + fmt.Sprintf("%q", path) + "]",
+		Kind:      "file",
+		Summary:   "create file " + path,
+		DependsOn: deps,
+		Desired: map[string]any{
+			"path":    path,
+			"content": path,
+			"owner":   "root",
+			"group":   "root",
+			"mode":    "0644",
+			"ensure":  "present",
+		},
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func writeEngineConfig(t *testing.T, content string) string {

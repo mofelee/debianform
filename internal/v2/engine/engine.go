@@ -56,9 +56,10 @@ type Observed struct {
 }
 
 type Options struct {
-	Host        string
-	LockTimeout time.Duration
-	Parallel    int
+	Host            string
+	LockTimeout     time.Duration
+	Parallel        int
+	PerHostParallel int
 }
 
 type Engine struct {
@@ -96,6 +97,9 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	}
 	if e.Provider == nil {
 		return Plan{}, fmt.Errorf("v2 engine provider is required")
+	}
+	if err := resourceGraph.Validate(); err != nil {
+		return Plan{}, err
 	}
 	hosts := hostsByName(program)
 	stateByHost := map[string]v2state.State{}
@@ -177,10 +181,6 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 }
 
 func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
-	if opts.Host == "" && opts.Parallel > 1 && len(program.Hosts) > 1 {
-		return e.applyHostsParallel(ctx, program, resourceGraph, opts)
-	}
-
 	hosts := hostsByName(program)
 	for _, host := range program.Hosts {
 		if opts.Host != "" && host.Name != opts.Host {
@@ -217,29 +217,12 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		states[name] = st
 	}
 
-	activeSteps := activeStepMap(plan)
-	for _, item := range executionOrder(resourceGraph, plan) {
-		switch item.kind {
-		case "resource":
-			step := activeSteps[item.address]
-			host, ok := hosts[step.Host]
-			if !ok {
-				return plan, fmt.Errorf("%s references unknown host %q", step.Address, step.Host)
-			}
-			st := states[host.Name]
-			if err := e.applyStep(ctx, &st, step); err != nil {
-				return plan, err
-			}
-			if err := e.Backend.Write(ctx, host, st); err != nil {
-				return plan, err
-			}
-			states[host.Name] = st
-		case "operation":
-			op := item.operation
-			if err := e.Provider.RunOperation(ctx, op); err != nil {
-				return plan, fmt.Errorf("%s failed: %w", op.Address, err)
-			}
-		}
+	waves, err := executionWaves(resourceGraph, plan)
+	if err != nil {
+		return plan, err
+	}
+	if err := e.runExecutionWaves(ctx, hosts, states, waves, opts); err != nil {
+		return plan, err
 	}
 	return plan, nil
 }
@@ -274,124 +257,6 @@ func hasHostFacts(facts ir.HostFacts) bool {
 		facts.System.Architecture != "" ||
 		facts.System.Codename != "" ||
 		facts.System.DetectedAt != ""
-}
-
-func (e Engine) applyHostsParallel(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
-	parallel := opts.Parallel
-	if parallel > len(program.Hosts) {
-		parallel = len(program.Hosts)
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	type result struct {
-		index int
-		host  string
-		plan  Plan
-		err   error
-	}
-	jobs := make(chan int)
-	results := make(chan result, len(program.Hosts))
-	var workers sync.WaitGroup
-	for range parallel {
-		workers.Add(1)
-		go func() {
-			defer workers.Done()
-			for index := range jobs {
-				host := program.Hosts[index]
-				plan, err := e.Apply(ctx, program, resourceGraph, Options{
-					Host:        host.Name,
-					LockTimeout: opts.LockTimeout,
-					Parallel:    1,
-				})
-				results <- result{index: index, host: host.Name, plan: plan, err: err}
-				if err != nil {
-					cancel()
-					return
-				}
-			}
-		}()
-	}
-
-	go func() {
-		defer close(jobs)
-		for index := range program.Hosts {
-			select {
-			case jobs <- index:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	go func() {
-		workers.Wait()
-		close(results)
-	}()
-
-	plans := make([]Plan, len(program.Hosts))
-	completed := make([]bool, len(program.Hosts))
-	var firstErr error
-	for item := range results {
-		if item.err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("host %s apply failed: %w", item.host, item.err)
-		}
-		plans[item.index] = item.plan
-		completed[item.index] = item.err == nil
-	}
-	if firstErr != nil {
-		return combinePlans(plans, completed), firstErr
-	}
-	return combinePlans(plans, completed), nil
-}
-
-func combinePlans(plans []Plan, included []bool) Plan {
-	var combined Plan
-	for index, plan := range plans {
-		if !included[index] {
-			continue
-		}
-		combined.Steps = append(combined.Steps, plan.Steps...)
-		combined.Operations = append(combined.Operations, plan.Operations...)
-		combined.Summary.Create += plan.Summary.Create
-		combined.Summary.Update += plan.Summary.Update
-		combined.Summary.Delete += plan.Summary.Delete
-		combined.Summary.NoOp += plan.Summary.NoOp
-		combined.Summary.Operations += plan.Summary.Operations
-	}
-	return combined
-}
-
-func (e Engine) applyStep(ctx context.Context, st *v2state.State, step Step) error {
-	now := e.now().UTC().Format(time.RFC3339)
-	switch step.Action {
-	case ActionCreate, ActionUpdate, ActionDelete:
-		observed, err := e.Provider.Apply(ctx, step)
-		if err != nil {
-			return fmt.Errorf("%s failed: %w", step.Address, err)
-		}
-		if step.Action == ActionDelete {
-			delete(st.Resources, step.Address)
-			return nil
-		}
-		if observed == nil {
-			observed = step.Observed
-		}
-		st.Resources[step.Address] = resourceStateForStep(step, observed, now)
-	case ActionAdopt:
-		st.Resources[step.Address] = resourceStateForStep(step, step.Observed, now)
-	case ActionDestroy:
-		if err := e.Provider.Destroy(ctx, step); err != nil {
-			return fmt.Errorf("%s failed: %w", step.Address, err)
-		}
-		delete(st.Resources, step.Address)
-	case ActionForget:
-		delete(st.Resources, step.Address)
-	case ActionNoOp:
-		return nil
-	default:
-		return fmt.Errorf("%s has unsupported action %q", step.Address, step.Action)
-	}
-	return nil
 }
 
 func (e Engine) now() time.Time {
@@ -677,9 +542,13 @@ func cloneMap(in map[string]any) map[string]any {
 }
 
 type executionItem struct {
-	kind      string
-	address   string
-	operation graph.Operation
+	kind         string
+	address      string
+	host         string
+	safeParallel bool
+	dependsOn    []string
+	step         Step
+	operation    graph.Operation
 }
 
 func activeStepMap(plan Plan) map[string]Step {
@@ -690,67 +559,284 @@ func activeStepMap(plan Plan) map[string]Step {
 	return out
 }
 
-func executionOrder(resourceGraph *graph.ResourceGraph, plan Plan) []executionItem {
-	active := activeStepMap(plan)
-	activeOps := map[string]graph.Operation{}
+func activeOperationMap(plan Plan) map[string]graph.Operation {
+	out := map[string]graph.Operation{}
 	for _, step := range plan.Operations {
-		activeOps[step.Operation.Address] = step.Operation
-	}
-
-	nodes := map[string]graph.Node{}
-	for _, node := range resourceGraph.Nodes {
-		nodes[node.Address] = node
-	}
-	operations := map[string]graph.Operation{}
-	for _, op := range resourceGraph.Operations {
-		operations[op.Address] = op
-	}
-
-	visited := map[string]bool{}
-	var out []executionItem
-	var visit func(string)
-	visit = func(address string) {
-		if visited[address] {
-			return
-		}
-		visited[address] = true
-		if node, ok := nodes[address]; ok {
-			for _, dep := range node.DependsOn {
-				if _, activeDep := active[dep]; activeDep {
-					visit(dep)
-				}
-				if _, activeDep := activeOps[dep]; activeDep {
-					visit(dep)
-				}
-			}
-			if _, ok := active[address]; ok {
-				out = append(out, executionItem{kind: "resource", address: address})
-			}
-			return
-		}
-		if _, ok := active[address]; ok {
-			out = append(out, executionItem{kind: "resource", address: address})
-			return
-		}
-		if op, ok := operations[address]; ok {
-			for _, dep := range op.DependsOn {
-				if _, activeDep := active[dep]; activeDep {
-					visit(dep)
-				}
-				if _, activeDep := activeOps[dep]; activeDep {
-					visit(dep)
-				}
-			}
-			if _, ok := activeOps[address]; ok {
-				out = append(out, executionItem{kind: "operation", address: address, operation: op})
-			}
-		}
-	}
-	for _, step := range plan.Steps {
-		visit(step.Address)
-	}
-	for _, step := range plan.Operations {
-		visit(step.Operation.Address)
+		out[step.Operation.Address] = step.Operation
 	}
 	return out
+}
+
+func executionWaves(resourceGraph *graph.ResourceGraph, plan Plan) ([][]executionItem, error) {
+	active := activeStepMap(plan)
+	activeOps := activeOperationMap(plan)
+
+	known := map[string]bool{}
+	for _, node := range resourceGraph.Nodes {
+		known[node.Address] = true
+	}
+	for _, op := range resourceGraph.Operations {
+		known[op.Address] = true
+	}
+
+	activeAddresses := map[string]bool{}
+	orphanSteps := []Step{}
+	for _, step := range plan.Steps {
+		if known[step.Address] {
+			activeAddresses[step.Address] = true
+		} else {
+			orphanSteps = append(orphanSteps, step)
+		}
+	}
+	for address := range activeOps {
+		activeAddresses[address] = true
+	}
+
+	scheduled, err := resourceGraph.ActiveWaves(activeAddresses)
+	if err != nil {
+		return nil, err
+	}
+
+	waves := make([][]executionItem, 0, len(scheduled)+1)
+	if len(orphanSteps) > 0 {
+		sortSteps(orphanSteps)
+		wave := make([]executionItem, 0, len(orphanSteps))
+		for _, step := range orphanSteps {
+			wave = append(wave, executionItem{
+				kind:    "resource",
+				address: step.Address,
+				host:    step.Host,
+				step:    step,
+			})
+		}
+		waves = append(waves, wave)
+	}
+	for _, scheduledWave := range scheduled {
+		wave := make([]executionItem, 0, len(scheduledWave))
+		for _, item := range scheduledWave {
+			if item.Operation {
+				op := activeOps[item.Address]
+				wave = append(wave, executionItem{
+					kind:      "operation",
+					address:   item.Address,
+					host:      item.Host,
+					dependsOn: item.DependsOn,
+					operation: op,
+				})
+				continue
+			}
+			step := active[item.Address]
+			wave = append(wave, executionItem{
+				kind:         "resource",
+				address:      item.Address,
+				host:         step.Host,
+				safeParallel: item.SafeParallel,
+				dependsOn:    item.DependsOn,
+				step:         step,
+			})
+		}
+		waves = append(waves, wave)
+	}
+	return waves, nil
+}
+
+func (e Engine) runExecutionWaves(ctx context.Context, hosts map[string]ir.HostSpec, states map[string]v2state.State, waves [][]executionItem, opts Options) error {
+	parallel := opts.Parallel
+	if parallel < 1 {
+		parallel = 1
+	}
+	perHostParallel := opts.PerHostParallel
+	if perHostParallel < 1 {
+		perHostParallel = 1
+	}
+
+	globalSem := make(chan struct{}, parallel)
+	hostSems := map[string]chan struct{}{}
+	statesLock := &sync.Mutex{}
+	stateLocks := map[string]*sync.Mutex{}
+	for name := range hosts {
+		hostSems[name] = make(chan struct{}, perHostParallel)
+		stateLocks[name] = &sync.Mutex{}
+	}
+
+	failed := map[string]error{}
+	blocked := map[string]string{}
+	var firstErr error
+	for _, wave := range waves {
+		runnable := make([]executionItem, 0, len(wave))
+		for _, item := range wave {
+			if dep := blockedDependency(item.dependsOn, failed, blocked); dep != "" {
+				blocked[item.address] = dep
+				continue
+			}
+			runnable = append(runnable, item)
+		}
+		results := runExecutionWave(ctx, e, hosts, states, statesLock, stateLocks, globalSem, hostSems, perHostParallel, runnable)
+		for _, item := range runnable {
+			if err := results[item.address]; err != nil {
+				failed[item.address] = err
+				if firstErr == nil {
+					firstErr = err
+				}
+			}
+		}
+	}
+	return firstErr
+}
+
+func runExecutionWave(ctx context.Context, e Engine, hosts map[string]ir.HostSpec, states map[string]v2state.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, globalSem chan struct{}, hostSems map[string]chan struct{}, perHostParallel int, wave []executionItem) map[string]error {
+	type result struct {
+		address string
+		err     error
+	}
+	results := make(chan result, len(wave))
+	var wg sync.WaitGroup
+	for _, item := range wave {
+		item := item
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			releaseGlobal, err := acquire(ctx, globalSem, 1)
+			if err != nil {
+				results <- result{address: item.address, err: err}
+				return
+			}
+			defer releaseGlobal()
+
+			hostSlots := 0
+			if item.host != "" {
+				hostSlots = 1
+				if !item.safeParallel {
+					hostSlots = perHostParallel
+				}
+			}
+			releaseHost := func() {}
+			if hostSlots > 0 {
+				hostSem, ok := hostSems[item.host]
+				if !ok {
+					results <- result{address: item.address, err: fmt.Errorf("%s references unknown host %q", item.address, item.host)}
+					return
+				}
+				releaseHost, err = acquire(ctx, hostSem, hostSlots)
+				if err != nil {
+					results <- result{address: item.address, err: err}
+					return
+				}
+				defer releaseHost()
+			}
+
+			results <- result{
+				address: item.address,
+				err:     e.executeItem(ctx, hosts, states, statesLock, stateLocks, item),
+			}
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	out := map[string]error{}
+	for item := range results {
+		out[item.address] = item.err
+	}
+	return out
+}
+
+func (e Engine) executeItem(ctx context.Context, hosts map[string]ir.HostSpec, states map[string]v2state.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, item executionItem) error {
+	switch item.kind {
+	case "resource":
+		return e.executeResourceStep(ctx, hosts, states, statesLock, stateLocks, item.step)
+	case "operation":
+		if err := e.Provider.RunOperation(ctx, item.operation); err != nil {
+			return fmt.Errorf("%s failed: %w", item.operation.Address, err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("%s has unsupported execution item kind %q", item.address, item.kind)
+	}
+}
+
+func (e Engine) executeResourceStep(ctx context.Context, hosts map[string]ir.HostSpec, states map[string]v2state.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, step Step) error {
+	host, ok := hosts[step.Host]
+	if !ok {
+		return fmt.Errorf("%s references unknown host %q", step.Address, step.Host)
+	}
+
+	now := e.now().UTC().Format(time.RFC3339)
+	var observed map[string]any
+	switch step.Action {
+	case ActionCreate, ActionUpdate, ActionDelete:
+		result, err := e.Provider.Apply(ctx, step)
+		if err != nil {
+			return fmt.Errorf("%s failed: %w", step.Address, err)
+		}
+		observed = result
+	case ActionDestroy:
+		if err := e.Provider.Destroy(ctx, step); err != nil {
+			return fmt.Errorf("%s failed: %w", step.Address, err)
+		}
+	case ActionAdopt, ActionForget, ActionNoOp:
+	default:
+		return fmt.Errorf("%s has unsupported action %q", step.Address, step.Action)
+	}
+
+	lock := stateLocks[host.Name]
+	lock.Lock()
+	defer lock.Unlock()
+
+	statesLock.Lock()
+	st := states[host.Name]
+	statesLock.Unlock()
+	switch step.Action {
+	case ActionCreate, ActionUpdate:
+		if observed == nil {
+			observed = step.Observed
+		}
+		st.Resources[step.Address] = resourceStateForStep(step, observed, now)
+	case ActionDelete, ActionDestroy, ActionForget:
+		delete(st.Resources, step.Address)
+	case ActionAdopt:
+		st.Resources[step.Address] = resourceStateForStep(step, step.Observed, now)
+	case ActionNoOp:
+		return nil
+	}
+	if err := e.Backend.Write(ctx, host, st); err != nil {
+		return err
+	}
+	statesLock.Lock()
+	states[host.Name] = st
+	statesLock.Unlock()
+	return nil
+}
+
+func blockedDependency(deps []string, failed map[string]error, blocked map[string]string) string {
+	for _, dep := range deps {
+		if _, ok := failed[dep]; ok {
+			return dep
+		}
+		if blockedBy, ok := blocked[dep]; ok {
+			return blockedBy
+		}
+	}
+	return ""
+}
+
+func acquire(ctx context.Context, sem chan struct{}, slots int) (func(), error) {
+	acquired := 0
+	for acquired < slots {
+		select {
+		case sem <- struct{}{}:
+			acquired++
+		case <-ctx.Done():
+			for acquired > 0 {
+				<-sem
+				acquired--
+			}
+			return nil, ctx.Err()
+		}
+	}
+	return func() {
+		for ; acquired > 0; acquired-- {
+			<-sem
+		}
+	}, nil
 }

@@ -57,6 +57,9 @@ func Compile(program *ir.Program) (*ResourceGraph, error) {
 	sort.SliceStable(graph.Operations, func(i, j int) bool {
 		return graph.Operations[i].Address < graph.Operations[j].Address
 	})
+	if err := graph.Validate(); err != nil {
+		return nil, err
+	}
 	return graph, nil
 }
 
