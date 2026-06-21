@@ -2,6 +2,7 @@ BINARY := dbf
 PACKAGE := ./cmd/dbf
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
+DATADIR ?= $(PREFIX)/share/debianform
 DESTDIR ?=
 INSTALL ?= install
 VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || echo dev)
@@ -20,8 +21,11 @@ build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PACKAGE)
 
 install: build
-	$(INSTALL) -d "$(DESTDIR)$(BINDIR)"
+	$(INSTALL) -d "$(DESTDIR)$(BINDIR)" "$(DESTDIR)$(DATADIR)/docs" "$(DESTDIR)$(DATADIR)/examples"
 	$(INSTALL) -m 0755 "$(BINARY)" "$(DESTDIR)$(BINDIR)/dbf"
+	$(INSTALL) -m 0644 README.md "$(DESTDIR)$(DATADIR)/README.md"
+	$(INSTALL) -m 0644 docs/*.md "$(DESTDIR)$(DATADIR)/docs/"
+	$(INSTALL) -m 0644 examples/*.dbf.hcl "$(DESTDIR)$(DATADIR)/examples/"
 
 test:
 	go test ./...

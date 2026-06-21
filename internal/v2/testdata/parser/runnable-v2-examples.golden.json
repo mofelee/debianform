@@ -1,0 +1,147 @@
+[
+  {
+    "fixture": "../../../examples/v2-bbr.dbf.hcl",
+    "hosts": [
+      {
+        "name": "bbr1",
+        "body_keys": [
+          "kernel"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-apt-repository.dbf.hcl",
+    "hosts": [
+      {
+        "name": "apt1",
+        "body_keys": [
+          "apt",
+          "packages"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-bird2.dbf.hcl",
+    "components": [
+      "bird2"
+    ],
+    "hosts": [
+      {
+        "name": "router1",
+        "components": [
+          "bird2=bird2"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-component-binary.dbf.hcl",
+    "components": [
+      "rclone"
+    ],
+    "hosts": [
+      {
+        "name": "tool1",
+        "components": [
+          "rclone=rclone"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-files-plan-preview.dbf.hcl",
+    "hosts": [
+      {
+        "name": "preview1",
+        "body_keys": [
+          "files"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-nftables.dbf.hcl",
+    "hosts": [
+      {
+        "name": "edge1",
+        "body_keys": [
+          "nftables",
+          "packages"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-plan-preview.dbf.hcl",
+    "hosts": [
+      {
+        "name": "preview1",
+        "body_keys": [
+          "nftables",
+          "secrets"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-profile-merge.dbf.hcl",
+    "profiles": [
+      {
+        "name": "base",
+        "body_keys": [
+          "packages",
+          "system"
+        ]
+      },
+      {
+        "name": "bbr",
+        "imports": [
+          "base"
+        ],
+        "body_keys": [
+          "kernel",
+          "packages"
+        ]
+      }
+    ],
+    "hosts": [
+      {
+        "name": "merge1",
+        "imports": [
+          "bbr"
+        ],
+        "body_keys": [
+          "packages",
+          "system"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-systemd-service.dbf.hcl",
+    "hosts": [
+      {
+        "name": "service1",
+        "body_keys": [
+          "files",
+          "services",
+          "systemd"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-user-group.dbf.hcl",
+    "hosts": [
+      {
+        "name": "users1",
+        "body_keys": [
+          "groups",
+          "users"
+        ]
+      }
+    ]
+  }
+]

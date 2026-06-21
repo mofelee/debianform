@@ -1,9 +1,11 @@
 package parser
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -346,6 +348,122 @@ host "edge1" {
 	content := snippet.Map["content"]
 	if content.Source.Path != `host.edge1.nftables.file["20-services"].content` {
 		t.Fatalf("snippet content source path = %q", content.Source.Path)
+	}
+}
+
+func TestParseRunnableV2ExamplesGolden(t *testing.T) {
+	summaries := []parsedExampleSummary{}
+	for _, fixture := range runnableV2ExampleFixtures() {
+		cfg, err := ParseFiles([]string{fixture})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cfg.Hosts) != 1 {
+			t.Fatalf("%s hosts = %d, want 1", fixture, len(cfg.Hosts))
+		}
+		summaries = append(summaries, summarizeParsedExample(fixture, cfg))
+	}
+
+	data, err := json.MarshalIndent(summaries, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "../testdata/parser/runnable-v2-examples.golden.json", string(data)+"\n")
+}
+
+func runnableV2ExampleFixtures() []string {
+	return []string{
+		"../../../examples/v2-bbr.dbf.hcl",
+		"../../../examples/v2-apt-repository.dbf.hcl",
+		"../../../examples/v2-bird2.dbf.hcl",
+		"../../../examples/v2-component-binary.dbf.hcl",
+		"../../../examples/v2-files-plan-preview.dbf.hcl",
+		"../../../examples/v2-nftables.dbf.hcl",
+		"../../../examples/v2-plan-preview.dbf.hcl",
+		"../../../examples/v2-profile-merge.dbf.hcl",
+		"../../../examples/v2-systemd-service.dbf.hcl",
+		"../../../examples/v2-user-group.dbf.hcl",
+	}
+}
+
+type parsedExampleSummary struct {
+	Fixture    string               `json:"fixture"`
+	Locals     []string             `json:"locals,omitempty"`
+	Profiles   []parsedBlockSummary `json:"profiles,omitempty"`
+	Components []string             `json:"components,omitempty"`
+	Hosts      []parsedBlockSummary `json:"hosts"`
+}
+
+type parsedBlockSummary struct {
+	Name       string   `json:"name"`
+	Imports    []string `json:"imports,omitempty"`
+	Components []string `json:"components,omitempty"`
+	BodyKeys   []string `json:"body_keys,omitempty"`
+}
+
+func summarizeParsedExample(fixture string, cfg *Config) parsedExampleSummary {
+	summary := parsedExampleSummary{
+		Fixture:    filepath.ToSlash(fixture),
+		Locals:     sortedKeys(cfg.Locals),
+		Components: sortedKeys(cfg.Components),
+	}
+
+	for _, name := range sortedKeys(cfg.Profiles) {
+		profile := cfg.Profiles[name]
+		summary.Profiles = append(summary.Profiles, parsedBlockSummary{
+			Name:     profile.Name,
+			Imports:  append([]string(nil), profile.Imports...),
+			BodyKeys: sortedKeys(profile.Body.Map),
+		})
+	}
+
+	for _, name := range sortedKeys(cfg.Hosts) {
+		host := cfg.Hosts[name]
+		summary.Hosts = append(summary.Hosts, parsedBlockSummary{
+			Name:       host.Name,
+			Imports:    append([]string(nil), host.Imports...),
+			Components: componentInstanceSummaries(host.Components),
+			BodyKeys:   sortedKeys(host.Body.Map),
+		})
+	}
+
+	return summary
+}
+
+func componentInstanceSummaries(instances []ComponentInstance) []string {
+	out := make([]string, 0, len(instances))
+	for _, instance := range instances {
+		out = append(out, instance.Name+"="+instance.Template)
+	}
+	return out
+}
+
+func sortedKeys[V any](values map[string]V) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func assertGolden(t *testing.T, golden string, got string) {
+	t.Helper()
+
+	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		if err := os.MkdirAll(filepath.Dir(golden), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(golden, []byte(got), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(golden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Fatalf("golden mismatch\n--- got ---\n%s\n--- want ---\n%s", got, string(want))
 	}
 }
 

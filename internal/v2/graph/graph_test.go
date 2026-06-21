@@ -76,6 +76,66 @@ func TestCompileAPTRepositoryResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileProfileMergeResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-profile-merge.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-profile-merge.golden.json", got)
+
+	for _, want := range []string{
+		`host.merge1.packages.install["curl"]`,
+		`host.merge1.packages.install["vim"]`,
+		`host.merge1.packages.install["htop"]`,
+		`host.merge1.packages.install["sudo"]`,
+		`host.merge1.kernel.module["tcp_bbr"]`,
+	} {
+		if nodeFor(resourceGraph, want) == nil {
+			t.Fatalf("resource graph missing %q", want)
+		}
+	}
+}
+
+func TestCompileSystemdServiceResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-systemd-service.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-systemd-service.golden.json", got)
+
+	serviceDeps := dependsOnFor(resourceGraph, `host.service1.services.service["myapp"]`)
+	for _, want := range []string{
+		`host.service1.systemd.unit["myapp.service"]`,
+		`host.service1.systemd.daemon_reload`,
+	} {
+		if !containsString(serviceDeps, want) {
+			t.Fatalf("myapp service deps = %#v, want %q", serviceDeps, want)
+		}
+	}
+}
+
+func TestCompileUserGroupResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-user-group.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-user-group.golden.json", got)
+
+	userDeps := dependsOnFor(resourceGraph, `host.users1.users.user["deploy"]`)
+	if !containsString(userDeps, `host.users1.groups.group["deploy"]`) {
+		t.Fatalf("deploy user deps = %#v, want deploy group dependency", userDeps)
+	}
+}
+
 func TestCompileNftablesResourceGraphGolden(t *testing.T) {
 	resourceGraph := compileGraphFixture(t, "../../../examples/v2-nftables.dbf.hcl")
 
@@ -369,11 +429,14 @@ func testHostFacts() map[string]ir.HostFacts {
 		"bbr1",
 		"edge1",
 		"foundation1",
+		"merge1",
 		"preview1",
 		"router1",
 		"server1",
 		"server2",
+		"service1",
 		"tool1",
+		"users1",
 	} {
 		out[name] = ir.HostFacts{System: ir.SystemFacts{
 			Hostname:     name,

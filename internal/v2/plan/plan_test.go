@@ -159,6 +159,80 @@ func TestComponentBinaryPlanJSONGolden(t *testing.T) {
 	}
 }
 
+func TestProfileMergePlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-profile-merge.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-profile-merge.dbf.hcl",
+		Host:        "merge1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-profile-merge.golden.json", got)
+
+	for _, want := range []string{
+		`host.merge1.packages.install["curl"]`,
+		`host.merge1.packages.install["sudo"]`,
+		`host.merge1.kernel.sysctl["net.ipv4.tcp_congestion_control"]`,
+	} {
+		if !hasChange(doc, want) {
+			t.Fatalf("profile merge plan missing change %q", want)
+		}
+	}
+}
+
+func TestSystemdServicePlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-systemd-service.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-systemd-service.dbf.hcl",
+		Host:        "service1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-systemd-service.golden.json", got)
+
+	if !hasOperation(doc, "host.service1.systemd.daemon_reload") {
+		t.Fatalf("systemd daemon reload operation missing: %#v", doc.Operations)
+	}
+	if !hasChange(doc, `host.service1.services.service["myapp"]`) {
+		t.Fatalf("myapp service change missing: %#v", doc.Changes)
+	}
+}
+
+func TestUserGroupPlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-user-group.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-user-group.dbf.hcl",
+		Host:        "users1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-user-group.golden.json", got)
+
+	for _, want := range []string{
+		`host.users1.groups.group["deploy"]`,
+		`host.users1.users.user["deploy"]`,
+	} {
+		if !hasChange(doc, want) {
+			t.Fatalf("user/group plan missing change %q", want)
+		}
+	}
+}
+
 func TestPlanHTMLDoesNotLeakSecrets(t *testing.T) {
 	doc := planFixture(t, "../testdata/fixtures/v2-foundation.dbf.hcl", Options{
 		CommandFile: "../testdata/fixtures/v2-foundation.dbf.hcl",
@@ -439,11 +513,14 @@ func testHostFacts() map[string]ir.HostFacts {
 		"bbr1",
 		"edge1",
 		"foundation1",
+		"merge1",
 		"preview1",
 		"router1",
 		"server1",
 		"server2",
+		"service1",
 		"tool1",
+		"users1",
 	} {
 		out[name] = ir.HostFacts{System: ir.SystemFacts{
 			Hostname:     name,

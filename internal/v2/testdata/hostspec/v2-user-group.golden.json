@@ -1,0 +1,114 @@
+{
+  "name": "users1",
+  "source": {
+    "file": "../../../examples/v2-user-group.dbf.hcl",
+    "line": 3,
+    "path": "host.users1"
+  },
+  "facts": {
+    "system": {
+      "hostname": "users1",
+      "architecture": "amd64",
+      "codename": "trixie"
+    }
+  },
+  "ssh": {
+    "host": "users1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../../../examples/v2-user-group.dbf.hcl",
+      "line": 3,
+      "path": "host.users1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/users1.json",
+    "lock_path": "/var/lock/debianform/state/users1.lock",
+    "source": {
+      "file": "../../../examples/v2-user-group.dbf.hcl",
+      "line": 3,
+      "path": "host.users1"
+    }
+  },
+  "system": {
+    "hostname": "users1",
+    "architecture": "amd64",
+    "codename": "trixie",
+    "source": {
+      "file": "../../../examples/v2-user-group.dbf.hcl",
+      "line": 3,
+      "path": "host.users1"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "groups": {
+      "deploy": {
+        "name": "deploy",
+        "system": true,
+        "ensure": "present",
+        "source": {
+          "file": "../../../examples/v2-user-group.dbf.hcl",
+          "line": 5,
+          "path": "host.users1.groups.group[\"deploy\"]"
+        }
+      }
+    },
+    "source": {
+      "file": "../../../examples/v2-user-group.dbf.hcl",
+      "line": 4,
+      "path": "host.users1.groups"
+    }
+  },
+  "users": {
+    "users": {
+      "deploy": {
+        "name": "deploy",
+        "group": "deploy",
+        "home": "/home/deploy",
+        "shell": "/bin/bash",
+        "ssh_authorized_keys": [
+          "ssh-ed25519 AAAA_REPLACE_ME deploy@example"
+        ],
+        "ensure": "present",
+        "source": {
+          "file": "../../../examples/v2-user-group.dbf.hcl",
+          "line": 11,
+          "path": "host.users1.users.user[\"deploy\"]"
+        }
+      }
+    },
+    "source": {
+      "file": "../../../examples/v2-user-group.dbf.hcl",
+      "line": 10,
+      "path": "host.users1.users"
+    }
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  }
+}

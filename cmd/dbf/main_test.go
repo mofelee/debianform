@@ -67,15 +67,19 @@ func TestVersionFlag(t *testing.T) {
 	}
 }
 
-func TestValidateV2BBR(t *testing.T) {
-	output := captureStdout(t, func() {
-		if err := run([]string{"validate", "-f", "../../examples/v2-bbr.dbf.hcl"}); err != nil {
-			t.Fatal(err)
-		}
-	})
+func TestValidateRunnableV2Examples(t *testing.T) {
+	for _, example := range runnableV2Examples() {
+		t.Run(filepath.Base(example), func(t *testing.T) {
+			output := captureStdout(t, func() {
+				if err := run([]string{"validate", "-f", "../../" + example}); err != nil {
+					t.Fatal(err)
+				}
+			})
 
-	if !strings.Contains(output, "v2 configuration is valid: 1 host(s)") {
-		t.Fatalf("validate output = %q", output)
+			if !strings.Contains(output, "v2 configuration is valid: 1 host(s)") {
+				t.Fatalf("validate output = %q", output)
+			}
+		})
 	}
 }
 
@@ -234,6 +238,55 @@ func TestPlanV2BBRHTML(t *testing.T) {
 	}
 }
 
+func TestREADMELocalCommandsAreCopyRunnable(t *testing.T) {
+	readme, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readmeText := string(readme)
+	for _, example := range runnableV2Examples() {
+		if !strings.Contains(readmeText, example) {
+			t.Fatalf("README does not mention runnable v2 example %s", example)
+		}
+	}
+	if strings.Contains(readmeText, "dbf plan -f examples/v2-bird2.dbf.hcl\n") {
+		t.Fatal("README contains a copy-runnable-looking online BIRD2 plan command")
+	}
+
+	dir := t.TempDir()
+	fmtFixture := filepath.Join(dir, "v2-bbr.dbf.hcl")
+	data, err := os.ReadFile("../../examples/v2-bbr.dbf.hcl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fmtFixture, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	commands := []struct {
+		name string
+		args []string
+	}{
+		{name: "validate-bbr", args: []string{"validate", "-f", "../../examples/v2-bbr.dbf.hcl"}},
+		{name: "plan-bbr-offline", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"}},
+		{name: "plan-bbr-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--offline"}},
+		{name: "plan-bbr-debug-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}},
+		{name: "plan-files-html", args: []string{"plan", "-f", "../../examples/v2-files-plan-preview.dbf.hcl", "--html", filepath.Join(dir, "plan.html"), "--offline"}},
+		{name: "fmt-bbr-copy", args: []string{"fmt", "-f", fmtFixture}},
+		{name: "validate-bird2", args: []string{"validate", "-f", "../../examples/v2-bird2.dbf.hcl"}},
+		{name: "plan-nftables-offline", args: []string{"plan", "-f", "../../examples/v2-nftables.dbf.hcl", "--offline"}},
+	}
+	for _, command := range commands {
+		t.Run(command.name, func(t *testing.T) {
+			captureStdout(t, func() {
+				if err := run(command.args); err != nil {
+					t.Fatal(err)
+				}
+			})
+		})
+	}
+}
+
 func TestFmtV2IsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")
@@ -277,6 +330,21 @@ content="hello"
 	})
 	if !strings.Contains(second, "formatted 0 file(s)") {
 		t.Fatalf("second fmt output = %q", second)
+	}
+}
+
+func runnableV2Examples() []string {
+	return []string{
+		"examples/v2-bbr.dbf.hcl",
+		"examples/v2-apt-repository.dbf.hcl",
+		"examples/v2-bird2.dbf.hcl",
+		"examples/v2-component-binary.dbf.hcl",
+		"examples/v2-files-plan-preview.dbf.hcl",
+		"examples/v2-nftables.dbf.hcl",
+		"examples/v2-plan-preview.dbf.hcl",
+		"examples/v2-profile-merge.dbf.hcl",
+		"examples/v2-systemd-service.dbf.hcl",
+		"examples/v2-user-group.dbf.hcl",
 	}
 }
 

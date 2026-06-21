@@ -1130,6 +1130,14 @@ func TestCompileComponentBinaryHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-component-binary.dbf.hcl", "../testdata/hostspec/v2-component-binary.golden.json")
 }
 
+func TestCompileSystemdServiceHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../../../examples/v2-systemd-service.dbf.hcl", "../testdata/hostspec/v2-systemd-service.golden.json")
+}
+
+func TestCompileUserGroupHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../../../examples/v2-user-group.dbf.hcl", "../testdata/hostspec/v2-user-group.golden.json")
+}
+
 func TestCompileNftablesHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-nftables.dbf.hcl", "../testdata/hostspec/v2-nftables.golden.json")
 }
@@ -1366,7 +1374,9 @@ func testHostFacts() map[string]ir.HostFacts {
 		"router1",
 		"server1",
 		"server2",
+		"service1",
 		"tool1",
+		"users1",
 	} {
 		out[name] = ir.HostFacts{System: ir.SystemFacts{
 			Hostname:     name,

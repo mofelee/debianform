@@ -12,6 +12,12 @@ DebianForm 是面向 Debian 主机的 v2 配置工具。
 
 v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源语法。
 
+## 兼容性
+
+旧实验配置格式已废弃，不再作为 CLI 入口或兼容目标。v2 文件必须使用 `host`、
+`profile`、`component`、`locals` 等 v2 顶层块；旧式低阶 resource DSL 需要迁移为
+v2 领域块或 component。
+
 ## v2 设计文档
 
 - [v2 requirements](docs/v2-requirements.md)
@@ -37,10 +43,13 @@ v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源
 - `examples/v2-systemd-service.dbf.hcl`
 - `examples/v2-user-group.dbf.hcl`
 
-其他示例仍为 design-only fixture：
+其他示例仍为 design-only fixture，仅用于表达设计方向，不作为第一版可运行样例：
 
 - `examples/v2-fleet.dbf.hcl`
 - `examples/v2-systemd-networkd-wireguard.dbf.hcl`
+
+design-only fixture 在进入可运行样例前，需要拆成小型 fixture，并加入 validate 与
+golden 测试。
 
 BBR v2 离线 plan 预览示例：
 
@@ -78,14 +87,16 @@ dbf plan -f examples/v2-bbr.dbf.hcl --format json --debug --offline
 dbf plan -f examples/v2-files-plan-preview.dbf.hcl --html plan.html --offline
 ```
 
-领域型 component 可用：
+领域型 component 可通过 validate 做本地语法和 HostSpec 检查：
 
 ```bash
-dbf plan -f examples/v2-bird2.dbf.hcl
+dbf validate -f examples/v2-bird2.dbf.hcl
 ```
 
 component 内可以读取 `target.system.codename` 等只读 host 视图，并展开为
 `host.<host>.components.<instance>...` 地址。
+这些 runtime facts 来自目标主机；需要完整 plan/apply 时，请使用可 SSH 连接的目标
+主机，或用支持的本地离线样例。
 
 component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
 它们可以声明 `source "<architecture>"` 并由运行时探测到的
@@ -137,6 +148,7 @@ dbf apply -f examples/v2-bbr.dbf.hcl --auto-approve
 dbf check -f examples/v2-bbr.dbf.hcl
 ```
 
+上述命令需要示例中的 host 能通过 SSH 连接，并且远端为受支持的 Debian 系统。
 `check` 在存在 create、update、delete、destroy 或 operation 时返回非零。
 
 多 host 配置可以限制 host 级并发：
@@ -180,6 +192,16 @@ host "service1" {
 hash、长度等摘要。`services.service.state` 支持 `running`、`stopped`、`restarted`
 和 `reloaded`。
 
+## 常见错误
+
+- `offline plan cannot resolve runtime facts`：离线 plan 遇到依赖
+  `target.system.codename` 或 `target.system.architecture` 的 component。改用
+  `dbf validate` 做本地检查，或对真实目标主机运行在线 plan。
+- `must declare system.architecture` / `must declare system.codename`：component 需要
+  runtime facts。真实主机会在线探测；纯本地 fixture 需要在 `host.system` 中显式声明。
+- component URL source 缺少 sha256：远程下载物必须声明 64 位 sha256。
+- design-only fixture 无法 apply：先拆成第一版支持的小型示例，并补 validate/golden 测试。
+
 ## 集成测试
 
 libvirt 集成测试会启动全新的 Debian 13 cloud VM，并执行 v2 `validate`、`apply` 和
@@ -195,9 +217,12 @@ make test-integration
 
 ```bash
 make build
+make install DESTDIR=/tmp/debianform-install
 make test
 make update-golden
 ```
 
 `make test` 运行 v2 Go 测试。
+`make install` 会安装 `dbf`，并把 README、`docs/` 和 `examples/` 放入
+`$(PREFIX)/share/debianform`。
 `make update-golden` 使用 `UPDATE_GOLDEN=1` 刷新 snapshot/golden 测试输出。
