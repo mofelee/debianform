@@ -130,6 +130,37 @@ func TestNativeProviderAPTSigningKeyURL(t *testing.T) {
 	}
 }
 
+func TestNativeProviderPackageInstallRefreshesMissingAPTCache(t *testing.T) {
+	node := graph.Node{
+		Address: "host.server1.packages.install[\"nftables\"]",
+		Host:    "server1",
+		Kind:    "package",
+		Desired: map[string]any{
+			"name":   "nftables",
+			"ensure": "present",
+		},
+	}
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[len(runner.scripts)-1]
+	for _, want := range []string{
+		"apt-cache policy 'nftables'",
+		"apt-get update",
+		"apt-get install -y 'nftables'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("package install script missing %q:\n%s", want, applied)
+		}
+	}
+	if strings.Index(applied, "apt-get update") > strings.Index(applied, "apt-get install -y 'nftables'") {
+		t.Fatalf("package install should refresh apt cache before install:\n%s", applied)
+	}
+}
+
 func TestNativeProviderComponentDownloadURL(t *testing.T) {
 	node := graph.Node{
 		Address: "host.server1.components.rclone.artifact.download[\"amd64\"]",

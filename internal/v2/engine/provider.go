@@ -764,6 +764,11 @@ func (p NativeProvider) applyPackage(ctx context.Context, step Step) (map[string
 	if ensureAbsent(step.Node) || step.Action == ActionDelete {
 		lines = append(lines, "apt-get remove -y "+shellQuote(name))
 	} else {
+		lines = append(lines,
+			"if ! apt-cache policy "+shellQuote(name)+" | awk '$1 == \"Candidate:\" && $2 != \"(none)\" { found = 1 } END { exit found ? 0 : 1 }'; then",
+			"  apt-get update",
+			"fi",
+		)
 		lines = append(lines, "apt-get install -y "+shellQuote(name))
 	}
 	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
