@@ -205,8 +205,8 @@ users {
 
 ## System
 
-`system` 描述用户希望管理的基础系统配置；主机架构和 Debian codename 属于运行时
-facts，通常不需要在 DSL 中手写：
+`system` 描述用户希望管理的基础系统配置。`hostname` 是 desired state，声明后表示要设置
+远端 hostname；主机架构和 Debian codename 属于运行时 facts，通常不需要在 DSL 中手写：
 
 ```hcl
 system {
@@ -217,13 +217,16 @@ system {
 
 要求：
 
-- `hostname` 默认等于 host label。
+- `hostname` 默认等于 host label；显式声明时表示期望远端 hostname 收敛到该值。
 - `architecture` 使用 DebianForm 规范架构名，例如 `amd64`、`arm64`，由在线
   `plan`/`check`/`apply` 在连接目标后探测；显式声明时必须与探测结果一致。
 - `codename` 是 Debian release codename，例如 `bookworm`、`trixie`，由在线
   `plan`/`check`/`apply` 从 `/etc/os-release` 或 `lsb_release` 探测。
-- 探测到的 `architecture`、`codename` 和远端 `hostname` 写入 state 顶层
-  `facts.system`，并在 component 实例化前注入 `target.system` 只读视图。
+- 探测到的 `architecture`、`codename` 和当前远端 hostname 写入 state 顶层
+  `facts.system`。其中 `facts.system.hostname` 是 observed value，不会覆盖
+  `system.hostname` desired value。
+- `target.system.hostname` 来自配置中的 desired hostname；`target.system.architecture` 和
+  `target.system.codename` 来自显式断言或在线探测 facts。
 - 离线 `validate` 不依赖 SSH；`plan --offline` 只生成纯本地预览。
 - `timezone` 和 `locale` 可由 profile 提供。
 - `hostname`、`architecture` 和 `codename` 只能在 host 中声明，profile 中声明应报错。

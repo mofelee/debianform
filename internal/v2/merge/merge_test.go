@@ -620,6 +620,84 @@ host "server1" {
 	}
 }
 
+func TestCompileRejectsDeclaredRuntimeFactMismatch(t *testing.T) {
+	tests := []struct {
+		name  string
+		body  string
+		facts ir.SystemFacts
+		want  string
+	}{
+		{
+			name: "architecture",
+			body: `
+host "server1" {
+  system {
+    architecture = "arm64"
+  }
+}
+`,
+			facts: ir.SystemFacts{Architecture: "amd64", Codename: "trixie"},
+			want:  `declared architecture "arm64" does not match detected architecture "amd64"`,
+		},
+		{
+			name: "codename",
+			body: `
+host "server1" {
+  system {
+    architecture = "amd64"
+    codename     = "bookworm"
+  }
+}
+`,
+			facts: ir.SystemFacts{Architecture: "amd64", Codename: "trixie"},
+			want:  `declared codename "bookworm" does not match detected codename "trixie"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := parseInline(t, tt.body)
+			_, err := CompileWithOptions(cfg, CompileOptions{
+				HostFacts: map[string]ir.HostFacts{
+					"server1": {System: tt.facts},
+				},
+			})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("CompileWithOptions error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompileKeepsDesiredHostnameSeparateFromObservedFacts(t *testing.T) {
+	cfg := parseInline(t, `
+host "server1" {
+  system {
+    hostname = "desired-hostname"
+  }
+}
+`)
+	program, err := CompileWithOptions(cfg, CompileOptions{
+		HostFacts: map[string]ir.HostFacts{
+			"server1": {System: ir.SystemFacts{
+				Hostname:     "observed-hostname",
+				Architecture: "amd64",
+				Codename:     "trixie",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := program.Hosts[0]
+	if host.System.Hostname != "desired-hostname" {
+		t.Fatalf("desired hostname = %q, want desired-hostname", host.System.Hostname)
+	}
+	if host.Facts.System.Hostname != "observed-hostname" {
+		t.Fatalf("observed hostname fact = %q, want observed-hostname", host.Facts.System.Hostname)
+	}
+}
+
 func TestCompileComponentTemplateSpecAndArtifactTypes(t *testing.T) {
 	program := compileInline(t, `
 component "artifact_file" {
