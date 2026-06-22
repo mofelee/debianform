@@ -107,11 +107,6 @@ component "shadowsocks_rust" {
 }
 
 host "ss1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   components = [
     component.shadowsocks_rust,
   ]

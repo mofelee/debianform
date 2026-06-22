@@ -9,9 +9,4 @@ host "cihost" {
     path      = "/var/lib/debianform-integration/shadowsocks-rust-state.json"
     lock_path = "/var/lock/debianform-integration/shadowsocks-rust-state.lock"
   }
-
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
 }

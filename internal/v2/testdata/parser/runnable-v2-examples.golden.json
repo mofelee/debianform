@@ -140,9 +140,6 @@
         "name": "ss1",
         "components": [
           "shadowsocks_rust=shadowsocks_rust"
-        ],
-        "body_keys": [
-          "system"
         ]
       }
     ]
