@@ -24,6 +24,7 @@ v2 领域块或 component。
 - [v2 IR requirements](docs/v2-ir-requirements.zh.md)
 - [v2 plan format](docs/v2-plan-format.md)
 - [v2 state](docs/v2-state.md)
+- [v2 systemd service units](docs/v2-systemd-service-units.md)
 - [v2 implementation plan](docs/v2-implementation-plan.zh.md)
 
 ## v2 示例
@@ -42,6 +43,7 @@ v2 领域块或 component。
 - `examples/v2-plan-preview.dbf.hcl`
 - `examples/v2-profile-merge.dbf.hcl`
 - `examples/v2-systemd-service.dbf.hcl`
+- `examples/v2-systemd-service-unit.dbf.hcl`
 - `examples/v2-user-group.dbf.hcl`
 
 其他示例仍为 design-only fixture，仅用于表达设计方向，不作为第一版可运行样例：
@@ -160,7 +162,11 @@ dbf apply --parallel 4 --auto-approve
 
 每台 host 内部仍按 ResourceGraph 的确定性顺序串行执行。
 
-基础系统配置示例：
+systemd service unit 可以用纯文本写完整 unit，也可以用结构化 `service_unit`
+生成常见 `.service`。两者都配合 `services.service` 管理 enabled/running 状态。
+完整对比见 [v2 systemd service units](docs/v2-systemd-service-units.md)。
+
+纯文本写法：
 
 ```hcl
 host "service1" {
@@ -177,6 +183,39 @@ host "service1" {
         [Service]
         ExecStart=/usr/local/bin/myapp --config /etc/myapp/config.yaml
       EOF
+    }
+  }
+
+  services {
+    service "myapp" {
+      enabled = true
+      state   = "running"
+    }
+  }
+}
+```
+
+结构化写法：
+
+```hcl
+host "service2" {
+  files {
+    file "/etc/myapp/config.yaml" {
+      mode    = "0644"
+      content = "listen: 127.0.0.1:8080\n"
+    }
+  }
+
+  systemd {
+    service_unit "myapp" {
+      description = "My App"
+      run         = ["/usr/local/bin/myapp", "--config", "/etc/myapp/config.yaml"]
+
+      working_dir   = "/var/lib/myapp"
+      restart       = "always"
+      restart_delay = "5s"
+      after         = ["network-online.target"]
+      wants         = ["network-online.target"]
     }
   }
 
@@ -213,6 +252,8 @@ make test-integration-layout
 make test-integration-case CASE=apt-source
 make test-integration-case CASE=bbr
 make test-integration-case CASE=files
+make test-integration-case CASE=nftables
+make test-integration-case CASE=systemd-service-unit
 make test-integration
 ```
 

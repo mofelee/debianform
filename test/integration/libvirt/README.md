@@ -16,6 +16,7 @@ make test-integration-case CASE=apt-source
 make test-integration-case CASE=bbr
 make test-integration-case CASE=files
 make test-integration-case CASE=nftables
+make test-integration-case CASE=systemd-service-unit
 ```
 
 Validate the case layout without starting a VM:

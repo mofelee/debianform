@@ -144,6 +144,20 @@
     ]
   },
   {
+    "fixture": "../../../examples/v2-systemd-service-unit.dbf.hcl",
+    "hosts": [
+      {
+        "name": "service_unit1",
+        "body_keys": [
+          "directories",
+          "files",
+          "services",
+          "systemd"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/v2-user-group.dbf.hcl",
     "hosts": [
       {

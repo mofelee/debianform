@@ -383,6 +383,7 @@ func runnableV2ExampleFixtures() []string {
 		"../../../examples/v2-plan-preview.dbf.hcl",
 		"../../../examples/v2-profile-merge.dbf.hcl",
 		"../../../examples/v2-systemd-service.dbf.hcl",
+		"../../../examples/v2-systemd-service-unit.dbf.hcl",
 		"../../../examples/v2-user-group.dbf.hcl",
 	}
 }

@@ -1837,70 +1837,480 @@ func userSpecs(users parser.Value) (map[string]ir.ManagedUser, error) {
 
 func systemdSpecs(systemd parser.Value) (map[string]ir.SystemdUnit, error) {
 	objects, ok, err := objectCollection(systemd, "unit")
-	if err != nil || !ok {
-		return map[string]ir.SystemdUnit{}, err
+	if err != nil {
+		return nil, err
 	}
-	out := make(map[string]ir.SystemdUnit, len(objects))
-	for _, name := range sortedKeys(objects) {
-		item := objects[name]
-		if name == "" {
-			return nil, fmt.Errorf("%s:%d:%s: systemd unit name must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
-		}
-		ensure, err := ensureField(item, "present")
-		if err != nil {
-			return nil, err
-		}
-		content, hasContent, err := stringField(item, "content")
-		if err != nil {
-			return nil, err
-		}
-		sourcePath, hasSource, err := stringField(item, "source")
-		if err != nil {
-			return nil, err
-		}
-		if ensure == "present" && hasContent == hasSource {
-			return nil, fmt.Errorf("%s:%d:%s: systemd.unit requires exactly one of content or source when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
-		}
-		owner, err := stringFieldDefault(item, "owner", "root")
-		if err != nil {
-			return nil, err
-		}
-		group, err := stringFieldDefault(item, "group", "root")
-		if err != nil {
-			return nil, err
-		}
-		mode, err := modeFieldDefault(item, "mode", "0644")
-		if err != nil {
-			return nil, err
-		}
-		lifecycle, err := lifecycleSpec(item)
-		if err != nil {
-			return nil, err
-		}
-		unit := ir.SystemdUnit{
-			Name:       name,
-			Path:       "/etc/systemd/system/" + name,
-			Content:    content,
-			SourcePath: resolvePath(item.Source.File, sourcePath),
-			Owner:      owner,
-			Group:      group,
-			Mode:       mode,
-			Ensure:     ensure,
-			Lifecycle:  lifecycle,
-			Source:     item.Source,
-		}
-		if hasContent {
-			unit.Summary = contentSummary([]byte(content))
-		} else if hasSource {
-			summary, err := fileSummary(unit.SourcePath, item.Source)
+	serviceObjects, serviceOK, err := objectCollection(systemd, "service_unit")
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]ir.SystemdUnit, len(objects)+len(serviceObjects))
+	if ok {
+		for _, name := range sortedKeys(objects) {
+			item := objects[name]
+			if name == "" {
+				return nil, fmt.Errorf("%s:%d:%s: systemd unit name must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+			}
+			unit, err := systemdUnitSpec(name, item)
 			if err != nil {
 				return nil, err
 			}
-			unit.Summary = summary
+			if err := addSystemdUnit(out, unit); err != nil {
+				return nil, err
+			}
 		}
-		out[name] = unit
+	}
+	if serviceOK {
+		for _, name := range sortedKeys(serviceObjects) {
+			item := serviceObjects[name]
+			if name == "" {
+				return nil, fmt.Errorf("%s:%d:%s: systemd service_unit name must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+			}
+			unit, err := systemdServiceUnitSpec(name, item)
+			if err != nil {
+				return nil, err
+			}
+			if err := addSystemdUnit(out, unit); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return out, nil
+}
+
+func addSystemdUnit(units map[string]ir.SystemdUnit, unit ir.SystemdUnit) error {
+	if previous, exists := units[unit.Name]; exists {
+		return fmt.Errorf("%s:%d:%s: systemd unit %q conflicts with unit declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, unit.Name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+	}
+	units[unit.Name] = unit
+	return nil
+}
+
+func systemdUnitSpec(name string, item parser.Value) (ir.SystemdUnit, error) {
+	ensure, err := ensureField(item, "present")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	content, hasContent, err := stringField(item, "content")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	sourcePath, hasSource, err := stringField(item, "source")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	if ensure == "present" && hasContent == hasSource {
+		return ir.SystemdUnit{}, fmt.Errorf("%s:%d:%s: systemd.unit requires exactly one of content or source when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	owner, err := stringFieldDefault(item, "owner", "root")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	group, err := stringFieldDefault(item, "group", "root")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	mode, err := modeFieldDefault(item, "mode", "0644")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	lifecycle, err := lifecycleSpec(item)
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	unit := ir.SystemdUnit{
+		Name:       name,
+		Path:       "/etc/systemd/system/" + name,
+		Content:    content,
+		SourcePath: resolvePath(item.Source.File, sourcePath),
+		Owner:      owner,
+		Group:      group,
+		Mode:       mode,
+		Ensure:     ensure,
+		Lifecycle:  lifecycle,
+		Source:     item.Source,
+	}
+	if hasContent {
+		unit.Summary = contentSummary([]byte(content))
+	} else if hasSource {
+		summary, err := fileSummary(unit.SourcePath, item.Source)
+		if err != nil {
+			return ir.SystemdUnit{}, err
+		}
+		unit.Summary = summary
+	}
+	return unit, nil
+}
+
+func systemdServiceUnitSpec(name string, item parser.Value) (ir.SystemdUnit, error) {
+	unitName := serviceUnitName(name)
+	ensure, err := ensureField(item, "present")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	content, hasContent, err := stringField(item, "content")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	sourcePath, hasSource, err := stringField(item, "source")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	hasRawUnit := hasContent || hasSource
+	hasStructuredFields := systemdServiceUnitHasStructuredFields(item)
+	if hasRawUnit {
+		if ensure == "present" && hasContent == hasSource {
+			return ir.SystemdUnit{}, fmt.Errorf("%s:%d:%s: systemd.service_unit requires exactly one of content or source when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		if hasStructuredFields {
+			return ir.SystemdUnit{}, fmt.Errorf("%s:%d:%s: systemd.service_unit cannot combine content/source with structured service fields", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+	} else if ensure == "present" {
+		content, err = renderSystemdServiceUnit(unitName, item)
+		if err != nil {
+			return ir.SystemdUnit{}, err
+		}
+		hasContent = true
+	}
+	owner, err := stringFieldDefault(item, "owner", "root")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	group, err := stringFieldDefault(item, "file_group", "root")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	mode, err := modeFieldDefault(item, "mode", "0644")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	lifecycle, err := lifecycleSpec(item)
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	unit := ir.SystemdUnit{
+		Name:       unitName,
+		Path:       "/etc/systemd/system/" + unitName,
+		Content:    content,
+		SourcePath: resolvePath(item.Source.File, sourcePath),
+		Owner:      owner,
+		Group:      group,
+		Mode:       mode,
+		Ensure:     ensure,
+		Lifecycle:  lifecycle,
+		Source:     item.Source,
+	}
+	if hasContent {
+		unit.Summary = contentSummary([]byte(content))
+	} else if hasSource {
+		summary, err := fileSummary(unit.SourcePath, item.Source)
+		if err != nil {
+			return ir.SystemdUnit{}, err
+		}
+		unit.Summary = summary
+	}
+	return unit, nil
+}
+
+func systemdServiceUnitHasStructuredFields(item parser.Value) bool {
+	for _, name := range []string{
+		"description", "run", "type", "user", "group", "working_dir",
+		"environment", "restart", "restart_delay", "wants", "after",
+		"wanted_by", "stdout", "stderr",
+	} {
+		if _, ok := item.Map[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func renderSystemdServiceUnit(unitName string, item parser.Value) (string, error) {
+	run, ok, err := systemdRunCommandField(item, "run")
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("%s:%d:%s.run: systemd.service_unit requires run unless content or source is used", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	description, ok, err := stringField(item, "description")
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		description = strings.TrimSuffix(unitName, ".service")
+	} else if strings.TrimSpace(description) == "" {
+		return "", fmt.Errorf("%s:%d:%s.description: must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	unitLines := []string{}
+	if err := appendSystemdAssignment(&unitLines, "Description", description, item.Source); err != nil {
+		return "", err
+	}
+	wants, err := stringListField(item, "wants")
+	if err != nil {
+		return "", err
+	}
+	if len(wants) > 0 {
+		value, err := systemdUnitListValue(wants, item.Map["wants"].Source)
+		if err != nil {
+			return "", err
+		}
+		if err := appendSystemdAssignment(&unitLines, "Wants", value, item.Map["wants"].Source); err != nil {
+			return "", err
+		}
+	}
+	after, err := stringListField(item, "after")
+	if err != nil {
+		return "", err
+	}
+	if len(after) > 0 {
+		value, err := systemdUnitListValue(after, item.Map["after"].Source)
+		if err != nil {
+			return "", err
+		}
+		if err := appendSystemdAssignment(&unitLines, "After", value, item.Map["after"].Source); err != nil {
+			return "", err
+		}
+	}
+
+	serviceLines := []string{}
+	if value, ok, err := stringField(item, "type"); err != nil {
+		return "", err
+	} else if ok {
+		if err := validateSystemdServiceType(value, item.Map["type"].Source); err != nil {
+			return "", err
+		}
+		if err := appendSystemdAssignment(&serviceLines, "Type", value, item.Map["type"].Source); err != nil {
+			return "", err
+		}
+	}
+	if value, ok, err := stringField(item, "user"); err != nil {
+		return "", err
+	} else if ok {
+		if strings.TrimSpace(value) == "" {
+			return "", fmt.Errorf("%s:%d:%s.user: must be non-empty", item.Source.File, item.Map["user"].Source.Line, item.Map["user"].Source.Path)
+		}
+		if err := appendSystemdAssignment(&serviceLines, "User", value, item.Map["user"].Source); err != nil {
+			return "", err
+		}
+	}
+	if value, ok, err := stringField(item, "group"); err != nil {
+		return "", err
+	} else if ok {
+		if strings.TrimSpace(value) == "" {
+			return "", fmt.Errorf("%s:%d:%s.group: must be non-empty", item.Source.File, item.Map["group"].Source.Line, item.Map["group"].Source.Path)
+		}
+		if err := appendSystemdAssignment(&serviceLines, "Group", value, item.Map["group"].Source); err != nil {
+			return "", err
+		}
+	}
+	if value, ok, err := stringField(item, "working_dir"); err != nil {
+		return "", err
+	} else if ok {
+		if strings.TrimSpace(value) == "" {
+			return "", fmt.Errorf("%s:%d:%s.working_dir: must be non-empty", item.Source.File, item.Map["working_dir"].Source.Line, item.Map["working_dir"].Source.Path)
+		}
+		if err := appendSystemdAssignment(&serviceLines, "WorkingDirectory", value, item.Map["working_dir"].Source); err != nil {
+			return "", err
+		}
+	}
+	environment, err := stringMapField(item, "environment")
+	if err != nil {
+		return "", err
+	}
+	if len(environment) > 0 {
+		for _, name := range sortedKeys(environment) {
+			if !systemdEnvironmentNamePattern.MatchString(name) {
+				source := item.Map["environment"].Map[name].Source
+				return "", fmt.Errorf("%s:%d:%s: environment variable name %q is invalid", source.File, source.Line, source.Path, name)
+			}
+			value := environment[name]
+			source := item.Map["environment"].Map[name].Source
+			if err := validateSystemdSingleLine(value, source); err != nil {
+				return "", err
+			}
+			serviceLines = append(serviceLines, "Environment="+systemdQuoteToken(name+"="+value))
+		}
+	}
+	if err := appendSystemdAssignment(&serviceLines, "ExecStart", run, item.Map["run"].Source); err != nil {
+		return "", err
+	}
+	if value, ok, err := stringField(item, "restart"); err != nil {
+		return "", err
+	} else if ok {
+		if err := validateSystemdRestart(value, item.Map["restart"].Source); err != nil {
+			return "", err
+		}
+		if err := appendSystemdAssignment(&serviceLines, "Restart", value, item.Map["restart"].Source); err != nil {
+			return "", err
+		}
+	}
+	if value, ok, err := stringField(item, "restart_delay"); err != nil {
+		return "", err
+	} else if ok {
+		if strings.TrimSpace(value) == "" {
+			return "", fmt.Errorf("%s:%d:%s.restart_delay: must be non-empty", item.Source.File, item.Map["restart_delay"].Source.Line, item.Map["restart_delay"].Source.Path)
+		}
+		if err := appendSystemdAssignment(&serviceLines, "RestartSec", value, item.Map["restart_delay"].Source); err != nil {
+			return "", err
+		}
+	}
+	if value, ok, err := stringField(item, "stdout"); err != nil {
+		return "", err
+	} else if ok {
+		if err := appendSystemdAssignment(&serviceLines, "StandardOutput", value, item.Map["stdout"].Source); err != nil {
+			return "", err
+		}
+	}
+	if value, ok, err := stringField(item, "stderr"); err != nil {
+		return "", err
+	} else if ok {
+		if err := appendSystemdAssignment(&serviceLines, "StandardError", value, item.Map["stderr"].Source); err != nil {
+			return "", err
+		}
+	}
+
+	wantedBy, hasWantedBy, err := optionalStringListField(item, "wanted_by")
+	if err != nil {
+		return "", err
+	}
+	wantedBySource := item.Source
+	if !hasWantedBy {
+		wantedBy = []string{"multi-user.target"}
+	} else {
+		wantedBySource = item.Map["wanted_by"].Source
+	}
+	installLines := []string{}
+	if len(wantedBy) > 0 {
+		value, err := systemdUnitListValue(wantedBy, wantedBySource)
+		if err != nil {
+			return "", err
+		}
+		if err := appendSystemdAssignment(&installLines, "WantedBy", value, wantedBySource); err != nil {
+			return "", err
+		}
+	}
+
+	lines := []string{"[Unit]"}
+	lines = append(lines, unitLines...)
+	lines = append(lines, "", "[Service]")
+	lines = append(lines, serviceLines...)
+	if len(installLines) > 0 {
+		lines = append(lines, "", "[Install]")
+		lines = append(lines, installLines...)
+	}
+	return strings.Join(lines, "\n") + "\n", nil
+}
+
+func systemdRunCommandField(root parser.Value, name string) (string, bool, error) {
+	value, ok := root.Map[name]
+	if !ok {
+		return "", false, nil
+	}
+	if str, ok := value.StringValue(); ok {
+		if strings.TrimSpace(str) == "" {
+			return "", false, fmt.Errorf("%s:%d:%s: must be a non-empty string or list of strings", value.Source.File, value.Source.Line, value.Source.Path)
+		}
+		if err := validateSystemdSingleLine(str, value.Source); err != nil {
+			return "", false, err
+		}
+		return str, true, nil
+	}
+	if !value.IsList() {
+		return "", false, fmt.Errorf("%s:%d:%s: must be a non-empty string or list of strings", value.Source.File, value.Source.Line, value.Source.Path)
+	}
+	if len(value.List) == 0 {
+		return "", false, fmt.Errorf("%s:%d:%s: must be a non-empty string or list of strings", value.Source.File, value.Source.Line, value.Source.Path)
+	}
+	args := make([]string, 0, len(value.List))
+	for _, item := range value.List {
+		arg, ok := item.StringValue()
+		if !ok || arg == "" {
+			return "", false, fmt.Errorf("%s:%d:%s: run entries must be non-empty strings", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		if err := validateSystemdSingleLine(arg, item.Source); err != nil {
+			return "", false, err
+		}
+		args = append(args, systemdQuoteToken(arg))
+	}
+	return strings.Join(args, " "), true, nil
+}
+
+func optionalStringListField(root parser.Value, name string) ([]string, bool, error) {
+	if _, ok := root.Map[name]; !ok {
+		return nil, false, nil
+	}
+	values, err := stringListField(root, name)
+	if err != nil {
+		return nil, false, err
+	}
+	return values, true, nil
+}
+
+func stringMapField(root parser.Value, name string) (map[string]string, error) {
+	value, ok, err := mapField(root, name)
+	if err != nil || !ok {
+		return nil, err
+	}
+	out := make(map[string]string, len(value.Map))
+	for _, key := range sortedKeys(value.Map) {
+		item := value.Map[key]
+		str, ok := item.StringValue()
+		if !ok {
+			return nil, fmt.Errorf("%s:%d:%s: map values must be strings", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		out[key] = str
+	}
+	return out, nil
+}
+
+func appendSystemdAssignment(lines *[]string, key string, value string, source ir.SourceRef) error {
+	if err := validateSystemdSingleLine(value, source); err != nil {
+		return err
+	}
+	*lines = append(*lines, key+"="+value)
+	return nil
+}
+
+func validateSystemdSingleLine(value string, source ir.SourceRef) error {
+	if strings.ContainsAny(value, "\x00\n\r") {
+		return fmt.Errorf("%s:%d:%s: systemd unit values must be single-line strings", source.File, source.Line, source.Path)
+	}
+	return nil
+}
+
+func systemdUnitListValue(values []string, source ir.SourceRef) (string, error) {
+	for _, value := range values {
+		if value == "" || strings.ContainsAny(value, " \t\n\r\x00") {
+			return "", fmt.Errorf("%s:%d:%s: systemd unit names must be non-empty strings without whitespace", source.File, source.Line, source.Path)
+		}
+	}
+	return strings.Join(values, " "), nil
+}
+
+func systemdQuoteToken(value string) string {
+	if systemdSafeTokenPattern.MatchString(value) {
+		return value
+	}
+	return strconv.Quote(value)
+}
+
+func validateSystemdServiceType(value string, source ir.SourceRef) error {
+	switch value {
+	case "simple", "exec", "forking", "oneshot", "dbus", "notify", "notify-reload", "idle":
+		return nil
+	default:
+		return fmt.Errorf("%s:%d:%s: service type must be simple, exec, forking, oneshot, dbus, notify, notify-reload, or idle", source.File, source.Line, source.Path)
+	}
+}
+
+func validateSystemdRestart(value string, source ir.SourceRef) error {
+	switch value {
+	case "no", "on-success", "on-failure", "on-abnormal", "on-watchdog", "on-abort", "always":
+		return nil
+	default:
+		return fmt.Errorf("%s:%d:%s: restart must be no, on-success, on-failure, on-abnormal, on-watchdog, on-abort, or always", source.File, source.Line, source.Path)
+	}
 }
 
 func serviceSpecs(services parser.Value) (map[string]ir.ManagedService, error) {
@@ -2318,8 +2728,10 @@ func boolFieldDefault(root parser.Value, name string, fallback bool) (bool, erro
 }
 
 var (
-	modePattern   = regexp.MustCompile(`^0[0-7]{3}$`)
-	sha256Pattern = regexp.MustCompile(`(?i)^[0-9a-f]{64}$`)
+	modePattern                   = regexp.MustCompile(`^0[0-7]{3}$`)
+	sha256Pattern                 = regexp.MustCompile(`(?i)^[0-9a-f]{64}$`)
+	systemdEnvironmentNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	systemdSafeTokenPattern       = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
 )
 
 func validServiceState(state string) bool {

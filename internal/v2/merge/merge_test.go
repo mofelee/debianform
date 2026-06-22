@@ -1162,6 +1162,97 @@ func TestCompileSystemdServiceHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-systemd-service.dbf.hcl", "../testdata/hostspec/v2-systemd-service.golden.json")
 }
 
+func TestCompileSystemdServiceUnitStructured(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  systemd {
+    service_unit "myapp" {
+      description   = "My App"
+      run           = ["/opt/myapp/bin/myapp", "--config", "/etc/myapp/config.yaml"]
+      type          = "simple"
+      user          = "myapp"
+      group         = "myapp"
+      working_dir   = "/var/lib/myapp"
+      restart       = "always"
+      restart_delay = "5s"
+      wants         = ["network-online.target"]
+      after         = ["network-online.target"]
+      stdout        = "journal"
+      stderr        = "journal"
+
+      environment = {
+        MYAPP_ENV = "production"
+        PATH      = "/usr/local/bin:/usr/bin:/bin"
+      }
+    }
+  }
+
+  services {
+    service "myapp" {
+      enabled = true
+      state   = "running"
+    }
+  }
+}
+`)
+
+	host := program.Hosts[0]
+	unit, ok := host.Systemd.Units["myapp.service"]
+	if !ok {
+		t.Fatalf("myapp.service unit missing: %#v", host.Systemd.Units)
+	}
+	wantContent := `[Unit]
+Description=My App
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=myapp
+Group=myapp
+WorkingDirectory=/var/lib/myapp
+Environment=MYAPP_ENV=production
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/myapp/bin/myapp --config /etc/myapp/config.yaml
+Restart=always
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+`
+	if unit.Content != wantContent {
+		t.Fatalf("unit content mismatch\n--- got ---\n%s\n--- want ---\n%s", unit.Content, wantContent)
+	}
+	if unit.Path != "/etc/systemd/system/myapp.service" || unit.Owner != "root" || unit.Group != "root" || unit.Mode != "0644" {
+		t.Fatalf("unit metadata = %#v", unit)
+	}
+	if got := host.Services.Services["myapp"].Unit; got != "myapp.service" {
+		t.Fatalf("service unit = %q, want myapp.service", got)
+	}
+}
+
+func TestCompileSystemdServiceUnitRawContent(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  systemd {
+    service_unit "myapp" {
+      content = "[Service]\nExecStart=/bin/true\n"
+    }
+  }
+}
+`)
+
+	unit, ok := program.Hosts[0].Systemd.Units["myapp.service"]
+	if !ok {
+		t.Fatalf("myapp.service unit missing")
+	}
+	if unit.Content != "[Service]\nExecStart=/bin/true\n" {
+		t.Fatalf("unit content = %q", unit.Content)
+	}
+}
+
 func TestCompileUserGroupHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-user-group.dbf.hcl", "../testdata/hostspec/v2-user-group.golden.json")
 }
@@ -1212,6 +1303,20 @@ host "server1" {
 }
 `,
 			want: "mode must be a four digit octal string",
+		},
+		{
+			name: "service unit raw and structured",
+			hcl: `
+host "server1" {
+  systemd {
+    service_unit "myapp" {
+      content = "[Service]\nExecStart=/bin/true\n"
+      run     = ["/bin/true"]
+    }
+  }
+}
+`,
+			want: "cannot combine content/source with structured service fields",
 		},
 		{
 			name: "missing group reference",

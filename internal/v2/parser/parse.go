@@ -1001,7 +1001,7 @@ func allowedDomainObjectBlocks(domain string) map[string]struct{} {
 	case "users":
 		return attrSet("user")
 	case "systemd":
-		return attrSet("unit")
+		return attrSet("unit", "service_unit")
 	case "services":
 		return attrSet("service")
 	case "nftables":
@@ -1031,6 +1031,13 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 		return attrSet("uid", "home", "shell", "group", "groups", "system", "ssh_authorized_keys", "ensure")
 	case "systemd.unit":
 		return attrSet("content", "source", "owner", "group", "mode", "ensure")
+	case "systemd.service_unit":
+		return attrSet(
+			"content", "source", "owner", "file_group", "mode", "ensure",
+			"description", "run", "type", "user", "group", "working_dir",
+			"environment", "restart", "restart_delay", "wants", "after",
+			"wanted_by", "stdout", "stderr",
+		)
 	case "services.service":
 		return attrSet("package", "enabled", "state")
 	case "nftables.file":

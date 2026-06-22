@@ -336,6 +336,35 @@ host "server1" {
 	}
 }
 
+func TestCompileServiceUnitDependency(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "server1" {
+  systemd {
+    service_unit "worker" {
+      run = ["/bin/true"]
+    }
+  }
+
+  services {
+    service "worker" {
+      enabled = true
+      state   = "running"
+    }
+  }
+}
+`)
+
+	serviceDeps := dependsOnFor(resourceGraph, `host.server1.services.service["worker"]`)
+	for _, want := range []string{
+		`host.server1.systemd.unit["worker.service"]`,
+		`host.server1.systemd.daemon_reload`,
+	} {
+		if !containsString(serviceDeps, want) {
+			t.Fatalf("service deps = %#v, want %q", serviceDeps, want)
+		}
+	}
+}
+
 func TestCompileAPTRepositoryDependencies(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {
