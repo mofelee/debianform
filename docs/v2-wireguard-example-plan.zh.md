@@ -66,7 +66,8 @@ test/integration/libvirt/cases/wireguard/
 - Step 1：写入 private key、`.netdev`、`.network`。
 - Step 2：启动/reload networkd，验证 `wg0` 地址和双向 ping。
 - Step 3：删除 A 的 `.netdev` 制造 drift，验证 `dbf check` 失败并由 apply 修复。
-- Step 4：把 networkd 文件声明为 absent，删除 `wg0`，但保留 private key。
+- Step 4：把 networkd 文件声明为 absent，删除 `wg0`，从 state 移除 networkd
+  file resources，但保留 private key。
 - Step 5：移除 component，销毁 private key、networkd 文件和 state resources。
 
 断言重点：
