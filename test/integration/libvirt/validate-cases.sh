@@ -23,11 +23,18 @@ if [[ -z "$DBF_BIN" ]]; then
   DBF_BIN="$TEMP_DBF"
 fi
 
+bash -n "$ROOT_DIR/test/integration/libvirt/run-case.sh"
+bash -n "$ROOT_DIR/test/integration/libvirt/run-two-host-case.sh"
+
 failed=0
 case_count=0
 while IFS= read -r case_dir; do
   case_count=$((case_count + 1))
   case_name="$(basename "$case_dir")"
+  two_host=0
+  if [[ -f "$case_dir/two-host.case" ]]; then
+    two_host=1
+  fi
   configs=()
   next_step=1
   while [[ -f "$case_dir/$next_step.dbf.hcl" ]]; do
@@ -66,6 +73,17 @@ while IFS= read -r case_dir; do
 
     validation="$("$DBF_BIN" validate -f "$config")"
     printf '[layout:%s] %s\n' "$case_name" "$validation"
+
+    if (( two_host == 1 )); then
+      if ! grep -Eq '__DBF_WG_A_SSH_HOST__|host[[:space:]]+"wg-a"' "$config"; then
+        printf '%s: two-host config %s should declare or template host wg-a\n' "$case_name" "$(basename "$config")" >&2
+        failed=1
+      fi
+      if ! grep -Eq '__DBF_WG_B_SSH_HOST__|host[[:space:]]+"wg-b"' "$config"; then
+        printf '%s: two-host config %s should declare or template host wg-b\n' "$case_name" "$(basename "$config")" >&2
+        failed=1
+      fi
+    fi
   done
 done < <(find "$CASES_DIR" -mindepth 1 -maxdepth 1 -type d | sort)
 
