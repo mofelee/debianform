@@ -345,11 +345,28 @@ type ComponentTemplateSpec struct {
 }
 
 type ComponentInputSpec struct {
-	Name      string    `json:"name"`
-	Type      string    `json:"type"`
-	Default   any       `json:"default,omitempty"`
-	Sensitive bool      `json:"sensitive,omitempty"`
-	Source    SourceRef `json:"source,omitempty"`
+	Name        string                 `json:"name"`
+	Type        string                 `json:"type"`
+	TypeExpr    string                 `json:"type_expr,omitempty"`
+	TypeSpec    ComponentInputTypeSpec `json:"type_spec,omitempty"`
+	Description string                 `json:"description,omitempty"`
+	Default     any                    `json:"default,omitempty"`
+	Sensitive   bool                   `json:"sensitive,omitempty"`
+	Nullable    bool                   `json:"nullable,omitempty"`
+	Source      SourceRef              `json:"source,omitempty"`
+}
+
+type ComponentInputTypeSpec struct {
+	Kind       string                             `json:"kind,omitempty"`
+	Element    *ComponentInputTypeSpec            `json:"element,omitempty"`
+	Attributes map[string]ComponentObjectAttrSpec `json:"attributes,omitempty"`
+	Tuple      []ComponentInputTypeSpec           `json:"tuple,omitempty"`
+}
+
+type ComponentObjectAttrSpec struct {
+	Type     ComponentInputTypeSpec `json:"type"`
+	Optional bool                   `json:"optional,omitempty"`
+	Default  any                    `json:"default,omitempty"`
 }
 
 type ComponentInstanceSpec struct {

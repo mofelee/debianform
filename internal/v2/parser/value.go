@@ -83,6 +83,35 @@ func (v Value) Key() string {
 	return string(data)
 }
 
+func (v Value) CanonicalString() string {
+	data, err := json.Marshal(v.canonicalTypeLiteral())
+	if err != nil {
+		return "null"
+	}
+	return string(data)
+}
+
+func (v Value) canonicalTypeLiteral() any {
+	switch v.Kind {
+	case KindNumber:
+		return json.Number(v.Number)
+	case KindList:
+		out := make([]any, 0, len(v.List))
+		for _, item := range v.List {
+			out = append(out, item.canonicalTypeLiteral())
+		}
+		return out
+	case KindMap:
+		out := make(map[string]any, len(v.Map))
+		for key, item := range v.Map {
+			out[key] = item.canonicalTypeLiteral()
+		}
+		return out
+	default:
+		return v.canonical()
+	}
+}
+
 func (v Value) canonical() any {
 	switch v.Kind {
 	case KindNull:

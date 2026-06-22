@@ -212,6 +212,98 @@ host "web1" {
 	}
 }
 
+func TestParseComponentInputRichTypes(t *testing.T) {
+	file := writeConfig(t, `
+component "proxy" {
+  input "listeners" {
+    type = list(object({
+      name = string
+      port = number
+      tls  = optional(bool, false)
+      tags = optional(map(string), {})
+    }))
+
+    description = "Listener definitions."
+    default     = []
+    nullable    = false
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := cfg.Components["proxy"].Inputs["listeners"]
+	if input.Type != `list(object({name=string,port=number,tags=optional(map(string),{}),tls=optional(bool,false)}))` {
+		t.Fatalf("input type = %q", input.Type)
+	}
+	if input.Description != "Listener definitions." || input.Nullable {
+		t.Fatalf("input metadata = %#v", input)
+	}
+	if input.TypeSpec.Kind != ComponentInputTypeList || input.TypeSpec.Element == nil || input.TypeSpec.Element.Kind != ComponentInputTypeObject {
+		t.Fatalf("input type spec = %#v", input.TypeSpec)
+	}
+	attrs := input.TypeSpec.Element.Attributes
+	if !attrs["tls"].Optional || attrs["tls"].Default == nil || attrs["tls"].Default.Bool {
+		t.Fatalf("tls attr = %#v", attrs["tls"])
+	}
+	if !attrs["tags"].Optional || attrs["tags"].Default == nil || attrs["tags"].Default.Kind != KindMap {
+		t.Fatalf("tags attr = %#v", attrs["tags"])
+	}
+}
+
+func TestParseRejectsInvalidComponentInputTypes(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "array alias",
+			hcl: `
+component "bad" {
+  input "ports" {
+    type = array(number)
+  }
+}
+`,
+			want: "array(T) is not supported; use list(T)",
+		},
+		{
+			name: "bare list",
+			hcl: `
+component "bad" {
+  input "ports" {
+    type = list
+  }
+}
+`,
+			want: "list requires an element type",
+		},
+		{
+			name: "optional outside object",
+			hcl: `
+component "bad" {
+  input "ports" {
+    type = optional(number)
+  }
+}
+`,
+			want: "optional() is only allowed inside object attribute type declarations",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := writeConfig(t, tt.hcl)
+			_, err := ParseFiles([]string{file})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ParseFiles error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseComponentArtifact(t *testing.T) {
 	file := writeConfig(t, `
 component "rclone" {
@@ -378,6 +470,7 @@ func runnableV2ExampleFixtures() []string {
 		"../../../examples/v2-apt-repository.dbf.hcl",
 		"../../../examples/v2-bird2.dbf.hcl",
 		"../../../examples/v2-component-binary.dbf.hcl",
+		"../../../examples/v2-component-inputs.dbf.hcl",
 		"../../../examples/v2-files-plan-preview.dbf.hcl",
 		"../../../examples/v2-nftables.dbf.hcl",
 		"../../../examples/v2-plan-preview.dbf.hcl",

@@ -1106,6 +1106,182 @@ host "server1" {
 	}
 }
 
+func TestCompileNormalizesRichComponentInputs(t *testing.T) {
+	program := compileInline(t, `
+component "proxy" {
+  input "listeners" {
+    type = list(object({
+      name = string
+      port = number
+      tls  = optional(bool, false)
+      note = optional(string)
+      tags = optional(map(string), {})
+    }))
+
+    description = "Listener definitions."
+    default     = []
+    nullable    = false
+  }
+
+  files {
+    file "/etc/proxy/listeners.json" {
+      content = jsonencode(input.listeners)
+    }
+  }
+}
+
+host "edge1" {
+  component "proxy" {
+    source = component.proxy
+
+    inputs = {
+      listeners = [
+        {
+          name = "http"
+          port = 80
+        },
+      ]
+    }
+  }
+}
+`)
+
+	template := program.Components["proxy"].Inputs["listeners"]
+	if template.Description != "Listener definitions." || !reflect.DeepEqual(template.Default, []any{}) || template.Nullable {
+		t.Fatalf("template input = %#v", template)
+	}
+	component := program.Hosts[0].Components[0]
+	listeners, ok := component.InputValues["listeners"].([]any)
+	if !ok || len(listeners) != 1 {
+		t.Fatalf("input listeners = %#v", component.InputValues["listeners"])
+	}
+	listener := listeners[0].(map[string]any)
+	if listener["tls"] != false || listener["note"] != nil || !reflect.DeepEqual(listener["tags"], map[string]any{}) {
+		t.Fatalf("normalized listener = %#v", listener)
+	}
+	file := component.Files.Files["/etc/proxy/listeners.json"]
+	if !strings.Contains(file.Content, `"tls":false`) || !strings.Contains(file.Content, `"note":null`) || !strings.Contains(file.Content, `"tags":{}`) {
+		t.Fatalf("file content = %s", file.Content)
+	}
+}
+
+func TestCompileRejectsInvalidRichComponentInputs(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "nullable false",
+			hcl: `
+component "proxy" {
+  input "listeners" {
+    type     = list(object({ name = string }))
+    nullable = false
+  }
+}
+
+host "edge1" {
+  component "proxy" {
+    source = component.proxy
+    inputs = { listeners = null }
+  }
+}
+`,
+			want: `component input "listeners" must not be null`,
+		},
+		{
+			name: "invalid input default",
+			hcl: `
+component "proxy" {
+  input "listeners" {
+    type    = list(object({ name = string }))
+    default = [{ name = 123 }]
+  }
+}
+
+host "edge1" {}
+`,
+			want: `component input "listeners"[0].name must be string`,
+		},
+		{
+			name: "invalid optional default",
+			hcl: `
+component "proxy" {
+  input "listeners" {
+    type = list(object({ name = string, tls = optional(bool, "no") }))
+  }
+}
+
+host "edge1" {}
+`,
+			want: `component input "listeners".tls must be bool`,
+		},
+		{
+			name: "missing object attribute",
+			hcl: `
+component "proxy" {
+  input "listeners" {
+    type = list(object({ name = string, port = number }))
+  }
+}
+
+host "edge1" {
+  component "proxy" {
+    source = component.proxy
+    inputs = { listeners = [{ name = "http" }] }
+  }
+}
+`,
+			want: `missing required attribute [0].port`,
+		},
+		{
+			name: "extra object attribute",
+			hcl: `
+component "proxy" {
+  input "listeners" {
+    type = list(object({ name = string }))
+  }
+}
+
+host "edge1" {
+  component "proxy" {
+    source = component.proxy
+    inputs = { listeners = [{ name = "http", typo = true }] }
+  }
+}
+`,
+			want: `unsupported attribute [0].typo`,
+		},
+		{
+			name: "nested type mismatch",
+			hcl: `
+component "proxy" {
+  input "listeners" {
+    type = list(object({ name = string, port = number }))
+  }
+}
+
+host "edge1" {
+  component "proxy" {
+    source = component.proxy
+    inputs = { listeners = [{ name = "http", port = "eighty" }] }
+  }
+}
+`,
+			want: `component input "listeners"[0].port must be number`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestCompileRejectsProfileImportCycle(t *testing.T) {
 	cfg := parseInline(t, `
 profile "a" {
@@ -1366,6 +1542,10 @@ func TestCompileBIRD2HostSpecGolden(t *testing.T) {
 
 func TestCompileComponentBinaryHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-component-binary.dbf.hcl", "../testdata/hostspec/v2-component-binary.golden.json")
+}
+
+func TestCompileComponentInputsHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../../../examples/v2-component-inputs.dbf.hcl", "../testdata/hostspec/v2-component-inputs.golden.json")
 }
 
 func TestCompileSystemdServiceHostSpecGolden(t *testing.T) {
@@ -1811,6 +1991,7 @@ func testHostFacts() map[string]ir.HostFacts {
 		"bbr1",
 		"edge1",
 		"foundation1",
+		"input1",
 		"merge1",
 		"preview1",
 		"router1",

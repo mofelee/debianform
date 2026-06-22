@@ -22,17 +22,27 @@ component "app" {
 }
 ```
 
-当前类型范围只有：
+当前已支持的类型范围：
 
 ```text
 string
 number
 bool
-list(string)
-map(string)
+any
+list(T)
+set(T)
+map(T)
+object({ ... })
+tuple([ ... ])
+optional(T)
+optional(T, default)
 ```
 
-这足够覆盖简单参数，但不适合表达真实部署组件的结构化接口。例如：
+其中 `optional(...)` 只能用于 object attribute。`description`、`nullable`、
+strict object schema 和 optional default 已实现；`validation`、完整 sensitive 传播、
+`deprecated` warning 和 `ephemeral` 仍由后续 loop 实现。
+
+真实部署组件通常需要结构化接口。例如：
 
 - 多个监听端口，每个端口有 `name`、`port`、`protocol`、`tls`。
 - 多个 upstream，每个 upstream 有 `host`、`port`、`weight`。

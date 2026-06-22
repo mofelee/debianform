@@ -1,0 +1,152 @@
+{
+  "format_version": "debianform.plan.v2alpha1",
+  "generated_at": "2026-06-20T12:00:00Z",
+  "command": {
+    "file": "../../../examples/v2-component-inputs.dbf.hcl",
+    "host": "input1"
+  },
+  "summary": {
+    "create": 1,
+    "update": 0,
+    "delete": 0,
+    "no_op": 0,
+    "operations": 0
+  },
+  "changes": [
+    {
+      "address": "host.input1.components.proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]",
+      "action": "create",
+      "summary": "create file /etc/reverse-proxy/listeners.json",
+      "source": {
+        "file": "../../../examples/v2-component-inputs.dbf.hcl",
+        "line": 22,
+        "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "component"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "proxy"
+          },
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 1,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "[{\"name\":\"http\",\"note\":null,\"port\":80,\"tags\":{},\"tls\":false},{\"name\":\"https\",\"note\":null,\"port\":443,\"tags\":{\"public\":\"true\"},\"tls\":true}]"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/reverse-proxy/listeners.json"
+          },
+          {
+            "path": [
+              "sensitive"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": false
+          },
+          {
+            "path": [
+              "summary"
+            ],
+            "kind": "map",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "summary",
+                  "bytes"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": 137
+              },
+              {
+                "path": [
+                  "summary",
+                  "sha256"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "b74a83b8b18992d585d318e4b2ae3cffb0e1ba7a82dad377ccf3432f4ef23ce5"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "operations": [],
+  "diagnostics": []
+}

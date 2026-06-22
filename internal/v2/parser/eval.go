@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -132,10 +133,76 @@ func hclEvalContext(ctx EvalContext) (*hcl.EvalContext, error) {
 		Variables: vars,
 		Functions: map[string]function.Function{
 			"file":         fileFunction(ctx.ModuleDir),
+			"jsonencode":   jsonencodeFunction(),
 			"templatefile": templatefileFunction(ctx.ModuleDir),
 			"toset":        tosetFunction(),
 		},
 	}, nil
+}
+
+func jsonencodeFunction() function.Function {
+	return function.New(&function.Spec{
+		Params: []function.Parameter{
+			{Name: "value", Type: cty.DynamicPseudoType, AllowNull: true},
+		},
+		Type: function.StaticReturnType(cty.String),
+		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
+			value, err := ctyJSONValue(args[0])
+			if err != nil {
+				return cty.NilVal, err
+			}
+			data, err := json.Marshal(value)
+			if err != nil {
+				return cty.NilVal, err
+			}
+			return cty.StringVal(string(data)), nil
+		},
+	})
+}
+
+func ctyJSONValue(value cty.Value) (any, error) {
+	value, _ = value.UnmarkDeep()
+	if !value.IsKnown() {
+		return nil, fmt.Errorf("jsonencode() argument must be known")
+	}
+	if value.IsNull() {
+		return nil, nil
+	}
+	ty := value.Type()
+	switch {
+	case ty.Equals(cty.String):
+		return value.AsString(), nil
+	case ty.Equals(cty.Bool):
+		return value.True(), nil
+	case ty.Equals(cty.Number):
+		return json.Number(value.AsBigFloat().Text('g', -1)), nil
+	case ty.IsTupleType() || ty.IsListType() || ty.IsSetType():
+		out := []any{}
+		it := value.ElementIterator()
+		for it.Next() {
+			_, item := it.Element()
+			converted, err := ctyJSONValue(item)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, converted)
+		}
+		return out, nil
+	case ty.IsObjectType() || ty.IsMapType():
+		out := map[string]any{}
+		it := value.ElementIterator()
+		for it.Next() {
+			key, item := it.Element()
+			converted, err := ctyJSONValue(item)
+			if err != nil {
+				return nil, err
+			}
+			out[key.AsString()] = converted
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("jsonencode() unsupported value type %s", ty.FriendlyName())
+	}
 }
 
 func ctyToValue(value cty.Value, source ir.SourceRef) (Value, error) {

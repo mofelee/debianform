@@ -1,0 +1,45 @@
+{
+  "nodes": [
+    {
+      "host": "input1",
+      "address": "host.input1.components.proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]",
+      "kind": "file",
+      "summary": "create file /etc/reverse-proxy/listeners.json",
+      "source": {
+        "file": "../../../examples/v2-component-inputs.dbf.hcl",
+        "line": 22,
+        "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]"
+      },
+      "desired": {
+        "component": "proxy",
+        "content": "[{\"name\":\"http\",\"note\":null,\"port\":80,\"tags\":{},\"tls\":false},{\"name\":\"https\",\"note\":null,\"port\":443,\"tags\":{\"public\":\"true\"},\"tls\":true}]",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/reverse-proxy/listeners.json",
+        "sensitive": false,
+        "summary": {
+          "sha256": "b74a83b8b18992d585d318e4b2ae3cffb0e1ba7a82dad377ccf3432f4ef23ce5",
+          "bytes": 137
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.input1_proxy__etc_reverse_proxy_listeners_json",
+      "provider_payload": {
+        "component": "proxy",
+        "content": "[{\"name\":\"http\",\"note\":null,\"port\":80,\"tags\":{},\"tls\":false},{\"name\":\"https\",\"note\":null,\"port\":443,\"tags\":{\"public\":\"true\"},\"tls\":true}]",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/reverse-proxy/listeners.json",
+        "sensitive": false,
+        "summary": {
+          "sha256": "b74a83b8b18992d585d318e4b2ae3cffb0e1ba7a82dad377ccf3432f4ef23ce5",
+          "bytes": 137
+        }
+      }
+    }
+  ]
+}

@@ -62,6 +62,23 @@
     ]
   },
   {
+    "fixture": "../../../examples/v2-component-inputs.dbf.hcl",
+    "components": [
+      "reverse_proxy"
+    ],
+    "hosts": [
+      {
+        "name": "input1",
+        "components": [
+          "proxy=reverse_proxy"
+        ],
+        "body_keys": [
+          "system"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/v2-files-plan-preview.dbf.hcl",
     "hosts": [
       {

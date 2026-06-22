@@ -51,11 +51,15 @@ type Component struct {
 }
 
 type ComponentInput struct {
-	Name      string
-	Type      string
-	Default   *Value
-	Sensitive bool
-	Source    ir.SourceRef
+	Name        string
+	Type        string
+	TypeExpr    string
+	TypeSpec    ComponentInputTypeSpec
+	Description string
+	Default     *Value
+	Sensitive   bool
+	Nullable    bool
+	Source      ir.SourceRef
 }
 
 type ComponentArtifactSource struct {
@@ -622,7 +626,7 @@ func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block
 		return ComponentInput{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
 	}
 	for attrName, attr := range block.Body.Attributes {
-		if attrName != "type" && attrName != "default" && attrName != "sensitive" {
+		if attrName != "type" && attrName != "default" && attrName != "sensitive" && attrName != "description" && attrName != "nullable" {
 			return ComponentInput{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, attrName)
 		}
 	}
@@ -630,14 +634,28 @@ func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block
 	if !ok {
 		return ComponentInput{}, fmt.Errorf("%s:%d: %s.type is required", file, block.TypeRange.Start.Line, path)
 	}
-	typeName, err := parseComponentInputType(typeAttr.Expr)
+	typeSpec, typeName, err := parseComponentInputType(typeAttr.Expr, ctx, path+".type")
 	if err != nil {
 		return ComponentInput{}, fmt.Errorf("%s:%d: %s.type: %w", file, typeAttr.NameRange.Start.Line, path, err)
 	}
 	input := ComponentInput{
-		Name:   name,
-		Type:   typeName,
-		Source: ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path},
+		Name:     name,
+		Type:     typeName,
+		TypeExpr: typeName,
+		TypeSpec: typeSpec,
+		Nullable: true,
+		Source:   ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path},
+	}
+	if descriptionAttr, ok := block.Body.Attributes["description"]; ok {
+		descriptionSource := ir.SourceRef{File: file, Line: descriptionAttr.NameRange.Start.Line, Path: path + ".description"}
+		value, err := evalValue(descriptionAttr.Expr, ctx, descriptionSource)
+		if err != nil {
+			return ComponentInput{}, fmt.Errorf("%s:%d: %s.description: %w", file, descriptionSource.Line, path, err)
+		}
+		if value.Kind != KindString {
+			return ComponentInput{}, fmt.Errorf("%s:%d: %s.description must be a string", file, descriptionSource.Line, path)
+		}
+		input.Description = value.String
 	}
 	if defaultAttr, ok := block.Body.Attributes["default"]; ok {
 		defaultSource := ir.SourceRef{File: file, Line: defaultAttr.NameRange.Start.Line, Path: path + ".default"}
@@ -658,36 +676,18 @@ func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block
 		}
 		input.Sensitive = value.Bool
 	}
+	if nullableAttr, ok := block.Body.Attributes["nullable"]; ok {
+		nullableSource := ir.SourceRef{File: file, Line: nullableAttr.NameRange.Start.Line, Path: path + ".nullable"}
+		value, err := evalValue(nullableAttr.Expr, ctx, nullableSource)
+		if err != nil {
+			return ComponentInput{}, fmt.Errorf("%s:%d: %s.nullable: %w", file, nullableSource.Line, path, err)
+		}
+		if value.Kind != KindBool {
+			return ComponentInput{}, fmt.Errorf("%s:%d: %s.nullable must be a boolean", file, nullableSource.Line, path)
+		}
+		input.Nullable = value.Bool
+	}
 	return input, nil
-}
-
-func parseComponentInputType(expr hcl.Expression) (string, error) {
-	if traversal, diags := hcl.AbsTraversalForExpr(expr); !diags.HasErrors() && len(traversal) == 1 {
-		if root, ok := traversal[0].(hcl.TraverseRoot); ok {
-			switch root.Name {
-			case "string", "number", "bool":
-				return root.Name, nil
-			}
-		}
-	}
-	if call, ok := expr.(*hclsyntax.FunctionCallExpr); ok {
-		if len(call.Args) != 1 {
-			return "", fmt.Errorf("%s() requires exactly one type argument", call.Name)
-		}
-		traversal, diags := hcl.AbsTraversalForExpr(call.Args[0])
-		if diags.HasErrors() || len(traversal) != 1 {
-			return "", fmt.Errorf("%s() argument must be string", call.Name)
-		}
-		root, ok := traversal[0].(hcl.TraverseRoot)
-		if !ok || root.Name != "string" {
-			return "", fmt.Errorf("%s() argument must be string", call.Name)
-		}
-		switch call.Name {
-		case "list", "map":
-			return call.Name + "(string)", nil
-		}
-	}
-	return "", fmt.Errorf("supported types are string, number, bool, list(string), and map(string)")
 }
 
 func ParseComponentBody(component Component, ctx EvalContext) (Value, error) {

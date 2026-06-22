@@ -40,9 +40,13 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 	}
 	sort.Strings(names)
 
+	components, err := componentTemplateSpecs(cfg.Components)
+	if err != nil {
+		return nil, err
+	}
 	program := &ir.Program{
 		Hosts:      make([]ir.HostSpec, 0, len(names)),
-		Components: componentTemplateSpecs(cfg.Components),
+		Components: components,
 	}
 	for _, name := range names {
 		if opts.HostFilter != "" && name != opts.HostFilter {
@@ -110,9 +114,9 @@ type resolvedProfile struct {
 	Asserts []parser.Assert
 }
 
-func componentTemplateSpecs(components map[string]parser.Component) map[string]ir.ComponentTemplateSpec {
+func componentTemplateSpecs(components map[string]parser.Component) (map[string]ir.ComponentTemplateSpec, error) {
 	if len(components) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make(map[string]ir.ComponentTemplateSpec, len(components))
 	for _, name := range sortedKeys(components) {
@@ -127,16 +131,27 @@ func componentTemplateSpecs(components map[string]parser.Component) map[string]i
 		}
 		for _, inputName := range sortedKeys(component.Inputs) {
 			input := component.Inputs[inputName]
+			if err := validateComponentInputDefinition(input); err != nil {
+				return nil, err
+			}
 			var defaultValue any
 			if input.Default != nil {
-				defaultValue = parserValueToAny(*input.Default)
+				normalized, err := normalizeComponentInput(input, *input.Default)
+				if err != nil {
+					return nil, err
+				}
+				defaultValue = parserValueToAny(normalized)
 			}
 			spec.Inputs[inputName] = ir.ComponentInputSpec{
-				Name:      input.Name,
-				Type:      input.Type,
-				Default:   defaultValue,
-				Sensitive: input.Sensitive,
-				Source:    input.Source,
+				Name:        input.Name,
+				Type:        input.Type,
+				TypeExpr:    input.TypeExpr,
+				TypeSpec:    componentInputTypeSpecToIR(input.TypeSpec),
+				Description: input.Description,
+				Default:     defaultValue,
+				Sensitive:   input.Sensitive,
+				Nullable:    input.Nullable,
+				Source:      input.Source,
 			}
 		}
 		if len(spec.Inputs) == 0 {
@@ -172,6 +187,38 @@ func componentTemplateSpecs(components map[string]parser.Component) map[string]i
 			}
 		}
 		out[name] = spec
+	}
+	return out, nil
+}
+
+func componentInputTypeSpecToIR(spec parser.ComponentInputTypeSpec) ir.ComponentInputTypeSpec {
+	out := ir.ComponentInputTypeSpec{
+		Kind: string(spec.Kind),
+	}
+	if spec.Element != nil {
+		element := componentInputTypeSpecToIR(*spec.Element)
+		out.Element = &element
+	}
+	if len(spec.Attributes) > 0 {
+		out.Attributes = make(map[string]ir.ComponentObjectAttrSpec, len(spec.Attributes))
+		for _, name := range sortedKeys(spec.Attributes) {
+			attr := spec.Attributes[name]
+			out.Attributes[name] = ir.ComponentObjectAttrSpec{
+				Type:     componentInputTypeSpecToIR(attr.Type),
+				Optional: attr.Optional,
+			}
+			if attr.Default != nil {
+				item := out.Attributes[name]
+				item.Default = parserValueToAny(*attr.Default)
+				out.Attributes[name] = item
+			}
+		}
+	}
+	if len(spec.Tuple) > 0 {
+		out.Tuple = make([]ir.ComponentInputTypeSpec, 0, len(spec.Tuple))
+		for _, item := range spec.Tuple {
+			out.Tuple = append(out.Tuple, componentInputTypeSpecToIR(item))
+		}
 	}
 	return out
 }
@@ -419,57 +466,227 @@ func componentInputValues(template parser.Component, instance parser.ComponentIn
 				return nil, nil, fmt.Errorf("%s:%d:%s: component.%s input %q is required", instance.Source.File, instance.Source.Line, instance.Source.Path, template.Name, name)
 			}
 			value = *input.Default
-			values[name] = value
 		}
-		if err := validateComponentInputType(input, value); err != nil {
+		normalized, err := normalizeComponentInput(input, value)
+		if err != nil {
 			return nil, nil, err
 		}
+		values[name] = normalized
 		if input.Sensitive {
 			jsonValues[name] = "<sensitive>"
 		} else {
-			jsonValues[name] = parserValueToAny(value)
+			jsonValues[name] = parserValueToAny(normalized)
 		}
 	}
 	return values, jsonValues, nil
 }
 
-func validateComponentInputType(input parser.ComponentInput, value parser.Value) error {
-	switch input.Type {
-	case "string":
-		if value.Kind != parser.KindString {
-			return fmt.Errorf("%s:%d:%s: component input %q must be a string", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
+func validateComponentInputDefinition(input parser.ComponentInput) error {
+	if input.Default != nil {
+		if _, err := normalizeComponentInput(input, *input.Default); err != nil {
+			return err
 		}
-	case "number":
-		if value.Kind != parser.KindNumber {
-			return fmt.Errorf("%s:%d:%s: component input %q must be a number", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
+	}
+	return validateComponentInputTypeSpecDefaults(input.Name, input.TypeSpec, "")
+}
+
+func validateComponentInputTypeSpecDefaults(inputName string, spec parser.ComponentInputTypeSpec, path string) error {
+	switch spec.Kind {
+	case parser.ComponentInputTypeList, parser.ComponentInputTypeSet, parser.ComponentInputTypeMap:
+		if spec.Element != nil {
+			return validateComponentInputTypeSpecDefaults(inputName, *spec.Element, path)
 		}
-	case "bool":
-		if value.Kind != parser.KindBool {
-			return fmt.Errorf("%s:%d:%s: component input %q must be a bool", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
-		}
-	case "list(string)":
-		if !value.IsList() {
-			return fmt.Errorf("%s:%d:%s: component input %q must be a list(string)", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
-		}
-		for _, item := range value.List {
-			if item.Kind != parser.KindString {
-				return fmt.Errorf("%s:%d:%s: component input %q entries must be strings", item.Source.File, item.Source.Line, item.Source.Path, input.Name)
+	case parser.ComponentInputTypeObject:
+		for _, name := range sortedKeys(spec.Attributes) {
+			attr := spec.Attributes[name]
+			attrPath := path + "." + name
+			if attr.Default != nil {
+				if _, err := normalizeComponentInputValue(inputName, attr.Type, *attr.Default, attrPath); err != nil {
+					return err
+				}
+			}
+			if err := validateComponentInputTypeSpecDefaults(inputName, attr.Type, attrPath); err != nil {
+				return err
 			}
 		}
-	case "map(string)":
-		if !value.IsMap() {
-			return fmt.Errorf("%s:%d:%s: component input %q must be a map(string)", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
-		}
-		for _, key := range sortedKeys(value.Map) {
-			item := value.Map[key]
-			if item.Kind != parser.KindString {
-				return fmt.Errorf("%s:%d:%s: component input %q values must be strings", item.Source.File, item.Source.Line, item.Source.Path, input.Name)
+	case parser.ComponentInputTypeTuple:
+		for i, item := range spec.Tuple {
+			if err := validateComponentInputTypeSpecDefaults(inputName, item, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+				return err
 			}
 		}
-	default:
-		return fmt.Errorf("%s:%d:%s: unsupported component input type %q", input.Source.File, input.Source.Line, input.Source.Path, input.Type)
 	}
 	return nil
+}
+
+func normalizeComponentInput(input parser.ComponentInput, value parser.Value) (parser.Value, error) {
+	if value.Kind == parser.KindNull && !input.Nullable {
+		return parser.Value{}, fmt.Errorf("%s:%d:%s: component input %q must not be null", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
+	}
+	return normalizeComponentInputValue(input.Name, input.TypeSpec, value, "")
+}
+
+func normalizeComponentInputValue(inputName string, spec parser.ComponentInputTypeSpec, value parser.Value, path string) (parser.Value, error) {
+	if value.Kind == parser.KindNull {
+		return value, nil
+	}
+	switch spec.Kind {
+	case parser.ComponentInputTypeAny:
+		return value, nil
+	case parser.ComponentInputTypeString:
+		if value.Kind != parser.KindString {
+			return parser.Value{}, componentInputTypeError(inputName, value, path, "string")
+		}
+		return value, nil
+	case parser.ComponentInputTypeNumber:
+		if value.Kind != parser.KindNumber {
+			return parser.Value{}, componentInputTypeError(inputName, value, path, "number")
+		}
+		return value, nil
+	case parser.ComponentInputTypeBool:
+		if value.Kind != parser.KindBool {
+			return parser.Value{}, componentInputTypeError(inputName, value, path, "bool")
+		}
+		return value, nil
+	case parser.ComponentInputTypeList, parser.ComponentInputTypeSet:
+		if !value.IsList() {
+			return parser.Value{}, componentInputTypeError(inputName, value, path, string(spec.Kind)+"("+elementTypeName(spec)+")")
+		}
+		out := value
+		out.List = make([]parser.Value, 0, len(value.List))
+		for i, item := range value.List {
+			normalized, err := normalizeComponentInputValue(inputName, *spec.Element, item, fmt.Sprintf("%s[%d]", path, i))
+			if err != nil {
+				return parser.Value{}, err
+			}
+			out.List = append(out.List, normalized)
+		}
+		if spec.Kind == parser.ComponentInputTypeSet {
+			sort.SliceStable(out.List, func(i, j int) bool {
+				return out.List[i].Key() < out.List[j].Key()
+			})
+			deduped := out.List[:0]
+			var last string
+			for i, item := range out.List {
+				key := item.Key()
+				if i == 0 || key != last {
+					deduped = append(deduped, item)
+				}
+				last = key
+			}
+			out.List = deduped
+		}
+		return out, nil
+	case parser.ComponentInputTypeMap:
+		if !value.IsMap() {
+			return parser.Value{}, componentInputTypeError(inputName, value, path, "map("+elementTypeName(spec)+")")
+		}
+		out := value
+		out.Map = make(map[string]parser.Value, len(value.Map))
+		for _, key := range sortedKeys(value.Map) {
+			normalized, err := normalizeComponentInputValue(inputName, *spec.Element, value.Map[key], fmt.Sprintf("%s[%q]", path, key))
+			if err != nil {
+				return parser.Value{}, err
+			}
+			out.Map[key] = normalized
+		}
+		return out, nil
+	case parser.ComponentInputTypeObject:
+		if !value.IsMap() {
+			return parser.Value{}, componentInputTypeError(inputName, value, path, "object")
+		}
+		out := value
+		out.Map = make(map[string]parser.Value, len(spec.Attributes))
+		for key := range value.Map {
+			if _, ok := spec.Attributes[key]; !ok {
+				return parser.Value{}, fmt.Errorf("%s:%d:%s: component input %q has unsupported attribute %s%s", value.Map[key].Source.File, value.Map[key].Source.Line, value.Map[key].Source.Path, inputName, pathPrefix(path), attributePath(key))
+			}
+		}
+		names := make([]string, 0, len(spec.Attributes))
+		for name := range spec.Attributes {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			attr := spec.Attributes[name]
+			item, ok := value.Map[name]
+			attrPath := path + "." + name
+			if !ok {
+				if attr.Default != nil {
+					normalized, err := normalizeComponentInputValue(inputName, attr.Type, *attr.Default, attrPath)
+					if err != nil {
+						return parser.Value{}, err
+					}
+					out.Map[name] = normalized
+					continue
+				}
+				if attr.Optional {
+					out.Map[name] = parser.NullValue(missingObjectAttributeSource(value, name, attrPath))
+					continue
+				}
+				return parser.Value{}, fmt.Errorf("%s:%d:%s: component input %q missing required attribute %s", value.Source.File, value.Source.Line, value.Source.Path, inputName, attrPath)
+			}
+			normalized, err := normalizeComponentInputValue(inputName, attr.Type, item, attrPath)
+			if err != nil {
+				return parser.Value{}, err
+			}
+			out.Map[name] = normalized
+		}
+		return out, nil
+	case parser.ComponentInputTypeTuple:
+		if !value.IsList() {
+			return parser.Value{}, componentInputTypeError(inputName, value, path, "tuple")
+		}
+		if len(value.List) != len(spec.Tuple) {
+			return parser.Value{}, fmt.Errorf("%s:%d:%s: component input %q%s must have %d entries, got %d", value.Source.File, value.Source.Line, value.Source.Path, inputName, path, len(spec.Tuple), len(value.List))
+		}
+		out := value
+		out.List = make([]parser.Value, 0, len(value.List))
+		for i, item := range value.List {
+			normalized, err := normalizeComponentInputValue(inputName, spec.Tuple[i], item, fmt.Sprintf("%s[%d]", path, i))
+			if err != nil {
+				return parser.Value{}, err
+			}
+			out.List = append(out.List, normalized)
+		}
+		return out, nil
+	default:
+		return parser.Value{}, fmt.Errorf("%s:%d:%s: unsupported component input type %q", value.Source.File, value.Source.Line, value.Source.Path, spec.Kind)
+	}
+}
+
+func componentInputTypeError(inputName string, value parser.Value, path string, want string) error {
+	return fmt.Errorf("%s:%d:%s: component input %q%s must be %s, got %s", value.Source.File, value.Source.Line, value.Source.Path, inputName, path, want, value.Kind)
+}
+
+func elementTypeName(spec parser.ComponentInputTypeSpec) string {
+	if spec.Element == nil {
+		return "any"
+	}
+	return spec.Element.String()
+}
+
+func missingObjectAttributeSource(parent parser.Value, name string, path string) ir.SourceRef {
+	source := parent.Source
+	source.Path = parent.Source.Path + path
+	if source.Path == "" {
+		source.Path = name
+	}
+	return source
+}
+
+func pathPrefix(path string) string {
+	if path == "" {
+		return ""
+	}
+	return path
+}
+
+func attributePath(name string) string {
+	if name == "" {
+		return ""
+	}
+	return "." + name
 }
 
 func applyComponentArtifact(spec *ir.ComponentInstanceSpec, template parser.Component, target ir.HostSpec) error {

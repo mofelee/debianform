@@ -721,11 +721,27 @@ type ComponentInstanceSpec struct {
 }
 
 type ComponentInputSpec struct {
-    Name      string
-    Type      ValueType
-    Default   *Value
-    Sensitive bool
-    Source    SourceRef
+    Name        string
+    Type        string
+    TypeSpec    ComponentInputTypeSpec
+    Description string
+    Default     *Value
+    Sensitive   bool
+    Nullable    bool
+    Source      SourceRef
+}
+
+type ComponentInputTypeSpec struct {
+    Kind       string
+    Element    *ComponentInputTypeSpec
+    Attributes map[string]ComponentObjectAttributeSpec
+    Tuple      []ComponentInputTypeSpec
+}
+
+type ComponentObjectAttributeSpec struct {
+    Type     ComponentInputTypeSpec
+    Optional bool
+    Default  *Value
 }
 
 type DownloadSourceSpec struct {

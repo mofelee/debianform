@@ -218,6 +218,21 @@ func TestCompileComponentBinaryResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileComponentInputsResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-component-inputs.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-component-inputs.golden.json", got)
+
+	if node := nodeFor(resourceGraph, `host.input1.components.proxy.files.file["/etc/reverse-proxy/listeners.json"]`); node == nil {
+		t.Fatalf("component input generated file node was not found")
+	}
+}
+
 func TestCompileComponentArtifactKindsAndCAOperation(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 component "company_ca" {
@@ -551,6 +566,7 @@ func testHostFacts() map[string]ir.HostFacts {
 		"bbr1",
 		"edge1",
 		"foundation1",
+		"input1",
 		"merge1",
 		"preview1",
 		"router1",

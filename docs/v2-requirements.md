@@ -579,8 +579,9 @@ ca_certificate  安装 CA 证书，并在内容变化后生成 update-ca-certifi
 - `components = [component.rclone]` 是无参数单实例 shorthand；实例名默认等于模板名。
 - 需要传参或同一模板多实例时，必须使用 host 内的 `component "<instance>"` block。
 - host 内的 component instance label 在同一 host 内唯一，并进入 v2 地址。
-- component input 必须显式声明类型；第一版支持 `string`、`number`、`bool`、
-  `list(string)` 和 `map(string)`。
+- component input 必须显式声明类型；当前支持 `string`、`number`、`bool`、`any`、
+  `list(T)`、`set(T)`、`map(T)`、`object({ ... })`、`tuple([ ... ])`，以及
+  object attribute 内的 `optional(T)` / `optional(T, default)`。
 - input 没有 default 时，所有实例必须传值。
 - 实例传入未知 input 或遗漏必填 input 时 validate 报错。
 - component 内部通过只读 `input.<name>` 访问参数。

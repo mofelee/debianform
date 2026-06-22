@@ -1,0 +1,158 @@
+{
+  "name": "input1",
+  "source": {
+    "file": "../../../examples/v2-component-inputs.dbf.hcl",
+    "line": 29,
+    "path": "host.input1"
+  },
+  "facts": {
+    "system": {
+      "hostname": "input1",
+      "architecture": "amd64",
+      "codename": "trixie"
+    }
+  },
+  "ssh": {
+    "host": "input1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../../../examples/v2-component-inputs.dbf.hcl",
+      "line": 29,
+      "path": "host.input1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/input1.json",
+    "lock_path": "/var/lock/debianform/state/input1.lock",
+    "source": {
+      "file": "../../../examples/v2-component-inputs.dbf.hcl",
+      "line": 29,
+      "path": "host.input1"
+    }
+  },
+  "system": {
+    "hostname": "input1",
+    "architecture": "amd64",
+    "codename": "trixie",
+    "source": {
+      "file": "../../../examples/v2-component-inputs.dbf.hcl",
+      "line": 30,
+      "path": "host.input1.system"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  },
+  "components": [
+    {
+      "name": "proxy",
+      "template": "reverse_proxy",
+      "input_values": {
+        "listeners": [
+          {
+            "name": "http",
+            "note": null,
+            "port": "80",
+            "tags": {},
+            "tls": false
+          },
+          {
+            "name": "https",
+            "note": null,
+            "port": "443",
+            "tags": {
+              "public": "true"
+            },
+            "tls": true
+          }
+        ]
+      },
+      "apt": {
+        "source": {}
+      },
+      "packages": {
+        "source": {}
+      },
+      "files": {
+        "files": {
+          "/etc/reverse-proxy/listeners.json": {
+            "path": "/etc/reverse-proxy/listeners.json",
+            "content": "[{\"name\":\"http\",\"note\":null,\"port\":80,\"tags\":{},\"tls\":false},{\"name\":\"https\",\"note\":null,\"port\":443,\"tags\":{\"public\":\"true\"},\"tls\":true}]",
+            "owner": "root",
+            "group": "root",
+            "mode": "0644",
+            "ensure": "present",
+            "summary": {
+              "sha256": "b74a83b8b18992d585d318e4b2ae3cffb0e1ba7a82dad377ccf3432f4ef23ce5",
+              "bytes": 137
+            },
+            "source": {
+              "file": "../../../examples/v2-component-inputs.dbf.hcl",
+              "line": 22,
+              "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]"
+            }
+          }
+        },
+        "source": {
+          "file": "../../../examples/v2-component-inputs.dbf.hcl",
+          "line": 21,
+          "path": "component.reverse_proxy.files"
+        }
+      },
+      "secrets": {
+        "source": {}
+      },
+      "directories": {
+        "source": {}
+      },
+      "groups": {
+        "source": {}
+      },
+      "users": {
+        "source": {}
+      },
+      "systemd": {
+        "source": {}
+      },
+      "services": {
+        "source": {}
+      },
+      "source": {
+        "file": "../../../examples/v2-component-inputs.dbf.hcl",
+        "line": 35,
+        "path": "host.input1.component[\"proxy\"]"
+      }
+    }
+  ]
+}

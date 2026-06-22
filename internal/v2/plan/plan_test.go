@@ -159,6 +159,26 @@ func TestComponentBinaryPlanJSONGolden(t *testing.T) {
 	}
 }
 
+func TestComponentInputsPlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-component-inputs.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-component-inputs.dbf.hcl",
+		Host:        "input1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-component-inputs.golden.json", got)
+
+	if doc.Summary.Create != 1 {
+		t.Fatalf("create count = %d, want 1", doc.Summary.Create)
+	}
+}
+
 func TestProfileMergePlanJSONGolden(t *testing.T) {
 	doc := planFixture(t, "../../../examples/v2-profile-merge.dbf.hcl", Options{
 		CommandFile: "../../../examples/v2-profile-merge.dbf.hcl",
@@ -513,6 +533,7 @@ func testHostFacts() map[string]ir.HostFacts {
 		"bbr1",
 		"edge1",
 		"foundation1",
+		"input1",
 		"merge1",
 		"preview1",
 		"router1",
