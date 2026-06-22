@@ -386,8 +386,8 @@ ssh_host wg-b ". /etc/os-release && test \"\$ID\" = debian && test \"\$VERSION_I
 
 while IFS= read -r config; do
   sed -i \
-    -e "s/__DBF_WG_A_SSH_HOST__/wg-a/g" \
-    -e "s/__DBF_WG_B_SSH_HOST__/wg-b/g" \
+    -e "s/__DBF_WG_A_SSH_HOST__/$VM_A_IP/g" \
+    -e "s/__DBF_WG_B_SSH_HOST__/$VM_B_IP/g" \
     -e "s/__DBF_WG_A_VM_IP__/$VM_A_IP/g" \
     -e "s/__DBF_WG_B_VM_IP__/$VM_B_IP/g" \
     -e "s/__DBF_VM_IP__/$VM_A_IP/g" \
