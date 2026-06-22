@@ -209,6 +209,7 @@ libvirt 集成测试会启动全新的 Debian 13 cloud VM，并执行 v2 `valida
 
 ```bash
 make test-integration-layout
+make test-integration-case CASE=bbr
 make test-integration-case CASE=files
 make test-integration
 ```

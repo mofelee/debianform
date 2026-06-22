@@ -1,0 +1,2 @@
+run_remote "write drift to bbr runtime and persisted files" \
+  "sysctl -w net.core.default_qdisc=fq_codel >/dev/null && sysctl -w net.ipv4.tcp_congestion_control=reno >/dev/null && printf 'tcp_bbr_drift\n' > /etc/modules-load.d/dbf-tcp_bbr.conf && printf 'net.core.default_qdisc = fq_codel\n' > /etc/sysctl.d/99-dbf-net_core_default_qdisc.conf && printf 'net.ipv4.tcp_congestion_control = reno\n' > /etc/sysctl.d/99-dbf-net_ipv4_tcp_congestion_control.conf"
