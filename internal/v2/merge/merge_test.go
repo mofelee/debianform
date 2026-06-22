@@ -698,6 +698,104 @@ host "server1" {
 	}
 }
 
+func TestValidateRuntimeTemplatesAllowsMissingRuntimeFacts(t *testing.T) {
+	cfg := parseInline(t, `
+component "tools" {
+  type = "binary"
+
+  source "amd64" {
+    url    = "https://downloads.example/tools-amd64.tar.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  source "arm64" {
+    url    = "https://downloads.example/tools-arm64.tar.gz"
+    sha256 = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  }
+
+  extract {
+    include = "tools"
+  }
+
+  install {
+    path = "/usr/local/bin/tools"
+  }
+
+  apt {
+    repository "tools_repo" {
+      uris       = ["https://repo.example/debian"]
+      suites     = [target.system.codename]
+      components = ["main"]
+    }
+  }
+}
+
+host "server1" {
+  components = [component.tools]
+}
+`)
+	if _, err := CompileWithOptions(cfg, CompileOptions{ValidateRuntimeTemplates: true}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateRuntimeTemplatesChecksAllArtifactSources(t *testing.T) {
+	cfg := parseInline(t, `
+component "tools" {
+  type = "binary"
+
+  source "amd64" {
+    url    = "https://downloads.example/tools-amd64.tar.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  source "arm64" {
+    url    = "https://downloads.example/tools-arm64.tar.gz"
+    sha256 = "bad"
+  }
+
+  extract {
+    include = "tools"
+  }
+
+  install {
+    path = "/usr/local/bin/tools"
+  }
+}
+
+host "server1" {
+  components = [component.tools]
+}
+`)
+	_, err := CompileWithOptions(cfg, CompileOptions{ValidateRuntimeTemplates: true})
+	if err == nil || !strings.Contains(err.Error(), "sha256 must be a 64 character hex string") {
+		t.Fatalf("CompileWithOptions error = %v, want sha256 validation", err)
+	}
+}
+
+func TestValidateRuntimeTemplatesChecksRuntimeDependentBodyShape(t *testing.T) {
+	cfg := parseInline(t, `
+component "tools" {
+  apt {
+    repository "tools_repo" {
+      uris       = ["https://repo.example/debian"]
+      suites     = [target.system.codename]
+      components = ["main"]
+      invalid    = true
+    }
+  }
+}
+
+host "server1" {
+  components = [component.tools]
+}
+`)
+	_, err := CompileWithOptions(cfg, CompileOptions{ValidateRuntimeTemplates: true})
+	if err == nil || !strings.Contains(err.Error(), "unsupported attribute component.tools.apt.repository[\"tools_repo\"].invalid") {
+		t.Fatalf("CompileWithOptions error = %v, want unsupported attribute validation", err)
+	}
+}
+
 func TestCompileComponentTemplateSpecAndArtifactTypes(t *testing.T) {
 	program := compileInline(t, `
 component "artifact_file" {

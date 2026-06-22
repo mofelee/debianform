@@ -302,14 +302,7 @@ func compileV2Program(cfg *v2parser.Config, host string, opts v2merge.CompileOpt
 }
 
 func compileV2ValidationProgram(cfg *v2parser.Config, host string) (*v2ir.Program, error) {
-	program, err := compileV2Program(cfg, host, v2merge.CompileOptions{})
-	if err == nil {
-		return program, nil
-	}
-	if !isRuntimeFactCompileError(err) {
-		return nil, err
-	}
-	return compileV2Program(cfg, host, v2merge.CompileOptions{SkipComponents: true})
+	return compileV2Program(cfg, host, v2merge.CompileOptions{ValidateRuntimeTemplates: true})
 }
 
 func isRuntimeFactCompileError(err error) bool {

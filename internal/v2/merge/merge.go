@@ -17,9 +17,10 @@ import (
 )
 
 type CompileOptions struct {
-	HostFilter     string
-	HostFacts      map[string]ir.HostFacts
-	SkipComponents bool
+	HostFilter               string
+	HostFacts                map[string]ir.HostFacts
+	SkipComponents           bool
+	ValidateRuntimeTemplates bool
 }
 
 func Compile(cfg *parser.Config) (*ir.Program, error) {
@@ -76,7 +77,11 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 				return nil, err
 			}
 		}
-		if !opts.SkipComponents {
+		if opts.ValidateRuntimeTemplates {
+			if err := compiler.validateRuntimeComponentTemplates(host.Components, spec); err != nil {
+				return nil, err
+			}
+		} else if !opts.SkipComponents {
 			components, err := compiler.instantiateComponents(host.Components, spec)
 			if err != nil {
 				return nil, err
@@ -268,6 +273,135 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 	return out, nil
 }
 
+func (c *compiler) validateRuntimeComponentTemplates(instances []parser.ComponentInstance, target ir.HostSpec) error {
+	if len(instances) == 0 {
+		return nil
+	}
+	seen := map[string]ir.SourceRef{}
+	targetValue := runtimeValidationTargetValue(target)
+	for _, instance := range instances {
+		if instance.Name == "" {
+			return fmt.Errorf("%s:%d:%s: component instance name must be non-empty", instance.Source.File, instance.Source.Line, instance.Source.Path)
+		}
+		if previous, exists := seen[instance.Name]; exists {
+			return fmt.Errorf("%s:%d:%s: duplicate component instance %q; first declared at %s:%d:%s", instance.Source.File, instance.Source.Line, instance.Source.Path, instance.Name, previous.File, previous.Line, previous.Path)
+		}
+		seen[instance.Name] = instance.Source
+
+		template, ok := c.cfg.Components[instance.Template]
+		if !ok {
+			return fmt.Errorf("%s:%d:%s: unknown component.%s", instance.Source.File, instance.Source.Line, instance.Source.Path, instance.Template)
+		}
+		inputValues, inputJSON, err := componentInputValues(template, instance)
+		if err != nil {
+			return err
+		}
+		inputVars := make(map[string]cty.Value, len(inputValues))
+		for name, value := range inputValues {
+			converted, err := value.ToCty()
+			if err != nil {
+				return fmt.Errorf("%s:%d:%s.inputs[%q]: %w", instance.Source.File, instance.Source.Line, instance.Source.Path, name, err)
+			}
+			inputVars[name] = converted
+		}
+		if err := parser.ValidateComponentBodyShape(template); err != nil {
+			return fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
+		}
+		install, err := validateComponentArtifactTemplate(template)
+		if err != nil {
+			return err
+		}
+		raw, err := parser.ParseComponentBody(template, parser.EvalContext{
+			ModuleDir: template.ModuleDir,
+			Locals:    c.cfg.Locals,
+			Variables: map[string]cty.Value{
+				"target": targetValue,
+				"input":  objectOrEmpty(inputVars),
+			},
+		})
+		if err != nil {
+			if isRuntimeUnknownError(err) {
+				if install != nil {
+					component := ir.ComponentInstanceSpec{
+						Name:         instance.Name,
+						Template:     template.Name,
+						InputValues:  inputJSON,
+						ArtifactType: template.Type,
+						Version:      template.Version,
+						Install:      install,
+						Source:       instance.Source,
+					}
+					if err := validateComponentAgainstHost(target, component); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			return fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
+		}
+		component, err := buildComponentSpec(instance, raw)
+		if err != nil {
+			return err
+		}
+		component.Template = template.Name
+		component.InputValues = inputJSON
+		if install != nil {
+			component.ArtifactType = template.Type
+			component.Version = template.Version
+			component.Install = install
+		}
+		if err := validateComponentAgainstHost(target, component); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateComponentAgainstHost(target ir.HostSpec, component ir.ComponentInstanceSpec) error {
+	check := target
+	check.Components = append(append([]ir.ComponentInstanceSpec(nil), target.Components...), component)
+	return validateHostSpec(check)
+}
+
+func runtimeValidationTargetValue(host ir.HostSpec) cty.Value {
+	architecture := cty.StringVal(host.System.Architecture)
+	if host.System.Architecture == "" {
+		architecture = cty.UnknownVal(cty.String)
+	}
+	codename := cty.StringVal(host.System.Codename)
+	if host.System.Codename == "" {
+		codename = cty.UnknownVal(cty.String)
+	}
+	system := cty.ObjectVal(map[string]cty.Value{
+		"hostname":     cty.StringVal(host.System.Hostname),
+		"architecture": architecture,
+		"codename":     codename,
+		"timezone":     cty.StringVal(host.System.Timezone),
+		"locale":       cty.StringVal(host.System.Locale),
+	})
+	return cty.ObjectVal(map[string]cty.Value{
+		"name":        cty.StringVal(host.Name),
+		"ssh":         sshSpecToCty(host.SSH),
+		"state":       stateSpecToCty(host.State),
+		"system":      system,
+		"kernel":      kernelSpecToCty(host.Kernel),
+		"packages":    packageSpecToCty(host.Packages),
+		"apt":         aptSpecToCty(host.APT),
+		"files":       fileSpecToCty(host.Files),
+		"secrets":     secretSpecToCty(host.Secrets),
+		"directories": directorySpecToCty(host.Directories),
+		"groups":      groupSpecToCty(host.Groups),
+		"users":       userSpecToCty(host.Users),
+		"systemd":     systemdSpecToCty(host.Systemd),
+		"services":    serviceSpecToCty(host.Services),
+		"nftables":    nftablesSpecToCty(host.Nftables),
+	})
+}
+
+func isRuntimeUnknownError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "unknown values are not supported")
+}
+
 func componentInputValues(template parser.Component, instance parser.ComponentInstance) (map[string]parser.Value, map[string]any, error) {
 	values := map[string]parser.Value{}
 	jsonValues := map[string]any{}
@@ -378,6 +512,42 @@ func applyComponentArtifact(spec *ir.ComponentInstanceSpec, template parser.Comp
 	}
 	spec.Install = install
 	return nil
+}
+
+func validateComponentArtifactTemplate(template parser.Component) (*ir.ComponentArtifactInstallSpec, error) {
+	if template.Type == "" && template.Version == "" && len(template.Sources) == 0 && template.Extract == nil && template.Install == nil {
+		return nil, nil
+	}
+	if template.Type == "" {
+		return nil, fmt.Errorf("%s:%d:%s.type: component artifact type is required when source, extract, install, or version is declared", template.Source.File, template.Source.Line, template.Source.Path)
+	}
+	if !supportedComponentArtifactType(template.Type) {
+		return nil, fmt.Errorf("%s:%d:%s.type: component artifact type %q is not supported yet", template.Source.File, template.Source.Line, template.Source.Path, template.Type)
+	}
+	if len(template.Sources) == 0 {
+		return nil, fmt.Errorf("%s:%d:%s.source: %s component requires at least one source block", template.Source.File, template.Source.Line, template.Source.Path, template.Type)
+	}
+	if independent, hasIndependent := template.Sources[""]; hasIndependent && len(template.Sources) != 1 {
+		return nil, fmt.Errorf("%s:%d:%s.source: cannot mix unlabeled and architecture-labeled source blocks", independent.Source.File, independent.Source.Line, independent.Source.Path)
+	}
+	for _, name := range sortedKeys(template.Sources) {
+		source := template.Sources[name]
+		if err := validateComponentArtifactSource(source); err != nil {
+			return nil, err
+		}
+		if template.Extract != nil {
+			if _, err := componentArtifactExtractSpec(template.Type, *template.Extract, source); err != nil {
+				return nil, err
+			}
+		} else if template.Type == "archive" {
+			return nil, fmt.Errorf("%s:%d:%s.extract: archive component requires an extract block", template.Source.File, template.Source.Line, template.Source.Path)
+		}
+	}
+	install, err := componentArtifactInstallSpec(template)
+	if err != nil {
+		return nil, err
+	}
+	return install, nil
 }
 
 func supportedComponentArtifactType(artifactType string) bool {

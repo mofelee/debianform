@@ -726,6 +726,182 @@ func ParseComponentBody(component Component, ctx EvalContext) (Value, error) {
 	return MapValue(values, component.Source), nil
 }
 
+func ValidateComponentBodyShape(component Component) error {
+	for name, attr := range component.Body.Attributes {
+		switch name {
+		case "type", "version":
+			continue
+		default:
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", attr.NameRange.Filename, attr.NameRange.Start.Line, component.Source.Path, name)
+		}
+	}
+
+	values := map[string]struct{}{}
+	for _, block := range component.Body.Blocks {
+		switch block.Type {
+		case "input", "source", "extract", "install":
+			continue
+		case "apt", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services":
+			if len(block.Labels) != 0 {
+				return fmt.Errorf("%s:%d: %s block must not have labels", component.Source.File, block.TypeRange.Start.Line, block.Type)
+			}
+			if _, exists := values[block.Type]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.%s block", component.Source.File, block.TypeRange.Start.Line, component.Source.Path, block.Type)
+			}
+			if err := validateDomainBlockShape(component.Source.File, component.Source.Path+"."+block.Type, block); err != nil {
+				return err
+			}
+			values[block.Type] = struct{}{}
+		default:
+			return fmt.Errorf("%s:%d: unsupported block %s.%s", component.Source.File, block.TypeRange.Start.Line, component.Source.Path, block.Type)
+		}
+	}
+	return nil
+}
+
+func validateDomainBlockShape(file, path string, block *hclsyntax.Block) error {
+	allowed := allowedDomainAttrs(block.Type)
+	allowedBlocks := allowedDomainObjectBlocks(block.Type)
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+
+	values := map[string]struct{}{}
+	collections := map[string]map[string]struct{}{}
+	for _, child := range block.Body.Blocks {
+		if block.Type == "nftables" && child.Type == "main" {
+			if _, exists := values["main"]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.main block", file, child.TypeRange.Start.Line, path)
+			}
+			if err := validateNftablesMainBlockShape(file, path+".main", child); err != nil {
+				return err
+			}
+			values["main"] = struct{}{}
+			continue
+		}
+		if _, ok := allowedBlocks[child.Type]; !ok {
+			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+		if len(child.Labels) != 1 {
+			return fmt.Errorf("%s:%d: %s.%s block requires exactly one label", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+		label := child.Labels[0]
+		objectPath := fmt.Sprintf("%s.%s[%s]", path, child.Type, strconv.Quote(label))
+		if err := validateLabeledObjectBlockShape(file, block.Type, objectPath, child); err != nil {
+			return err
+		}
+		collection, ok := collections[child.Type]
+		if !ok {
+			collection = map[string]struct{}{}
+			collections[child.Type] = collection
+		}
+		if _, exists := collection[label]; exists {
+			return fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
+		}
+		collection[label] = struct{}{}
+	}
+	return nil
+}
+
+func validateNftablesMainBlockShape(file, path string, block *hclsyntax.Block) error {
+	if len(block.Labels) != 0 {
+		return fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	allowed := attrSet("path", "content", "source", "owner", "group", "mode", "ensure", "sensitive", "validate", "activate")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	values := map[string]struct{}{}
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "lifecycle":
+			if _, exists := values["lifecycle"]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.lifecycle block", file, child.TypeRange.Start.Line, path)
+			}
+			if err := validateLifecycleBlockShape(file, path+".lifecycle", child); err != nil {
+				return err
+			}
+			values["lifecycle"] = struct{}{}
+		default:
+			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return nil
+}
+
+func validateLabeledObjectBlockShape(file, domain, path string, block *hclsyntax.Block) error {
+	allowed := allowedLabeledObjectAttrs(domain, block.Type)
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+
+	values := map[string]struct{}{}
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "lifecycle":
+			if _, exists := values["lifecycle"]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.lifecycle block", file, child.TypeRange.Start.Line, path)
+			}
+			if err := validateLifecycleBlockShape(file, path+".lifecycle", child); err != nil {
+				return err
+			}
+			values["lifecycle"] = struct{}{}
+		case "signing_key":
+			if domain != "apt" || block.Type != "repository" {
+				return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if _, exists := values["signing_key"]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.signing_key block", file, child.TypeRange.Start.Line, path)
+			}
+			if err := validateSigningKeyBlockShape(file, path+".signing_key", child); err != nil {
+				return err
+			}
+			values["signing_key"] = struct{}{}
+		default:
+			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return nil
+}
+
+func validateSigningKeyBlockShape(file, path string, block *hclsyntax.Block) error {
+	if len(block.Labels) != 0 {
+		return fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	for name, attr := range block.Body.Attributes {
+		switch name {
+		case "url", "content", "sha256", "path":
+		default:
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	return nil
+}
+
+func validateLifecycleBlockShape(file, path string, block *hclsyntax.Block) error {
+	if len(block.Labels) != 0 {
+		return fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	for name, attr := range block.Body.Attributes {
+		if name != "prevent_destroy" {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	return nil
+}
+
 func parseDomainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
 	allowed := allowedDomainAttrs(block.Type)
 	allowedBlocks := allowedDomainObjectBlocks(block.Type)
