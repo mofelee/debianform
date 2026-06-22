@@ -18,7 +18,11 @@ make test-integration-case CASE=files
 make test-integration-case CASE=nftables
 make test-integration-case CASE=shadowsocks-rust
 make test-integration-case CASE=systemd-service-unit
+make test-integration-case CASE=wireguard
 ```
+
+`wireguard` case uses the two-host runner. It boots two Debian VMs on the same
+temporary libvirt network and verifies bidirectional tunnel ping over `wg0`.
 
 Validate the case layout without starting a VM:
 

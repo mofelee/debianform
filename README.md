@@ -29,7 +29,8 @@ v2 领域块或 component。
 
 ## v2 示例
 
-`examples/` 中的文件是 v2 示例和设计夹具。当前已支持以下示例通过 v2 validate。
+`examples/` 中的文件是 v2 示例和设计夹具。当前已支持以下示例作为 v2 可运行样例；
+依赖本地 source/secrets 的示例需要先准备对应文件，因为 validate 会读取这些输入。
 默认 `plan` 会通过 SSH 探测 runtime facts 并读取远端状态；纯本地预览可使用
 `plan --offline`：
 
@@ -46,6 +47,7 @@ v2 领域块或 component。
 - `examples/v2-systemd-service.dbf.hcl`
 - `examples/v2-systemd-service-unit.dbf.hcl`
 - `examples/v2-user-group.dbf.hcl`
+- `examples/v2-wireguard-wgquick.dbf.hcl`（真实 apply 前需准备本地 `examples/secrets/wg-a.conf` 和 `wg-b.conf`）
 
 其他示例仍为 design-only fixture，仅用于表达设计方向，不作为第一版可运行样例：
 
