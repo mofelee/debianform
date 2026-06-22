@@ -27,8 +27,8 @@ component "wireguard_networkd" {
   directories {
     directory "/etc/wireguard" {
       owner = "root"
-      group = "root"
-      mode  = "0700"
+      group = "systemd-network"
+      mode  = "0750"
     }
   }
 
@@ -36,8 +36,8 @@ component "wireguard_networkd" {
     file "/etc/wireguard/private.key" {
       source = input.private_key_source
       owner  = "root"
-      group  = "root"
-      mode   = "0600"
+      group  = "systemd-network"
+      mode   = "0640"
     }
   }
 

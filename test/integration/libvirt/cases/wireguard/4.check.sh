@@ -7,9 +7,9 @@ assert_remote wg-a "wg-a networkd files were removed before destroy" \
 assert_remote wg-b "wg-b networkd files were removed before destroy" \
   "test ! -e /etc/systemd/network/10-wg0.netdev && test ! -e /etc/systemd/network/20-wg0.network"
 assert_remote wg-a "wg-a private key remains available for final destroy" \
-  "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '600 root root'"
+  "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '640 root systemd-network'"
 assert_remote wg-b "wg-b private key remains available for final destroy" \
-  "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '600 root root'"
+  "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '640 root systemd-network'"
 assert_remote wg-a "wg-a state records absent networkd files without private key plaintext" \
   "grep -F 'host.wg-a.components.wireguard.systemd.networkd.netdev' /var/lib/debianform-integration/wireguard-a-state.json && ! grep -F 'PrivateKey =' /var/lib/debianform-integration/wireguard-a-state.json && ! grep -F 'oC8QjNRJyIfLSq9M9ueL2r/CIDRZrpbj+bF5x04kBVc=' /var/lib/debianform-integration/wireguard-a-state.json"
 assert_remote wg-b "wg-b state records absent networkd files without private key plaintext" \

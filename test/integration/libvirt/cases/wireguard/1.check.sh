@@ -1,7 +1,7 @@
 assert_remote wg-a "wg-a private key was deployed as a strict secret" \
-  "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '600 root root'"
+  "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '640 root systemd-network'"
 assert_remote wg-b "wg-b private key was deployed as a strict secret" \
-  "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '600 root root'"
+  "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '640 root systemd-network'"
 assert_remote wg-a "wg-a networkd netdev exists" \
   "test -e /etc/systemd/network/10-wg0.netdev && grep -F 'PrivateKeyFile=/etc/wireguard/private.key' /etc/systemd/network/10-wg0.netdev"
 assert_remote wg-b "wg-b networkd netdev exists" \

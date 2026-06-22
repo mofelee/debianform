@@ -8,6 +8,8 @@
 
 - 示例使用 `systemd.networkd` DSL 生成原生 networkd 配置。
 - WireGuard private key 通过 `secrets.file` 写入 `/etc/wireguard/private.key`。
+- private key 文件使用 `root:systemd-network 0640`，因为 Debian 上
+  `systemd-networkd.service` 以 `systemd-network` 用户运行。
 - `.netdev` 使用 `PrivateKeyFile`，不允许 inline `PrivateKey`。
 - 集成测试创建两台 Debian VM，并验证 `wg0` 双向 tunnel ping。
 
