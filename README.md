@@ -22,6 +22,7 @@ v2 领域块或 component。
 
 - [v2 requirements](docs/v2-requirements.md)
 - [v2 IR requirements](docs/v2-ir-requirements.zh.md)
+- [v2 component input requirements](docs/v2-component-input-requirements.zh.md)
 - [v2 plan format](docs/v2-plan-format.md)
 - [v2 state](docs/v2-state.md)
 - [v2 systemd service units](docs/v2-systemd-service-units.md)
