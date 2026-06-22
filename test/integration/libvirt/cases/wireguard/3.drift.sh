@@ -1,4 +1,4 @@
-run_remote wg-a "stop wg-a WireGuard service to create service drift" \
-  "systemctl stop wg-quick@wg0.service"
-assert_remote wg-a "wg-a service drift is present before repair" \
-  "! systemctl is-active --quiet wg-quick@wg0.service"
+run_remote wg-a "remove wg-a networkd netdev file to create drift" \
+  "rm -f /etc/systemd/network/10-wg0.netdev && networkctl reload"
+assert_remote wg-a "wg-a networkd file drift is present before repair" \
+  "test ! -e /etc/systemd/network/10-wg0.netdev"

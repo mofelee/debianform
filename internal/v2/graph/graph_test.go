@@ -365,6 +365,65 @@ host "server1" {
 	}
 }
 
+func TestCompileSystemdNetworkdWireGuardGraph(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "server1" {
+  systemd {
+    networkd {
+      netdev "10-wg0" {
+        netdev = {
+          Name = "wg0"
+          Kind = "wireguard"
+        }
+
+        wireguard = {
+          ListenPort     = 51820
+          PrivateKeyFile = "/etc/wireguard/private.key"
+          RouteTable     = "off"
+        }
+      }
+
+      network "20-wg0" {
+        match = {
+          Name = "wg0"
+        }
+
+        network = {
+          Address = ["10.80.0.1/30"]
+        }
+      }
+    }
+  }
+}
+`)
+
+	netdev := nodeFor(resourceGraph, `host.server1.systemd.networkd.netdev["10-wg0"]`)
+	if netdev == nil || netdev.Kind != "networkd_netdev" {
+		t.Fatalf("networkd netdev node = %#v", netdev)
+	}
+	if _, ok := netdev.Desired["content"]; !ok {
+		t.Fatalf("networkd netdev desired content missing: %#v", netdev.Desired)
+	}
+	networkDeps := dependsOnFor(resourceGraph, `host.server1.systemd.networkd.network["20-wg0"]`)
+	if !containsString(networkDeps, `host.server1.systemd.networkd.netdev["10-wg0"]`) {
+		t.Fatalf("network deps = %#v, want netdev dependency", networkDeps)
+	}
+	reload := operationFor(resourceGraph, "host.server1.systemd.networkd.restart")
+	if reload == nil {
+		t.Fatalf("networkd reload operation missing")
+	}
+	if !containsString(reload.TriggeredBy, `host.server1.systemd.networkd.netdev["10-wg0"]`) ||
+		!containsString(reload.TriggeredBy, `host.server1.systemd.networkd.network["20-wg0"]`) {
+		t.Fatalf("reload triggered_by = %#v", reload.TriggeredBy)
+	}
+	if !strings.Contains(reload.CommandPreview, "networkctl reload") {
+		t.Fatalf("reload command = %q", reload.CommandPreview)
+	}
+	if nodeFor(resourceGraph, `host.server1.packages.install["wireguard-tools"]`) != nil {
+		t.Fatalf("networkd WireGuard graph should not install wireguard-tools")
+	}
+}
+
 func TestCompileAPTRepositoryDependencies(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {

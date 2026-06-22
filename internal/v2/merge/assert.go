@@ -245,7 +245,72 @@ func systemdSpecToCty(spec ir.SystemdSpec) cty.Value {
 			"source_path": cty.StringVal(item.SourcePath),
 		})
 	}
-	return cty.ObjectVal(map[string]cty.Value{"units": objectOrEmpty(units)})
+	values := map[string]cty.Value{
+		"units":    objectOrEmpty(units),
+		"networkd": cty.NullVal(cty.DynamicPseudoType),
+	}
+	if spec.Networkd != nil {
+		values["networkd"] = networkdSpecToCty(*spec.Networkd)
+	}
+	return cty.ObjectVal(values)
+}
+
+func networkdSpecToCty(spec ir.NetworkdSpec) cty.Value {
+	netdevs := make(map[string]cty.Value, len(spec.NetDevs))
+	for _, label := range sortedMapKeys(spec.NetDevs) {
+		item := spec.NetDevs[label]
+		peers := make(map[string]cty.Value, len(item.WireGuardPeers))
+		for _, peer := range sortedMapKeys(item.WireGuardPeers) {
+			peers[peer] = networkdSectionToCty(item.WireGuardPeers[peer])
+		}
+		netdevs[label] = cty.ObjectVal(map[string]cty.Value{
+			"label":          cty.StringVal(item.Label),
+			"path":           cty.StringVal(item.Path),
+			"netdev":         networkdSectionToCty(item.NetDev),
+			"wireguard":      networkdSectionToCty(item.WireGuard),
+			"wireguard_peer": objectOrEmpty(peers),
+			"owner":          cty.StringVal(item.Owner),
+			"group":          cty.StringVal(item.Group),
+			"mode":           cty.StringVal(item.Mode),
+			"ensure":         cty.StringVal(item.Ensure),
+		})
+	}
+	networks := make(map[string]cty.Value, len(spec.Networks))
+	for _, label := range sortedMapKeys(spec.Networks) {
+		item := spec.Networks[label]
+		networks[label] = cty.ObjectVal(map[string]cty.Value{
+			"label":   cty.StringVal(item.Label),
+			"path":    cty.StringVal(item.Path),
+			"match":   networkdSectionToCty(item.Match),
+			"network": networkdSectionToCty(item.Network),
+			"owner":   cty.StringVal(item.Owner),
+			"group":   cty.StringVal(item.Group),
+			"mode":    cty.StringVal(item.Mode),
+			"ensure":  cty.StringVal(item.Ensure),
+		})
+	}
+	enable := cty.NullVal(cty.Bool)
+	if spec.Enable != nil {
+		enable = cty.BoolVal(*spec.Enable)
+	}
+	return cty.ObjectVal(map[string]cty.Value{
+		"enable":  enable,
+		"netdev":  objectOrEmpty(netdevs),
+		"network": objectOrEmpty(networks),
+	})
+}
+
+func networkdSectionToCty(section ir.NetworkdSection) cty.Value {
+	values := make(map[string]cty.Value, len(section))
+	for _, key := range sortedMapKeys(section) {
+		items := section[key]
+		if len(items) == 1 {
+			values[key] = cty.StringVal(items[0])
+		} else {
+			values[key] = stringListToCty(items)
+		}
+	}
+	return objectOrEmpty(values)
 }
 
 func serviceSpecToCty(spec ir.ServiceSpec) cty.Value {

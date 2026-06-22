@@ -98,10 +98,6 @@ profile "bbr" {
 }
 
 profile "wireguard" {
-  packages {
-    install = ["wireguard-tools"]
-  }
-
   kernel {
     modules = ["wireguard"]
   }

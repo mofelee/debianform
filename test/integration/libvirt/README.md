@@ -22,7 +22,8 @@ make test-integration-case CASE=wireguard
 ```
 
 `wireguard` case uses the two-host runner. It boots two Debian VMs on the same
-temporary libvirt network and verifies bidirectional tunnel ping over `wg0`.
+temporary libvirt network and verifies a native systemd-networkd WireGuard
+tunnel over `wg0`.
 
 Validate the case layout without starting a VM:
 

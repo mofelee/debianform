@@ -358,8 +358,8 @@ func TestParseRunnableV2ExamplesGolden(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(cfg.Hosts) != 1 {
-			t.Fatalf("%s hosts = %d, want 1", fixture, len(cfg.Hosts))
+		if len(cfg.Hosts) == 0 {
+			t.Fatalf("%s hosts = 0, want at least 1", fixture)
 		}
 		summaries = append(summaries, summarizeParsedExample(fixture, cfg))
 	}

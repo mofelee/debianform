@@ -230,8 +230,9 @@ type ManagedUser struct {
 }
 
 type SystemdSpec struct {
-	Units  map[string]SystemdUnit `json:"units,omitempty"`
-	Source SourceRef              `json:"source,omitempty"`
+	Units    map[string]SystemdUnit `json:"units,omitempty"`
+	Networkd *NetworkdSpec          `json:"networkd,omitempty"`
+	Source   SourceRef              `json:"source,omitempty"`
 }
 
 type SystemdUnit struct {
@@ -246,6 +247,46 @@ type SystemdUnit struct {
 	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
 	Summary    ContentSummary `json:"summary,omitempty"`
 	Source     SourceRef      `json:"source,omitempty"`
+}
+
+type NetworkdSpec struct {
+	Enable   *bool                      `json:"enable,omitempty"`
+	NetDevs  map[string]NetworkdNetDev  `json:"netdev,omitempty"`
+	Networks map[string]NetworkdNetwork `json:"network,omitempty"`
+	Source   SourceRef                  `json:"source,omitempty"`
+}
+
+type NetworkdSection map[string][]string
+
+type NetworkdNetDev struct {
+	Label          string                     `json:"label"`
+	Path           string                     `json:"path"`
+	NetDev         NetworkdSection            `json:"netdev,omitempty"`
+	WireGuard      NetworkdSection            `json:"wireguard,omitempty"`
+	WireGuardPeers map[string]NetworkdSection `json:"wireguard_peer,omitempty"`
+	Owner          string                     `json:"owner"`
+	Group          string                     `json:"group"`
+	Mode           string                     `json:"mode"`
+	Ensure         string                     `json:"ensure"`
+	Lifecycle      *LifecycleSpec             `json:"lifecycle,omitempty"`
+	Summary        ContentSummary             `json:"summary,omitempty"`
+	Content        string                     `json:"content,omitempty"`
+	Source         SourceRef                  `json:"source,omitempty"`
+}
+
+type NetworkdNetwork struct {
+	Label     string          `json:"label"`
+	Path      string          `json:"path"`
+	Match     NetworkdSection `json:"match,omitempty"`
+	Network   NetworkdSection `json:"network,omitempty"`
+	Owner     string          `json:"owner"`
+	Group     string          `json:"group"`
+	Mode      string          `json:"mode"`
+	Ensure    string          `json:"ensure"`
+	Lifecycle *LifecycleSpec  `json:"lifecycle,omitempty"`
+	Summary   ContentSummary  `json:"summary,omitempty"`
+	Content   string          `json:"content,omitempty"`
+	Source    SourceRef       `json:"source,omitempty"`
 }
 
 type ServiceSpec struct {

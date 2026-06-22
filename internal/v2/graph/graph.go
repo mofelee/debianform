@@ -103,6 +103,27 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			unitAddresses[name] = fmt.Sprintf("%s.systemd.unit[%s]", componentPrefix, strconv.Quote(name))
 		}
 	}
+	networkdAddresses := map[string]string{}
+	if host.Systemd.Networkd != nil {
+		for _, label := range sortedKeys(host.Systemd.Networkd.NetDevs) {
+			networkdAddresses[host.Systemd.Networkd.NetDevs[label].Path] = fmt.Sprintf("host.%s.systemd.networkd.netdev[%s]", host.Name, strconv.Quote(label))
+		}
+		for _, label := range sortedKeys(host.Systemd.Networkd.Networks) {
+			networkdAddresses[host.Systemd.Networkd.Networks[label].Path] = fmt.Sprintf("host.%s.systemd.networkd.network[%s]", host.Name, strconv.Quote(label))
+		}
+	}
+	for _, component := range host.Components {
+		if component.Systemd.Networkd == nil {
+			continue
+		}
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, label := range sortedKeys(component.Systemd.Networkd.NetDevs) {
+			networkdAddresses[component.Systemd.Networkd.NetDevs[label].Path] = fmt.Sprintf("%s.systemd.networkd.netdev[%s]", componentPrefix, strconv.Quote(label))
+		}
+		for _, label := range sortedKeys(component.Systemd.Networkd.Networks) {
+			networkdAddresses[component.Systemd.Networkd.Networks[label].Path] = fmt.Sprintf("%s.systemd.networkd.network[%s]", componentPrefix, strconv.Quote(label))
+		}
+	}
 
 	for _, module := range host.Kernel.Modules {
 		address := fmt.Sprintf("host.%s.kernel.module[%s]", host.Name, strconv.Quote(module.Name))
@@ -990,6 +1011,11 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	}
 
 	unitTriggers := []string{}
+	networkdTriggers := []string{}
+	networkdDeleteNames := []string{}
+	networkdSource := ir.SourceRef{}
+	var networkdEnable *bool
+	networkdEnableSource := ir.SourceRef{}
 	for _, name := range sortedKeys(host.Systemd.Units) {
 		item := host.Systemd.Units[name]
 		address := fmt.Sprintf("host.%s.systemd.unit[%s]", host.Name, strconv.Quote(name))
@@ -1062,6 +1088,120 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				ProviderPayload: desired,
 			})
 		}
+	}
+
+	if host.Systemd.Networkd != nil {
+		if networkdSource.File == "" {
+			networkdSource = host.Systemd.Networkd.Source
+		}
+		if host.Systemd.Networkd.Enable != nil {
+			value := *host.Systemd.Networkd.Enable
+			networkdEnable = &value
+			networkdEnableSource = host.Systemd.Networkd.Source
+		}
+		for _, label := range sortedKeys(host.Systemd.Networkd.NetDevs) {
+			item := host.Systemd.Networkd.NetDevs[label]
+			address := fmt.Sprintf("host.%s.systemd.networkd.netdev[%s]", host.Name, strconv.Quote(label))
+			networkdTriggers = append(networkdTriggers, address)
+			if item.Ensure == "absent" {
+				networkdDeleteNames = append(networkdDeleteNames, networkdNetDevName(item))
+			}
+			nodes = append(nodes, networkdNetDevNode(host.Name, address, "", item, nil))
+		}
+		for _, label := range sortedKeys(host.Systemd.Networkd.Networks) {
+			item := host.Systemd.Networkd.Networks[label]
+			address := fmt.Sprintf("host.%s.systemd.networkd.network[%s]", host.Name, strconv.Quote(label))
+			networkdTriggers = append(networkdTriggers, address)
+			deps := networkdNetworkDependencies(item, networkdAddresses)
+			nodes = append(nodes, networkdNetworkNode(host.Name, address, "", item, deps))
+		}
+	}
+
+	for _, component := range host.Components {
+		if component.Systemd.Networkd == nil {
+			continue
+		}
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		if networkdSource.File == "" {
+			networkdSource = component.Systemd.Networkd.Source
+		}
+		if component.Systemd.Networkd.Enable != nil {
+			value := *component.Systemd.Networkd.Enable
+			networkdEnable = &value
+			networkdEnableSource = component.Systemd.Networkd.Source
+		}
+		for _, label := range sortedKeys(component.Systemd.Networkd.NetDevs) {
+			item := component.Systemd.Networkd.NetDevs[label]
+			address := fmt.Sprintf("%s.systemd.networkd.netdev[%s]", componentPrefix, strconv.Quote(label))
+			networkdTriggers = append(networkdTriggers, address)
+			if item.Ensure == "absent" {
+				networkdDeleteNames = append(networkdDeleteNames, networkdNetDevName(item))
+			}
+			deps := []string{}
+			if installAddress, ok := componentArtifactInstallAddresses[component.Name]; ok {
+				deps = append(deps, installAddress)
+			}
+			deps = append(deps, ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses)...)
+			nodes = append(nodes, networkdNetDevNode(host.Name, address, component.Name, item, dedupeStrings(deps)))
+		}
+		for _, label := range sortedKeys(component.Systemd.Networkd.Networks) {
+			item := component.Systemd.Networkd.Networks[label]
+			address := fmt.Sprintf("%s.systemd.networkd.network[%s]", componentPrefix, strconv.Quote(label))
+			networkdTriggers = append(networkdTriggers, address)
+			deps := networkdNetworkDependencies(item, networkdAddresses)
+			if installAddress, ok := componentArtifactInstallAddresses[component.Name]; ok {
+				deps = append(deps, installAddress)
+			}
+			deps = append(deps, ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses)...)
+			nodes = append(nodes, networkdNetworkNode(host.Name, address, component.Name, item, dedupeStrings(deps)))
+		}
+	}
+
+	if len(networkdTriggers) > 0 {
+		deps := append([]string(nil), networkdTriggers...)
+		if networkdEnable != nil && *networkdEnable {
+			deps = append(deps, "host."+host.Name+".systemd.networkd.enable")
+		}
+		operations = append(operations, Operation{
+			Address:        "host." + host.Name + ".systemd.networkd.restart",
+			Action:         "run",
+			Summary:        "reload systemd-networkd",
+			DependsOn:      dedupeStrings(deps),
+			TriggeredBy:    append([]string(nil), networkdTriggers...),
+			CommandPreview: networkdReloadCommand(networkdDeleteNames),
+			Source:         networkdSource,
+		})
+	}
+
+	if networkdEnable != nil {
+		address := "host." + host.Name + ".systemd.networkd.enable"
+		deps := append([]string(nil), networkdTriggers...)
+		state := "stopped"
+		if *networkdEnable {
+			state = "running"
+		}
+		desired := map[string]any{
+			"name":    "systemd-networkd",
+			"unit":    "systemd-networkd.service",
+			"enabled": *networkdEnable,
+			"state":   state,
+		}
+		summary := "disable systemd-networkd"
+		if *networkdEnable {
+			summary = "enable systemd-networkd"
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         address,
+			Kind:            "service",
+			Summary:         summary,
+			Source:          networkdEnableSource,
+			Desired:         desired,
+			DependsOn:       dedupeStrings(deps),
+			ProviderType:    "service",
+			ProviderAddress: "service." + providerName(host.Name, "systemd-networkd"),
+			ProviderPayload: desired,
+		})
 	}
 
 	daemonReloadAddress := ""
@@ -1216,6 +1356,103 @@ func providerName(parts ...string) string {
 
 func aptRepositorySourcePath(name string) string {
 	return "/etc/apt/sources.list.d/" + providerName(name) + ".sources"
+}
+
+func networkdNetDevNode(hostName, address, component string, item ir.NetworkdNetDev, deps []string) Node {
+	desired := map[string]any{
+		"label":   item.Label,
+		"path":    item.Path,
+		"owner":   item.Owner,
+		"group":   item.Group,
+		"mode":    item.Mode,
+		"ensure":  item.Ensure,
+		"summary": item.Summary,
+	}
+	if component != "" {
+		desired["component"] = component
+	}
+	if item.Content != "" {
+		desired["content"] = item.Content
+	}
+	return Node{
+		Host:            hostName,
+		Address:         address,
+		Kind:            "networkd_netdev",
+		Summary:         "manage networkd netdev " + item.Label,
+		Source:          item.Source,
+		Lifecycle:       lifecyclePtr(item.Lifecycle),
+		Desired:         desired,
+		DependsOn:       dedupeStrings(deps),
+		ProviderType:    "file",
+		ProviderAddress: "file." + providerName(hostName, item.Path),
+		ProviderPayload: desired,
+	}
+}
+
+func networkdNetworkNode(hostName, address, component string, item ir.NetworkdNetwork, deps []string) Node {
+	desired := map[string]any{
+		"label":   item.Label,
+		"path":    item.Path,
+		"owner":   item.Owner,
+		"group":   item.Group,
+		"mode":    item.Mode,
+		"ensure":  item.Ensure,
+		"summary": item.Summary,
+	}
+	if component != "" {
+		desired["component"] = component
+	}
+	if item.Content != "" {
+		desired["content"] = item.Content
+	}
+	return Node{
+		Host:            hostName,
+		Address:         address,
+		Kind:            "networkd_network",
+		Summary:         "manage networkd network " + item.Label,
+		Source:          item.Source,
+		Lifecycle:       lifecyclePtr(item.Lifecycle),
+		Desired:         desired,
+		DependsOn:       dedupeStrings(deps),
+		ProviderType:    "file",
+		ProviderAddress: "file." + providerName(hostName, item.Path),
+		ProviderPayload: desired,
+	}
+}
+
+func networkdNetworkDependencies(item ir.NetworkdNetwork, networkdAddresses map[string]string) []string {
+	var deps []string
+	for path, address := range networkdAddresses {
+		if strings.HasSuffix(path, ".netdev") && strings.Contains(address, ".networkd.netdev[") {
+			deps = append(deps, address)
+		}
+	}
+	return dedupeStrings(deps)
+}
+
+func networkdNetDevName(item ir.NetworkdNetDev) string {
+	if values := item.NetDev["Name"]; len(values) > 0 {
+		return values[0]
+	}
+	return ""
+}
+
+func networkdReloadCommand(deleteNames []string) string {
+	lines := []string{"systemctl start systemd-networkd.service", "networkctl reload"}
+	for _, name := range dedupeStrings(deleteNames) {
+		if name == "" {
+			continue
+		}
+		lines = append(lines, "ip link delete "+shellQuoteGraph(name)+" 2>/dev/null || true")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func shellQuoteGraph(value string) string {
+	if value == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func aptRepositorySourceContent(repo ir.APTRepositorySpec) string {

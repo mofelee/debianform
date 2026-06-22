@@ -1,20 +1,16 @@
-assert_remote wg-a "wg-a service was stopped before destroy" \
-  "! systemctl is-active --quiet wg-quick@wg0.service"
-assert_remote wg-b "wg-b service was stopped before destroy" \
-  "! systemctl is-active --quiet wg-quick@wg0.service"
-assert_remote wg-a "wg-a service was disabled before destroy" \
-  "! systemctl is-enabled --quiet wg-quick@wg0.service"
-assert_remote wg-b "wg-b service was disabled before destroy" \
-  "! systemctl is-enabled --quiet wg-quick@wg0.service"
-assert_remote wg-a "wg-a WireGuard interface was removed after stopping service" \
+assert_remote wg-a "wg-a WireGuard interface was removed before destroy" \
   "! ip link show wg0"
-assert_remote wg-b "wg-b WireGuard interface was removed after stopping service" \
+assert_remote wg-b "wg-b WireGuard interface was removed before destroy" \
   "! ip link show wg0"
-assert_remote wg-a "wg-a config remains available for final destroy" \
-  "test -e /etc/wireguard/wg0.conf && test \"\$(stat -c '%a %U %G' /etc/wireguard/wg0.conf)\" = '600 root root'"
-assert_remote wg-b "wg-b config remains available for final destroy" \
-  "test -e /etc/wireguard/wg0.conf && test \"\$(stat -c '%a %U %G' /etc/wireguard/wg0.conf)\" = '600 root root'"
-assert_remote wg-a "wg-a state records stopped service without private key plaintext" \
-  "grep -F 'host.wg-a.components.wireguard.services.service[\\\"wg-quick@wg0\\\"]' /var/lib/debianform-integration/wireguard-a-state.json && ! grep -F 'PrivateKey' /var/lib/debianform-integration/wireguard-a-state.json"
-assert_remote wg-b "wg-b state records stopped service without private key plaintext" \
-  "grep -F 'host.wg-b.components.wireguard.services.service[\\\"wg-quick@wg0\\\"]' /var/lib/debianform-integration/wireguard-b-state.json && ! grep -F 'PrivateKey' /var/lib/debianform-integration/wireguard-b-state.json"
+assert_remote wg-a "wg-a networkd files were removed before destroy" \
+  "test ! -e /etc/systemd/network/10-wg0.netdev && test ! -e /etc/systemd/network/20-wg0.network"
+assert_remote wg-b "wg-b networkd files were removed before destroy" \
+  "test ! -e /etc/systemd/network/10-wg0.netdev && test ! -e /etc/systemd/network/20-wg0.network"
+assert_remote wg-a "wg-a private key remains available for final destroy" \
+  "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '600 root root'"
+assert_remote wg-b "wg-b private key remains available for final destroy" \
+  "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '600 root root'"
+assert_remote wg-a "wg-a state records absent networkd files without private key plaintext" \
+  "grep -F 'host.wg-a.components.wireguard.systemd.networkd.netdev' /var/lib/debianform-integration/wireguard-a-state.json && ! grep -F 'PrivateKey =' /var/lib/debianform-integration/wireguard-a-state.json && ! grep -F 'oC8QjNRJyIfLSq9M9ueL2r/CIDRZrpbj+bF5x04kBVc=' /var/lib/debianform-integration/wireguard-a-state.json"
+assert_remote wg-b "wg-b state records absent networkd files without private key plaintext" \
+  "grep -F 'host.wg-b.components.wireguard.systemd.networkd.netdev' /var/lib/debianform-integration/wireguard-b-state.json && ! grep -F 'PrivateKey =' /var/lib/debianform-integration/wireguard-b-state.json && ! grep -F 'mDr+zYznUq+J5L2Qm9ezR8FFcpFw69yiLLogYxYJBGc=' /var/lib/debianform-integration/wireguard-b-state.json"

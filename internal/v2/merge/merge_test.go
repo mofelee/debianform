@@ -1463,6 +1463,105 @@ host "server1" {
 	}
 }
 
+func TestCompileSystemdNetworkdWireGuard(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  systemd {
+    networkd {
+      netdev "10-wg0" {
+        netdev = {
+          Name = "wg0"
+          Kind = "wireguard"
+        }
+
+        wireguard = {
+          ListenPort     = 51820
+          PrivateKeyFile = "/etc/wireguard/private.key"
+          RouteTable     = "off"
+        }
+
+        wireguard_peer "server2" {
+          PublicKey  = "peer-public-key"
+          AllowedIPs = ["10.80.0.2/32"]
+        }
+      }
+
+      network "20-wg0" {
+        match = {
+          Name = "wg0"
+        }
+
+        network = {
+          Address = ["10.80.0.1/30"]
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = self.systemd.networkd.netdev["10-wg0"].wireguard.RouteTable == "off"
+    message   = "RouteTable must stay off"
+  }
+}
+`)
+
+	host := program.Hosts[0]
+	if host.Systemd.Networkd == nil {
+		t.Fatal("networkd spec missing")
+	}
+	netdev := host.Systemd.Networkd.NetDevs["10-wg0"]
+	wantNetdev := `[NetDev]
+Kind=wireguard
+Name=wg0
+
+[WireGuard]
+ListenPort=51820
+PrivateKeyFile=/etc/wireguard/private.key
+RouteTable=off
+
+[WireGuardPeer]
+AllowedIPs=10.80.0.2/32
+PublicKey=peer-public-key
+`
+	if netdev.Content != wantNetdev {
+		t.Fatalf("netdev content mismatch\n--- got ---\n%s\n--- want ---\n%s", netdev.Content, wantNetdev)
+	}
+	network := host.Systemd.Networkd.Networks["20-wg0"]
+	wantNetwork := `[Match]
+Name=wg0
+
+[Network]
+Address=10.80.0.1/30
+`
+	if network.Content != wantNetwork {
+		t.Fatalf("network content mismatch\n--- got ---\n%s\n--- want ---\n%s", network.Content, wantNetwork)
+	}
+}
+
+func TestCompileRejectsInlineWireGuardPrivateKey(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+host "server1" {
+  systemd {
+    networkd {
+      netdev "10-wg0" {
+        netdev = {
+          Name = "wg0"
+          Kind = "wireguard"
+        }
+
+        wireguard = {
+          PrivateKey = "inline-private-key"
+        }
+      }
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "use PrivateKeyFile instead of inline PrivateKey") {
+		t.Fatalf("error = %v, want inline private key rejection", err)
+	}
+}
+
 func TestCompileUserGroupHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-user-group.dbf.hcl", "../testdata/hostspec/v2-user-group.golden.json")
 }

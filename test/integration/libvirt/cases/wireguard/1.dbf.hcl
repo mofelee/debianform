@@ -1,24 +1,27 @@
-component "wireguard_wgquick" {
-  input "config_source" {
+component "wireguard_networkd" {
+  input "private_key_source" {
+    type      = string
+    sensitive = true
+  }
+
+  input "address" {
     type = string
   }
 
-  input "service_enabled" {
-    type    = bool
-    default = false
+  input "listen_port" {
+    type = number
   }
 
-  input "service_state" {
-    type    = string
-    default = "stopped"
+  input "peer_public_key" {
+    type = string
   }
 
-  packages {
-    install = [
-      "wireguard-tools",
-      "iproute2",
-      "iputils-ping",
-    ]
+  input "peer_allowed_ip" {
+    type = string
+  }
+
+  input "peer_endpoint" {
+    type = string
   }
 
   directories {
@@ -30,19 +33,45 @@ component "wireguard_wgquick" {
   }
 
   secrets {
-    file "/etc/wireguard/wg0.conf" {
-      source = input.config_source
+    file "/etc/wireguard/private.key" {
+      source = input.private_key_source
       owner  = "root"
       group  = "root"
       mode   = "0600"
     }
   }
 
-  services {
-    service "wg-quick@wg0" {
-      package = "wireguard-tools"
-      enabled = input.service_enabled
-      state   = input.service_state
+  systemd {
+    networkd {
+      netdev "10-wg0" {
+        netdev = {
+          Name = "wg0"
+          Kind = "wireguard"
+        }
+
+        wireguard = {
+          ListenPort     = input.listen_port
+          PrivateKeyFile = "/etc/wireguard/private.key"
+          RouteTable     = "off"
+        }
+
+        wireguard_peer "peer" {
+          PublicKey           = input.peer_public_key
+          AllowedIPs          = [input.peer_allowed_ip]
+          Endpoint            = input.peer_endpoint
+          PersistentKeepalive = 25
+        }
+      }
+
+      network "20-wg0" {
+        match = {
+          Name = "wg0"
+        }
+
+        network = {
+          Address = [input.address]
+        }
+      }
     }
   }
 }
@@ -60,10 +89,15 @@ host "wg-a" {
   }
 
   component "wireguard" {
-    source = component.wireguard_wgquick
+    source = component.wireguard_networkd
 
     inputs = {
-      config_source = "secrets/wg-a.conf"
+      private_key_source = "secrets/wg-a.key"
+      address            = "10.80.0.1/30"
+      listen_port        = 51820
+      peer_public_key    = "2Ra/MKyq6SNHwY2Zk7pFeJrpVxbL1g5pXHltd4xT5Co="
+      peer_allowed_ip    = "10.80.0.2/32"
+      peer_endpoint      = "__DBF_WG_B_VM_IP__:51820"
     }
   }
 }
@@ -81,10 +115,15 @@ host "wg-b" {
   }
 
   component "wireguard" {
-    source = component.wireguard_wgquick
+    source = component.wireguard_networkd
 
     inputs = {
-      config_source = "secrets/wg-b.conf"
+      private_key_source = "secrets/wg-b.key"
+      address            = "10.80.0.2/30"
+      listen_port        = 51820
+      peer_public_key    = "oqdR68M0ICIpSoQv+P8pIW5o56sWAtN9D8c27jvqqGI="
+      peer_allowed_ip    = "10.80.0.1/32"
+      peer_endpoint      = "__DBF_WG_A_VM_IP__:51820"
     }
   }
 }

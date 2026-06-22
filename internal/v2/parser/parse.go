@@ -781,6 +781,16 @@ func validateDomainBlockShape(file, path string, block *hclsyntax.Block) error {
 			values["main"] = struct{}{}
 			continue
 		}
+		if block.Type == "systemd" && child.Type == "networkd" {
+			if _, exists := values["networkd"]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.networkd block", file, child.TypeRange.Start.Line, path)
+			}
+			if err := validateNetworkdBlockShape(file, path+".networkd", child); err != nil {
+				return err
+			}
+			values["networkd"] = struct{}{}
+			continue
+		}
 		if _, ok := allowedBlocks[child.Type]; !ok {
 			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
 		}
@@ -801,6 +811,106 @@ func validateDomainBlockShape(file, path string, block *hclsyntax.Block) error {
 			return fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
 		}
 		collection[label] = struct{}{}
+	}
+	return nil
+}
+
+func validateNetworkdBlockShape(file, path string, block *hclsyntax.Block) error {
+	if len(block.Labels) != 0 {
+		return fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	allowed := attrSet("enable")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	collections := map[string]map[string]struct{}{}
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "netdev", "network":
+			if len(child.Labels) != 1 {
+				return fmt.Errorf("%s:%d: %s.%s block requires exactly one label", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			label := child.Labels[0]
+			objectPath := fmt.Sprintf("%s.%s[%s]", path, child.Type, strconv.Quote(label))
+			if err := validateNetworkdObjectBlockShape(file, objectPath, child); err != nil {
+				return err
+			}
+			collection, ok := collections[child.Type]
+			if !ok {
+				collection = map[string]struct{}{}
+				collections[child.Type] = collection
+			}
+			if _, exists := collection[label]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
+			}
+			collection[label] = struct{}{}
+		default:
+			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return nil
+}
+
+func validateNetworkdObjectBlockShape(file, path string, block *hclsyntax.Block) error {
+	var allowed map[string]struct{}
+	switch block.Type {
+	case "netdev":
+		allowed = attrSet("path", "owner", "group", "mode", "ensure", "netdev", "wireguard")
+	case "network":
+		allowed = attrSet("path", "owner", "group", "mode", "ensure", "match", "network")
+	default:
+		return fmt.Errorf("%s:%d: unsupported block %s", file, block.TypeRange.Start.Line, path)
+	}
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+
+	values := map[string]struct{}{}
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "lifecycle":
+			if _, exists := values["lifecycle"]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.lifecycle block", file, child.TypeRange.Start.Line, path)
+			}
+			if err := validateLifecycleBlockShape(file, path+".lifecycle", child); err != nil {
+				return err
+			}
+			values["lifecycle"] = struct{}{}
+		case "wireguard_peer":
+			if block.Type != "netdev" {
+				return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if len(child.Labels) != 1 {
+				return fmt.Errorf("%s:%d: %s.%s block requires exactly one label", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			label := child.Labels[0]
+			peerPath := fmt.Sprintf("%s.wireguard_peer[%s]", path, strconv.Quote(label))
+			if _, exists := values[peerPath]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, peerPath)
+			}
+			if err := validateNetworkdSectionBlockShape(file, peerPath, child); err != nil {
+				return err
+			}
+			values[peerPath] = struct{}{}
+		default:
+			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return nil
+}
+
+func validateNetworkdSectionBlockShape(file, path string, block *hclsyntax.Block) error {
+	if len(block.Body.Blocks) != 0 {
+		return fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	for name, attr := range block.Body.Attributes {
+		if name == "" {
+			return fmt.Errorf("%s:%d: unsupported empty attribute in %s", file, attr.NameRange.Start.Line, path)
+		}
 	}
 	return nil
 }
@@ -934,6 +1044,17 @@ func parseDomainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext
 			values["main"] = main
 			continue
 		}
+		if block.Type == "systemd" && child.Type == "networkd" {
+			if _, exists := values["networkd"]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.networkd block", file, child.TypeRange.Start.Line, path)
+			}
+			networkd, err := parseNetworkdBlock(file, path+".networkd", child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values["networkd"] = networkd
+			continue
+		}
 		if _, ok := allowedBlocks[child.Type]; !ok {
 			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
 		}
@@ -957,6 +1078,130 @@ func parseDomainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext
 		values[child.Type] = collection
 	}
 
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseNetworkdBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	if len(block.Labels) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	values := map[string]Value{}
+	for name, attr := range block.Body.Attributes {
+		if name != "enable" {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "netdev", "network":
+			if len(child.Labels) != 1 {
+				return Value{}, fmt.Errorf("%s:%d: %s.%s block requires exactly one label", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			label := child.Labels[0]
+			objectPath := fmt.Sprintf("%s.%s[%s]", path, child.Type, strconv.Quote(label))
+			object, err := parseNetworkdObjectBlock(file, objectPath, child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			collection, ok := values[child.Type]
+			if !ok {
+				collection = MapValue(nil, ir.SourceRef{File: file, Line: child.TypeRange.Start.Line, Path: path + "." + child.Type})
+			}
+			if _, exists := collection.Map[label]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
+			}
+			collection.Map[label] = object
+			values[child.Type] = collection
+		default:
+			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseNetworkdObjectBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	var allowed map[string]struct{}
+	switch block.Type {
+	case "netdev":
+		allowed = attrSet("path", "owner", "group", "mode", "ensure", "netdev", "wireguard")
+	case "network":
+		allowed = attrSet("path", "owner", "group", "mode", "ensure", "match", "network")
+	default:
+		return Value{}, fmt.Errorf("%s:%d: unsupported block %s", file, block.TypeRange.Start.Line, path)
+	}
+	values := map[string]Value{}
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "lifecycle":
+			if _, exists := values["lifecycle"]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.lifecycle block", file, child.TypeRange.Start.Line, path)
+			}
+			lifecycle, err := parseLifecycleBlock(file, path+".lifecycle", child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values["lifecycle"] = lifecycle
+		case "wireguard_peer":
+			if block.Type != "netdev" {
+				return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if len(child.Labels) != 1 {
+				return Value{}, fmt.Errorf("%s:%d: %s.%s block requires exactly one label", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			label := child.Labels[0]
+			peerPath := fmt.Sprintf("%s.wireguard_peer[%s]", path, strconv.Quote(label))
+			peer, err := parseNetworkdSectionBlock(file, peerPath, child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			collection, ok := values["wireguard_peer"]
+			if !ok {
+				collection = MapValue(nil, ir.SourceRef{File: file, Line: child.TypeRange.Start.Line, Path: path + ".wireguard_peer"})
+			}
+			if _, exists := collection.Map[label]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, peerPath)
+			}
+			collection.Map[label] = peer
+			values["wireguard_peer"] = collection
+		default:
+			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseNetworkdSectionBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	if len(block.Body.Blocks) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	values := map[string]Value{}
+	for name, attr := range block.Body.Attributes {
+		attrSource := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
 	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
 }
 

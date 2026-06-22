@@ -1088,6 +1088,11 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 			return spec, err
 		}
 		spec.Systemd.Units = units
+		networkd, err := networkdSpec(systemd)
+		if err != nil {
+			return spec, err
+		}
+		spec.Systemd.Networkd = networkd
 	}
 
 	if services, ok, err := mapField(raw, "services"); err != nil {
@@ -1256,6 +1261,11 @@ func buildComponentSpec(instance parser.ComponentInstance, raw parser.Value) (ir
 			return spec, err
 		}
 		spec.Systemd.Units = units
+		networkd, err := networkdSpec(systemd)
+		if err != nil {
+			return spec, err
+		}
+		spec.Systemd.Networkd = networkd
 	}
 
 	if services, ok, err := mapField(raw, "services"); err != nil {
@@ -2050,6 +2060,360 @@ func systemdSpecs(systemd parser.Value) (map[string]ir.SystemdUnit, error) {
 	return out, nil
 }
 
+func networkdSpec(systemd parser.Value) (*ir.NetworkdSpec, error) {
+	networkd, ok, err := mapField(systemd, "networkd")
+	if err != nil || !ok {
+		return nil, err
+	}
+	spec := &ir.NetworkdSpec{
+		NetDevs:  map[string]ir.NetworkdNetDev{},
+		Networks: map[string]ir.NetworkdNetwork{},
+		Source:   networkd.Source,
+	}
+	if enable, ok, err := boolField(networkd, "enable"); err != nil {
+		return nil, err
+	} else if ok {
+		value := enable
+		spec.Enable = &value
+	}
+
+	netdevs, ok, err := objectCollection(networkd, "netdev")
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		for _, label := range sortedKeys(netdevs) {
+			item := netdevs[label]
+			if label == "" {
+				return nil, fmt.Errorf("%s:%d:%s: networkd netdev label must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+			}
+			netdev, err := networkdNetDevSpec(label, item)
+			if err != nil {
+				return nil, err
+			}
+			spec.NetDevs[label] = netdev
+		}
+	}
+
+	networks, ok, err := objectCollection(networkd, "network")
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		for _, label := range sortedKeys(networks) {
+			item := networks[label]
+			if label == "" {
+				return nil, fmt.Errorf("%s:%d:%s: networkd network label must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+			}
+			network, err := networkdNetworkSpec(label, item)
+			if err != nil {
+				return nil, err
+			}
+			spec.Networks[label] = network
+		}
+	}
+	return spec, nil
+}
+
+func networkdNetDevSpec(label string, item parser.Value) (ir.NetworkdNetDev, error) {
+	path, err := networkdFilePath(item, "path", "/etc/systemd/network/"+label+".netdev")
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
+	ensure, err := ensureField(item, "present")
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
+	netdev, err := networkdSectionField(item, "netdev")
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
+	wireguard, err := networkdSectionField(item, "wireguard")
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
+	if _, ok := wireguard["PrivateKey"]; ok {
+		return ir.NetworkdNetDev{}, fmt.Errorf("%s:%d:%s.wireguard.PrivateKey: use PrivateKeyFile instead of inline PrivateKey", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	peers, err := networkdSectionCollection(item, "wireguard_peer")
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
+	for _, label := range sortedKeys(peers) {
+		if _, ok := peers[label]["PresharedKey"]; ok {
+			return ir.NetworkdNetDev{}, fmt.Errorf("%s:%d:%s.wireguard_peer[%q].PresharedKey: use PresharedKeyFile instead of inline PresharedKey", item.Source.File, item.Source.Line, item.Source.Path, label)
+		}
+	}
+	if ensure == "present" {
+		if len(netdev) == 0 {
+			return ir.NetworkdNetDev{}, fmt.Errorf("%s:%d:%s.netdev: networkd netdev requires netdev section when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		if kind := firstSectionValue(netdev, "Kind"); kind == "" {
+			return ir.NetworkdNetDev{}, fmt.Errorf("%s:%d:%s.netdev.Kind: networkd netdev requires Kind", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		if name := firstSectionValue(netdev, "Name"); name == "" {
+			return ir.NetworkdNetDev{}, fmt.Errorf("%s:%d:%s.netdev.Name: networkd netdev requires Name", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+	}
+	owner, err := stringFieldDefault(item, "owner", "root")
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
+	group, err := stringFieldDefault(item, "group", "root")
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
+	mode, err := modeFieldDefault(item, "mode", "0644")
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
+	lifecycle, err := lifecycleSpec(item)
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
+	out := ir.NetworkdNetDev{
+		Label:          label,
+		Path:           path,
+		NetDev:         netdev,
+		WireGuard:      wireguard,
+		WireGuardPeers: peers,
+		Owner:          owner,
+		Group:          group,
+		Mode:           mode,
+		Ensure:         ensure,
+		Lifecycle:      lifecycle,
+		Source:         item.Source,
+	}
+	if ensure == "present" {
+		content, err := renderNetworkdNetDev(out)
+		if err != nil {
+			return ir.NetworkdNetDev{}, err
+		}
+		out.Content = content
+		out.Summary = contentSummary([]byte(content))
+	}
+	return out, nil
+}
+
+func networkdNetworkSpec(label string, item parser.Value) (ir.NetworkdNetwork, error) {
+	path, err := networkdFilePath(item, "path", "/etc/systemd/network/"+label+".network")
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
+	}
+	ensure, err := ensureField(item, "present")
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
+	}
+	match, err := networkdSectionField(item, "match")
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
+	}
+	network, err := networkdSectionField(item, "network")
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
+	}
+	if ensure == "present" {
+		if len(match) == 0 {
+			return ir.NetworkdNetwork{}, fmt.Errorf("%s:%d:%s.match: networkd network requires match section when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		if len(network) == 0 {
+			return ir.NetworkdNetwork{}, fmt.Errorf("%s:%d:%s.network: networkd network requires network section when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+	}
+	owner, err := stringFieldDefault(item, "owner", "root")
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
+	}
+	group, err := stringFieldDefault(item, "group", "root")
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
+	}
+	mode, err := modeFieldDefault(item, "mode", "0644")
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
+	}
+	lifecycle, err := lifecycleSpec(item)
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
+	}
+	out := ir.NetworkdNetwork{
+		Label:     label,
+		Path:      path,
+		Match:     match,
+		Network:   network,
+		Owner:     owner,
+		Group:     group,
+		Mode:      mode,
+		Ensure:    ensure,
+		Lifecycle: lifecycle,
+		Source:    item.Source,
+	}
+	if ensure == "present" {
+		content, err := renderNetworkdNetwork(out)
+		if err != nil {
+			return ir.NetworkdNetwork{}, err
+		}
+		out.Content = content
+		out.Summary = contentSummary([]byte(content))
+	}
+	return out, nil
+}
+
+func networkdFilePath(item parser.Value, field string, fallback string) (string, error) {
+	path, ok, err := stringField(item, field)
+	if err != nil {
+		return "", err
+	}
+	if !ok || path == "" {
+		path = fallback
+	}
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("%s:%d:%s.%s: networkd file path must be absolute", item.Source.File, item.Source.Line, item.Source.Path, field)
+	}
+	return path, nil
+}
+
+func networkdSectionField(root parser.Value, name string) (ir.NetworkdSection, error) {
+	section, ok, err := mapField(root, name)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return networkdSection(section)
+}
+
+func networkdSectionCollection(root parser.Value, name string) (map[string]ir.NetworkdSection, error) {
+	objects, ok, err := objectCollection(root, name)
+	if err != nil || !ok {
+		return map[string]ir.NetworkdSection{}, err
+	}
+	out := make(map[string]ir.NetworkdSection, len(objects))
+	for _, label := range sortedKeys(objects) {
+		item := objects[label]
+		if label == "" {
+			return nil, fmt.Errorf("%s:%d:%s: networkd %s label must be non-empty", item.Source.File, item.Source.Line, item.Source.Path, name)
+		}
+		section, err := networkdSection(item)
+		if err != nil {
+			return nil, err
+		}
+		out[label] = section
+	}
+	return out, nil
+}
+
+func networkdSection(root parser.Value) (ir.NetworkdSection, error) {
+	if !root.IsMap() {
+		return nil, fmt.Errorf("%s:%d:%s: networkd section must be a map", root.Source.File, root.Source.Line, root.Source.Path)
+	}
+	out := ir.NetworkdSection{}
+	for _, key := range sortedKeys(root.Map) {
+		item := root.Map[key]
+		values, err := networkdSectionValues(item)
+		if err != nil {
+			return nil, err
+		}
+		out[key] = values
+	}
+	return out, nil
+}
+
+func networkdSectionValues(value parser.Value) ([]string, error) {
+	if value.IsList() {
+		out := make([]string, 0, len(value.List))
+		for _, item := range value.List {
+			str, err := networkdScalarValue(item)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, str)
+		}
+		return out, nil
+	}
+	str, err := networkdScalarValue(value)
+	if err != nil {
+		return nil, err
+	}
+	return []string{str}, nil
+}
+
+func networkdScalarValue(value parser.Value) (string, error) {
+	switch value.Kind {
+	case parser.KindString:
+		if err := validateSystemdSingleLine(value.String, value.Source); err != nil {
+			return "", err
+		}
+		return value.String, nil
+	case parser.KindNumber:
+		if err := validateSystemdSingleLine(value.Number, value.Source); err != nil {
+			return "", err
+		}
+		return value.Number, nil
+	case parser.KindBool:
+		if value.Bool {
+			return "yes", nil
+		}
+		return "no", nil
+	default:
+		return "", fmt.Errorf("%s:%d:%s: networkd section values must be strings, numbers, booleans, or lists of those", value.Source.File, value.Source.Line, value.Source.Path)
+	}
+}
+
+func renderNetworkdNetDev(item ir.NetworkdNetDev) (string, error) {
+	var lines []string
+	if err := appendNetworkdSection(&lines, "NetDev", item.NetDev, item.Source); err != nil {
+		return "", err
+	}
+	if len(item.WireGuard) > 0 {
+		if err := appendNetworkdSection(&lines, "WireGuard", item.WireGuard, item.Source); err != nil {
+			return "", err
+		}
+	}
+	for _, label := range sortedKeys(item.WireGuardPeers) {
+		if err := appendNetworkdSection(&lines, "WireGuardPeer", item.WireGuardPeers[label], item.Source); err != nil {
+			return "", err
+		}
+	}
+	return strings.Join(lines, "\n") + "\n", nil
+}
+
+func renderNetworkdNetwork(item ir.NetworkdNetwork) (string, error) {
+	var lines []string
+	if err := appendNetworkdSection(&lines, "Match", item.Match, item.Source); err != nil {
+		return "", err
+	}
+	if err := appendNetworkdSection(&lines, "Network", item.Network, item.Source); err != nil {
+		return "", err
+	}
+	return strings.Join(lines, "\n") + "\n", nil
+}
+
+func appendNetworkdSection(lines *[]string, name string, values ir.NetworkdSection, source ir.SourceRef) error {
+	if len(*lines) > 0 {
+		*lines = append(*lines, "")
+	}
+	*lines = append(*lines, "["+name+"]")
+	for _, key := range sortedKeys(values) {
+		if strings.TrimSpace(key) == "" || strings.ContainsAny(key, "=\x00\n\r") {
+			return fmt.Errorf("%s:%d:%s: networkd section key %q is invalid", source.File, source.Line, source.Path, key)
+		}
+		for _, value := range values[key] {
+			if err := validateSystemdSingleLine(value, source); err != nil {
+				return err
+			}
+			*lines = append(*lines, key+"="+value)
+		}
+	}
+	return nil
+}
+
+func firstSectionValue(section ir.NetworkdSection, key string) string {
+	values := section[key]
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
 func addSystemdUnit(units map[string]ir.SystemdUnit, unit ir.SystemdUnit) error {
 	if previous, exists := units[unit.Name]; exists {
 		return fmt.Errorf("%s:%d:%s: systemd unit %q conflicts with unit declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, unit.Name, previous.Source.File, previous.Source.Line, previous.Source.Path)
@@ -2699,6 +3063,19 @@ func validateHostSpec(spec ir.HostSpec) error {
 	for name, unit := range spec.Systemd.Units {
 		units[name] = unit
 	}
+	if spec.Systemd.Networkd != nil {
+		if err := validateNetworkdSpecPaths(*spec.Systemd.Networkd, files, secrets); err != nil {
+			return err
+		}
+		for _, label := range sortedKeys(spec.Systemd.Networkd.NetDevs) {
+			item := spec.Systemd.Networkd.NetDevs[label]
+			files[item.Path] = item.Source
+		}
+		for _, label := range sortedKeys(spec.Systemd.Networkd.Networks) {
+			item := spec.Systemd.Networkd.Networks[label]
+			files[item.Path] = item.Source
+		}
+	}
 	for name, service := range spec.Services.Services {
 		services[name] = service
 	}
@@ -2794,6 +3171,19 @@ func validateHostSpec(spec ir.HostSpec) error {
 			}
 			units[name] = unit
 		}
+		if component.Systemd.Networkd != nil {
+			if err := validateNetworkdSpecPaths(*component.Systemd.Networkd, files, secrets); err != nil {
+				return err
+			}
+			for _, label := range sortedKeys(component.Systemd.Networkd.NetDevs) {
+				item := component.Systemd.Networkd.NetDevs[label]
+				files[item.Path] = item.Source
+			}
+			for _, label := range sortedKeys(component.Systemd.Networkd.Networks) {
+				item := component.Systemd.Networkd.Networks[label]
+				files[item.Path] = item.Source
+			}
+		}
 		for name, service := range component.Services.Services {
 			if previous, exists := services[name]; exists {
 				return fmt.Errorf("%s:%d:%s: component %q service %q conflicts with service declared at %s:%d:%s", service.Source.File, service.Source.Line, service.Source.Path, component.Name, name, previous.Source.File, previous.Source.Line, previous.Source.Path)
@@ -2833,6 +3223,41 @@ func validateNftablesPath(item *ir.NftablesFileSpec, files map[string]ir.SourceR
 	}
 	if previous, exists := secrets[item.Path]; exists {
 		return fmt.Errorf("%s:%d:%s: nftables file path %q conflicts with secret declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, item.Path, previous.File, previous.Line, previous.Path)
+	}
+	return nil
+}
+
+func validateNetworkdSpecPaths(spec ir.NetworkdSpec, files map[string]ir.SourceRef, secrets map[string]ir.SourceRef) error {
+	seen := map[string]ir.SourceRef{}
+	for _, label := range sortedKeys(spec.NetDevs) {
+		item := spec.NetDevs[label]
+		if err := validateNetworkdPath("networkd netdev", item.Path, item.Source, files, secrets); err != nil {
+			return err
+		}
+		if previous, exists := seen[item.Path]; exists {
+			return fmt.Errorf("%s:%d:%s: networkd netdev path %q conflicts with networkd file declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, item.Path, previous.File, previous.Line, previous.Path)
+		}
+		seen[item.Path] = item.Source
+	}
+	for _, label := range sortedKeys(spec.Networks) {
+		item := spec.Networks[label]
+		if err := validateNetworkdPath("networkd network", item.Path, item.Source, files, secrets); err != nil {
+			return err
+		}
+		if previous, exists := seen[item.Path]; exists {
+			return fmt.Errorf("%s:%d:%s: networkd network path %q conflicts with networkd file declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, item.Path, previous.File, previous.Line, previous.Path)
+		}
+		seen[item.Path] = item.Source
+	}
+	return nil
+}
+
+func validateNetworkdPath(kind string, path string, source ir.SourceRef, files map[string]ir.SourceRef, secrets map[string]ir.SourceRef) error {
+	if previous, exists := files[path]; exists {
+		return fmt.Errorf("%s:%d:%s: %s path %q conflicts with file declared at %s:%d:%s", source.File, source.Line, source.Path, kind, path, previous.File, previous.Line, previous.Path)
+	}
+	if previous, exists := secrets[path]; exists {
+		return fmt.Errorf("%s:%d:%s: %s path %q conflicts with secret declared at %s:%d:%s", source.File, source.Line, source.Path, kind, path, previous.File, previous.Line, previous.Path)
 	}
 	return nil
 }

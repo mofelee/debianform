@@ -47,12 +47,12 @@ v2 领域块或 component。
 - `examples/v2-systemd-service.dbf.hcl`
 - `examples/v2-systemd-service-unit.dbf.hcl`
 - `examples/v2-user-group.dbf.hcl`
-- `examples/v2-wireguard-wgquick.dbf.hcl`（真实 apply 前需准备本地 `examples/secrets/wg-a.conf` 和 `wg-b.conf`）
+- `examples/v2-wireguard-networkd.dbf.hcl`（真实 validate/apply 前需准备本地 `examples/secrets/wg-a.key` 和 `wg-b.key`）
+- `examples/v2-systemd-networkd-wireguard.dbf.hcl`（同上，展示 systemd-networkd 原生写法）
 
 其他示例仍为 design-only fixture，仅用于表达设计方向，不作为第一版可运行样例：
 
 - `examples/v2-fleet.dbf.hcl`
-- `examples/v2-systemd-networkd-wireguard.dbf.hcl`
 
 design-only fixture 在进入可运行样例前，需要拆成小型 fixture，并加入 validate 与
 golden 测试。
