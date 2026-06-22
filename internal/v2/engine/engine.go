@@ -375,6 +375,9 @@ func orphanSteps(states map[string]v2state.State, desired map[string]graph.Node,
 			if prior.Ownership == "adopted" {
 				action = ActionForget
 				summary = "forget adopted " + prior.Kind + " " + address
+			} else if forgetOrphan(prior) {
+				action = ActionForget
+				summary = "forget " + prior.Kind + " " + address
 			}
 			if action == ActionDestroy && preventsDestroy(prior.Lifecycle) {
 				return nil, preventDestroyError(address, prior.Kind, prior.Lifecycle)
@@ -390,6 +393,10 @@ func orphanSteps(states map[string]v2state.State, desired map[string]graph.Node,
 		}
 	}
 	return out, nil
+}
+
+func forgetOrphan(prior v2state.Resource) bool {
+	return prior.Kind == "apt_source_file" && stringMapValue(prior.Desired, "on_destroy") == "keep"
 }
 
 func operationSteps(operations []graph.Operation, changed map[string]struct{}, opts Options) []OperationStep {

@@ -708,6 +708,7 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 		},
 		APT: ir.APTSpec{
 			Repositories: map[string]ir.APTRepositorySpec{},
+			SourceFiles:  map[string]ir.APTSourceFileSpec{},
 		},
 		Files: ir.FileSpec{
 			Files: map[string]ir.ManagedFile{},
@@ -843,7 +844,12 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 		if err != nil {
 			return spec, err
 		}
+		sourceFiles, err := aptSourceFileSpecs(apt)
+		if err != nil {
+			return spec, err
+		}
 		spec.APT.Repositories = repositories
+		spec.APT.SourceFiles = sourceFiles
 	}
 
 	if files, ok, err := mapField(raw, "files"); err != nil {
@@ -962,6 +968,7 @@ func buildComponentSpec(instance parser.ComponentInstance, raw parser.Value) (ir
 		Source:   instance.Source,
 		APT: ir.APTSpec{
 			Repositories: map[string]ir.APTRepositorySpec{},
+			SourceFiles:  map[string]ir.APTSourceFileSpec{},
 		},
 		Files: ir.FileSpec{
 			Files: map[string]ir.ManagedFile{},
@@ -1005,7 +1012,12 @@ func buildComponentSpec(instance parser.ComponentInstance, raw parser.Value) (ir
 		if err != nil {
 			return spec, err
 		}
+		sourceFiles, err := aptSourceFileSpecs(apt)
+		if err != nil {
+			return spec, err
+		}
 		spec.APT.Repositories = repositories
+		spec.APT.SourceFiles = sourceFiles
 	}
 
 	if files, ok, err := mapField(raw, "files"); err != nil {
@@ -1382,6 +1394,89 @@ func aptRepositorySpecs(apt parser.Value) (map[string]ir.APTRepositorySpec, erro
 			Lifecycle:     lifecycle,
 			Source:        item.Source,
 		}
+	}
+	return out, nil
+}
+
+func aptSourceFileSpecs(apt parser.Value) (map[string]ir.APTSourceFileSpec, error) {
+	objects, ok, err := objectCollection(apt, "source_file")
+	if err != nil || !ok {
+		return map[string]ir.APTSourceFileSpec{}, err
+	}
+	out := make(map[string]ir.APTSourceFileSpec, len(objects))
+	for _, label := range sortedKeys(objects) {
+		item := objects[label]
+		if label == "" {
+			return nil, fmt.Errorf("%s:%d:%s: apt source_file label must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		path, ok, err := stringField(item, "path")
+		if err != nil {
+			return nil, err
+		}
+		if !ok || path == "" || !filepath.IsAbs(path) {
+			return nil, fmt.Errorf("%s:%d:%s.path: apt source_file path must be absolute and non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		ensure, err := ensureField(item, "present")
+		if err != nil {
+			return nil, err
+		}
+		content, hasContent, err := stringField(item, "content")
+		if err != nil {
+			return nil, err
+		}
+		sourcePath, hasSource, err := stringField(item, "source")
+		if err != nil {
+			return nil, err
+		}
+		if ensure == "present" && hasContent == hasSource {
+			return nil, fmt.Errorf("%s:%d:%s: apt.source_file requires exactly one of content or source when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		owner, err := stringFieldDefault(item, "owner", "root")
+		if err != nil {
+			return nil, err
+		}
+		group, err := stringFieldDefault(item, "group", "root")
+		if err != nil {
+			return nil, err
+		}
+		mode, err := modeFieldDefault(item, "mode", "0644")
+		if err != nil {
+			return nil, err
+		}
+		onDestroy, err := stringFieldDefault(item, "on_destroy", "keep")
+		if err != nil {
+			return nil, err
+		}
+		if onDestroy != "keep" && onDestroy != "restore" {
+			return nil, fmt.Errorf("%s:%d:%s.on_destroy: on_destroy must be keep or restore", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		lifecycle, err := lifecycleSpec(item)
+		if err != nil {
+			return nil, err
+		}
+		sourceFile := ir.APTSourceFileSpec{
+			Label:      label,
+			Path:       path,
+			Content:    content,
+			SourcePath: resolvePath(item.Source.File, sourcePath),
+			Owner:      owner,
+			Group:      group,
+			Mode:       mode,
+			Ensure:     ensure,
+			OnDestroy:  onDestroy,
+			Lifecycle:  lifecycle,
+			Source:     item.Source,
+		}
+		if hasContent {
+			sourceFile.Summary = contentSummary([]byte(content))
+		} else if hasSource {
+			summary, err := fileSummary(sourceFile.SourcePath, item.Source)
+			if err != nil {
+				return nil, err
+			}
+			sourceFile.Summary = summary
+		}
+		out[label] = sourceFile
 	}
 	return out, nil
 }
@@ -1997,6 +2092,16 @@ func validateHostSpec(spec ir.HostSpec) error {
 	for name, repository := range spec.APT.Repositories {
 		repositories[name] = repository
 	}
+	for _, label := range sortedKeys(spec.APT.SourceFiles) {
+		item := spec.APT.SourceFiles[label]
+		if previous, exists := files[item.Path]; exists {
+			return fmt.Errorf("%s:%d:%s: apt source_file path %q conflicts with file declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, item.Path, previous.File, previous.Line, previous.Path)
+		}
+		if previous, exists := secrets[item.Path]; exists {
+			return fmt.Errorf("%s:%d:%s: apt source_file path %q conflicts with secret declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, item.Path, previous.File, previous.Line, previous.Path)
+		}
+		files[item.Path] = item.Source
+	}
 	for _, pkg := range spec.Packages.Install {
 		packages[pkg.Name] = pkg
 	}
@@ -2066,6 +2171,16 @@ func validateHostSpec(spec ir.HostSpec) error {
 				return fmt.Errorf("%s:%d:%s: component %q apt.repository %q conflicts with repository declared at %s:%d:%s", repository.Source.File, repository.Source.Line, repository.Source.Path, component.Name, name, previous.Source.File, previous.Source.Line, previous.Source.Path)
 			}
 			repositories[name] = repository
+		}
+		for _, label := range sortedKeys(component.APT.SourceFiles) {
+			item := component.APT.SourceFiles[label]
+			if previous, exists := files[item.Path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q apt source_file path %q conflicts with file declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, component.Name, item.Path, previous.File, previous.Line, previous.Path)
+			}
+			if previous, exists := secrets[item.Path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q apt source_file path %q conflicts with secret declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, component.Name, item.Path, previous.File, previous.Line, previous.Path)
+			}
+			files[item.Path] = item.Source
 		}
 		for _, pkg := range component.Packages.Install {
 			if previous, exists := packages[pkg.Name]; exists {

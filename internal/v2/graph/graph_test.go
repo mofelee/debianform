@@ -404,6 +404,40 @@ host "server1" {
 	}
 }
 
+func TestCompileAPTSourceFileTriggersCacheRefresh(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "server1" {
+  apt {
+    source_file "main" {
+      path       = "/etc/apt/sources.list"
+      content    = "deb https://mirrors.aliyun.com/debian/ trixie main\n"
+      on_destroy = "restore"
+    }
+  }
+}
+`)
+
+	address := `host.server1.apt.source_file["main"]`
+	node := nodeFor(resourceGraph, address)
+	if node == nil {
+		t.Fatalf("apt source_file node missing")
+	}
+	if node.Kind != "apt_source_file" || node.ProviderType != "apt_source_file" {
+		t.Fatalf("node kind/provider = %s/%s", node.Kind, node.ProviderType)
+	}
+	if node.Desired["path"] != "/etc/apt/sources.list" || node.Desired["on_destroy"] != "restore" {
+		t.Fatalf("desired = %#v", node.Desired)
+	}
+
+	operation := operationFor(resourceGraph, `host.server1.apt.cache_refresh`)
+	if operation == nil {
+		t.Fatalf("apt cache refresh operation missing")
+	}
+	if !containsString(operation.TriggeredBy, address) {
+		t.Fatalf("refresh triggered_by = %#v, want %q", operation.TriggeredBy, address)
+	}
+}
+
 func compileGraphFixture(t *testing.T, fixture string) *ResourceGraph {
 	t.Helper()
 

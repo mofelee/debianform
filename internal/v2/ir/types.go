@@ -106,6 +106,7 @@ type PackageItem struct {
 
 type APTSpec struct {
 	Repositories map[string]APTRepositorySpec `json:"repositories,omitempty"`
+	SourceFiles  map[string]APTSourceFileSpec `json:"source_files,omitempty"`
 	Source       SourceRef                    `json:"source,omitempty"`
 }
 
@@ -127,6 +128,21 @@ type APTSigningKeySpec struct {
 	SHA256  string    `json:"sha256,omitempty"`
 	Path    string    `json:"path"`
 	Source  SourceRef `json:"source,omitempty"`
+}
+
+type APTSourceFileSpec struct {
+	Label      string         `json:"label"`
+	Path       string         `json:"path"`
+	Content    string         `json:"content,omitempty"`
+	SourcePath string         `json:"source_path,omitempty"`
+	Owner      string         `json:"owner"`
+	Group      string         `json:"group"`
+	Mode       string         `json:"mode"`
+	Ensure     string         `json:"ensure"`
+	OnDestroy  string         `json:"on_destroy"`
+	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
+	Summary    ContentSummary `json:"summary,omitempty"`
+	Source     SourceRef      `json:"source,omitempty"`
 }
 
 type FileSpec struct {

@@ -989,7 +989,7 @@ func allowedDomainAttrs(domain string) map[string]struct{} {
 func allowedDomainObjectBlocks(domain string) map[string]struct{} {
 	switch domain {
 	case "apt":
-		return attrSet("repository")
+		return attrSet("repository", "source_file")
 	case "packages":
 		return attrSet("package")
 	case "files", "secrets":
@@ -1015,6 +1015,8 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 	switch domain + "." + blockType {
 	case "apt.repository":
 		return attrSet("uris", "suites", "components", "architectures", "ensure")
+	case "apt.source_file":
+		return attrSet("path", "content", "source", "owner", "group", "mode", "ensure", "on_destroy")
 	case "packages.package":
 		return attrSet("repositories")
 	case "files.file":

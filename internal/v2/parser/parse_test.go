@@ -374,6 +374,7 @@ func TestParseRunnableV2ExamplesGolden(t *testing.T) {
 func runnableV2ExampleFixtures() []string {
 	return []string{
 		"../../../examples/v2-bbr.dbf.hcl",
+		"../../../examples/v2-apt-source-file.dbf.hcl",
 		"../../../examples/v2-apt-repository.dbf.hcl",
 		"../../../examples/v2-bird2.dbf.hcl",
 		"../../../examples/v2-component-binary.dbf.hcl",

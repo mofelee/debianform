@@ -33,6 +33,7 @@ v2 领域块或 component。
 `plan --offline`：
 
 - `examples/v2-bbr.dbf.hcl`
+- `examples/v2-apt-source-file.dbf.hcl`
 - `examples/v2-apt-repository.dbf.hcl`
 - `examples/v2-bird2.dbf.hcl`
 - `examples/v2-component-binary.dbf.hcl`（真实 apply 前需替换为上游下载物真实 sha256）
@@ -209,6 +210,7 @@ libvirt 集成测试会启动全新的 Debian 13 cloud VM，并执行 v2 `valida
 
 ```bash
 make test-integration-layout
+make test-integration-case CASE=apt-source
 make test-integration-case CASE=bbr
 make test-integration-case CASE=files
 make test-integration

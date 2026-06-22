@@ -11,6 +11,17 @@
     ]
   },
   {
+    "fixture": "../../../examples/v2-apt-source-file.dbf.hcl",
+    "hosts": [
+      {
+        "name": "apt-source1",
+        "body_keys": [
+          "apt"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/v2-apt-repository.dbf.hcl",
     "hosts": [
       {

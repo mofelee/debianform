@@ -29,6 +29,8 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2stat
 	switch node.Kind {
 	case "file", "secret", "systemd_unit", "nftables_file":
 		return p.planFileLike(ctx, node, prior)
+	case "apt_source_file":
+		return p.planAPTSourceFile(ctx, node, prior)
 	case "apt_signing_key":
 		return p.planAPTSigningKey(ctx, node, prior)
 	case "component_download":
@@ -64,6 +66,8 @@ func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, e
 	switch step.Node.Kind {
 	case "file", "secret", "nftables_file":
 		return p.applyFileLike(ctx, step, false)
+	case "apt_source_file":
+		return p.applyAPTSourceFile(ctx, step)
 	case "systemd_unit":
 		return p.applyFileLike(ctx, step, true)
 	case "apt_signing_key":
@@ -104,6 +108,8 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 	desired := step.Prior.Desired
 	host := step.Prior.Host
 	switch step.Prior.Kind {
+	case "apt_source_file":
+		return p.destroyAPTSourceFile(ctx, step)
 	case "file", "secret", "nftables_file", "apt_signing_key", "component_download", "component_binary", "component_file", "component_ca_certificate":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), false)
 	case "component_archive":
@@ -247,6 +253,106 @@ func (p NativeProvider) applyFileLike(ctx context.Context, step Step, daemonRelo
 		return nil, err
 	}
 	return map[string]any{"exists": true, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planAPTSourceFile(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	path := stringDesired(node, "path")
+	current, err := p.readPathWithContent(ctx, node.Host, path)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	onDestroy := stringDesired(node, "on_destroy")
+	if onDestroy == "" {
+		onDestroy = "keep"
+	}
+	if ensureAbsent(node) {
+		if prior == nil {
+			return ProviderPlan{Action: ActionNoOp, Summary: "already unmanaged apt source file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		if onDestroy == "keep" {
+			return ProviderPlan{Action: ActionForget, Summary: "forget apt source file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return ProviderPlan{Action: ActionDelete, Summary: "restore apt source file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	wantSHA, err := desiredContentSHA(node)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	if !current.Exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "write apt source file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if current.IsDir ||
+		current.SHA256 != wantSHA ||
+		current.Owner != stringDesired(node, "owner") ||
+		current.Group != stringDesired(node, "group") ||
+		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update apt source file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for apt source file "+path, withAPTSourceOriginal(observed, prior, current)), nil
+}
+
+func (p NativeProvider) applyAPTSourceFile(ctx context.Context, step Step) (map[string]any, error) {
+	path := stringDesired(step.Node, "path")
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		if aptSourceOnDestroy(step.Node.Desired) == "restore" {
+			if err := p.restoreAPTSourceFile(ctx, step.Node.Host, path, step.Prior); err != nil {
+				return nil, err
+			}
+		}
+		return map[string]any{"exists": false}, nil
+	}
+	original, err := p.aptSourceOriginal(ctx, step)
+	if err != nil {
+		return nil, err
+	}
+	content, err := desiredContent(step.Node)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.writePathContent(ctx, step.Node.Host, path, content, stringDesired(step.Node, "owner"), stringDesired(step.Node, "group"), stringDesired(step.Node, "mode")); err != nil {
+		return nil, err
+	}
+	observed := map[string]any{"exists": true, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}
+	copyAPTSourceOriginal(observed, original)
+	return observed, nil
+}
+
+func (p NativeProvider) destroyAPTSourceFile(ctx context.Context, step Step) error {
+	if step.Prior == nil {
+		return nil
+	}
+	if aptSourceOnDestroy(step.Prior.Desired) != "restore" {
+		return nil
+	}
+	if err := p.restoreAPTSourceFile(ctx, step.Prior.Host, stringMapValue(step.Prior.Desired, "path"), step.Prior); err != nil {
+		return err
+	}
+	_, err := p.Runner.Run(ctx, step.Prior.Host, "set -eu\nexport DEBIAN_FRONTEND=noninteractive\napt-get update\n")
+	return err
+}
+
+func (p NativeProvider) restoreAPTSourceFile(ctx context.Context, host, path string, prior *v2state.Resource) error {
+	if prior == nil {
+		return nil
+	}
+	if !boolMapValue(prior.Observed, "original_exists") {
+		return p.removePath(ctx, host, path, false)
+	}
+	content := stringMapValue(prior.Observed, "original_content")
+	owner := stringMapValue(prior.Observed, "original_owner")
+	if owner == "" {
+		owner = "root"
+	}
+	group := stringMapValue(prior.Observed, "original_group")
+	if group == "" {
+		group = "root"
+	}
+	mode := stringMapValue(prior.Observed, "original_mode")
+	if mode == "" {
+		mode = "0644"
+	}
+	return p.writePathContent(ctx, host, path, []byte(content), owner, group, mode)
 }
 
 func (p NativeProvider) planAPTSigningKey(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
@@ -1211,6 +1317,124 @@ if [ -f %s ]; then sha256sum %s | awk '{print $1}'; else echo ''; fi
 	return st, nil
 }
 
+type pathContentState struct {
+	pathState
+	Content string
+}
+
+func (p NativeProvider) readPathWithContent(ctx context.Context, host, path string) (pathContentState, error) {
+	if path == "" {
+		return pathContentState{}, nil
+	}
+	script := fmt.Sprintf(`set -eu
+if [ ! -e %s ]; then
+  echo missing
+  exit 0
+fi
+if [ -d %s ]; then echo dir; else echo file; fi
+stat -c '%%U' %s
+stat -c '%%G' %s
+stat -c '%%a' %s
+if [ -f %s ]; then sha256sum %s | awk '{print $1}'; else echo ''; fi
+if [ -f %s ]; then base64 < %s | tr -d '\n'; echo; else echo ''; fi
+`, shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path), shellQuote(path))
+	result, err := p.Runner.Run(ctx, host, script)
+	if err != nil {
+		return pathContentState{}, err
+	}
+	lines := strings.Split(strings.TrimRight(result.Stdout, "\n"), "\n")
+	if len(lines) == 0 || lines[0] == "missing" {
+		return pathContentState{}, nil
+	}
+	st := pathContentState{pathState: pathState{Exists: true, IsDir: lines[0] == "dir"}}
+	if len(lines) > 1 {
+		st.Owner = lines[1]
+	}
+	if len(lines) > 2 {
+		st.Group = lines[2]
+	}
+	if len(lines) > 3 {
+		st.Mode = lines[3]
+	}
+	if len(lines) > 4 {
+		st.SHA256 = lines[4]
+	}
+	if len(lines) > 5 && lines[5] != "" {
+		data, err := base64.StdEncoding.DecodeString(lines[5])
+		if err != nil {
+			return pathContentState{}, err
+		}
+		st.Content = string(data)
+	}
+	return st, nil
+}
+
+func (p NativeProvider) writePathContent(ctx context.Context, host, path string, content []byte, owner, group, mode string) error {
+	encoded := base64.StdEncoding.EncodeToString(content)
+	tmp := path + ".dbf-tmp"
+	lines := []string{
+		"set -eu",
+		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
+		"base64 -d > " + shellQuote(tmp) + " <<'__DBF_FILE__'\n" + encoded + "\n__DBF_FILE__",
+		"install -o " + shellQuote(owner) +
+			" -g " + shellQuote(group) +
+			" -m " + shellQuote(mode) +
+			" " + shellQuote(tmp) + " " + shellQuote(path),
+		"rm -f -- " + shellQuote(tmp),
+	}
+	_, err := p.Runner.Run(ctx, host, strings.Join(lines, "\n")+"\n")
+	return err
+}
+
+func (p NativeProvider) aptSourceOriginal(ctx context.Context, step Step) (map[string]any, error) {
+	original := map[string]any{}
+	if step.Prior != nil && hasAPTSourceOriginal(step.Prior.Observed) {
+		copyAPTSourceOriginal(original, step.Prior.Observed)
+		return original, nil
+	}
+	current, err := p.readPathWithContent(ctx, step.Node.Host, stringDesired(step.Node, "path"))
+	if err != nil {
+		return nil, err
+	}
+	copyAPTSourceOriginal(original, aptSourceOriginalFromCurrent(current))
+	return original, nil
+}
+
+func withAPTSourceOriginal(observed map[string]any, prior *v2state.Resource, current pathContentState) map[string]any {
+	if observed == nil {
+		observed = map[string]any{}
+	}
+	if prior != nil && hasAPTSourceOriginal(prior.Observed) {
+		copyAPTSourceOriginal(observed, prior.Observed)
+		return observed
+	}
+	copyAPTSourceOriginal(observed, aptSourceOriginalFromCurrent(current))
+	return observed
+}
+
+func aptSourceOriginalFromCurrent(current pathContentState) map[string]any {
+	return map[string]any{
+		"original_exists":  current.Exists && !current.IsDir,
+		"original_content": current.Content,
+		"original_owner":   current.Owner,
+		"original_group":   current.Group,
+		"original_mode":    current.Mode,
+	}
+}
+
+func hasAPTSourceOriginal(values map[string]any) bool {
+	_, ok := values["original_exists"]
+	return ok
+}
+
+func copyAPTSourceOriginal(dst map[string]any, src map[string]any) {
+	for _, key := range []string{"original_exists", "original_content", "original_owner", "original_group", "original_mode"} {
+		if value, ok := src[key]; ok {
+			dst[key] = value
+		}
+	}
+}
+
 type userState struct {
 	exists       bool
 	uid          string
@@ -1334,6 +1558,19 @@ func stringMapValue(values map[string]any, name string) string {
 		}
 	}
 	return ""
+}
+
+func boolMapValue(values map[string]any, name string) bool {
+	value, _ := values[name].(bool)
+	return value
+}
+
+func aptSourceOnDestroy(desired map[string]any) string {
+	value := stringMapValue(desired, "on_destroy")
+	if value == "" {
+		return "keep"
+	}
+	return value
 }
 
 func boolDesired(node graph.Node, name string) bool {

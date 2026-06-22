@@ -12,6 +12,7 @@ make test-integration
 Run one case:
 
 ```bash
+make test-integration-case CASE=apt-source
 make test-integration-case CASE=bbr
 make test-integration-case CASE=files
 make test-integration-case CASE=nftables

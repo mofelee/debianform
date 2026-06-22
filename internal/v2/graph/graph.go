@@ -223,6 +223,43 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		})
 		repositoryTriggers = append(repositoryTriggers, sourceAddress)
 	}
+	for _, label := range sortedKeys(host.APT.SourceFiles) {
+		item := host.APT.SourceFiles[label]
+		address := fmt.Sprintf("host.%s.apt.source_file[%s]", host.Name, strconv.Quote(label))
+		if aptCacheSource.File == "" {
+			aptCacheSource = item.Source
+		}
+		desired := map[string]any{
+			"label":      item.Label,
+			"path":       item.Path,
+			"owner":      item.Owner,
+			"group":      item.Group,
+			"mode":       item.Mode,
+			"ensure":     item.Ensure,
+			"on_destroy": item.OnDestroy,
+		}
+		if item.Ensure != "absent" {
+			if item.Content != "" {
+				desired["content"] = item.Content
+			}
+			if item.SourcePath != "" {
+				desired["source_path"] = item.SourcePath
+			}
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         address,
+			Kind:            "apt_source_file",
+			Summary:         "manage apt source file " + item.Label,
+			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
+			Desired:         desired,
+			ProviderType:    "apt_source_file",
+			ProviderAddress: "apt_source_file." + providerName(host.Name, item.Label),
+			ProviderPayload: desired,
+		})
+		repositoryTriggers = append(repositoryTriggers, address)
+	}
 
 	for _, component := range host.Components {
 		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
@@ -296,6 +333,44 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				ProviderPayload: sourceDesired,
 			})
 			repositoryTriggers = append(repositoryTriggers, sourceAddress)
+		}
+		for _, label := range sortedKeys(component.APT.SourceFiles) {
+			item := component.APT.SourceFiles[label]
+			address := fmt.Sprintf("%s.apt.source_file[%s]", componentPrefix, strconv.Quote(label))
+			if aptCacheSource.File == "" {
+				aptCacheSource = item.Source
+			}
+			desired := map[string]any{
+				"label":      item.Label,
+				"component":  component.Name,
+				"path":       item.Path,
+				"owner":      item.Owner,
+				"group":      item.Group,
+				"mode":       item.Mode,
+				"ensure":     item.Ensure,
+				"on_destroy": item.OnDestroy,
+			}
+			if item.Ensure != "absent" {
+				if item.Content != "" {
+					desired["content"] = item.Content
+				}
+				if item.SourcePath != "" {
+					desired["source_path"] = item.SourcePath
+				}
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "apt_source_file",
+				Summary:         "manage apt source file " + item.Label,
+				Source:          item.Source,
+				Lifecycle:       lifecyclePtr(item.Lifecycle),
+				Desired:         desired,
+				ProviderType:    "apt_source_file",
+				ProviderAddress: "apt_source_file." + providerName(host.Name, component.Name, item.Label),
+				ProviderPayload: desired,
+			})
+			repositoryTriggers = append(repositoryTriggers, address)
 		}
 	}
 

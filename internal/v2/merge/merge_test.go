@@ -1106,6 +1106,34 @@ func TestCompileInvalidFixtureReportsSourcePath(t *testing.T) {
 	}
 }
 
+func TestCompileAPTSourceFile(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  apt {
+    source_file "main" {
+      path       = "/etc/apt/sources.list"
+      content    = "deb https://mirrors.aliyun.com/debian/ trixie main\n"
+      on_destroy = "restore"
+    }
+  }
+}
+`)
+
+	got := program.Hosts[0].APT.SourceFiles["main"]
+	if got.Path != "/etc/apt/sources.list" {
+		t.Fatalf("path = %q", got.Path)
+	}
+	if got.Content != "deb https://mirrors.aliyun.com/debian/ trixie main\n" {
+		t.Fatalf("content = %q", got.Content)
+	}
+	if got.OnDestroy != "restore" {
+		t.Fatalf("on_destroy = %q, want restore", got.OnDestroy)
+	}
+	if got.Owner != "root" || got.Group != "root" || got.Mode != "0644" {
+		t.Fatalf("metadata = %s:%s %s, want root:root 0644", got.Owner, got.Group, got.Mode)
+	}
+}
+
 func TestCompileBBRHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-bbr.dbf.hcl", "../testdata/hostspec/v2-bbr.golden.json")
 }

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,6 +128,109 @@ func TestNativeProviderAPTSigningKeyURL(t *testing.T) {
 		if !strings.Contains(applied, want) {
 			t.Fatalf("apt signing key apply script missing %q:\n%s", want, applied)
 		}
+	}
+}
+
+func TestNativeProviderAPTSourceFilePreservesOriginalAndRestores(t *testing.T) {
+	oldContent := "deb http://deb.debian.org/debian trixie main\n"
+	newContent := "deb https://mirrors.aliyun.com/debian/ trixie main\n"
+	oldOutput := "file\nroot\nroot\n644\n" + sha256Hex([]byte(oldContent)) + "\n" + base64.StdEncoding.EncodeToString([]byte(oldContent)) + "\n"
+	node := graph.Node{
+		Address: "host.server1.apt.source_file[\"main\"]",
+		Host:    "server1",
+		Kind:    "apt_source_file",
+		Desired: map[string]any{
+			"label":      "main",
+			"path":       "/etc/apt/sources.list",
+			"content":    newContent,
+			"owner":      "root",
+			"group":      "root",
+			"mode":       "0644",
+			"ensure":     "present",
+			"on_destroy": "restore",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: oldOutput}, {Stdout: oldOutput}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionUpdate {
+		t.Fatalf("existing different apt source file action = %q, want update", got.Action)
+	}
+	if _, ok := got.Observed["original_content"]; ok {
+		t.Fatalf("plan observed should not expose original content: %#v", got.Observed)
+	}
+
+	observed, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionUpdate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observed["original_content"] != oldContent || observed["original_mode"] != "644" {
+		t.Fatalf("apply observed original = %#v", observed)
+	}
+	applied := runner.scripts[len(runner.scripts)-1]
+	if !strings.Contains(applied, base64.StdEncoding.EncodeToString([]byte(newContent))) {
+		t.Fatalf("apply script should write new content:\n%s", applied)
+	}
+
+	prior := &v2state.Resource{
+		Host: "server1",
+		Kind: "apt_source_file",
+		Desired: map[string]any{
+			"path":       "/etc/apt/sources.list",
+			"on_destroy": "restore",
+		},
+		Observed: map[string]any{
+			"original_exists":  true,
+			"original_content": oldContent,
+			"original_owner":   "root",
+			"original_group":   "root",
+			"original_mode":    "0644",
+		},
+	}
+	if err := provider.Destroy(context.Background(), Step{Address: node.Address, Prior: prior}); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) < 2 {
+		t.Fatalf("restore should write original content and refresh apt cache, scripts = %#v", runner.scripts)
+	}
+	restored := runner.scripts[len(runner.scripts)-2]
+	if !strings.Contains(restored, base64.StdEncoding.EncodeToString([]byte(oldContent))) {
+		t.Fatalf("destroy restore script should write original content:\n%s", restored)
+	}
+	if !strings.Contains(runner.scripts[len(runner.scripts)-1], "apt-get update") {
+		t.Fatalf("destroy restore should refresh apt cache:\n%s", runner.scripts[len(runner.scripts)-1])
+	}
+}
+
+func TestNativeProviderAPTSourceFileKeepForgetsWithoutRemoteChange(t *testing.T) {
+	node := graph.Node{
+		Address: "host.server1.apt.source_file[\"main\"]",
+		Host:    "server1",
+		Kind:    "apt_source_file",
+		Desired: map[string]any{
+			"label":      "main",
+			"path":       "/etc/apt/sources.list",
+			"ensure":     "absent",
+			"on_destroy": "keep",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "file\nroot\nroot\n644\nabc\n\n"}}}
+	provider := NewNativeProvider(runner)
+	prior := &v2state.Resource{Ownership: "managed", Observed: map[string]any{"original_exists": true}}
+
+	got, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionForget {
+		t.Fatalf("absent keep action = %q, want forget", got.Action)
+	}
+	if len(runner.scripts) != 1 {
+		t.Fatalf("plan should only read remote state, scripts = %#v", runner.scripts)
 	}
 }
 

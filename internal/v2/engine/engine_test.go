@@ -208,6 +208,40 @@ func TestApplyForgetsAdoptedOrphanWithoutDestroy(t *testing.T) {
 	}
 }
 
+func TestApplyForgetsAPTSourceFileOrphanWhenDestroyKeeps(t *testing.T) {
+	program, _ := fixtureProgramAndGraph(t, "../../../examples/v2-bbr.dbf.hcl")
+	backend := NewMemoryBackend()
+	provider := NewMemoryProvider()
+	orphanAddress := `host.bbr1.apt.source_file["main"]`
+	if err := backend.Write(context.Background(), program.Hosts[0], v2state.State{
+		Version: v2state.Version,
+		Host:    "bbr1",
+		Resources: map[string]v2state.Resource{
+			orphanAddress: {
+				Host:          "bbr1",
+				Kind:          "apt_source_file",
+				Ownership:     "managed",
+				DesiredDigest: "old",
+				Desired:       map[string]any{"path": "/etc/apt/sources.list", "on_destroy": "keep"},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	plan, err := engine.Apply(context.Background(), program, &graph.ResourceGraph{}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Steps) != 1 || plan.Steps[0].Action != ActionForget {
+		t.Fatalf("plan steps = %#v, want forget", plan.Steps)
+	}
+	if len(provider.Destroyed) != 0 {
+		t.Fatalf("destroyed = %#v, want no remote destroy", provider.Destroyed)
+	}
+}
+
 func TestBBRMemoryApplyIsIdempotent(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-bbr.dbf.hcl")
 	engine := Engine{Backend: NewMemoryBackend(), Provider: NewMemoryProvider()}

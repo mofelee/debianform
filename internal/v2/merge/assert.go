@@ -130,7 +130,24 @@ func aptSpecToCty(spec ir.APTSpec) cty.Value {
 			"ensure":        cty.StringVal(item.Ensure),
 		})
 	}
-	return cty.ObjectVal(map[string]cty.Value{"repositories": objectOrEmpty(repositories)})
+	sourceFiles := make(map[string]cty.Value, len(spec.SourceFiles))
+	for _, label := range sortedMapKeys(spec.SourceFiles) {
+		item := spec.SourceFiles[label]
+		sourceFiles[label] = cty.ObjectVal(map[string]cty.Value{
+			"label":       cty.StringVal(item.Label),
+			"path":        cty.StringVal(item.Path),
+			"owner":       cty.StringVal(item.Owner),
+			"group":       cty.StringVal(item.Group),
+			"mode":        cty.StringVal(item.Mode),
+			"ensure":      cty.StringVal(item.Ensure),
+			"on_destroy":  cty.StringVal(item.OnDestroy),
+			"source_path": cty.StringVal(item.SourcePath),
+		})
+	}
+	return cty.ObjectVal(map[string]cty.Value{
+		"repositories": objectOrEmpty(repositories),
+		"source_files": objectOrEmpty(sourceFiles),
+	})
 }
 
 func fileSpecToCty(spec ir.FileSpec) cty.Value {
