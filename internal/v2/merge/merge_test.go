@@ -534,6 +534,40 @@ host "tool1" {
 	}
 }
 
+func TestCompileComponentBinaryArtifactInfersTarXZ(t *testing.T) {
+	program := compileInline(t, `
+component "tool" {
+  type = "binary"
+
+  source "amd64" {
+    url    = "https://downloads.example/tool-v1.0.0-x86_64.tar.xz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  extract {
+    include = "tool"
+  }
+
+  install {
+    path = "/usr/local/bin/tool"
+  }
+}
+
+host "server1" {
+  components = [component.tool]
+
+  system {
+    architecture = "amd64"
+  }
+}
+`)
+
+	component := program.Hosts[0].Components[0]
+	if component.Extract == nil || component.Extract.Format != "tar.xz" {
+		t.Fatalf("extract = %#v, want tar.xz", component.Extract)
+	}
+}
+
 func TestCompileUsesRuntimeFactsForTargetAndArtifactSelection(t *testing.T) {
 	cfg := parseInline(t, `
 component "tools" {

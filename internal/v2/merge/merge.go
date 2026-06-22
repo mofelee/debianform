@@ -440,8 +440,8 @@ func componentArtifactExtractSpec(artifactType string, extract parser.ComponentA
 	}
 	switch artifactType {
 	case "binary":
-		if format != "zip" && format != "tar.gz" && format != "bz2" {
-			return nil, fmt.Errorf("%s:%d:%s.format: binary extract format must be zip, tar.gz, or bz2", extract.Source.File, extract.Source.Line, extract.Source.Path)
+		if format != "zip" && format != "tar.gz" && format != "tar.xz" && format != "bz2" {
+			return nil, fmt.Errorf("%s:%d:%s.format: binary extract format must be zip, tar.gz, tar.xz, or bz2", extract.Source.File, extract.Source.Line, extract.Source.Path)
 		}
 		if format == "bz2" {
 			if extract.Include != "" {
@@ -528,6 +528,8 @@ func inferArtifactFormat(sourceURL string) string {
 		return "zip"
 	case strings.HasSuffix(strings.ToLower(base), ".tar.gz"), strings.HasSuffix(strings.ToLower(base), ".tgz"):
 		return "tar.gz"
+	case strings.HasSuffix(strings.ToLower(base), ".tar.xz"), strings.HasSuffix(strings.ToLower(base), ".txz"):
+		return "tar.xz"
 	case strings.HasSuffix(strings.ToLower(base), ".bz2"):
 		return "bz2"
 	default:

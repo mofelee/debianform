@@ -42,6 +42,7 @@ v2 领域块或 component。
 - `examples/v2-nftables.dbf.hcl`
 - `examples/v2-plan-preview.dbf.hcl`
 - `examples/v2-profile-merge.dbf.hcl`
+- `examples/v2-shadowsocks-rust.dbf.hcl`
 - `examples/v2-systemd-service.dbf.hcl`
 - `examples/v2-systemd-service-unit.dbf.hcl`
 - `examples/v2-user-group.dbf.hcl`
@@ -253,6 +254,7 @@ make test-integration-case CASE=apt-source
 make test-integration-case CASE=bbr
 make test-integration-case CASE=files
 make test-integration-case CASE=nftables
+make test-integration-case CASE=shadowsocks-rust
 make test-integration-case CASE=systemd-service-unit
 make test-integration
 ```

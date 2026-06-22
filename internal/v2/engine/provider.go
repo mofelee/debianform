@@ -543,7 +543,7 @@ func (p NativeProvider) applyComponentBinary(ctx context.Context, step Step) (ma
 		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
 	}
 	if format := stringDesired(step.Node, "extract_format"); format != "" {
-		if format != "zip" && format != "tar.gz" && format != "bz2" {
+		if format != "zip" && format != "tar.gz" && format != "tar.xz" && format != "bz2" {
 			return nil, fmt.Errorf("%s unsupported component binary extract format %q", step.Address, format)
 		}
 		lines = append(lines, componentBinaryExtractInstallScript(step.Node)...)
@@ -695,7 +695,7 @@ func (p NativeProvider) applyComponentArchive(ctx context.Context, step Step) (m
 		"trap 'rm -rf -- \"$work\"' EXIT",
 		"staging=\"$work/staging\"",
 		"mkdir -p \"$staging\"",
-		"tar -xzf " + shellQuote(cachePath) + " -C \"$staging\" --strip-components " + shellQuote(stripComponents),
+		"tar --no-same-owner -xzf " + shellQuote(cachePath) + " -C \"$staging\" --strip-components " + shellQuote(stripComponents),
 		"chown -R " + shellQuote(stringDesired(step.Node, "owner")+":"+stringDesired(step.Node, "group")) + " \"$staging\"",
 		"chmod " + shellQuote(stringDesired(step.Node, "mode")) + " \"$staging\"",
 		"tmp=\"$parent/.${base}.dbf-new\"",
@@ -759,13 +759,20 @@ func componentBinaryExtractInstallScript(node graph.Node) []string {
 		"  apt-get update",
 		"  apt-get install -y tar gzip",
 		"fi",
+		"if [ " + shellQuote(format) + " = 'tar.xz' ] && { ! command -v tar >/dev/null 2>&1 || ! command -v xz >/dev/null 2>&1; }; then",
+		"  export DEBIAN_FRONTEND=noninteractive",
+		"  apt-get update",
+		"  apt-get install -y tar xz-utils",
+		"fi",
 		"work=$(mktemp -d)",
 		"trap 'rm -rf -- \"$work\"' EXIT",
 	}
 	if format == "zip" {
 		lines = append(lines, "unzip -q "+shellQuote(cachePath)+" -d \"$work\"")
+	} else if format == "tar.xz" {
+		lines = append(lines, "tar --no-same-owner -xJf "+shellQuote(cachePath)+" -C \"$work\"")
 	} else {
-		lines = append(lines, "tar -xzf "+shellQuote(cachePath)+" -C \"$work\"")
+		lines = append(lines, "tar --no-same-owner -xzf "+shellQuote(cachePath)+" -C \"$work\"")
 	}
 	lines = append(lines,
 		"include="+shellQuote(include),
