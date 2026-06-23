@@ -35,7 +35,7 @@ type Node struct {
 func (n Node) MarshalJSON() ([]byte, error) {
 	type nodeJSON Node
 	out := nodeJSON(n)
-	if nodeContentWriteOnly(n) {
+	if nodeContentWriteOnly(n) || nodeSensitive(n) {
 		out.ProviderPayload = nil
 	}
 	return json.Marshal(out)
@@ -43,6 +43,11 @@ func (n Node) MarshalJSON() ([]byte, error) {
 
 func nodeContentWriteOnly(n Node) bool {
 	value, _ := n.Desired["content_write_only"].(bool)
+	return value
+}
+
+func nodeSensitive(n Node) bool {
+	value, _ := n.Desired["sensitive"].(bool)
 	return value
 }
 
@@ -1509,6 +1514,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 }
 
 var providerNamePattern = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
+var shellSafeArgPattern = regexp.MustCompile(`^[A-Za-z0-9_./:@%+=,-]+$`)
 
 func providerName(parts ...string) string {
 	joined := strings.Join(parts, "_")
@@ -1540,12 +1546,13 @@ var dockerOfficialPackages = []string{
 }
 
 type dockerEngineGraph struct {
-	Nodes              []Node
-	Operations         []Operation
-	RepositoryTriggers []string
-	PackageAddresses   []string
-	ServiceAddress     string
-	DaemonFileAddress  string
+	Nodes                    []Node
+	Operations               []Operation
+	RepositoryTriggers       []string
+	PackageAddresses         []string
+	ServiceAddress           string
+	DaemonFileAddress        string
+	ComposeValidateAddresses map[string]string
 }
 
 func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) (dockerEngineGraph, error) {
@@ -1565,9 +1572,6 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) 
 	}
 	if len(docker.Users) > 0 {
 		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.users: docker users are not implemented in this loop", docker.Source.File, docker.Source.Line, docker.Source.Path)
-	}
-	if len(docker.Composes) > 0 {
-		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.compose: docker compose projects are not implemented in this loop", docker.Source.File, docker.Source.Line, docker.Source.Path)
 	}
 
 	switch docker.Package.Source {
@@ -1718,6 +1722,14 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) 
 		}
 	}
 
+	composeNodes, composeOperations, composeValidates, err := dockerComposeGraph(host, out.PackageAddresses, serviceAddress)
+	if err != nil {
+		return dockerEngineGraph{}, err
+	}
+	out.Nodes = append(out.Nodes, composeNodes...)
+	out.Operations = append(out.Operations, composeOperations...)
+	out.ComposeValidateAddresses = composeValidates
+
 	return out, nil
 }
 
@@ -1761,6 +1773,136 @@ func dockerDaemonGraph(host ir.HostSpec) (string, Node, Operation, error) {
 		Source:         daemon.Source,
 	}
 	return address, node, operation, nil
+}
+
+func dockerComposeGraph(host ir.HostSpec, packageAddresses []string, serviceAddress string) ([]Node, []Operation, map[string]string, error) {
+	if host.Docker == nil || len(host.Docker.Composes) == 0 {
+		return nil, nil, map[string]string{}, nil
+	}
+	validateAddresses := map[string]string{}
+	var nodes []Node
+	var operations []Operation
+	for _, name := range sortedKeys(host.Docker.Composes) {
+		compose := host.Docker.Composes[name]
+		if !compose.Enable {
+			continue
+		}
+		prefix := fmt.Sprintf("host.%s.docker.compose[%s]", host.Name, strconv.Quote(name))
+		directoryAddress := prefix + ".directory"
+		directoryDesired := map[string]any{
+			"path":   compose.Directory,
+			"owner":  "root",
+			"group":  "root",
+			"mode":   "0755",
+			"ensure": "present",
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         directoryAddress,
+			Kind:            "directory",
+			Summary:         "create docker compose directory " + compose.Directory,
+			Source:          compose.Source,
+			Desired:         directoryDesired,
+			ProviderType:    "directory",
+			ProviderAddress: "directory." + providerName(host.Name, "docker", "compose", name, compose.Directory),
+			ProviderPayload: directoryDesired,
+		})
+
+		fileAddresses := []string{}
+		engineDeps := []string{}
+		if len(packageAddresses) > 0 {
+			engineDeps = append(engineDeps, packageAddresses...)
+		}
+		if serviceAddress != "" {
+			engineDeps = append(engineDeps, serviceAddress)
+		}
+		fileDeps := dedupeStrings(append([]string{directoryAddress}, engineDeps...))
+
+		if compose.File == nil {
+			return nil, nil, nil, fmt.Errorf("%s:%d:%s.file: docker compose file block is required", compose.Source.File, compose.Source.Line, compose.Source.Path)
+		}
+		fileAddress, fileNode := dockerComposeFileNode(host.Name, prefix+".file", name, *compose.File, "manage docker compose file", fileDeps)
+		nodes = append(nodes, fileNode)
+		fileAddresses = append(fileAddresses, fileAddress)
+
+		for _, label := range sortedKeys(compose.EnvFiles) {
+			envFile := compose.EnvFiles[label]
+			envAddress, envNode := dockerComposeFileNode(host.Name, fmt.Sprintf("%s.env_file[%s]", prefix, strconv.Quote(label)), name, envFile, "manage docker compose env file "+label, fileDeps)
+			nodes = append(nodes, envNode)
+			fileAddresses = append(fileAddresses, envAddress)
+		}
+
+		validateAddress := prefix + ".validate"
+		validateAddresses[name] = validateAddress
+		operations = append(operations, Operation{
+			Address:        validateAddress,
+			Action:         "run",
+			Summary:        "validate docker compose project " + compose.Project,
+			DependsOn:      dedupeStrings(fileAddresses),
+			TriggeredBy:    dedupeStrings(fileAddresses),
+			CommandPreview: dockerComposeConfigCommand(compose),
+			Source:         compose.Source,
+		})
+	}
+	return nodes, operations, validateAddresses, nil
+}
+
+func dockerComposeFileNode(hostName, address, composeName string, item ir.DockerComposeFileSpec, summary string, deps []string) (string, Node) {
+	desired, payload := fileResourceDesiredPayload(fileResourceSpec{
+		Path:       item.Path,
+		Content:    item.Content,
+		SourcePath: item.SourcePath,
+		Owner:      item.Owner,
+		Group:      item.Group,
+		Mode:       item.Mode,
+		Sensitive:  item.Sensitive,
+		Ensure:     "present",
+		Summary:    item.Summary,
+	})
+	desired["compose"] = composeName
+	payload["compose"] = composeName
+	node := Node{
+		Host:            hostName,
+		Address:         address,
+		Kind:            "file",
+		Summary:         summary,
+		Source:          item.Source,
+		Desired:         desired,
+		DependsOn:       dedupeStrings(deps),
+		ProviderType:    "file",
+		ProviderAddress: "file." + providerName(hostName, item.Path),
+		ProviderPayload: payload,
+	}
+	return address, node
+}
+
+func dockerComposeConfigCommand(compose ir.DockerComposeSpec) string {
+	args := []string{
+		"docker",
+		"compose",
+		"-p",
+		compose.Project,
+	}
+	if compose.File != nil {
+		args = append(args, "-f", compose.File.Path)
+	}
+	args = append(args, "config")
+	return quoteCommand(args)
+}
+
+func quoteCommand(args []string) string {
+	out := make([]string, 0, len(args))
+	for _, arg := range args {
+		out = append(out, shellQuoteCommandArg(arg))
+	}
+	return strings.Join(out, " ")
+}
+
+func shellQuoteCommandArg(value string) string {
+	if value != "" && shellSafeArgPattern.MatchString(value) {
+		return value
+	}
+	return shellQuoteGraph(value)
 }
 
 func deterministicJSON(value any) (string, error) {

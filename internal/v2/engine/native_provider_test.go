@@ -926,6 +926,23 @@ func TestNativeProviderDockerServiceApplyScript(t *testing.T) {
 	}
 }
 
+func TestNativeProviderDockerComposeValidateOperation(t *testing.T) {
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+	operation := graph.Operation{
+		Address:        `host.compose1.docker.compose["app"].validate`,
+		Action:         "run",
+		CommandPreview: "docker compose -p app -f /opt/app/compose.yaml config",
+	}
+
+	if err := provider.RunOperation(context.Background(), operation); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 1 || runner.scripts[0] != operation.CommandPreview {
+		t.Fatalf("compose validate command = %#v, want %q", runner.scripts, operation.CommandPreview)
+	}
+}
+
 func TestSSHRunnerExpandsHomeIdentityFile(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

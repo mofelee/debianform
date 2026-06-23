@@ -136,20 +136,7 @@
         }
       },
       "provider_type": "file",
-      "provider_address": "file.foundation1__etc_myapp_token",
-      "provider_payload": {
-        "ensure": "present",
-        "group": "root",
-        "mode": "0600",
-        "owner": "root",
-        "path": "/etc/myapp/token",
-        "sensitive": true,
-        "source_path": "../testdata/fixtures/app-token.txt",
-        "summary": {
-          "sha256": "f807665a6313f37a4f9c7885876d603d78999ed82a816fbb4c805d4ecfe21fa6",
-          "bytes": 24
-        }
-      }
+      "provider_address": "file.foundation1__etc_myapp_token"
     },
     {
       "host": "foundation1",

@@ -484,6 +484,50 @@ host "server1" {
 	}
 }
 
+func TestDockerComposeMemoryApplyDoesNotLeakEnvFileContent(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-compose.dbf.hcl")
+	backend := NewMemoryBackend()
+	provider := NewMemoryProvider()
+	engine := Engine{
+		Backend:  backend,
+		Provider: provider,
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	}
+
+	plan, err := engine.Apply(context.Background(), program, resourceGraph, Options{Host: "compose1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasStepAction(plan, `host.compose1.docker.compose["app"].env_file["app"]`, ActionCreate) {
+		t.Fatalf("compose apply plan missing env file create: %#v", plan.Steps)
+	}
+	if len(provider.Operations) != 2 || !containsString(provider.Operations, `host.compose1.docker.compose["app"].validate`) {
+		t.Fatalf("compose operations = %#v, want apt refresh and compose validate", provider.Operations)
+	}
+
+	st, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := v2state.Encode(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "compose apply state", string(data))
+	env, ok := st.Resources[`host.compose1.docker.compose["app"].env_file["app"]`]
+	if !ok {
+		t.Fatalf("state missing compose env file: %#v", st.Resources)
+	}
+	if _, ok := env.Desired["content"]; ok {
+		t.Fatalf("state env desired leaked content: %#v", env.Desired)
+	}
+	if env.Desired["content_sha256"] == "" || env.Desired["content_bytes"] == nil {
+		t.Fatalf("state env desired missing content summary: %#v", env.Desired)
+	}
+}
+
 func TestDockerEngineMemoryCheckDetectsPackageAndServiceDrift(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-minimal.dbf.hcl")
 	provider := NewMemoryProvider()

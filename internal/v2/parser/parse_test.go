@@ -1262,6 +1262,38 @@ host "docker1" {
 	}
 }
 
+func TestParseRejectsDuplicateDockerComposeEnvFile(t *testing.T) {
+	file := writeConfig(t, `
+host "docker1" {
+  docker {
+    compose "app" {
+      directory = "/opt/app"
+
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+
+      env_file "app" {
+        path    = "/opt/app/.env"
+        content = "TOKEN=example\n"
+      }
+
+      env_file "app" {
+        path    = "/opt/app/other.env"
+        content = "TOKEN=example\n"
+      }
+    }
+  }
+}
+`)
+
+	_, err := ParseFiles([]string{file})
+	if err == nil || !strings.Contains(err.Error(), `duplicate host.docker1.docker.compose["app"].env_file["app"]`) {
+		t.Fatalf("ParseFiles() error = %v, want duplicate compose env_file label", err)
+	}
+}
+
 func TestParseRunnableV2ExamplesGolden(t *testing.T) {
 	summaries := []parsedExampleSummary{}
 	for _, fixture := range runnableV2ExampleFixtures() {

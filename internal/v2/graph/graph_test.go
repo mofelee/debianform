@@ -236,6 +236,103 @@ func TestCompileDockerDaemonResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileDockerComposeResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-docker-compose.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-docker-compose.golden.json", got)
+
+	directoryAddress := `host.compose1.docker.compose["app"].directory`
+	composeFileAddress := `host.compose1.docker.compose["app"].file`
+	envFileAddress := `host.compose1.docker.compose["app"].env_file["app"]`
+	validateAddress := `host.compose1.docker.compose["app"].validate`
+	serviceAddress := `host.compose1.docker.service["docker"]`
+	packageAddress := `host.compose1.docker.package["docker-compose-plugin"]`
+
+	directory := nodeFor(resourceGraph, directoryAddress)
+	if directory == nil {
+		t.Fatal("compose directory node missing")
+	}
+	if directory.Kind != "directory" || directory.Desired["mode"] != "0755" {
+		t.Fatalf("compose directory = %#v", directory)
+	}
+	composeFile := nodeFor(resourceGraph, composeFileAddress)
+	if composeFile == nil {
+		t.Fatal("compose file node missing")
+	}
+	for _, want := range []string{directoryAddress, serviceAddress, packageAddress} {
+		if !containsString(composeFile.DependsOn, want) {
+			t.Fatalf("compose file deps = %#v, want %q", composeFile.DependsOn, want)
+		}
+	}
+	envFile := nodeFor(resourceGraph, envFileAddress)
+	if envFile == nil {
+		t.Fatal("compose env file node missing")
+	}
+	if envFile.Desired["sensitive"] != true {
+		t.Fatalf("env file desired should be sensitive: %#v", envFile.Desired)
+	}
+	if _, ok := envFile.Desired["content"]; ok {
+		t.Fatalf("env file desired leaked content: %#v", envFile.Desired)
+	}
+	if envFile.ProviderPayload["content"] != "TOKEN=not-a-real-preview-secret\n" {
+		t.Fatalf("env file provider payload missing content: %#v", envFile.ProviderPayload)
+	}
+
+	validate := operationFor(resourceGraph, validateAddress)
+	if validate == nil {
+		t.Fatal("compose validate operation missing")
+	}
+	if validate.CommandPreview != "docker compose -p app -f /opt/app/compose.yaml config" {
+		t.Fatalf("validate command = %q", validate.CommandPreview)
+	}
+	for _, want := range []string{composeFileAddress, envFileAddress} {
+		if !containsString(validate.DependsOn, want) || !containsString(validate.TriggeredBy, want) {
+			t.Fatalf("validate deps=%#v triggered_by=%#v, want %q", validate.DependsOn, validate.TriggeredBy, want)
+		}
+	}
+}
+
+func TestCompileDockerComposePackageSourceNoneSkipsPackageDependencies(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "server1" {
+  docker {
+    enable = true
+
+    package {
+      source = "none"
+    }
+
+    compose "app" {
+      directory = "/opt/app"
+
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+    }
+  }
+}
+`)
+
+	composeFile := nodeFor(resourceGraph, `host.server1.docker.compose["app"].file`)
+	if composeFile == nil {
+		t.Fatal("compose file node missing")
+	}
+	for _, dep := range composeFile.DependsOn {
+		if strings.Contains(dep, `.docker.package[`) {
+			t.Fatalf("source none compose file should not depend on packages: %#v", composeFile.DependsOn)
+		}
+	}
+	if !containsString(composeFile.DependsOn, `host.server1.docker.service["docker"]`) {
+		t.Fatalf("source none compose file deps = %#v, want docker service", composeFile.DependsOn)
+	}
+}
+
 func TestCompileDockerDisabledGeneratesNoDockerNodes(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {
@@ -974,6 +1071,7 @@ func testHostFacts() map[string]ir.HostFacts {
 	for _, name := range []string{
 		"apt1",
 		"bbr1",
+		"compose1",
 		"docker-daemon1",
 		"docker1",
 		"edge1",

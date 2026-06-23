@@ -197,6 +197,77 @@ func TestDockerDaemonPlanTextGolden(t *testing.T) {
 	}
 }
 
+func TestDockerComposePlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-docker-compose.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-docker-compose.dbf.hcl",
+		Host:        "compose1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-docker-compose.golden.json", got)
+
+	if doc.Summary.Create != 11 {
+		t.Fatalf("create count = %d, want 11", doc.Summary.Create)
+	}
+	if doc.Summary.Operations != 2 {
+		t.Fatalf("operations = %d, want 2", doc.Summary.Operations)
+	}
+	if !hasChange(doc, `host.compose1.docker.compose["app"].directory`) {
+		t.Fatalf("compose directory change missing")
+	}
+	if !hasChange(doc, `host.compose1.docker.compose["app"].file`) {
+		t.Fatalf("compose file change missing")
+	}
+	if !hasChange(doc, `host.compose1.docker.compose["app"].env_file["app"]`) {
+		t.Fatalf("compose env file change missing")
+	}
+	if !hasOperation(doc, `host.compose1.docker.compose["app"].validate`) {
+		t.Fatalf("compose validate operation missing: %#v", doc.Operations)
+	}
+	data, err = json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "docker compose plan JSON", string(data))
+	if strings.Contains(string(data), "not-a-real-preview-secret") {
+		t.Fatalf("docker compose plan JSON leaked env file content:\n%s", data)
+	}
+}
+
+func TestDockerComposePlanTextGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-docker-compose.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-docker-compose.dbf.hcl",
+		Host:        "compose1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	assertGolden(t, "../testdata/plan/v2-docker-compose.golden.txt", text.String())
+	for _, want := range []string{
+		`host.compose1.docker.compose["app"].file`,
+		`+     image: nginx:1.27-alpine`,
+		`host.compose1.docker.compose["app"].validate`,
+		`docker compose -p app -f /opt/app/compose.yaml config`,
+		`<sensitive sha256=`,
+	} {
+		if !strings.Contains(text.String(), want) {
+			t.Fatalf("docker compose text plan missing %q:\n%s", want, text.String())
+		}
+	}
+	if strings.Contains(text.String(), "not-a-real-preview-secret") {
+		t.Fatalf("docker compose text plan leaked env file content:\n%s", text.String())
+	}
+}
+
 func TestNftablesPlanJSONGolden(t *testing.T) {
 	doc := planFixture(t, "../../../examples/v2-nftables.dbf.hcl", Options{
 		CommandFile: "../../../examples/v2-nftables.dbf.hcl",
@@ -747,6 +818,7 @@ func testHostFacts() map[string]ir.HostFacts {
 	for _, name := range []string{
 		"apt1",
 		"bbr1",
+		"compose1",
 		"docker-daemon1",
 		"docker1",
 		"edge1",

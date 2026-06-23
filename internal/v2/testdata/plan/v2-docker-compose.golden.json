@@ -1,0 +1,901 @@
+{
+  "format_version": "debianform.plan.v2alpha1",
+  "generated_at": "2026-06-20T12:00:00Z",
+  "command": {
+    "file": "../../../examples/v2-docker-compose.dbf.hcl",
+    "host": "compose1"
+  },
+  "summary": {
+    "create": 11,
+    "update": 0,
+    "delete": 0,
+    "no_op": 0,
+    "operations": 2
+  },
+  "changes": [
+    {
+      "address": "host.compose1.docker.apt.repository[\"docker-official\"]",
+      "action": "create",
+      "summary": "manage docker official apt repository",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 6,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "Types: deb"
+                  },
+                  {
+                    "op": "create",
+                    "text": "URIs: https://download.docker.com/linux/debian"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Suites: trixie"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Components: stable"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Architectures: amd64"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Signed-By: /etc/apt/keyrings/docker.asc"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-official"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/apt/sources.list.d/docker_official.sources"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.apt.signing_key[\"docker-official\"]",
+      "action": "create",
+      "summary": "manage docker official apt signing key",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-official"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/apt/keyrings/docker.asc"
+          },
+          {
+            "path": [
+              "sha256"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
+          },
+          {
+            "path": [
+              "url"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "https://download.docker.com/linux/debian/gpg"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.compose[\"app\"].directory",
+      "action": "create",
+      "summary": "create docker compose directory /opt/app",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0755"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/opt/app"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.compose[\"app\"].env_file[\"app\"]",
+      "action": "create",
+      "summary": "manage docker compose env file app",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 32,
+        "path": "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": true,
+        "children": [
+          {
+            "path": [
+              "compose"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "app"
+          },
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "sensitive",
+            "action": "create",
+            "sensitive": true,
+            "after_summary": {
+              "bytes": 32,
+              "sha256": "13960174065f5092768d3f5b11c1acad09272142febb757484b9709779b52588"
+            }
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0600"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/opt/app/.env"
+          },
+          {
+            "path": [
+              "sensitive"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.compose[\"app\"].file",
+      "action": "create",
+      "summary": "manage docker compose file",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 20,
+        "path": "host.compose1.docker.compose[\"app\"].file"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "compose"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "app"
+          },
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 5,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "services:"
+                  },
+                  {
+                    "op": "create",
+                    "text": "  web:"
+                  },
+                  {
+                    "op": "create",
+                    "text": "    image: nginx:1.27-alpine"
+                  },
+                  {
+                    "op": "create",
+                    "text": "    ports:"
+                  },
+                  {
+                    "op": "create",
+                    "text": "      - \"8080:80\""
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/opt/app/compose.yaml"
+          },
+          {
+            "path": [
+              "sensitive"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": false
+          },
+          {
+            "path": [
+              "summary"
+            ],
+            "kind": "map",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "summary",
+                  "bytes"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": 75
+              },
+              {
+                "path": [
+                  "summary",
+                  "sha256"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "d1f744f61ab84b59402583765d65b4d6b984fd44c128388ac3ea0a07ef123d0f"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.package[\"containerd.io\"]",
+      "action": "create",
+      "summary": "install docker package containerd.io",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "containerd.io"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-official"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.package[\"docker-buildx-plugin\"]",
+      "action": "create",
+      "summary": "install docker package docker-buildx-plugin",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-buildx-plugin"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-official"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.package[\"docker-ce\"]",
+      "action": "create",
+      "summary": "install docker package docker-ce",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-ce"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-official"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.package[\"docker-ce-cli\"]",
+      "action": "create",
+      "summary": "install docker package docker-ce-cli",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-ce-cli"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-official"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.package[\"docker-compose-plugin\"]",
+      "action": "create",
+      "summary": "install docker package docker-compose-plugin",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-compose-plugin"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-official"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.service[\"docker\"]",
+      "action": "create",
+      "summary": "manage docker service",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "enabled"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker"
+          },
+          {
+            "path": [
+              "state"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "running"
+          },
+          {
+            "path": [
+              "unit"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker.service"
+          }
+        ]
+      }
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.compose1.apt.cache_refresh",
+      "action": "run",
+      "summary": "refresh apt package cache",
+      "depends_on": [
+        "host.compose1.docker.apt.signing_key[\"docker-official\"]",
+        "host.compose1.docker.apt.repository[\"docker-official\"]"
+      ],
+      "triggered_by": [
+        "host.compose1.docker.apt.signing_key[\"docker-official\"]",
+        "host.compose1.docker.apt.repository[\"docker-official\"]"
+      ],
+      "command_preview": "apt-get update",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      }
+    },
+    {
+      "address": "host.compose1.docker.compose[\"app\"].validate",
+      "action": "run",
+      "summary": "validate docker compose project app",
+      "depends_on": [
+        "host.compose1.docker.compose[\"app\"].file",
+        "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
+      ],
+      "triggered_by": [
+        "host.compose1.docker.compose[\"app\"].file",
+        "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
+      ],
+      "command_preview": "docker compose -p app -f /opt/app/compose.yaml config",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
+      }
+    }
+  ],
+  "diagnostics": []
+}

@@ -3223,6 +3223,35 @@ host "compose1" {
 			want: "docker compose file path",
 		},
 		{
+			name: "compose env file path conflicts with systemd unit",
+			hcl: `
+host "compose1" {
+  systemd {
+    unit "app.env" {
+      content = "[Service]\nExecStart=/bin/true\n"
+    }
+  }
+
+  docker {
+    compose "app" {
+      directory = "/opt/app"
+
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+
+      env_file "app" {
+        path    = "/etc/systemd/system/app.env"
+        content = "TOKEN=example\n"
+      }
+    }
+  }
+}
+`,
+			want: "docker compose env_file path",
+		},
+		{
 			name: "invalid compose project",
 			hcl: `
 host "compose1" {

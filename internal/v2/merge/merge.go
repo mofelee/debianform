@@ -4025,6 +4025,7 @@ func validateHostSpec(spec ir.HostSpec) error {
 	}
 	for name, unit := range spec.Systemd.Units {
 		units[name] = unit
+		files[unit.Path] = unit.Source
 	}
 	if spec.Systemd.Networkd != nil {
 		if err := validateNetworkdSpecPaths(*spec.Systemd.Networkd, files, secrets); err != nil {
@@ -4160,7 +4161,14 @@ func validateHostSpec(spec ir.HostSpec) error {
 			if previous, exists := units[name]; exists {
 				return fmt.Errorf("%s:%d:%s: component %q systemd unit %q conflicts with unit declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, name, previous.Source.File, previous.Source.Line, previous.Source.Path)
 			}
+			if previous, exists := files[unit.Path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q systemd unit path %q conflicts with file declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, unit.Path, previous.File, previous.Line, previous.Path)
+			}
+			if previous, exists := secrets[unit.Path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q systemd unit path %q conflicts with secret declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, unit.Path, previous.File, previous.Line, previous.Path)
+			}
 			units[name] = unit
+			files[unit.Path] = unit.Source
 		}
 		if component.Systemd.Networkd != nil {
 			if err := validateNetworkdSpecPaths(*component.Systemd.Networkd, files, secrets); err != nil {

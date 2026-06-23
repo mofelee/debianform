@@ -2,7 +2,7 @@
   "name": "compose1",
   "source": {
     "file": "../../../examples/v2-docker-compose.dbf.hcl",
-    "line": 6,
+    "line": 7,
     "path": "host.compose1"
   },
   "facts": {
@@ -14,7 +14,7 @@
     "user": "root",
     "source": {
       "file": "../../../examples/v2-docker-compose.dbf.hcl",
-      "line": 6,
+      "line": 7,
       "path": "host.compose1"
     }
   },
@@ -23,16 +23,18 @@
     "lock_path": "/var/lock/debianform/state/compose1.lock",
     "source": {
       "file": "../../../examples/v2-docker-compose.dbf.hcl",
-      "line": 6,
+      "line": 7,
       "path": "host.compose1"
     }
   },
   "system": {
     "hostname": "compose1",
+    "architecture": "amd64",
+    "codename": "trixie",
     "source": {
       "file": "../../../examples/v2-docker-compose.dbf.hcl",
-      "line": 6,
-      "path": "host.compose1"
+      "line": 8,
+      "path": "host.compose1.system"
     }
   },
   "kernel": {
@@ -76,7 +78,7 @@
       "remove_conflicts": "auto",
       "source_ref": {
         "file": "../../../examples/v2-docker-compose.dbf.hcl",
-        "line": 7,
+        "line": 13,
         "path": "host.compose1.docker"
       }
     },
@@ -86,7 +88,7 @@
       "name": "docker.service",
       "source_ref": {
         "file": "../../../examples/v2-docker-compose.dbf.hcl",
-        "line": 7,
+        "line": 13,
         "path": "host.compose1.docker"
       }
     },
@@ -109,7 +111,7 @@
           },
           "source": {
             "file": "../../../examples/v2-docker-compose.dbf.hcl",
-            "line": 14,
+            "line": 20,
             "path": "host.compose1.docker.compose[\"app\"].file"
           }
         },
@@ -117,18 +119,18 @@
           "app": {
             "label": "app",
             "path": "/opt/app/.env",
-            "content": "NGINX_HOST=localhost\n",
+            "content": "TOKEN=not-a-real-preview-secret\n",
             "owner": "root",
             "group": "root",
             "mode": "0600",
             "sensitive": true,
             "summary": {
-              "sha256": "2772e1be6c9876ad31a974c279f21df38af3c5ccc1fde8b37f6992f6d8ab6440",
-              "bytes": 21
+              "sha256": "13960174065f5092768d3f5b11c1acad09272142febb757484b9709779b52588",
+              "bytes": 32
             },
             "source": {
               "file": "../../../examples/v2-docker-compose.dbf.hcl",
-              "line": 26,
+              "line": 32,
               "path": "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
             }
           }
@@ -149,14 +151,14 @@
         ],
         "source": {
           "file": "../../../examples/v2-docker-compose.dbf.hcl",
-          "line": 10,
+          "line": 16,
           "path": "host.compose1.docker.compose[\"app\"]"
         }
       }
     },
     "source": {
       "file": "../../../examples/v2-docker-compose.dbf.hcl",
-      "line": 7,
+      "line": 13,
       "path": "host.compose1.docker"
     }
   }

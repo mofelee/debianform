@@ -28,9 +28,10 @@
 - [x] 已支持 `docker.enable` 官方源 ResourceGraph / offline plan 展开
 - [x] 已支持 Docker Engine apply / check 复用现有 provider 闭环
 - [x] 已支持 Docker daemon ResourceGraph / plan / apply / check 闭环
+- [x] 已支持 Compose directory / compose file / env file / config validate ResourceGraph 闭环
 - [ ] 尚未支持 Compose project 状态漂移检测
-- [ ] 尚未支持 users / Compose ResourceGraph 展开
-- [ ] 尚未支持 users / Compose apply / check 闭环
+- [ ] 尚未支持 users / Compose project state / Compose systemd ResourceGraph 展开
+- [ ] 尚未支持 users / Compose project state / Compose systemd apply / check 闭环
 
 ## 总体实现边界
 
@@ -295,34 +296,34 @@ make test
 
 代码：
 
-- [ ] 编译 compose working directory 节点，默认 owner/group/mode 为 `root/root/0755`
-- [ ] 编译 compose file 节点，默认 owner/group/mode 为 `root/root/0644`
-- [ ] 编译 env file 节点，默认 owner/group/mode 为 `root/root/0600`
-- [ ] env file 默认 `sensitive = true` 或 `content_write_only = true`
-- [ ] compose file / env file 依赖 working directory
-- [ ] compose file / env file 依赖 Docker Engine packages/service，除非 `package.source = "none"`
-- [ ] 编译 `docker.compose["<name>"].validate` operation
-- [ ] validate operation command preview 使用 `docker compose -p <project> -f <file> config`
-- [ ] validate operation 依赖 compose file 和 env files
-- [ ] 后续所有 project 状态和 systemd 节点依赖 validate operation
-- [ ] 校验同一 host 下 compose file/env file path 不与 files/secrets/nftables/networkd/systemd unit 冲突
+- [x] 编译 compose working directory 节点，默认 owner/group/mode 为 `root/root/0755`
+- [x] 编译 compose file 节点，默认 owner/group/mode 为 `root/root/0644`
+- [x] 编译 env file 节点，默认 owner/group/mode 为 `root/root/0600`
+- [x] env file 默认 `sensitive = true` 或 `content_write_only = true`
+- [x] compose file / env file 依赖 working directory
+- [x] compose file / env file 依赖 Docker Engine packages/service，除非 `package.source = "none"`
+- [x] 编译 `docker.compose["<name>"].validate` operation
+- [x] validate operation command preview 使用 `docker compose -p <project> -f <file> config`
+- [x] validate operation 依赖 compose file 和 env files
+- [x] 后续所有 project 状态和 systemd 节点依赖 validate operation
+- [x] 校验同一 host 下 compose file/env file path 不与 files/secrets/nftables/networkd/systemd unit 冲突
 
 测试：
 
-- [ ] ResourceGraph golden 覆盖 directory、compose file、env file、validate operation
-- [ ] plan golden 覆盖 compose YAML 行级 diff
-- [ ] sensitive 测试确保 env file 内容不进入 plan/state/log
-- [ ] operation 单测覆盖 validate command preview
-- [ ] 负例覆盖 path 冲突、env_file label 重复、compose file 缺失
+- [x] ResourceGraph golden 覆盖 directory、compose file、env file、validate operation
+- [x] plan golden 覆盖 compose YAML 行级 diff
+- [x] sensitive 测试确保 env file 内容不进入 plan/state/log
+- [x] operation 单测覆盖 validate command preview
+- [x] 负例覆盖 path 冲突、env_file label 重复、compose file 缺失
 
 示例：
 
-- [ ] `examples/v2-docker-compose.dbf.hcl` 进入 graph / plan golden
+- [x] `examples/v2-docker-compose.dbf.hcl` 进入 graph / plan golden
 
 文档：
 
-- [ ] README 增加 Compose file 管理示例
-- [ ] 文档明确 DebianForm 不解析、不重写 Compose schema
+- [x] README 增加 Compose file 管理示例
+- [x] 文档明确 DebianForm 不解析、不重写 Compose schema
 
 验收：
 

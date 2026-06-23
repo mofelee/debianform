@@ -1,0 +1,412 @@
+{
+  "nodes": [
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.apt.repository[\"docker-official\"]",
+      "kind": "file",
+      "summary": "manage docker official apt repository",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "desired": {
+        "content": "Types: deb\nURIs: https://download.docker.com/linux/debian\nSuites: trixie\nComponents: stable\nArchitectures: amd64\nSigned-By: /etc/apt/keyrings/docker.asc\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "docker-official",
+        "owner": "root",
+        "path": "/etc/apt/sources.list.d/docker_official.sources"
+      },
+      "provider_type": "file",
+      "provider_address": "file.compose1__etc_apt_sources_list_d_docker_official_sources",
+      "provider_payload": {
+        "content": "Types: deb\nURIs: https://download.docker.com/linux/debian\nSuites: trixie\nComponents: stable\nArchitectures: amd64\nSigned-By: /etc/apt/keyrings/docker.asc\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "docker-official",
+        "owner": "root",
+        "path": "/etc/apt/sources.list.d/docker_official.sources"
+      },
+      "depends_on": [
+        "host.compose1.docker.apt.signing_key[\"docker-official\"]"
+      ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.apt.signing_key[\"docker-official\"]",
+      "kind": "apt_signing_key",
+      "summary": "manage docker official apt signing key",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "desired": {
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "docker-official",
+        "owner": "root",
+        "path": "/etc/apt/keyrings/docker.asc",
+        "sha256": "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570",
+        "url": "https://download.docker.com/linux/debian/gpg"
+      },
+      "provider_type": "apt_signing_key",
+      "provider_address": "apt_signing_key.compose1_docker_official",
+      "provider_payload": {
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "docker-official",
+        "owner": "root",
+        "path": "/etc/apt/keyrings/docker.asc",
+        "sha256": "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570",
+        "url": "https://download.docker.com/linux/debian/gpg"
+      }
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.compose[\"app\"].directory",
+      "kind": "directory",
+      "summary": "create docker compose directory /opt/app",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
+      },
+      "desired": {
+        "ensure": "present",
+        "group": "root",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/opt/app"
+      },
+      "provider_type": "directory",
+      "provider_address": "directory.compose1_docker_compose_app__opt_app",
+      "provider_payload": {
+        "ensure": "present",
+        "group": "root",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/opt/app"
+      }
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.compose[\"app\"].env_file[\"app\"]",
+      "kind": "file",
+      "summary": "manage docker compose env file app",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 32,
+        "path": "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
+      },
+      "desired": {
+        "compose": "app",
+        "content_bytes": 32,
+        "content_sha256": "13960174065f5092768d3f5b11c1acad09272142febb757484b9709779b52588",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0600",
+        "owner": "root",
+        "path": "/opt/app/.env",
+        "sensitive": true,
+        "summary": {
+          "sha256": "13960174065f5092768d3f5b11c1acad09272142febb757484b9709779b52588",
+          "bytes": 32
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.compose1__opt_app_env",
+      "depends_on": [
+        "host.compose1.docker.compose[\"app\"].directory",
+        "host.compose1.docker.package[\"docker-ce\"]",
+        "host.compose1.docker.package[\"docker-ce-cli\"]",
+        "host.compose1.docker.package[\"containerd.io\"]",
+        "host.compose1.docker.package[\"docker-buildx-plugin\"]",
+        "host.compose1.docker.package[\"docker-compose-plugin\"]",
+        "host.compose1.docker.service[\"docker\"]"
+      ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.compose[\"app\"].file",
+      "kind": "file",
+      "summary": "manage docker compose file",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 20,
+        "path": "host.compose1.docker.compose[\"app\"].file"
+      },
+      "desired": {
+        "compose": "app",
+        "content": "services:\n  web:\n    image: nginx:1.27-alpine\n    ports:\n      - \"8080:80\"\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/opt/app/compose.yaml",
+        "sensitive": false,
+        "summary": {
+          "sha256": "d1f744f61ab84b59402583765d65b4d6b984fd44c128388ac3ea0a07ef123d0f",
+          "bytes": 75
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.compose1__opt_app_compose_yaml",
+      "provider_payload": {
+        "compose": "app",
+        "content": "services:\n  web:\n    image: nginx:1.27-alpine\n    ports:\n      - \"8080:80\"\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/opt/app/compose.yaml",
+        "sensitive": false,
+        "summary": {
+          "sha256": "d1f744f61ab84b59402583765d65b4d6b984fd44c128388ac3ea0a07ef123d0f",
+          "bytes": 75
+        }
+      },
+      "depends_on": [
+        "host.compose1.docker.compose[\"app\"].directory",
+        "host.compose1.docker.package[\"docker-ce\"]",
+        "host.compose1.docker.package[\"docker-ce-cli\"]",
+        "host.compose1.docker.package[\"containerd.io\"]",
+        "host.compose1.docker.package[\"docker-buildx-plugin\"]",
+        "host.compose1.docker.package[\"docker-compose-plugin\"]",
+        "host.compose1.docker.service[\"docker\"]"
+      ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.package[\"containerd.io\"]",
+      "kind": "package",
+      "summary": "install docker package containerd.io",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "containerd.io",
+        "repositories": [
+          "docker-official"
+        ]
+      },
+      "provider_type": "package",
+      "provider_address": "package.compose1_docker_containerd_io",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "containerd.io",
+        "repositories": [
+          "docker-official"
+        ]
+      },
+      "depends_on": [
+        "host.compose1.docker.apt.repository[\"docker-official\"]",
+        "host.compose1.apt.cache_refresh"
+      ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.package[\"docker-buildx-plugin\"]",
+      "kind": "package",
+      "summary": "install docker package docker-buildx-plugin",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "docker-buildx-plugin",
+        "repositories": [
+          "docker-official"
+        ]
+      },
+      "provider_type": "package",
+      "provider_address": "package.compose1_docker_docker_buildx_plugin",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "docker-buildx-plugin",
+        "repositories": [
+          "docker-official"
+        ]
+      },
+      "depends_on": [
+        "host.compose1.docker.apt.repository[\"docker-official\"]",
+        "host.compose1.apt.cache_refresh"
+      ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.package[\"docker-ce\"]",
+      "kind": "package",
+      "summary": "install docker package docker-ce",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "docker-ce",
+        "repositories": [
+          "docker-official"
+        ]
+      },
+      "provider_type": "package",
+      "provider_address": "package.compose1_docker_docker_ce",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "docker-ce",
+        "repositories": [
+          "docker-official"
+        ]
+      },
+      "depends_on": [
+        "host.compose1.docker.apt.repository[\"docker-official\"]",
+        "host.compose1.apt.cache_refresh"
+      ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.package[\"docker-ce-cli\"]",
+      "kind": "package",
+      "summary": "install docker package docker-ce-cli",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "docker-ce-cli",
+        "repositories": [
+          "docker-official"
+        ]
+      },
+      "provider_type": "package",
+      "provider_address": "package.compose1_docker_docker_ce_cli",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "docker-ce-cli",
+        "repositories": [
+          "docker-official"
+        ]
+      },
+      "depends_on": [
+        "host.compose1.docker.apt.repository[\"docker-official\"]",
+        "host.compose1.apt.cache_refresh"
+      ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.package[\"docker-compose-plugin\"]",
+      "kind": "package",
+      "summary": "install docker package docker-compose-plugin",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "docker-compose-plugin",
+        "repositories": [
+          "docker-official"
+        ]
+      },
+      "provider_type": "package",
+      "provider_address": "package.compose1_docker_docker_compose_plugin",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "docker-compose-plugin",
+        "repositories": [
+          "docker-official"
+        ]
+      },
+      "depends_on": [
+        "host.compose1.docker.apt.repository[\"docker-official\"]",
+        "host.compose1.apt.cache_refresh"
+      ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.service[\"docker\"]",
+      "kind": "service",
+      "summary": "manage docker service",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "desired": {
+        "enabled": true,
+        "name": "docker",
+        "state": "running",
+        "unit": "docker.service"
+      },
+      "provider_type": "service",
+      "provider_address": "service.compose1_docker",
+      "provider_payload": {
+        "enabled": true,
+        "name": "docker",
+        "state": "running",
+        "unit": "docker.service"
+      },
+      "depends_on": [
+        "host.compose1.docker.package[\"docker-ce\"]",
+        "host.compose1.docker.package[\"docker-ce-cli\"]",
+        "host.compose1.docker.package[\"containerd.io\"]",
+        "host.compose1.docker.package[\"docker-buildx-plugin\"]",
+        "host.compose1.docker.package[\"docker-compose-plugin\"]"
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.compose1.apt.cache_refresh",
+      "action": "run",
+      "summary": "refresh apt package cache",
+      "depends_on": [
+        "host.compose1.docker.apt.signing_key[\"docker-official\"]",
+        "host.compose1.docker.apt.repository[\"docker-official\"]"
+      ],
+      "triggered_by": [
+        "host.compose1.docker.apt.signing_key[\"docker-official\"]",
+        "host.compose1.docker.apt.repository[\"docker-official\"]"
+      ],
+      "command_preview": "apt-get update",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      }
+    },
+    {
+      "address": "host.compose1.docker.compose[\"app\"].validate",
+      "action": "run",
+      "summary": "validate docker compose project app",
+      "depends_on": [
+        "host.compose1.docker.compose[\"app\"].file",
+        "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
+      ],
+      "triggered_by": [
+        "host.compose1.docker.compose[\"app\"].file",
+        "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
+      ],
+      "command_preview": "docker compose -p app -f /opt/app/compose.yaml config",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
+      }
+    }
+  ]
+}

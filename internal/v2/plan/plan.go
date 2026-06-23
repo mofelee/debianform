@@ -189,6 +189,9 @@ func PrintText(w io.Writer, doc Document) {
 		if len(op.TriggeredBy) > 0 {
 			fmt.Fprintf(w, "    triggered_by: %s\n", strings.Join(op.TriggeredBy, ", "))
 		}
+		if op.CommandPreview != "" {
+			fmt.Fprintf(w, "    command: %s\n", op.CommandPreview)
+		}
 	}
 	fmt.Fprintln(w)
 	printSummary(w, doc.Summary)

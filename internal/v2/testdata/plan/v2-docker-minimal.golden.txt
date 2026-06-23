@@ -72,5 +72,6 @@ Plan:
   ! host.docker1.apt.cache_refresh
     refresh apt package cache
     triggered_by: host.docker1.docker.apt.signing_key["docker-official"], host.docker1.docker.apt.repository["docker-official"]
+    command: apt-get update
 
 Summary: 8 create, 0 update, 0 delete, 0 no-op, 1 operations

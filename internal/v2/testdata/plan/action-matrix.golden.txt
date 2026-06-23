@@ -22,5 +22,6 @@ Plan:
   ! host.server1.systemd.daemon_reload
     reload systemd manager configuration
     triggered_by: host.server1.files.file["/tmp/update"]
+    command: systemctl daemon-reload
 
 Summary: 1 create, 1 update, 1 delete, 1 no-op, 1 operations

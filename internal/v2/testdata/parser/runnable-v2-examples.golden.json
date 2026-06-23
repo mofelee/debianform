@@ -101,7 +101,8 @@
       {
         "name": "compose1",
         "body_keys": [
-          "docker"
+          "docker",
+          "system"
         ]
       }
     ]

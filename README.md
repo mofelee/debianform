@@ -130,7 +130,7 @@ v2 领域块或 component。
 - `examples/v2-bird2.dbf.hcl`
 - `examples/v2-component-binary.dbf.hcl`（真实 apply 前需替换为上游下载物真实 sha256）
 - `examples/v2-component-inputs.dbf.hcl`
-- `examples/v2-docker-compose.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
+- `examples/v2-docker-compose.dbf.hcl`（当前支持 Compose 文件写入和 `docker compose config` 校验）
 - `examples/v2-docker-daemon.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
 - `examples/v2-docker-minimal.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
 - `examples/v2-files-plan-preview.dbf.hcl`
@@ -254,7 +254,9 @@ component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
 Docker v2 DSL 当前已接入 validate 和 HostSpec 编译。最小语法已经可以展开为官方 Docker
 APT 源、默认 Docker packages 和 `docker.service`，并可通过现有 provider apply/check。
 `daemon.settings` 会以稳定 JSON 写入 `/etc/docker/daemon.json`，文件变化后 MVP 统一触发
-`systemctl restart docker.service`；users 和 Compose 会在后续 loop 完成：
+`systemctl restart docker.service`。
+Compose 当前支持工作目录、`compose.yaml`、`.env` 文件写入和 `docker compose config`
+校验；DebianForm 不解析、不重写 Compose schema，应用状态收敛和 systemd unit 会在后续 loop 完成：
 
 ```hcl
 host "docker1" {
@@ -301,6 +303,41 @@ host "docker-daemon1" {
 
 ```bash
 dbf plan -f examples/v2-docker-daemon.dbf.hcl --offline
+```
+
+```hcl
+host "compose1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  docker {
+    enable = true
+
+    compose "app" {
+      directory = "/opt/app"
+
+      file {
+        path = "/opt/app/compose.yaml"
+        content = <<-YAML
+          services:
+            web:
+              image: nginx:1.27-alpine
+        YAML
+      }
+
+      env_file "app" {
+        path    = "/opt/app/.env"
+        content = "TOKEN=not-a-real-preview-secret\n"
+      }
+    }
+  }
+}
+```
+
+```bash
+dbf plan -f examples/v2-docker-compose.dbf.hcl --offline
 ```
 
 nftables 使用原生 ruleset/snippet 文件作为主路径，不提供通用 firewall 抽象。
