@@ -283,6 +283,52 @@ func TestDockerComposePlanTextGolden(t *testing.T) {
 	}
 }
 
+func TestDockerUsersPlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-docker-users.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-docker-users.dbf.hcl",
+		Host:        "docker-users1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-docker-users.golden.json", got)
+
+	if doc.Summary.Create != 12 {
+		t.Fatalf("create count = %d, want 12", doc.Summary.Create)
+	}
+	if !hasChange(doc, `host.docker-users1.docker.user_group_membership["deploy:docker"]`) {
+		t.Fatalf("docker users membership change missing")
+	}
+}
+
+func TestDockerUsersPlanTextGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-docker-users.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-docker-users.dbf.hcl",
+		Host:        "docker-users1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	assertGolden(t, "../testdata/plan/v2-docker-users.golden.txt", text.String())
+	for _, want := range []string{
+		`host.docker-users1.docker.group["docker"]`,
+		`host.docker-users1.docker.user_group_membership["deploy:docker"]`,
+		`log out and back in`,
+	} {
+		if !strings.Contains(text.String(), want) {
+			t.Fatalf("docker users text plan missing %q:\n%s", want, text.String())
+		}
+	}
+}
+
 func TestNftablesPlanJSONGolden(t *testing.T) {
 	doc := planFixture(t, "../../../examples/v2-nftables.dbf.hcl", Options{
 		CommandFile: "../../../examples/v2-nftables.dbf.hcl",
@@ -836,6 +882,7 @@ func testHostFacts() map[string]ir.HostFacts {
 		"compose1",
 		"docker-daemon1",
 		"docker1",
+		"docker-users1",
 		"edge1",
 		"foundation1",
 		"input1",

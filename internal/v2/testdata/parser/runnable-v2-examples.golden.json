@@ -132,6 +132,20 @@
     ]
   },
   {
+    "fixture": "../../../examples/v2-docker-users.dbf.hcl",
+    "hosts": [
+      {
+        "name": "docker-users1",
+        "body_keys": [
+          "docker",
+          "groups",
+          "system",
+          "users"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/v2-files-plan-preview.dbf.hcl",
     "hosts": [
       {

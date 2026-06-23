@@ -32,8 +32,8 @@
 - [x] 已支持 Compose project 状态 ResourceGraph 展开和状态漂移检测
 - [x] 已支持 Compose systemd ResourceGraph / apply / check 闭环
 - [x] 已新增 Docker / daemon / Compose libvirt 集成 case 和 drift 钩子
-- [ ] 尚未支持 users ResourceGraph 展开
-- [ ] 尚未支持 users apply / check 闭环
+- [x] 已支持 users ResourceGraph 展开
+- [x] 已支持 users apply / check 闭环
 
 ## 总体实现边界
 
@@ -508,32 +508,32 @@ pool 路径；两主机 WireGuard runner 仍按本地 libvirt 路径执行。
 
 代码：
 
-- [ ] 新增 IR 或 graph-level membership spec
-- [ ] 新增 provider kind `user_group_membership`
-- [ ] 编译 `docker.users` 为 `docker` group 节点
-- [ ] 编译每个用户的 docker group membership 节点
-- [ ] membership 节点只管理补充组关系，不接管 user home/shell/uid
-- [ ] membership 节点依赖 `docker` group
-- [ ] 若同 host 也声明了同名 user，membership 节点依赖 user 节点
-- [ ] plan/apply 输出提示重新登录后 group session 才会生效
-- [ ] check 能检测用户缺失 docker group
+- [x] 新增 IR 或 graph-level membership spec
+- [x] 新增 provider kind `user_group_membership`
+- [x] 编译 `docker.users` 为 `docker` group 节点
+- [x] 编译每个用户的 docker group membership 节点
+- [x] membership 节点只管理补充组关系，不接管 user home/shell/uid
+- [x] membership 节点依赖 `docker` group
+- [x] 若同 host 也声明了同名 user，membership 节点依赖 user 节点
+- [x] plan/apply 输出提示重新登录后 group session 才会生效
+- [x] check 能检测用户缺失 docker group
 
 测试：
 
-- [ ] ResourceGraph golden 覆盖 docker group 和 membership
-- [ ] NativeProvider fake runner 测试 `usermod -aG docker <user>` 行为
-- [ ] provider plan 单测覆盖已在组内 no-op
-- [ ] provider plan 单测覆盖用户不存在时诊断清晰
-- [ ] 负例覆盖空用户名
+- [x] ResourceGraph golden 覆盖 docker group 和 membership
+- [x] NativeProvider fake runner 测试 `usermod -aG docker <user>` 行为
+- [x] provider plan 单测覆盖已在组内 no-op
+- [x] provider plan 单测覆盖用户不存在时诊断清晰
+- [x] 负例覆盖空用户名
 
 示例：
 
-- [ ] 新增 `examples/v2-docker-users.dbf.hcl`
+- [x] 新增 `examples/v2-docker-users.dbf.hcl`
 
 文档：
 
-- [ ] README 增加 docker users 示例
-- [ ] 文档提示重新登录后权限生效
+- [x] README 增加 docker users 示例
+- [x] 文档提示重新登录后权限生效
 
 验收：
 

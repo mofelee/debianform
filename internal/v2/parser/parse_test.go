@@ -1326,6 +1326,7 @@ func runnableV2ExampleFixtures() []string {
 		"../../../examples/v2-docker-compose.dbf.hcl",
 		"../../../examples/v2-docker-daemon.dbf.hcl",
 		"../../../examples/v2-docker-minimal.dbf.hcl",
+		"../../../examples/v2-docker-users.dbf.hcl",
 		"../../../examples/v2-files-plan-preview.dbf.hcl",
 		"../../../examples/v2-mihomo.dbf.hcl",
 		"../../../examples/v2-nftables.dbf.hcl",

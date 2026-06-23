@@ -3581,7 +3581,7 @@ func dockerSpec(docker parser.Value) (*ir.DockerSpec, error) {
 	if !ok {
 		enable = false
 	}
-	users, err := stringListField(docker, "users")
+	users, err := dockerUsersField(docker)
 	if err != nil {
 		return nil, err
 	}
@@ -3610,6 +3610,27 @@ func dockerSpec(docker parser.Value) (*ir.DockerSpec, error) {
 		Composes: composes,
 		Source:   docker.Source,
 	}, nil
+}
+
+func dockerUsersField(docker parser.Value) ([]string, error) {
+	list, ok, err := listField(docker, "users")
+	if err != nil || !ok {
+		return nil, err
+	}
+	out := make([]string, 0, len(list.List))
+	seen := map[string]struct{}{}
+	for _, item := range list.List {
+		value, ok := item.StringValue()
+		if !ok || strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("%s:%d:%s: docker users entries must be non-empty strings", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		if _, exists := seen[value]; exists {
+			return nil, fmt.Errorf("%s:%d:%s: duplicate docker users entry %q", item.Source.File, item.Source.Line, item.Source.Path, value)
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out, nil
 }
 
 func dockerPackageSpec(docker parser.Value) (ir.DockerPackageSpec, error) {

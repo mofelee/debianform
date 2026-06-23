@@ -150,7 +150,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	dockerServiceAddress := ""
 	dockerDaemonFileAddress := ""
 	if host.Docker != nil {
-		dockerGraph, err := dockerEngineNodes(host, repositoryAddresses)
+		dockerGraph, err := dockerEngineNodes(host, repositoryAddresses, groupAddresses, userAddresses)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1555,7 +1555,7 @@ type dockerEngineGraph struct {
 	ComposeValidateAddresses map[string]string
 }
 
-func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) (dockerEngineGraph, error) {
+func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, groupAddresses map[string]string, userAddresses map[string]string) (dockerEngineGraph, error) {
 	docker := host.Docker
 	if docker == nil || !docker.Enable {
 		return dockerEngineGraph{}, nil
@@ -1569,9 +1569,6 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) 
 	}
 	if docker.Package.RemoveConflicts != "auto" {
 		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker conflict package removal is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path)
-	}
-	if len(docker.Users) > 0 {
-		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.users: docker users are not implemented in this loop", docker.Source.File, docker.Source.Line, docker.Source.Path)
 	}
 
 	switch docker.Package.Source {
@@ -1682,6 +1679,10 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) 
 		}
 	}
 
+	if len(docker.Users) > 0 {
+		out.Nodes = append(out.Nodes, dockerUserMembershipNodes(host, groupAddresses, userAddresses)...)
+	}
+
 	if docker.Daemon != nil {
 		fileAddress, fileNode, restartOperation, err := dockerDaemonGraph(host)
 		if err != nil {
@@ -1735,6 +1736,61 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) 
 	out.ComposeValidateAddresses = composeValidates
 
 	return out, nil
+}
+
+func dockerUserMembershipNodes(host ir.HostSpec, groupAddresses map[string]string, userAddresses map[string]string) []Node {
+	docker := host.Docker
+	if docker == nil || len(docker.Users) == 0 {
+		return nil
+	}
+	nodes := []Node{}
+	groupAddress, groupDeclared := groupAddresses["docker"]
+	if !groupDeclared {
+		groupAddress = fmt.Sprintf("host.%s.docker.group[%s]", host.Name, strconv.Quote("docker"))
+		desired := map[string]any{
+			"name":   "docker",
+			"gid":    "",
+			"system": false,
+			"ensure": "present",
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         groupAddress,
+			Kind:            "group",
+			Summary:         "create docker group",
+			Source:          docker.Source,
+			Desired:         desired,
+			ProviderType:    "group",
+			ProviderAddress: "group." + providerName(host.Name, "docker"),
+			ProviderPayload: desired,
+		})
+	}
+	for _, user := range dedupeStrings(docker.Users) {
+		address := fmt.Sprintf("host.%s.docker.user_group_membership[%s]", host.Name, strconv.Quote(user+":docker"))
+		deps := []string{groupAddress}
+		if userAddress, ok := userAddresses[user]; ok {
+			deps = append(deps, userAddress)
+		}
+		desired := map[string]any{
+			"user":   user,
+			"group":  "docker",
+			"ensure": "present",
+			"note":   "user must log out and back in for docker group membership to affect existing sessions",
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         address,
+			Kind:            "user_group_membership",
+			Summary:         "add user " + user + " to docker group",
+			Source:          docker.Source,
+			Desired:         desired,
+			DependsOn:       dedupeStrings(deps),
+			ProviderType:    "user_group_membership",
+			ProviderAddress: "user_group_membership." + providerName(host.Name, user, "docker"),
+			ProviderPayload: desired,
+		})
+	}
+	return nodes
 }
 
 func dockerDaemonGraph(host ir.HostSpec) (string, Node, Operation, error) {

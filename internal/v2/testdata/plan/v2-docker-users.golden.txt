@@ -1,0 +1,110 @@
+Plan:
+  + host.docker-users1.docker.apt.repository["docker-official"]
+    manage docker official apt repository
+    source: ../../../examples/v2-docker-users.dbf.hcl:26:host.docker-users1.docker
+    + content
+      @@ -1,0 +1,6 @@
+      + Types: deb
+      + URIs: https://download.docker.com/linux/debian
+      + Suites: trixie
+      + Components: stable
+      + Architectures: amd64
+      + Signed-By: /etc/apt/keyrings/docker.asc
+    + ensure: "present"
+    + group: "root"
+    + mode: "0644"
+    + name: "docker-official"
+    + owner: "root"
+    + path: "/etc/apt/sources.list.d/docker_official.sources"
+  + host.docker-users1.docker.apt.signing_key["docker-official"]
+    manage docker official apt signing key
+    source: ../../../examples/v2-docker-users.dbf.hcl:26:host.docker-users1.docker
+    + ensure: "present"
+    + group: "root"
+    + mode: "0644"
+    + name: "docker-official"
+    + owner: "root"
+    + path: "/etc/apt/keyrings/docker.asc"
+    + sha256: "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
+    + url: "https://download.docker.com/linux/debian/gpg"
+  + host.docker-users1.docker.group["docker"]
+    create docker group
+    source: ../../../examples/v2-docker-users.dbf.hcl:26:host.docker-users1.docker
+    + ensure: "present"
+    + gid: ""
+    + name: "docker"
+    + system: false
+  + host.docker-users1.docker.package["containerd.io"]
+    install docker package containerd.io
+    source: ../../../examples/v2-docker-users.dbf.hcl:26:host.docker-users1.docker
+    + ensure: "present"
+    + name: "containerd.io"
+    + repositories
+      + repositories.0: "docker-official"
+  + host.docker-users1.docker.package["docker-buildx-plugin"]
+    install docker package docker-buildx-plugin
+    source: ../../../examples/v2-docker-users.dbf.hcl:26:host.docker-users1.docker
+    + ensure: "present"
+    + name: "docker-buildx-plugin"
+    + repositories
+      + repositories.0: "docker-official"
+  + host.docker-users1.docker.package["docker-ce"]
+    install docker package docker-ce
+    source: ../../../examples/v2-docker-users.dbf.hcl:26:host.docker-users1.docker
+    + ensure: "present"
+    + name: "docker-ce"
+    + repositories
+      + repositories.0: "docker-official"
+  + host.docker-users1.docker.package["docker-ce-cli"]
+    install docker package docker-ce-cli
+    source: ../../../examples/v2-docker-users.dbf.hcl:26:host.docker-users1.docker
+    + ensure: "present"
+    + name: "docker-ce-cli"
+    + repositories
+      + repositories.0: "docker-official"
+  + host.docker-users1.docker.package["docker-compose-plugin"]
+    install docker package docker-compose-plugin
+    source: ../../../examples/v2-docker-users.dbf.hcl:26:host.docker-users1.docker
+    + ensure: "present"
+    + name: "docker-compose-plugin"
+    + repositories
+      + repositories.0: "docker-official"
+  + host.docker-users1.docker.service["docker"]
+    manage docker service
+    source: ../../../examples/v2-docker-users.dbf.hcl:26:host.docker-users1.docker
+    + enabled: true
+    + name: "docker"
+    + state: "running"
+    + unit: "docker.service"
+  + host.docker-users1.docker.user_group_membership["deploy:docker"]
+    add user deploy to docker group
+    source: ../../../examples/v2-docker-users.dbf.hcl:26:host.docker-users1.docker
+    + ensure: "present"
+    + group: "docker"
+    + note: "user must log out and back in for docker group membership to affect existing sessions"
+    + user: "deploy"
+  + host.docker-users1.groups.group["deploy"]
+    create group deploy
+    source: ../../../examples/v2-docker-users.dbf.hcl:13:host.docker-users1.groups.group["deploy"]
+    + ensure: "present"
+    + gid: ""
+    + name: "deploy"
+    + system: true
+  + host.docker-users1.users.user["deploy"]
+    create user deploy
+    source: ../../../examples/v2-docker-users.dbf.hcl:19:host.docker-users1.users.user["deploy"]
+    + ensure: "present"
+    + group: "deploy"
+    + groups
+    + home: "/home/deploy"
+    + name: "deploy"
+    + shell: "/bin/bash"
+    + ssh_authorized_keys
+    + system: false
+    + uid: ""
+  ! host.docker-users1.apt.cache_refresh
+    refresh apt package cache
+    triggered_by: host.docker-users1.docker.apt.signing_key["docker-official"], host.docker-users1.docker.apt.repository["docker-official"]
+    command: apt-get update
+
+Summary: 12 create, 0 update, 0 delete, 0 no-op, 1 operations

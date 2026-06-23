@@ -57,6 +57,8 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2stat
 		return p.planGroup(ctx, node, prior)
 	case "user":
 		return p.planUser(ctx, node, prior)
+	case "user_group_membership":
+		return p.planUserGroupMembership(ctx, node, prior)
 	case "ssh_authorized_key":
 		return p.planAuthorizedKey(ctx, node, prior)
 	case "service":
@@ -100,6 +102,8 @@ func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, e
 		return p.applyGroup(ctx, step)
 	case "user":
 		return p.applyUser(ctx, step)
+	case "user_group_membership":
+		return p.applyUserGroupMembership(ctx, step)
 	case "ssh_authorized_key":
 		return p.applyAuthorizedKey(ctx, step)
 	case "service":
@@ -169,6 +173,15 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 			return nil
 		}
 		_, err := p.Runner.Run(ctx, host, "if getent passwd "+shellQuote(name)+" >/dev/null; then userdel "+shellQuote(name)+"; fi\n")
+		return err
+	case "user_group_membership":
+		user := stringMapValue(desired, "user")
+		group := stringMapValue(desired, "group")
+		if user == "" || group == "" {
+			return nil
+		}
+		node := graph.Node{Address: step.Address, Host: host, Desired: map[string]any{"user": user, "group": group, "ensure": "absent"}}
+		_, err := p.applyUserGroupMembership(ctx, Step{Node: node, Action: ActionDelete})
 		return err
 	case "ssh_authorized_key":
 		user := stringMapValue(desired, "user")
@@ -1325,6 +1338,65 @@ func (p NativeProvider) applyUser(ctx context.Context, step Step) (map[string]an
 	return map[string]any{"exists": !ensureAbsent(step.Node), "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
 }
 
+func (p NativeProvider) planUserGroupMembership(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	user := stringDesired(node, "user")
+	group := stringDesired(node, "group")
+	cur, err := p.readUser(ctx, node.Host, user)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := map[string]any{
+		"exists":        cur.exists,
+		"user":          user,
+		"group":         group,
+		"primary_group": cur.primaryGroup,
+		"present":       cur.exists && userInGroup(cur, group),
+		"groups":        cur.groups,
+	}
+	if ensureAbsent(node) {
+		if cur.exists && stringSliceContains(cur.groups, group) {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove user " + user + " from group " + group, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent user group membership "+user+":"+group, observed), nil
+	}
+	if !cur.exists {
+		return ProviderPlan{}, fmt.Errorf("%s: user %q does not exist; declare users.user[%q] or create it before applying group membership %q", node.Address, user, user, group)
+	}
+	if userInGroup(cur, group) {
+		return inSyncPlan(node, prior, "no changes for user group membership "+user+":"+group, observed), nil
+	}
+	return ProviderPlan{
+		Action:    ActionUpdate,
+		Summary:   "add user " + user + " to group " + group + " (log out and back in for group session to refresh)",
+		Observed:  observed,
+		Ownership: ownership(prior),
+	}, nil
+}
+
+func (p NativeProvider) applyUserGroupMembership(ctx context.Context, step Step) (map[string]any, error) {
+	user := stringDesired(step.Node, "user")
+	group := stringDesired(step.Node, "group")
+	lines := []string{"set -eu"}
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		lines = append(lines, "if getent passwd "+shellQuote(user)+" >/dev/null && [ \"$(id -gn "+shellQuote(user)+")\" != "+shellQuote(group)+" ] && id -nG "+shellQuote(user)+" | tr ' ' '\\n' | grep -Fx "+shellQuote(group)+" >/dev/null; then gpasswd -d "+shellQuote(user)+" "+shellQuote(group)+"; fi")
+	} else {
+		lines = append(lines,
+			"getent passwd "+shellQuote(user)+" >/dev/null || { echo "+shellQuote("debianform: user "+user+" does not exist; create it before applying group membership "+group)+" >&2; exit 1; }",
+			"getent group "+shellQuote(group)+" >/dev/null || { echo "+shellQuote("debianform: group "+group+" does not exist; create it before applying membership for user "+user)+" >&2; exit 1; }",
+			"usermod -aG "+shellQuote(group)+" "+shellQuote(user),
+			"echo "+shellQuote("debianform: user "+user+" must log out and back in for "+group+" group membership to affect existing sessions"),
+		)
+	}
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		return map[string]any{"exists": true, "present": false, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+	}
+	return map[string]any{"exists": true, "present": true, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
 func (p NativeProvider) planAuthorizedKey(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
 	keytype, keyblob, err := splitAuthorizedKey(stringDesired(node, "key"))
 	if err != nil {
@@ -2184,4 +2256,17 @@ func sameStringSet(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func userInGroup(user userState, group string) bool {
+	return user.primaryGroup == group || stringSliceContains(user.groups, group)
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

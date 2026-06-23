@@ -133,6 +133,7 @@ v2 领域块或 component。
 - `examples/v2-docker-compose.dbf.hcl`（当前支持 Compose 文件写入、`docker compose config` 校验、generated systemd unit/service，以及 Compose project apply/check）
 - `examples/v2-docker-daemon.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
 - `examples/v2-docker-minimal.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
+- `examples/v2-docker-users.dbf.hcl`（当前支持 docker group 和 supplementary group membership apply/check）
 - `examples/v2-files-plan-preview.dbf.hcl`
 - `examples/v2-mihomo.dbf.hcl`
 - `examples/v2-nftables.dbf.hcl`
@@ -253,7 +254,8 @@ component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
 
 Docker v2 DSL MVP 已支持官方 Docker APT 源、默认 Docker packages、`docker.service`
 enable/start、daemon JSON、Compose 文件写入、`docker compose config` 校验、Compose
-project `running`/`stopped`/`absent` 收敛，以及 generated systemd unit/service。
+project `running`/`stopped`/`absent` 收敛、generated systemd unit/service，以及
+`docker.users` supplementary group membership。
 `daemon.settings` 会以稳定 JSON 写入 `/etc/docker/daemon.json`，文件变化后 MVP 统一触发
 `systemctl restart docker.service`。DebianForm 不解析、不重写 Compose schema。
 真实 apply/check 依赖目标主机可以访问 Docker 官方 APT 源和镜像 registry：
@@ -303,6 +305,41 @@ host "docker-daemon1" {
 
 ```bash
 dbf plan -f examples/v2-docker-daemon.dbf.hcl --offline
+```
+
+`docker.users` 会创建或复用 `docker` group，并把列出的用户加入 supplementary group；
+它不接管用户的 home、shell 或 uid。已登录 session 需要重新登录后才会获得新的 group 权限：
+
+```hcl
+host "docker-users1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  groups {
+    group "deploy" {
+      system = true
+    }
+  }
+
+  users {
+    user "deploy" {
+      home  = "/home/deploy"
+      shell = "/bin/bash"
+      group = "deploy"
+    }
+  }
+
+  docker {
+    enable = true
+    users  = ["deploy"]
+  }
+}
+```
+
+```bash
+dbf plan -f examples/v2-docker-users.dbf.hcl --offline
 ```
 
 ```hcl

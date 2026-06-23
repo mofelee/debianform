@@ -355,6 +355,65 @@ func TestCompileDockerComposeResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileDockerUsersResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-docker-users.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-docker-users.golden.json", got)
+
+	groupAddress := `host.docker-users1.docker.group["docker"]`
+	userAddress := `host.docker-users1.users.user["deploy"]`
+	membershipAddress := `host.docker-users1.docker.user_group_membership["deploy:docker"]`
+
+	group := nodeFor(resourceGraph, groupAddress)
+	if group == nil || group.Kind != "group" || group.Desired["name"] != "docker" {
+		t.Fatalf("docker group node = %#v", group)
+	}
+	membership := nodeFor(resourceGraph, membershipAddress)
+	if membership == nil || membership.Kind != "user_group_membership" {
+		t.Fatalf("docker membership node = %#v", membership)
+	}
+	if membership.Desired["user"] != "deploy" || membership.Desired["group"] != "docker" {
+		t.Fatalf("docker membership desired = %#v", membership.Desired)
+	}
+	for _, want := range []string{groupAddress, userAddress} {
+		if !containsString(membership.DependsOn, want) {
+			t.Fatalf("docker membership deps = %#v, want %q", membership.DependsOn, want)
+		}
+	}
+}
+
+func TestCompileDockerUsersReusesDeclaredDockerGroup(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "docker-users1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  groups {
+    group "docker" {}
+  }
+
+  docker {
+    enable = true
+    users  = ["deploy"]
+  }
+}
+`)
+	if nodeFor(resourceGraph, `host.docker-users1.docker.group["docker"]`) != nil {
+		t.Fatalf("docker group node should reuse declared host group")
+	}
+	membershipDeps := dependsOnFor(resourceGraph, `host.docker-users1.docker.user_group_membership["deploy:docker"]`)
+	if !containsString(membershipDeps, `host.docker-users1.groups.group["docker"]`) {
+		t.Fatalf("membership deps = %#v, want declared docker group", membershipDeps)
+	}
+}
+
 func TestCompileDockerComposePackageSourceNoneSkipsPackageDependencies(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {

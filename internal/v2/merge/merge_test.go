@@ -3106,6 +3106,7 @@ func TestCompileDockerHostSpecGoldens(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-docker-minimal.dbf.hcl", "../testdata/hostspec/v2-docker-minimal.golden.json")
 	assertHostSpecGolden(t, "../../../examples/v2-docker-daemon.dbf.hcl", "../testdata/hostspec/v2-docker-daemon.golden.json")
 	assertHostSpecGolden(t, "../../../examples/v2-docker-compose.dbf.hcl", "../testdata/hostspec/v2-docker-compose.golden.json")
+	assertHostSpecGolden(t, "../../../examples/v2-docker-users.dbf.hcl", "../testdata/hostspec/v2-docker-users.golden.json")
 }
 
 func TestCompileRejectsDockerInvalidInputs(t *testing.T) {
@@ -3141,6 +3142,17 @@ host "docker1" {
 }
 `,
 			want: "must be auto, true, or false",
+		},
+		{
+			name: "empty docker user",
+			hcl: `
+host "docker1" {
+  docker {
+    users = [""]
+  }
+}
+`,
+			want: "docker users entries must be non-empty strings",
 		},
 		{
 			name: "missing compose directory",
