@@ -113,6 +113,7 @@ v2 领域块或 component。
 - [v2 plan format](docs/v2-plan-format.md)
 - [v2 state](docs/v2-state.md)
 - [support matrix](docs/support-matrix.zh.md)
+- [beta feedback and triage](docs/beta-feedback-triage.zh.md)
 - [v2 systemd service units](docs/v2-systemd-service-units.md)
 - [v2 implementation plan](docs/v2-implementation-plan.zh.md)
 - [operations runbook](docs/operations-runbook.zh.md)

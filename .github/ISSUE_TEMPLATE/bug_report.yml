@@ -1,0 +1,59 @@
+name: Bug report
+description: Report a reproducible DebianForm bug.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, SSH private keys, tokens, private hostnames, or
+        sensitive plan/state output. Security vulnerabilities should be reported
+        through GitHub Security Advisories, not public issues.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What failed?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the exact error text when possible.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include exact commands and a minimal redacted config.
+      placeholder: |
+        1. Run ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        dbf version:
+        control machine:
+        target:
+        install method:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or plan output
+      description: Paste redacted output only.
+      render: text

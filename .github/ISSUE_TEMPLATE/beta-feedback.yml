@@ -1,0 +1,66 @@
+name: Beta feedback
+description: Share public beta experience, rough edges, or adoption blockers.
+title: "[beta feedback] "
+labels: ["beta-feedback", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying DebianForm during public beta.
+
+        Do not include secrets, SSH private keys, tokens, private hostnames, or
+        sensitive plan/state output. Security vulnerabilities should be reported
+        through GitHub Security Advisories, not public issues.
+  - type: dropdown
+    id: feedback_type
+    attributes:
+      label: Feedback type
+      options:
+        - First-run / quickstart
+        - Install / upgrade
+        - DSL design
+        - Plan / apply / check behavior
+        - Docker / Compose
+        - Documentation
+        - Release / packaging
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include dbf version, control machine OS/arch, target Debian version/arch, install method, and whether the target was a VM or physical host.
+      placeholder: |
+        dbf version:
+        control machine:
+        target:
+        install method:
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands or workflow
+      description: Include the exact commands or workflow steps, with secrets removed.
+      render: bash
+  - type: textarea
+    id: config
+    attributes:
+      label: Minimal config or plan excerpt
+      description: Paste the smallest redacted snippet that explains the feedback.
+      render: hcl
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Did this block adoption, create confusion, or only affect polish?
+    validations:
+      required: true

@@ -160,7 +160,7 @@
 - [x] 更完整的 quickstart 文档。
 - [x] 依赖漏洞扫描进入 CI。
 - [x] release notes 模板，固定包含 breaking changes、known issues、verification matrix 和 migration notes。
-- [ ] beta 用户反馈入口和 triage 流程。
+- [x] beta 用户反馈入口和 triage 流程。
 - [ ] 真实部署模板或小型案例。
 - [x] 对高风险资源的 `prevent_destroy` 使用建议。
 
@@ -238,6 +238,7 @@
 - [x] [v2 state](v2-state.md) 文档存在。
 - [x] [v2 plan format](v2-plan-format.md) 文档存在。
 - [x] [support matrix](support-matrix.zh.md) 文档存在。
+- [x] [beta feedback and triage](beta-feedback-triage.zh.md) 文档存在。
 - [x] 发布流程、自动化计划和快速操作手册存在。
 - [x] 面向新用户的一页 quickstart 已独立成文。
 - [x] 面向运维恢复的 runbook 已覆盖 stale lock、失败 apply、drift、资源移除和常见错误恢复。
@@ -340,3 +341,19 @@
 
 - [x] 发布前现在有固定 release notes 模板，避免遗漏 breaking changes、known issues、
       verification matrix 和 migration notes。
+
+### 2026-06-23 beta feedback triage 补充
+
+本次检查命令：
+
+- [x] 核对 `.github`、README、SECURITY.md、support matrix 和现有反馈/issue 入口。
+- [x] 新增 GitHub Issue Forms：`Beta feedback` 和 `Bug report`，默认添加
+      `needs-triage`。
+- [x] 新增 `.github/ISSUE_TEMPLATE/config.yml`，把安全漏洞引导到 GitHub Security
+      Advisories。
+- [x] 新增 `docs/beta-feedback-triage.zh.md`，定义反馈入口、标签、优先级、triage
+      步骤、关闭条件和 known issues 同步规则。
+
+结论：
+
+- [x] public beta 现在有明确反馈入口和 triage 流程；真实反馈收集本身仍需要后续外部使用。

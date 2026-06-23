@@ -155,6 +155,8 @@
 
 ## 当前不支持或尚未承诺
 
+- 真实 beta 用户反馈仍在收集中；反馈入口和 triage 流程见
+  [beta feedback and triage](beta-feedback-triage.zh.md)。
 - Stable/GA 级别 backward compatibility policy。
 - State schema migration policy。
 - Plan JSON format compatibility policy。
