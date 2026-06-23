@@ -140,6 +140,8 @@ dbf check -f site.dbf.hcl
 
 ## 常见失败
 
+更完整的恢复步骤见 [operations runbook](operations-runbook.zh.md)。
+
 - `ssh: connect ...`：先用普通 `ssh root@host` 排查网络、密钥和 root 登录权限。
 - `offline plan cannot resolve runtime facts`：当前配置依赖远端 facts。改用在线 plan，
   或在 fixture 中显式声明 `system.architecture` / `system.codename`。

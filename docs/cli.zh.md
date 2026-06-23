@@ -7,6 +7,8 @@
 
 第一次使用建议先走 [quickstart](quickstart.zh.md)，它覆盖准备 root SSH 测试主机、
 写第一份配置、`validate`、在线 `plan`、`apply`、再次 `plan` no-op 和 `check`。
+Stale lock、apply 中途失败、drift 恢复和常见故障排查见
+[operations runbook](operations-runbook.zh.md)。
 
 ## 基本规则
 

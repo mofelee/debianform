@@ -114,6 +114,7 @@ v2 领域块或 component。
 - [v2 state](docs/v2-state.md)
 - [v2 systemd service units](docs/v2-systemd-service-units.md)
 - [v2 implementation plan](docs/v2-implementation-plan.zh.md)
+- [operations runbook](docs/operations-runbook.zh.md)
 - [release process](docs/release-process.zh.md)
 - [release automation plan](docs/release-automation-plan.zh.md)
 - [release quick runbook](docs/release-quick-runbook.zh.md)
@@ -163,6 +164,8 @@ dbf plan -f examples/v2-bbr.dbf.hcl --offline
 
 从第一台测试主机的 root SSH 准备、第一份配置、validate、在线 plan、apply、再次 plan
 no-op 到 check 的完整路径见 [quickstart](docs/quickstart.zh.md)。
+Stale lock、apply 中途失败、drift 恢复和常见故障排查见
+[operations runbook](docs/operations-runbook.zh.md)。
 
 `-f file` 可以重复传入；传入一个或多个 `-f` 时只读取这些显式指定的文件，不传时读取当前目录所有
 `*.dbf.hcl` 并按文件名排序。

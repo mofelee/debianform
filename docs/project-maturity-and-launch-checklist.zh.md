@@ -30,7 +30,7 @@
 - [x] README 已明确 beta/public preview、支持范围、安装、升级、校验和示例边界。
 - [x] 正式 public beta tag `v0.1.0-beta.2` 已完成端到端发布确认。
 - [ ] 还缺真实低风险 Debian 13 主机上的小范围 beta 使用反馈。
-- [ ] 还缺 stable 所需的兼容性、迁移、恢复和长期支持承诺。
+- [ ] 还缺 stable 所需的兼容性、迁移和长期支持承诺。
 
 ## 发布定位检查
 
@@ -132,8 +132,8 @@
 - [x] [v2 state](v2-state.md) 说明 state path、lock path、ownership、lock 和 atomic write。
 - [x] [release quick runbook](release-quick-runbook.zh.md) 说明发布前、发布中、发布后和回滚流程。
 - [x] 新增独立 quickstart，覆盖准备 SSH 用户、写第一份配置、validate、在线 plan、apply、check。
-- [ ] 新增 operations/runbook，覆盖 stale lock、apply 中途失败、state 与远端不一致、资源移除和恢复步骤。
-- [ ] 新增常见故障排查文档，使用真实错误信息和修复步骤。
+- [x] 新增 operations/runbook，覆盖 stale lock、apply 中途失败、state 与远端不一致、资源移除和恢复步骤。
+- [x] 新增常见故障排查文档，使用真实错误信息和修复步骤。
 - [ ] 新增简明支持矩阵，把 DSL block、resource/domain 类型和当前稳定性放在一处。
 
 ### beta 验证
@@ -156,13 +156,13 @@
 - [ ] apt repository 可行性评估或计划。
 - [ ] Linux arm64 安装路径自动验证。
 - [ ] Linux Homebrew 路径自动验证或明确 best-effort 策略。
-- [ ] 更完整的 operations/runbook 文档。
+- [x] 更完整的 operations/runbook 文档。
 - [x] 更完整的 quickstart 文档。
 - [x] 依赖漏洞扫描进入 CI。
 - [ ] release notes 模板，固定包含 breaking changes、known issues、verification matrix 和 migration notes。
 - [ ] beta 用户反馈入口和 triage 流程。
 - [ ] 真实部署模板或小型案例。
-- [ ] 对高风险资源的 `prevent_destroy` 使用建议。
+- [x] 对高风险资源的 `prevent_destroy` 使用建议。
 
 ## P2：stable/GA 前必须完成
 
@@ -174,9 +174,9 @@
 - [ ] 明确 plan JSON format compatibility policy。
 - [ ] release、安装、升级、回滚路径经过多个正式 release 验证。
 - [ ] 安全文档包含 root-only SSH 执行模型、权限边界、secret 处理和漏洞响应流程。
-- [ ] 常见失败场景都有可执行恢复步骤。
+- [x] 常见失败场景都有可执行恢复步骤。
 - [ ] 更广泛的 Debian 版本或架构支持策略。
-- [ ] 常见故障排查覆盖 root SSH 不可用、权限不足和目标系统不受支持。
+- [x] 常见故障排查覆盖 root SSH 不可用、权限不足和目标系统不受支持。
 - [ ] README 中承诺的能力都能被测试、示例或文档覆盖。
 
 ## 详细成熟度检查
@@ -239,7 +239,7 @@
 - [x] [v2 plan format](v2-plan-format.md) 文档存在。
 - [x] 发布流程、自动化计划和快速操作手册存在。
 - [x] 面向新用户的一页 quickstart 已独立成文。
-- [ ] 面向运维恢复的 runbook 还不够完整。
+- [x] 面向运维恢复的 runbook 已覆盖 stale lock、失败 apply、drift、资源移除和常见错误恢复。
 - [ ] 面向 stable 的 compatibility policy 和 migration policy 还未成文。
 
 ## 建议发布决策
@@ -258,8 +258,11 @@
 - [ ] 真实用户和真实主机验证不足。
 - [ ] state/schema migration policy 尚未完成。
 - [ ] backward compatibility policy 尚未完成。
-- [ ] operations recovery 文档尚未完整。
 - [ ] 还没有连续多个正式 release 的稳定记录。
+
+已缓解的 stable 阻塞项：
+
+- [x] operations recovery 文档已补齐 public beta 阶段需要的本地恢复流程。
 
 ## 检查记录
 
@@ -291,4 +294,18 @@
       plan、apply、no-op plan 和 check。
 - [x] 发布、安装和供应链自动化已从计划状态推进为仓库内可执行配置。
 - [x] 正式 public beta `v0.1.0-beta.2` 已按 release runbook 创建 tag，并确认 CI、GitHub Release、Homebrew tap 和 clean install 验证全部通过。
-- [ ] stable/GA 仍需要真实使用反馈、兼容性政策、state migration 策略和恢复手册。
+- [ ] stable/GA 仍需要真实使用反馈、兼容性政策和 state migration 策略。
+
+### 2026-06-23 operations runbook 补充
+
+本次检查命令：
+
+- [x] `dbf` CLI、v2 state 和 SSH lock 实现口径审阅。
+- [x] `docs/operations-runbook.zh.md` 新增 stale lock、apply 中途失败、drift、资源移除、
+      `prevent_destroy` 和常见故障恢复步骤。
+- [x] `docs/operations-runbook.zh.md` 覆盖 root SSH 不可用、权限不足和目标 facts 探测失败。
+
+结论：
+
+- [x] 运维恢复文档现在覆盖 public beta 阶段常见失败场景，并从 README、CLI 文档和
+      quickstart 提供入口。
