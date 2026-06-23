@@ -11,6 +11,7 @@ This project follows semantic versioning after the public beta line begins.
 - Added a security model document covering root-only SSH, permission boundaries,
   secret handling, state/lock behavior, and vulnerability response.
 - Added a `.deb` and APT repository feasibility plan.
+- Added a Debian version and architecture support strategy.
 
 ## v0.1.0-beta.2
 

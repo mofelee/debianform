@@ -175,7 +175,7 @@
 - [ ] release、安装、升级、回滚路径经过多个正式 release 验证。
 - [x] 安全文档包含 root-only SSH 执行模型、权限边界、secret 处理和漏洞响应流程。
 - [x] 常见失败场景都有可执行恢复步骤。
-- [ ] 更广泛的 Debian 版本或架构支持策略。
+- [x] 更广泛的 Debian 版本或架构支持策略。
 - [x] 常见故障排查覆盖 root SSH 不可用、权限不足和目标系统不受支持。
 - [ ] README 中承诺的能力都能被测试、示例或文档覆盖。
 
@@ -240,6 +240,7 @@
 - [x] [support matrix](support-matrix.zh.md) 文档存在。
 - [x] [security model](security-model.zh.md) 文档存在。
 - [x] [apt repository feasibility](apt-repository-feasibility.zh.md) 文档存在。
+- [x] [platform support strategy](platform-support-strategy.zh.md) 文档存在。
 - [x] [beta feedback and triage](beta-feedback-triage.zh.md) 文档存在。
 - [x] 发布流程、自动化计划和快速操作手册存在。
 - [x] 面向新用户的一页 quickstart 已独立成文。
@@ -416,3 +417,17 @@
 
 - [x] apt repository 可行性评估和计划已经补齐；`.deb` 包和 repository 发布渠道仍未实现，
       需要后续独立 loop。
+
+### 2026-06-23 Debian 版本和架构支持策略
+
+本次检查命令：
+
+- [x] 核对 README、support matrix、release process、runtime facts 文档和 facts discovery 实现。
+- [x] 新增 `docs/platform-support-strategy.zh.md`，区分 CLI 运行平台和目标主机，
+      明确 Debian 13 amd64 Beta、Debian 13 arm64/Debian 12 Preview、非 Debian unsupported。
+- [x] README、release process 和 support matrix 增加入口。
+
+结论：
+
+- [x] stable 前要求的 Debian 版本和架构支持策略已补齐；真实平台提升仍需要后续
+      arm64/Debian 12 验证 loop。
