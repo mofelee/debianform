@@ -116,6 +116,7 @@ DSL、CLI、state schema 和 plan JSON 的 beta/stable 兼容规则见
 - [v2 state](docs/v2-state.md)
 - [support matrix](docs/support-matrix.zh.md)
 - [platform support strategy](docs/platform-support-strategy.zh.md)
+- [Linux Homebrew verification policy](docs/linux-homebrew-verification-policy.zh.md)
 - [compatibility policy](docs/compatibility-policy.zh.md)
 - [security model](docs/security-model.zh.md)
 - [beta feedback and triage](docs/beta-feedback-triage.zh.md)

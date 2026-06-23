@@ -334,6 +334,8 @@ Homebrew 验证矩阵：
 | macOS arm64 | yes |
 
 如果某个平台无法在 CI 中自动验证，release notes 必须标记为手工验证或暂未验证。
+Linux Homebrew 的 best-effort 规则见
+[Linux Homebrew verification policy](linux-homebrew-verification-policy.zh.md)。
 
 ## 失败处理
 

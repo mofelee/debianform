@@ -155,7 +155,7 @@
 - [ ] `.deb` 包。
 - [x] apt repository 可行性评估或计划。
 - [ ] Linux arm64 安装路径自动验证。
-- [ ] Linux Homebrew 路径自动验证或明确 best-effort 策略。
+- [x] Linux Homebrew 路径自动验证或明确 best-effort 策略。
 - [x] 更完整的 operations/runbook 文档。
 - [x] 更完整的 quickstart 文档。
 - [x] 依赖漏洞扫描进入 CI。
@@ -241,6 +241,7 @@
 - [x] [security model](security-model.zh.md) 文档存在。
 - [x] [apt repository feasibility](apt-repository-feasibility.zh.md) 文档存在。
 - [x] [platform support strategy](platform-support-strategy.zh.md) 文档存在。
+- [x] [Linux Homebrew verification policy](linux-homebrew-verification-policy.zh.md) 文档存在。
 - [x] [beta feedback and triage](beta-feedback-triage.zh.md) 文档存在。
 - [x] 发布流程、自动化计划和快速操作手册存在。
 - [x] 面向新用户的一页 quickstart 已独立成文。
@@ -431,3 +432,18 @@
 
 - [x] stable 前要求的 Debian 版本和架构支持策略已补齐；真实平台提升仍需要后续
       arm64/Debian 12 验证 loop。
+
+### 2026-06-23 Linux Homebrew best-effort 策略
+
+本次检查命令：
+
+- [x] 核对 release workflow、release automation plan、release process 和 Homebrew formula
+      更新脚本。
+- [x] 新增 `docs/linux-homebrew-verification-policy.zh.md`，明确 Linux Homebrew 当前为
+      best-effort、有 brew 才自动验证、无 brew 时 release notes 写 `manual/best-effort`。
+- [x] README、release process 和 support matrix 增加入口。
+
+结论：
+
+- [x] Linux Homebrew 路径已经有明确 best-effort 策略；真实自动验证仍需要后续提供
+      有 Homebrew 的 Linux runner。

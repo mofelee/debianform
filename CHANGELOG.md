@@ -12,6 +12,7 @@ This project follows semantic versioning after the public beta line begins.
   secret handling, state/lock behavior, and vulnerability response.
 - Added a `.deb` and APT repository feasibility plan.
 - Added a Debian version and architecture support strategy.
+- Added a Linux Homebrew best-effort verification policy.
 
 ## v0.1.0-beta.2
 

@@ -9,6 +9,8 @@ root-only SSH、权限边界、secret 处理和漏洞响应见
 [security model](security-model.zh.md)。
 Debian 版本和架构进入 Beta/Preview 的条件见
 [platform support strategy](platform-support-strategy.zh.md)。
+Linux Homebrew best-effort 规则见
+[Linux Homebrew verification policy](linux-homebrew-verification-policy.zh.md)。
 
 ## 状态定义
 
@@ -24,7 +26,7 @@ Debian 版本和架构进入 Beta/Preview 的条件见
 
 | 项目 | 当前状态 | 说明 |
 | --- | --- | --- |
-| CLI on Linux amd64 | Beta | release tarball、curl installer 和本地/CI 检查覆盖。 |
+| CLI on Linux amd64 | Beta | release tarball、curl installer 和本地/CI 检查覆盖；Homebrew install/test/upgrade 当前 best-effort。 |
 | CLI on Linux arm64 | Preview | release artifact 已构建；真实 arm64 curl installer 仍需人工或 runner 验证。 |
 | CLI on macOS amd64 | Beta | release artifact、curl installer 和 Homebrew install/test/upgrade 已验证。 |
 | CLI on macOS arm64 | Beta | release artifact、curl installer 和 Homebrew install/test/upgrade 已验证。 |
