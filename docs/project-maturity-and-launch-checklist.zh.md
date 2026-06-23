@@ -1,222 +1,279 @@
 # 项目成熟度与上线清单
 
-本文档用于评估 DebianForm 当前项目成熟度，并整理上线前需要补齐的事项。
+本文档用于定期评估 DebianForm 的项目成熟度，并把上线前、公开 beta 后、stable 前需要完成的事项整理成可维护的 checklist。
 
-## 当前成熟度
+维护方式：每次检查时直接把 `- [ ]` 改成 `- [x]`，并在「检查记录」中追加本次验证命令和结论。
 
-当前项目成熟度建议评为 **3/5：beta 初期**。
+## 本次检查摘要
 
-它已经不是原型项目。当前仓库已经具备：
+- 检查日期：2026-06-23。
+- 当前建议成熟度：**4/5：public beta 可上线候选**。
+- 推荐发布定位：**`v0.1.0-beta` 或 public preview**。
+- 不建议发布定位：stable、GA、production-ready。
 
-- v2 CLI 主路径：`validate`、`fmt`、`plan`、`apply`、`check`。
-- v2 DSL 的 parser、merge、HostSpec、ResourceGraph、plan、state 和 SSH 执行路径。
-- state 文件、远端 lock、observed 检测、drift 检查和 apply 后状态持久化。
-- DAG 调度、多 host apply 并发控制和失败传播。
-- plan JSON、文本 renderer 和静态 HTML preview。
-- golden 测试、race 单测、libvirt Debian 13 VM 集成测试设计。
-- README、v2 设计文档、示例和常见错误说明。
+本次本地验收：
 
-这说明项目已经具备完整的核心闭环，适合自用或小范围真实机器试用。
+- [x] `go vet ./...`
+- [x] `go test ./...`
+- [x] `go test -race -count=1 ./...`
+- [x] `make build`
+- [x] `make test-integration-layout`
+- [ ] `make test-integration` 完整 Debian 13 libvirt VM 矩阵，本次检查未重新运行。
+- [ ] 正式发布 tag 对应 commit 的 GitHub Actions 全绿，本次检查未创建正式发布 tag。
 
-但它还不适合直接作为 stable/GA 面向大规模用户发布。主要缺口不在核心功能是否存在，而在发布流程、支持边界、安全承诺、运维文档和真实用户验证。
+当前判断：
 
-## 建议发布定位
+- [x] 核心 v2 闭环已经完整：validate、plan、apply、check、state、lock、observed drift 和 SSH 执行路径都存在。
+- [x] 发布工程化已经基本完成：GoReleaser、GitHub Release、checksum、curl installer、Homebrew tap 自动更新、post-release verification、cosign keyless、SBOM 和 provenance 都已经有仓库配置或文档记录。
+- [x] README 已明确 beta/public preview、支持范围、安装、升级、校验和示例边界。
+- [ ] 还缺一次正式 public beta tag 的端到端发布确认。
+- [ ] 还缺真实低风险 Debian 13 主机上的小范围 beta 使用反馈。
+- [ ] 还缺 stable 所需的兼容性、迁移、恢复和长期支持承诺。
 
-推荐先以 **`v0.1.0-beta`** 或 **public preview** 形式发布。
+## 发布定位检查
 
-发布说明应明确：
+- [x] README 顶部明确项目处于 public preview / beta 阶段。
+- [x] README 明确 v2 是当前唯一主线。
+- [x] README 明确旧实验格式已经废弃。
+- [x] README 明确目标系统最高优先级是 Debian 13。
+- [x] README 明确被管理目标主机优先支持架构是 amd64。
+- [x] README 明确 `dbf` CLI 发布产物覆盖 Linux/macOS 的 amd64 和 arm64。
+- [x] README 区分可运行示例和 design-only fixture。
+- [x] README 提醒真实 apply 前需要先运行 plan，并需要 SSH 可达的受支持 Debian 主机。
+- [ ] release notes 为正式 public beta tag 明确写出 beta 风险、兼容性限制和迁移影响。
+- [ ] stable/GA 文案在 README、release notes、安装文档中均未被误用。
 
-- 目标系统是 Debian 13。
-- 被管理目标主机优先支持架构是 amd64。
-- `dbf` CLI 发布产物覆盖 Linux/macOS 的 amd64 和 arm64。
-- 当前 v2 是唯一主线。
-- 旧实验格式已经废弃。
-- design-only fixture 不是可运行功能承诺。
-- 生产机器使用前必须先运行 `plan`，并建议先在测试主机验证。
+## P0：公开 beta 上线前必须完成
 
-暂不建议使用 stable、GA、production-ready 等定位。
+### 支持范围
 
-## 上线前必须完成
+- [x] 支持的 Debian 版本已在 README 中说明。
+- [x] 目标主机架构优先级已在 README 中说明。
+- [x] CLI 运行平台和目标主机平台已在 README 与 [release process](release-process.zh.md) 中区分。
+- [x] v2 可运行示例已在 README 中列出。
+- [x] `examples/v2-fleet.dbf.hcl` 已标记为 design-only fixture。
+- [x] 可运行示例有 validate 测试覆盖。
+- [ ] 为正式 public beta release notes 增加一份简短的「已支持 / 暂不支持」矩阵。
 
-### 1. 明确支持范围
+### CI 和测试闸门
 
-在 README 和 release notes 中写清：
+- [x] CI 包含 gofmt 检查。
+- [x] CI 包含 `go vet ./...`。
+- [x] CI 包含 `go test -race -count=1 ./...`。
+- [x] CI 包含 `make build`。
+- [x] CI 包含 `make test-integration-layout`。
+- [x] CI 动态发现 libvirt integration cases。
+- [x] CI 包含 Debian 13 libvirt integration job。
+- [x] libvirt cases 覆盖 `apt-source`、`bbr`、`component-inputs`、`files`、`nftables`、`shadowsocks-rust`、`source-build`、`systemd-service-unit` 和 `wireguard`。
+- [x] `wireguard` case 覆盖双 host runner。
+- [ ] 正式发布前确认 release tag 对应 commit 的 CI 全绿。
+- [ ] 正式发布前至少完成一次完整 `make test-integration` 或等价 CI libvirt 矩阵。
 
-- 支持的 Debian 版本。
-- 支持的 CPU 架构。
-- 支持的 DSL block 和 resource 类型。
-- 不支持或暂不稳定的能力。
-- 哪些示例是可运行样例，哪些只是设计 fixture。
+### 发布产物和安装
 
-最低要求：
+- [x] `LICENSE` 存在。
+- [x] `CHANGELOG.md` 存在。
+- [x] `SECURITY.md` 存在。
+- [x] [release process](release-process.zh.md) 存在。
+- [x] [release quick runbook](release-quick-runbook.zh.md) 存在。
+- [x] `.goreleaser.yaml` 覆盖 Linux/macOS amd64/arm64。
+- [x] release tarball 包含 `dbf`、README、docs、examples、LICENSE 和 CHANGELOG。
+- [x] release workflow 会生成 `checksums.txt`。
+- [x] release workflow 会创建 GitHub Release。
+- [x] release workflow 会生成 `checksums.txt.sigstore.json`。
+- [x] release workflow 会生成 SBOM。
+- [x] release workflow 会生成 GitHub provenance attestation。
+- [x] `scripts/install.sh` 支持 latest 和指定版本安装。
+- [x] `scripts/install.sh` 校验 tarball SHA256。
+- [x] `scripts/install.sh` 支持 Linux/macOS amd64/arm64 检测或覆盖。
+- [x] `scripts/install.sh` 支持 `--prefix`、`--bin-dir`、`--dry-run` 和 `--force`。
+- [x] Homebrew tap 自动更新流程已在 release workflow 中接入。
+- [x] release dry-run workflow 可验证 GoReleaser snapshot artifact。
+- [x] post-release verification 覆盖 Linux amd64 curl installer。
+- [x] post-release verification 覆盖 macOS amd64 和 macOS arm64 curl installer。
+- [x] post-release verification 覆盖 macOS Homebrew install/test/upgrade。
+- [x] Linux arm64 artifact build 已覆盖。
+- [ ] Linux arm64 curl installer 在真实 arm64 runner 或机器上验证。
+- [ ] Linux Homebrew install/test/upgrade 在有 Homebrew 的 Linux runner 或机器上验证。
+- [ ] 正式 public beta tag 创建并通过 release workflow。
+- [ ] 正式 GitHub Release assets 和 verification matrix 人工抽查通过。
+- [ ] 正式 Homebrew formula 指向 public beta tag，而不是测试 tag。
+- [ ] `CHANGELOG.md` 为正式 public beta tag 写入真实变更，而不是占位说明。
 
-- `examples/v2-fleet.dbf.hcl` 等 design-only 文件不能让用户误以为可以直接 apply。
-- 所有公开承诺的示例都必须能通过 validate/golden 测试。
+### 安全和信任
 
-### 2. 让 CI 成为发布门槛
+- [x] `SECURITY.md` 指向 GitHub Security Advisories。
+- [x] README 说明 checksum 校验。
+- [x] README 说明 cosign keyless bundle 校验。
+- [x] README 说明 GitHub provenance attestation 校验。
+- [x] [v2 state](v2-state.md) 说明 state 保存哪些字段。
+- [x] [v2 state](v2-state.md) 说明 secret content、sensitive input、SSH 私钥、命令日志和 lock lease 不写入 state。
+- [x] [v2 plan format](v2-plan-format.md) 说明 sensitive diff 不输出明文。
+- [x] README 说明远程 URL artifact 必须声明 64 位 sha256。
+- [x] WireGuard integration checks 覆盖 private key 不写入 state 明文。
+- [ ] 增加 `govulncheck` 或等价依赖漏洞扫描。
+- [ ] 增加 Dependabot/Renovate 或等价依赖更新策略。
+- [ ] 增加面向用户的 SSH 执行模型、sudo 权限和最小权限建议文档。
+- [ ] 增加覆盖 text/json/html plan、stdout/stderr、state 的集中式 secret redaction 回归矩阵。
 
-发布前 CI 必须稳定通过：
+### 用户文档
 
-```bash
-go vet ./...
-go test -race -count=1 ./...
-make build
-make test-integration-layout
-make test-integration
-```
+- [x] README 包含 Homebrew 安装方式。
+- [x] README 包含 curl 安装方式。
+- [x] README 包含升级和回滚说明。
+- [x] README 包含 `dbf version` 安装验证。
+- [x] README 包含 validate、offline plan、json plan、html plan、apply、check 的基础示例。
+- [x] [CLI 文档](cli.zh.md) 说明 `validate`、`plan`、`apply`、`check`、`fmt`、`component inspect` 和 version。
+- [x] [CLI 文档](cli.zh.md) 说明 `--host`、`--parallel` 和 `--lock-timeout`。
+- [x] [v2 state](v2-state.md) 说明 state path、lock path、ownership、lock 和 atomic write。
+- [x] [release quick runbook](release-quick-runbook.zh.md) 说明发布前、发布中、发布后和回滚流程。
+- [ ] 新增独立 quickstart，覆盖准备 SSH 用户、写第一份配置、validate、在线 plan、apply、check。
+- [ ] 新增 operations/runbook，覆盖 stale lock、apply 中途失败、state 与远端不一致、资源移除和恢复步骤。
+- [ ] 新增常见故障排查文档，使用真实错误信息和修复步骤。
+- [ ] 新增简明支持矩阵，把 DSL block、resource/domain 类型和当前稳定性放在一处。
 
-GitHub Actions 中已经有 unit 和 libvirt integration jobs。发布前需要确保这些 job 在干净环境中稳定绿。
+### beta 验证
 
-特别注意：
+- [x] libvirt integration tests 使用 Debian 13 cloud VM。
+- [x] libvirt integration tests 执行真实 validate、apply 和 check。
+- [x] integration cases 包含 drift 检查脚本。
+- [x] integration cases 包含删除、forget 或 restore 行为验证。
+- [x] release automation plan 记录过 test tag 的端到端 release workflow 验证。
+- [ ] 正式 beta tag 发布后，在干净环境验证 `dbf version`、`dbf validate`、`dbf plan --offline`。
+- [ ] 正式 beta tag 发布后，在至少一台低风险 Debian 13 主机上验证在线 `plan`、`apply`、再次 `plan` no-op 和 `check`。
+- [ ] 正式 beta tag 发布后，人工制造 drift 并确认 `check` 非零退出且输出可理解。
+- [ ] 正式 beta tag 发布后，验证失败 apply 不记录未成功资源。
+- [ ] 正式 beta tag 发布后，验证 plan、log、state 不泄露 secret 明文。
+- [ ] 收集至少一轮真实使用反馈，并把阻塞问题修复或记录到 known issues。
 
-- libvirt 集成测试必须覆盖 Debian 13 VM 的真实 `validate`、`apply`、`check`。
-- CI failure 不能被文档变更、缓存问题或 flaky 网络掩盖。
-- release tag 对应的 commit 必须来自全绿 CI。
+## P1：公开 beta 后尽快补齐
 
-### 3. 补齐发布与安装体系
+- [ ] `.deb` 包。
+- [ ] apt repository 可行性评估或计划。
+- [ ] Linux arm64 安装路径自动验证。
+- [ ] Linux Homebrew 路径自动验证或明确 best-effort 策略。
+- [ ] 更完整的 operations/runbook 文档。
+- [ ] 更完整的 quickstart 文档。
+- [ ] 依赖漏洞扫描进入 CI。
+- [ ] release notes 模板，固定包含 breaking changes、known issues、verification matrix 和 migration notes。
+- [ ] beta 用户反馈入口和 triage 流程。
+- [ ] 真实部署模板或小型案例。
+- [ ] 对高风险资源的 `prevent_destroy` 使用建议。
 
-当前已有 `make build` 和 `make install`，但公开发布还需要：
+## P2：stable/GA 前必须完成
 
-- `LICENSE`。
-- `CHANGELOG.md`。
-- 版本号策略，例如 semver。
-- GitHub Release。
-- Linux/macOS 的 amd64 和 arm64 release tarball。
-- SHA256 checksums。
-- `curl` 安装脚本。
-- Homebrew tap。
-- 基础安装和升级说明。
+- [ ] 连续多个 release 没有破坏性 DSL/state/plan JSON 变更。
+- [ ] 多个真实用户或多组真实主机稳定使用。
+- [ ] CI 和 libvirt integration tests 长期稳定，flaky 情况有记录和处理。
+- [ ] 明确 backward compatibility policy。
+- [ ] 明确 state schema migration policy。
+- [ ] 明确 plan JSON format compatibility policy。
+- [ ] release、安装、升级、回滚路径经过多个正式 release 验证。
+- [ ] 安全文档包含 SSH 执行模型、权限边界、secret 处理和漏洞响应流程。
+- [ ] 常见失败场景都有可执行恢复步骤。
+- [ ] 更广泛的 Debian 版本或架构支持策略。
+- [ ] 最小 sudo 权限建议。
+- [ ] README 中承诺的能力都能被测试、示例或文档覆盖。
 
-建议后续补充：
+## 详细成熟度检查
 
-- `.deb` 包。
-- apt repository。
-- release artifact 签名。
-- 自动化 release workflow。
+### 核心产品
 
-最低可接受上线标准：
+- [x] v2 CLI 主路径：`validate`、`fmt`、`plan`、`apply`、`check`。
+- [x] 辅助 CLI：`version`、`component inspect`、`variable inspect`。
+- [x] parser 支持 v2 顶层结构和领域 block。
+- [x] profile/host merge 已实现。
+- [x] component input、validation、deprecated warning 和 sensitive metadata 已实现。
+- [x] variable、var-file、auto var file、env var 和 CLI var 已实现。
+- [x] HostSpec、ResourceGraph、plan 和 state 路径已实现。
+- [x] 在线 plan 支持 SSH、runtime facts、observed state 和 drift 对比。
+- [x] 离线 plan 支持本地预览。
+- [x] apply 支持远端 state lock 和 state 持久化。
+- [x] check 通过在线 plan 检测 drift，并在有变更时返回非零。
+- [x] DAG 调度和多 host apply 并发控制已实现。
+- [x] plan 支持 text、JSON 和静态 HTML。
+- [x] domain 覆盖 kernel/sysctl、files/secrets/directories、users/groups、systemd/services、APT、nftables、component binary/archive/file/ca_certificate/source build。
+- [ ] stable 级别的兼容性和迁移策略尚未完成。
 
-- 用户可以从 GitHub Release 下载 `dbf`。
-- 用户可以校验 checksum。
-- 用户可以用 Homebrew 或 `curl` 安装、升级、运行 `dbf version` 和 `dbf plan`。
-- 具体发布流程见 [release process](release-process.zh.md)。
-- 自动化落地计划见 [release automation plan](release-automation-plan.zh.md)。
+### 测试覆盖
 
-### 4. 补齐安全与信任材料
+- [x] parser 单测。
+- [x] merge 单测。
+- [x] graph/schedule 单测。
+- [x] plan/diff 单测。
+- [x] state 单测。
+- [x] engine 单测。
+- [x] CLI 单测。
+- [x] version 单测。
+- [x] source build integration Go test。
+- [x] golden test 覆盖 parser、HostSpec、graph 和 plan。
+- [x] runnable v2 examples validate 测试。
+- [x] libvirt case layout validate。
+- [x] Debian 13 libvirt VM integration 设计和 CI job 已存在。
+- [ ] 本次检查未重新运行完整 Debian 13 libvirt VM integration 矩阵。
+- [ ] 还缺长期 flaky 记录和趋势观察。
 
-DebianForm 会通过 SSH 修改目标主机上的系统文件、服务、apt、kernel、nftables 等配置，因此安全说明必须清楚。
+### 发布成熟度
 
-上线前至少需要：
+- [x] 本地 build 注入 version、commit、date。
+- [x] GoReleaser 多平台构建配置。
+- [x] release dry-run workflow。
+- [x] tag-triggered release workflow。
+- [x] curl installer。
+- [x] Homebrew tap 自动更新脚本和 workflow step。
+- [x] post-release verification summary 写入 release notes。
+- [x] checksum、cosign keyless、SBOM、provenance。
+- [ ] 正式 public beta release 尚需按 runbook 执行并确认。
+- [ ] `.deb` 和 apt repository 尚未实现。
 
-- `SECURITY.md`，说明漏洞报告方式。
-- secret redaction 规则说明。
-- state 文件中保存哪些数据的说明。
-- plan/log/state 不应泄露 `secrets.file` 和 sensitive input 明文的测试说明。
-- 远程 URL artifact 必须校验 sha256 的说明。
+### 文档成熟度
 
-建议增加：
+- [x] README 覆盖项目定位、安装、升级、校验、示例、基础命令和集成测试入口。
+- [x] [CLI 文档](cli.zh.md) 覆盖主要命令和参数。
+- [x] [v2 requirements](v2-requirements.md) 和相关设计文档存在。
+- [x] [v2 state](v2-state.md) 文档存在。
+- [x] [v2 plan format](v2-plan-format.md) 文档存在。
+- [x] 发布流程、自动化计划和快速操作手册存在。
+- [ ] 面向新用户的一页 quickstart 还不够独立。
+- [ ] 面向运维恢复的 runbook 还不够完整。
+- [ ] 面向 stable 的 compatibility policy 和 migration policy 还未成文。
 
-- 依赖漏洞扫描。
-- release checksum/signature。
-- 对 SSH 执行模型和远端权限要求的文档。
+## 建议发布决策
 
-### 5. 补齐用户运维文档
+可以发布 public beta 的条件：
 
-当前 README 已经说明很多能力，但公开给用户使用还需要更偏操作手册的文档。
+- [x] 核心功能闭环已经具备。
+- [x] 本地 Go 检查和构建通过。
+- [x] release automation 已经具备端到端能力。
+- [ ] 正式 tag 前完整 CI 全绿。
+- [ ] 正式 tag 前完成或接受完整 libvirt 矩阵的验证结果。
+- [ ] release notes 明确 beta 风险和支持边界。
 
-建议新增 quickstart：
+不应发布 stable/GA 的原因：
 
-- 如何安装。
-- 如何准备 SSH 用户和权限。
-- 如何写第一份 `.dbf.hcl`。
-- 如何运行 `validate`。
-- 如何运行在线 `plan`。
-- 如何确认并运行 `apply`。
-- 如何运行 `check` 检测 drift。
+- [ ] 真实用户和真实主机验证不足。
+- [ ] state/schema migration policy 尚未完成。
+- [ ] backward compatibility policy 尚未完成。
+- [ ] operations recovery 文档尚未完整。
+- [ ] 还没有连续多个正式 release 的稳定记录。
 
-建议新增 operations 文档：
+## 检查记录
 
-- state 文件默认位置。
-- lock 文件默认位置。
-- lock 超时和 stale lock 处理。
-- apply 中途失败后如何判断哪些资源已成功。
-- 如何从 state 和远端状态不一致中恢复。
-- 如何限制 `--host` 和 `--parallel`。
-- 如何安全地移除一个资源。
-- `prevent_destroy` 的使用建议。
+### 2026-06-23
 
-### 6. 做小范围 beta 验证
+本次检查命令：
 
-公开前建议先在真实但低风险的 Debian 13 主机上做小范围 beta。
+- [x] `go vet ./...`
+- [x] `go test ./...`
+- [x] `go test -race -count=1 ./...`
+- [x] `make build`
+- [x] `make test-integration-layout`
+- [ ] `make test-integration`
 
-建议覆盖：
+结论：
 
-- BBR/kernel/sysctl。
-- files/secrets/directories。
-- users/groups/authorized keys。
-- systemd unit/service。
-- apt repository/package。
-- nftables。
-- component binary/archive/file/ca_certificate。
-- source build component。
-- 多 host profile 复用。
-
-验证目标：
-
-- 初次 apply 成功。
-- apply 后再次 plan 为 no-op。
-- 人工 drift 后 check 能发现。
-- 配置删除后 destroy/delete 行为符合预期。
-- 失败后 state 不记录未成功资源。
-- plan、log、state 不泄露 secret 明文。
-
-## 建议优先级
-
-### P0：没有这些不要公开
-
-- CI 全绿并作为 release gate。
-- `LICENSE`。
-- `SECURITY.md`。
-- `CHANGELOG.md`。
-- README 顶部明确 beta 状态和支持范围。
-- GitHub Release 四平台二进制和 checksum。
-- `curl` 安装脚本。
-- Homebrew tap binary formula。
-- 至少一轮真实 Debian 13 beta 验证。
-
-### P1：公开 beta 后尽快补
-
-- `.deb` 包或 apt repository。
-- 自动化 release workflow。
-- 自动更新 Homebrew tap。
-- operations/runbook 文档。
-- 更完整的 quickstart。
-- release artifact 签名。
-- 依赖漏洞扫描。
-
-### P2：stable 前补
-
-- 更广泛的 Debian 版本/架构支持策略。
-- backward compatibility policy。
-- state schema migration 策略。
-- 更完整的错误恢复手册。
-- 用户案例和真实部署模板。
-- 更细的权限模型和最小 sudo 权限建议。
-
-## Stable/GA 判断标准
-
-当满足以下条件后，可以考虑从 beta 推进到 stable：
-
-- 至少连续多个 release 没有破坏性 state/schema 变更。
-- 多个真实用户或多组真实主机稳定使用。
-- CI 和 libvirt 集成测试长期稳定。
-- release、安装、升级、回滚路径清楚。
-- 安全文档和漏洞响应流程存在。
-- 常见失败场景都有可操作恢复步骤。
-- README 中承诺的能力都能被测试或示例覆盖。
-
-## 当前结论
-
-DebianForm 当前已经具备完整核心功能链路，适合进入公开 beta 或小范围 public preview。
-
-上线策略应保守：先发布 beta，明确支持边界，收集真实使用反馈，再逐步补齐发布、安全、运维和兼容性体系。等这些工程化能力稳定后，再考虑 stable/GA。
+- [x] 项目成熟度从「beta 初期」提升到「public beta 可上线候选」。
+- [x] 本地代码质量、race 单测、build 和 integration layout 检查通过。
+- [x] 发布、安装和供应链自动化已从计划状态推进为仓库内可执行配置。
+- [ ] 正式 public beta 仍需要按 release runbook 创建 tag，并确认 CI、GitHub Release、Homebrew tap 和 clean install 验证全部通过。
+- [ ] stable/GA 仍需要真实使用反馈、兼容性政策、state migration 策略和恢复手册。
