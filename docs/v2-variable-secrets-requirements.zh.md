@@ -417,7 +417,37 @@ files {
 
 - 简单本地文件部署仍然方便。
 - 现有示例和集成测试不用立即破坏。
-- 在 write-only runner 完成前，`secrets.file` 可继续提供已验证的最小安全边界。
+- `secrets.file` 作为兼容层继续存在，但新配置应使用 `variable + files.file`。
+
+迁移示例：
+
+```hcl
+variable "app_token" {
+  type      = string
+  sensitive = true
+  ephemeral = true
+}
+
+variable "app_token_version" {
+  type = string
+}
+
+files {
+  file "/etc/app/token" {
+    content         = var.app_token
+    content_version = var.app_token_version
+    owner           = "root"
+    group           = "root"
+    mode            = "0600"
+  }
+}
+```
+
+原来的 `source = "secrets/app-token"` 对应 CLI 传值：
+
+```bash
+dbf plan -f app.dbf.hcl -var app_token=@secrets/app-token -var app_token_version=2026-06-23
+```
 
 ## 编译与 IR 要求
 
@@ -1340,29 +1370,39 @@ stdin 或 secret backend。
 
 代码：
 
-- [ ] 给 `secrets.file` 增加可控 deprecation warning。
-- [ ] warning 不改变退出码。
-- [ ] 如需要，提供关闭 warning 的兼容开关，或至少保留一个 minor 周期。
-- [ ] 示例、README、docs 改为推荐 `variable + files.file`。
+- [x] 给 `secrets.file` 增加可控 deprecation warning。
+- [x] warning 不改变退出码。
+- [x] 如需要，提供关闭 warning 的兼容开关，或至少保留一个 minor 周期。
+- [x] 示例、README、docs 改为推荐 `variable + files.file`。
 
 测试：
 
-- [ ] 使用 `secrets.file` 输出 warning。
-- [ ] warning 不改变 validate/plan/apply 退出码。
-- [ ] 兼容开关如实现，需要覆盖开启和关闭。
-- [ ] 现有集成测试仍可运行。
+- [x] 使用 `secrets.file` 输出 warning。
+- [x] warning 不改变 validate/plan/apply 退出码。
+- [x] 兼容开关如实现，需要覆盖开启和关闭。
+- [x] 现有集成测试仍可运行。
 
 示例/文档：
 
-- [ ] README 默认展示新写法。
-- [ ] 迁移说明写清楚 `source` 到 `-var @path` 的迁移方式。
-- [ ] 本文档更新 `secrets.file` 的最终定位。
+- [x] README 默认展示新写法。
+- [x] 迁移说明写清楚 `source` 到 `-var @path` 的迁移方式。
+- [x] 本文档更新 `secrets.file` 的最终定位。
 
 验收：
 
-- [ ] `secrets.file` 可以作为兼容层继续存在。
-- [ ] 删除旧语法需要另行决策和单独 loop。
-- [ ] `make test` 通过。
+- [x] `secrets.file` 可以作为兼容层继续存在。
+- [x] 删除旧语法需要另行决策和单独 loop。
+- [x] `make test` 通过。
+
+实现记录：
+
+- merge 层在 `secrets.file` 被编译时输出 deprecation warning，沿用现有
+  `ir.Warning`/CLI stderr 通道；`validate`、`plan`、`apply` 仍以原退出码语义执行。
+- `CompileOptions.SuppressSecretFileDeprecationWarning` 可关闭该 warning，用于兼容窗口、
+  集成环境或调用方分阶段迁移。
+- CLI 测试覆盖 `validate` 和离线 `plan` 成功但 stderr 输出 warning；merge 单测覆盖 warning
+  source path 和 suppression 开关。
+- 旧语法没有删除，后续是否删除需要单独决策。
 
 ## 推荐实现顺序
 

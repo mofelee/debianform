@@ -640,6 +640,46 @@ host "server1" {
 	}
 }
 
+func TestValidateAndPlanPrintSecretFileDeprecationWarnings(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "token.txt"), []byte("not-a-real-secret-token"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(config, []byte(`
+host "server1" {
+  secrets {
+    file "/etc/app/token" {
+      source = "token.txt"
+    }
+  }
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, validateStderr := captureOutput(t, func() {
+		if err := run([]string{"validate", "-f", config}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(validateStderr, "warning:") || !strings.Contains(validateStderr, "secrets.file is deprecated") {
+		t.Fatalf("validate stderr = %q, want secrets.file deprecation warning", validateStderr)
+	}
+
+	planStdout, planStderr := captureOutput(t, func() {
+		if err := run([]string{"plan", "-f", config, "--offline"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(planStderr, "warning:") || !strings.Contains(planStderr, "secrets.file is deprecated") {
+		t.Fatalf("plan stderr = %q, want secrets.file deprecation warning", planStderr)
+	}
+	if strings.Contains(planStdout, "warning:") {
+		t.Fatalf("plan stdout contains warning: %q", planStdout)
+	}
+}
+
 func TestComponentInspect(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")

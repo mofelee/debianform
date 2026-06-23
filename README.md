@@ -181,7 +181,8 @@ dbf component inspect -f examples/v2-component-inputs.dbf.hcl reverse_proxy
 顶层 `variable` 用于 program 级外部输入。写入敏感文件时，推荐使用
 `variable + files.file`：敏感值放在 `content`，非敏感 `content_version` 负责触发
 write-only 更新。`secrets.file` 仍保留为兼容层，旧配置和 state address 不会因为新写法
-立即失效。
+立即失效，但会输出 deprecation warning。旧 `source = "secrets/app-token"` 可迁移为
+`-var app_token=@secrets/app-token`。
 
 ```bash
 dbf plan -f examples/v2-variable-secret-file.dbf.hcl --offline

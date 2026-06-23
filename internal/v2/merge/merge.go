@@ -17,11 +17,12 @@ import (
 )
 
 type CompileOptions struct {
-	HostFilter               string
-	HostFacts                map[string]ir.HostFacts
-	SkipComponents           bool
-	ValidateRuntimeTemplates bool
-	Warnings                 *[]ir.Warning
+	HostFilter                           string
+	HostFacts                            map[string]ir.HostFacts
+	SkipComponents                       bool
+	ValidateRuntimeTemplates             bool
+	SuppressSecretFileDeprecationWarning bool
+	Warnings                             *[]ir.Warning
 }
 
 func Compile(cfg *parser.Config) (*ir.Program, error) {
@@ -30,10 +31,11 @@ func Compile(cfg *parser.Config) (*ir.Program, error) {
 
 func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, error) {
 	compiler := &compiler{
-		cfg:          cfg,
-		profileCache: map[string]resolvedProfile{},
-		visiting:     map[string]bool{},
-		warnings:     opts.Warnings,
+		cfg:                               cfg,
+		profileCache:                      map[string]resolvedProfile{},
+		visiting:                          map[string]bool{},
+		suppressSecretFileDeprecationWarn: opts.SuppressSecretFileDeprecationWarning,
+		warnings:                          opts.Warnings,
 	}
 
 	names := make([]string, 0, len(cfg.Hosts))
@@ -82,7 +84,7 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 			return nil, fmt.Errorf("%s:%d: host %q: %w", host.Source.File, host.Source.Line, host.Name, err)
 		}
 		asserts = append(asserts, host.Asserts...)
-		spec, err := buildHostSpec(host, merged)
+		spec, err := compiler.buildHostSpec(host, merged)
 		if err != nil {
 			return nil, err
 		}
@@ -153,10 +155,11 @@ func variableSpecs(cfg *parser.Config) (map[string]ir.VariableSpec, error) {
 }
 
 type compiler struct {
-	cfg          *parser.Config
-	profileCache map[string]resolvedProfile
-	visiting     map[string]bool
-	warnings     *[]ir.Warning
+	cfg                               *parser.Config
+	profileCache                      map[string]resolvedProfile
+	visiting                          map[string]bool
+	suppressSecretFileDeprecationWarn bool
+	warnings                          *[]ir.Warning
 }
 
 type resolvedProfile struct {
@@ -392,7 +395,7 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 		if err != nil {
 			return nil, fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
-		component, err := buildComponentSpec(instance, raw)
+		component, err := c.buildComponentSpec(instance, raw)
 		if err != nil {
 			return nil, err
 		}
@@ -476,7 +479,7 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 			}
 			return fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
-		component, err := buildComponentSpec(instance, raw)
+		component, err := c.buildComponentSpec(instance, raw)
 		if err != nil {
 			return err
 		}
@@ -544,6 +547,19 @@ func (c *compiler) warningSink() *[]ir.Warning {
 		return nil
 	}
 	return c.warnings
+}
+
+func (c *compiler) warnSecretFilesDeprecated(files map[string]ir.SecretFile) {
+	if c == nil || c.warnings == nil || c.suppressSecretFileDeprecationWarn {
+		return
+	}
+	for _, path := range sortedKeys(files) {
+		file := files[path]
+		*c.warnings = append(*c.warnings, ir.Warning{
+			Source:  file.Source,
+			Message: "secrets.file is deprecated; use variable + files.file content with content_version instead",
+		})
+	}
 }
 
 func (c *compiler) validateVariableValues() error {
@@ -1304,7 +1320,7 @@ func listValue(values []parser.Value, source ir.SourceRef) parser.Value {
 	return parser.Value{Kind: parser.KindList, List: values, Source: source}
 }
 
-func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
+func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 	spec := ir.HostSpec{
 		Name:   host.Name,
 		Source: host.Source,
@@ -1492,6 +1508,7 @@ func buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpec, error) {
 			return spec, err
 		}
 		spec.Secrets.Files = secretFiles
+		c.warnSecretFilesDeprecated(secretFiles)
 	}
 
 	if directories, ok, err := mapField(raw, "directories"); err != nil {
@@ -1586,7 +1603,7 @@ func applyHostFacts(spec *ir.HostSpec, facts ir.HostFacts) error {
 	return nil
 }
 
-func buildComponentSpec(instance parser.ComponentInstance, raw parser.Value) (ir.ComponentInstanceSpec, error) {
+func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, raw parser.Value) (ir.ComponentInstanceSpec, error) {
 	spec := ir.ComponentInstanceSpec{
 		Name:     instance.Name,
 		Template: instance.Template,
@@ -1665,6 +1682,7 @@ func buildComponentSpec(instance parser.ComponentInstance, raw parser.Value) (ir
 			return spec, err
 		}
 		spec.Secrets.Files = secretFiles
+		c.warnSecretFilesDeprecated(secretFiles)
 	}
 
 	if directories, ok, err := mapField(raw, "directories"); err != nil {

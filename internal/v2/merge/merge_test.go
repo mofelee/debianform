@@ -1787,6 +1787,53 @@ host "server1" {}
 	}
 }
 
+func TestCompileSecretFileDeprecationWarnings(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "token.txt"), []byte("not-a-real-secret-token"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(file, []byte(strings.TrimPrefix(`
+host "server1" {
+  secrets {
+    file "/etc/app/token" {
+      source = "token.txt"
+    }
+  }
+}
+`, "\n")), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := parser.ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	warnings := []ir.Warning{}
+	if _, err := CompileWithOptions(cfg, CompileOptions{Warnings: &warnings}); err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %#v, want 1", warnings)
+	}
+	if !strings.Contains(warnings[0].Message, "secrets.file is deprecated") {
+		t.Fatalf("warning = %#v", warnings[0])
+	}
+	if warnings[0].Source.Path != `host.server1.secrets.file["/etc/app/token"]` {
+		t.Fatalf("warning source = %#v", warnings[0].Source)
+	}
+
+	warnings = []ir.Warning{}
+	if _, err := CompileWithOptions(cfg, CompileOptions{
+		Warnings:                             &warnings,
+		SuppressSecretFileDeprecationWarning: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("suppressed warnings = %#v, want none", warnings)
+	}
+}
+
 func TestCompileSensitiveComponentInputPropagatesToFileContent(t *testing.T) {
 	program := compileInline(t, `
 component "app" {
