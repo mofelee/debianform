@@ -94,6 +94,193 @@ host "web1" {}
 	}
 }
 
+func TestParseVariableRichTypesAndMetadata(t *testing.T) {
+	file := writeConfig(t, `
+variable "environment" {
+  type        = string
+  description = "Deployment environment."
+  default     = "prod"
+  nullable    = false
+  sensitive   = true
+  ephemeral   = true
+  const       = true
+  deprecated  = "Use deployment_environment instead."
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be valid"
+  }
+}
+
+variable "listeners" {
+  type = list(object({
+    name = string
+    port = number
+    tls  = optional(bool, false)
+    tags = optional(map(string), {})
+  }))
+
+  default = [
+    {
+      name = "http"
+      port = 80
+    },
+  ]
+}
+
+variable "labels" {
+  type    = map(string)
+  default = {}
+}
+
+variable "ports" {
+  type    = set(number)
+  default = [443, 80, 443]
+}
+
+variable "pair" {
+  type    = tuple([string, number, bool])
+  default = ["https", 443, true]
+}
+
+host "server1" {}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment := cfg.Variables["environment"]
+	if environment.Type != "string" || environment.Description != "Deployment environment." {
+		t.Fatalf("environment variable = %#v", environment)
+	}
+	if environment.Default == nil || environment.Default.String != "prod" {
+		t.Fatalf("environment default = %#v", environment.Default)
+	}
+	if environment.Nullable || !environment.Sensitive || !environment.Ephemeral || !environment.Const {
+		t.Fatalf("environment booleans = nullable:%v sensitive:%v ephemeral:%v const:%v", environment.Nullable, environment.Sensitive, environment.Ephemeral, environment.Const)
+	}
+	if environment.Deprecated != "Use deployment_environment instead." {
+		t.Fatalf("deprecated = %q", environment.Deprecated)
+	}
+	if len(environment.Validations) != 1 || environment.Validations[0].Source.Path != `variable["environment"].validation[0]` {
+		t.Fatalf("validations = %#v", environment.Validations)
+	}
+
+	listeners := cfg.Variables["listeners"]
+	wantType := `list(object({name=string,port=number,tags=optional(map(string),{}),tls=optional(bool,false)}))`
+	if listeners.Type != wantType {
+		t.Fatalf("listeners type = %q, want %q", listeners.Type, wantType)
+	}
+	if listeners.TypeSpec.Kind != ComponentInputTypeList || listeners.TypeSpec.Element == nil || listeners.TypeSpec.Element.Kind != ComponentInputTypeObject {
+		t.Fatalf("listeners type spec = %#v", listeners.TypeSpec)
+	}
+	attrs := listeners.TypeSpec.Element.Attributes
+	if !attrs["tls"].Optional || attrs["tls"].Default == nil || attrs["tls"].Default.Bool {
+		t.Fatalf("tls attr = %#v", attrs["tls"])
+	}
+	if !attrs["tags"].Optional || attrs["tags"].Default == nil || attrs["tags"].Default.Kind != KindMap {
+		t.Fatalf("tags attr = %#v", attrs["tags"])
+	}
+	for _, name := range []string{"labels", "ports", "pair"} {
+		if _, ok := cfg.Variables[name]; !ok {
+			t.Fatalf("variable %q was not parsed", name)
+		}
+	}
+}
+
+func TestParseRejectsInvalidVariableBlocks(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "no label",
+			hcl: `
+variable {
+  type = string
+}
+`,
+			want: "variable block requires exactly one label",
+		},
+		{
+			name: "two labels",
+			hcl: `
+variable "one" "two" {
+  type = string
+}
+`,
+			want: "variable block requires exactly one label",
+		},
+		{
+			name: "duplicate",
+			hcl: `
+variable "environment" {
+  type = string
+}
+
+variable "environment" {
+  type = string
+}
+`,
+			want: `duplicate variable "environment"`,
+		},
+		{
+			name: "unknown attribute",
+			hcl: `
+variable "environment" {
+  type    = string
+  unknown = true
+}
+`,
+			want: `unsupported attribute variable["environment"].unknown`,
+		},
+		{
+			name: "wrong type expression",
+			hcl: `
+variable "environment" {
+  type = array(string)
+}
+`,
+			want: "array(T) is not supported; use list(T)",
+		},
+		{
+			name: "wrong bool attribute type",
+			hcl: `
+variable "environment" {
+  type      = string
+  sensitive = "yes"
+}
+`,
+			want: `variable["environment"].sensitive must be a boolean`,
+		},
+		{
+			name: "validation label",
+			hcl: `
+variable "environment" {
+  type = string
+
+  validation "range" {
+    condition     = true
+    error_message = "ok"
+  }
+}
+`,
+			want: `variable["environment"].validation[0] block must not have labels`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := writeConfig(t, tt.hcl)
+			_, err := ParseFiles([]string{file})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ParseFiles error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseLabeledObjectBlockSourcePath(t *testing.T) {
 	file := writeConfig(t, `
 host "web1" {
@@ -634,6 +821,7 @@ func runnableV2ExampleFixtures() []string {
 type parsedExampleSummary struct {
 	Fixture    string               `json:"fixture"`
 	Locals     []string             `json:"locals,omitempty"`
+	Variables  []string             `json:"variables,omitempty"`
 	Profiles   []parsedBlockSummary `json:"profiles,omitempty"`
 	Components []string             `json:"components,omitempty"`
 	Hosts      []parsedBlockSummary `json:"hosts"`
@@ -650,6 +838,7 @@ func summarizeParsedExample(fixture string, cfg *Config) parsedExampleSummary {
 	summary := parsedExampleSummary{
 		Fixture:    filepath.ToSlash(fixture),
 		Locals:     sortedKeys(cfg.Locals),
+		Variables:  sortedKeys(cfg.Variables),
 		Components: sortedKeys(cfg.Components),
 	}
 

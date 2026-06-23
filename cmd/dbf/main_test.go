@@ -105,6 +105,17 @@ host "server1" {
 	}
 }
 
+func TestValidateAcceptsUnreferencedVariableDeclarations(t *testing.T) {
+	output := captureStdout(t, func() {
+		if err := run([]string{"validate", "-f", "../../internal/v2/testdata/fixtures/v2-variable-declarations.dbf.hcl"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "v2 configuration is valid: 1 host(s)") {
+		t.Fatalf("validate output = %q", output)
+	}
+}
+
 func TestValidateAndPlanPrintDeprecatedInputWarnings(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")

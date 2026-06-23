@@ -10,6 +10,7 @@ const (
 	SensitiveFileContent         = "not-a-real-preview-secret"
 	SensitiveComponentInputValue = "example-secret-token"
 	SensitiveServiceEnvironment  = "not-a-real-service-token"
+	SensitiveVariableDefault     = "not-a-real-variable-secret"
 )
 
 func NoSecretLeak(t *testing.T, label, text string, allowed ...string) {
@@ -24,6 +25,7 @@ func NoSecretLeak(t *testing.T, label, text string, allowed ...string) {
 		SensitiveFileContent,
 		SensitiveComponentInputValue,
 		SensitiveServiceEnvironment,
+		SensitiveVariableDefault,
 	} {
 		if secret == "" || allowedSet[secret] {
 			continue

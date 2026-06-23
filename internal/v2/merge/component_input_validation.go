@@ -89,6 +89,21 @@ func componentInputValidationSpecs(validations []parser.ComponentInputValidation
 	return out
 }
 
+func variableValidationSpecs(validations []parser.VariableValidation) []ir.ComponentInputValidationSpec {
+	if len(validations) == 0 {
+		return nil
+	}
+	out := make([]ir.ComponentInputValidationSpec, 0, len(validations))
+	for _, validation := range validations {
+		out = append(out, ir.ComponentInputValidationSpec{
+			ConditionSource: validation.ConditionSource,
+			Message:         validation.Message,
+			MessageSource:   validation.MessageSource,
+		})
+	}
+	return out
+}
+
 func componentInputValidationFunctions() map[string]function.Function {
 	return map[string]function.Function{
 		"length":     stdlib.LengthFunc,

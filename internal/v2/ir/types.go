@@ -2,6 +2,7 @@ package ir
 
 type Program struct {
 	Hosts      []HostSpec                       `json:"hosts"`
+	Variables  map[string]VariableSpec          `json:"variables,omitempty"`
 	Components map[string]ComponentTemplateSpec `json:"components,omitempty"`
 }
 
@@ -337,6 +338,22 @@ type NftablesFileSpec struct {
 type ContentSummary struct {
 	SHA256 string `json:"sha256,omitempty"`
 	Bytes  int64  `json:"bytes,omitempty"`
+}
+
+type VariableSpec struct {
+	Name        string                         `json:"name"`
+	Type        string                         `json:"type"`
+	TypeExpr    string                         `json:"type_expr,omitempty"`
+	TypeSpec    ComponentInputTypeSpec         `json:"type_spec,omitempty"`
+	Description string                         `json:"description,omitempty"`
+	Default     any                            `json:"default,omitempty"`
+	Sensitive   bool                           `json:"sensitive,omitempty"`
+	Nullable    bool                           `json:"nullable,omitempty"`
+	Ephemeral   bool                           `json:"ephemeral,omitempty"`
+	Const       bool                           `json:"const,omitempty"`
+	Deprecated  string                         `json:"deprecated,omitempty"`
+	Validations []ComponentInputValidationSpec `json:"validations,omitempty"`
+	Source      SourceRef                      `json:"source,omitempty"`
 }
 
 type ComponentTemplateSpec struct {

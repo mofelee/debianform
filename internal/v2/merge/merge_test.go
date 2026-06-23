@@ -314,6 +314,91 @@ func TestCompileStructuredServiceEnvironmentMarksUnitSensitive(t *testing.T) {
 	testassert.NoSecretLeak(t, "structured service HostSpec JSON", string(data))
 }
 
+func TestCompileVariableDeclarationsIntoProgramIR(t *testing.T) {
+	cfg, err := parser.ParseFiles([]string{"../testdata/fixtures/v2-variable-declarations.dbf.hcl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := CompileWithOptions(cfg, CompileOptions{HostFacts: testHostFacts()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(program.Variables) != 3 {
+		t.Fatalf("variables = %#v", program.Variables)
+	}
+
+	environment := program.Variables["environment"]
+	if environment.Type != "string" || environment.Default != "prod" || environment.Nullable {
+		t.Fatalf("environment variable = %#v", environment)
+	}
+	if len(environment.Validations) != 1 || environment.Validations[0].Message != "environment must be dev, staging, or prod." {
+		t.Fatalf("environment validations = %#v", environment.Validations)
+	}
+
+	listeners := program.Variables["listeners"]
+	defaults, ok := listeners.Default.([]any)
+	if !ok || len(defaults) != 1 {
+		t.Fatalf("listeners default = %#v", listeners.Default)
+	}
+	listener, ok := defaults[0].(map[string]any)
+	if !ok {
+		t.Fatalf("listener default = %#v", defaults[0])
+	}
+	if listener["tls"] != false {
+		t.Fatalf("optional tls default = %#v", listener)
+	}
+
+	token := program.Variables["app_token"]
+	if !token.Sensitive || !token.Ephemeral || token.Default != testassert.SensitiveVariableDefault {
+		t.Fatalf("token variable = %#v", token)
+	}
+	data, err := json.MarshalIndent(program, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "program variable JSON", string(data))
+	var decoded struct {
+		Variables map[string]struct {
+			Default any `json:"default"`
+		} `json:"variables"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Variables["app_token"].Default != "<sensitive>" {
+		t.Fatalf("program variable JSON did not redact sensitive default:\n%s", data)
+	}
+}
+
+func TestCompileRejectsInvalidVariableDefault(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+variable "environment" {
+  type    = string
+  default = 42
+}
+
+host "server1" {}
+`)
+	if err == nil || !strings.Contains(err.Error(), `variable "environment" must be string`) {
+		t.Fatalf("compile error = %v, want variable type mismatch", err)
+	}
+}
+
+func TestCompileRejectsNonNullableVariableDefaultNull(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+variable "environment" {
+  type     = string
+  default  = null
+  nullable = false
+}
+
+host "server1" {}
+`)
+	if err == nil || !strings.Contains(err.Error(), `variable "environment" must not be null`) {
+		t.Fatalf("compile error = %v, want non-null variable error", err)
+	}
+}
+
 func TestCompileNftablesDefaults(t *testing.T) {
 	program := compileInline(t, `
 host "edge1" {

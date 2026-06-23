@@ -46,8 +46,13 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 	if err != nil {
 		return nil, err
 	}
+	variables, err := variableSpecs(cfg.Variables)
+	if err != nil {
+		return nil, err
+	}
 	program := &ir.Program{
 		Hosts:      make([]ir.HostSpec, 0, len(names)),
+		Variables:  variables,
 		Components: components,
 	}
 	for _, name := range names {
@@ -103,6 +108,43 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 		program.Hosts = append(program.Hosts, spec)
 	}
 	return program, nil
+}
+
+func variableSpecs(variables map[string]parser.Variable) (map[string]ir.VariableSpec, error) {
+	if len(variables) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]ir.VariableSpec, len(variables))
+	for _, name := range sortedKeys(variables) {
+		variable := variables[name]
+		if err := validateVariableDefinition(variable); err != nil {
+			return nil, err
+		}
+		var defaultValue any
+		if variable.Default != nil {
+			normalized, err := normalizeVariable(variable, *variable.Default)
+			if err != nil {
+				return nil, err
+			}
+			defaultValue = parserValueToAny(normalized)
+		}
+		out[name] = ir.VariableSpec{
+			Name:        variable.Name,
+			Type:        variable.Type,
+			TypeExpr:    variable.TypeExpr,
+			TypeSpec:    componentInputTypeSpecToIR(variable.TypeSpec),
+			Description: variable.Description,
+			Default:     defaultValue,
+			Sensitive:   variable.Sensitive,
+			Nullable:    variable.Nullable,
+			Ephemeral:   variable.Ephemeral,
+			Const:       variable.Const,
+			Deprecated:  variable.Deprecated,
+			Validations: variableValidationSpecs(variable.Validations),
+			Source:      variable.Source,
+		}
+	}
+	return out, nil
 }
 
 type compiler struct {
@@ -530,6 +572,15 @@ func validateComponentInputDefinition(input parser.ComponentInput) error {
 	return validateComponentInputTypeSpecDefaults(input.Name, input.TypeSpec, "")
 }
 
+func validateVariableDefinition(variable parser.Variable) error {
+	if variable.Default != nil {
+		if _, err := normalizeVariable(variable, *variable.Default); err != nil {
+			return err
+		}
+	}
+	return validateComponentInputTypeSpecDefaults(variable.Name, variable.TypeSpec, "")
+}
+
 func validateComponentInputTypeSpecDefaults(inputName string, spec parser.ComponentInputTypeSpec, path string) error {
 	switch spec.Kind {
 	case parser.ComponentInputTypeList, parser.ComponentInputTypeSet, parser.ComponentInputTypeMap:
@@ -564,6 +615,23 @@ func normalizeComponentInput(input parser.ComponentInput, value parser.Value) (p
 		return parser.Value{}, fmt.Errorf("%s:%d:%s: component input %q must not be null", value.Source.File, value.Source.Line, value.Source.Path, input.Name)
 	}
 	return normalizeComponentInputValue(input.Name, input.TypeSpec, value, "")
+}
+
+func normalizeVariable(variable parser.Variable, value parser.Value) (parser.Value, error) {
+	if value.Kind == parser.KindNull && !variable.Nullable {
+		return parser.Value{}, fmt.Errorf("%s:%d:%s: variable %q must not be null", value.Source.File, value.Source.Line, value.Source.Path, variable.Name)
+	}
+	normalized, err := normalizeComponentInputValue(variable.Name, variable.TypeSpec, value, "")
+	if err != nil {
+		return parser.Value{}, variableTypeError(variable.Name, err)
+	}
+	return normalized, nil
+}
+
+func variableTypeError(name string, err error) error {
+	text := err.Error()
+	text = strings.ReplaceAll(text, fmt.Sprintf("component input %q", name), fmt.Sprintf("variable %q", name))
+	return fmt.Errorf("%s", text)
 }
 
 func normalizeComponentInputValue(inputName string, spec parser.ComponentInputTypeSpec, value parser.Value, path string) (parser.Value, error) {

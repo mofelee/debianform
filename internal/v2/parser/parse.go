@@ -15,6 +15,7 @@ import (
 type Config struct {
 	Files      []string
 	Locals     map[string]Value
+	Variables  map[string]Variable
 	Profiles   map[string]Profile
 	Hosts      map[string]Host
 	Components map[string]Component
@@ -63,6 +64,30 @@ type ComponentInput struct {
 	Deprecated  string
 	Validations []ComponentInputValidation
 	Source      ir.SourceRef
+}
+
+type Variable struct {
+	Name        string
+	Type        string
+	TypeExpr    string
+	TypeSpec    ComponentInputTypeSpec
+	Description string
+	Default     *Value
+	Sensitive   bool
+	Nullable    bool
+	Ephemeral   bool
+	Const       bool
+	Deprecated  string
+	Validations []VariableValidation
+	Source      ir.SourceRef
+}
+
+type VariableValidation struct {
+	Source          ir.SourceRef
+	Condition       hcl.Expression
+	ConditionSource ir.SourceRef
+	Message         string
+	MessageSource   ir.SourceRef
 }
 
 type ComponentInputValidation struct {
@@ -123,6 +148,7 @@ func ParseFiles(files []string) (*Config, error) {
 	cfg := &Config{
 		Files:      append([]string(nil), files...),
 		Locals:     map[string]Value{},
+		Variables:  map[string]Variable{},
 		Profiles:   map[string]Profile{},
 		Hosts:      map[string]Host{},
 		Components: map[string]Component{},
@@ -200,6 +226,15 @@ func parseTopLevel(cfg *Config, file string, body *hclsyntax.Body) error {
 		switch block.Type {
 		case "locals":
 			continue
+		case "variable":
+			variable, err := parseVariable(file, block, ctx)
+			if err != nil {
+				return err
+			}
+			if previous, exists := cfg.Variables[variable.Name]; exists {
+				return fmt.Errorf("%s:%d: duplicate variable %q; first defined at %s:%d", file, variable.Source.Line, variable.Name, previous.Source.File, previous.Source.Line)
+			}
+			cfg.Variables[variable.Name] = variable
 		case "profile":
 			profile, err := parseProfile(file, block, ctx)
 			if err != nil {
@@ -232,6 +267,123 @@ func parseTopLevel(cfg *Config, file string, body *hclsyntax.Body) error {
 		}
 	}
 	return nil
+}
+
+func parseVariable(file string, block *hclsyntax.Block, ctx EvalContext) (Variable, error) {
+	if len(block.Labels) != 1 {
+		return Variable{}, fmt.Errorf("%s:%d: variable block requires exactly one label", file, block.TypeRange.Start.Line)
+	}
+	name := block.Labels[0]
+	path := fmt.Sprintf("variable[%s]", strconv.Quote(name))
+	for attrName, attr := range block.Body.Attributes {
+		switch attrName {
+		case "type", "default", "description", "nullable", "sensitive", "ephemeral", "const", "deprecated":
+		default:
+			return Variable{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, attrName)
+		}
+	}
+	for _, child := range block.Body.Blocks {
+		if child.Type != "validation" {
+			return Variable{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	typeAttr, ok := block.Body.Attributes["type"]
+	if !ok {
+		return Variable{}, fmt.Errorf("%s:%d: %s.type is required", file, block.TypeRange.Start.Line, path)
+	}
+	typeSpec, typeName, err := parseComponentInputType(typeAttr.Expr, ctx, path+".type")
+	if err != nil {
+		return Variable{}, fmt.Errorf("%s:%d: %s.type: %w", file, typeAttr.NameRange.Start.Line, path, err)
+	}
+	variable := Variable{
+		Name:     name,
+		Type:     typeName,
+		TypeExpr: typeName,
+		TypeSpec: typeSpec,
+		Nullable: true,
+		Source:   ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path},
+	}
+	if descriptionAttr, ok := block.Body.Attributes["description"]; ok {
+		descriptionSource := ir.SourceRef{File: file, Line: descriptionAttr.NameRange.Start.Line, Path: path + ".description"}
+		value, err := evalValue(descriptionAttr.Expr, ctx, descriptionSource)
+		if err != nil {
+			return Variable{}, fmt.Errorf("%s:%d: %s.description: %w", file, descriptionSource.Line, path, err)
+		}
+		if value.Kind != KindString {
+			return Variable{}, fmt.Errorf("%s:%d: %s.description must be a string", file, descriptionSource.Line, path)
+		}
+		variable.Description = value.String
+	}
+	if deprecatedAttr, ok := block.Body.Attributes["deprecated"]; ok {
+		deprecatedSource := ir.SourceRef{File: file, Line: deprecatedAttr.NameRange.Start.Line, Path: path + ".deprecated"}
+		value, err := evalValue(deprecatedAttr.Expr, ctx, deprecatedSource)
+		if err != nil {
+			return Variable{}, fmt.Errorf("%s:%d: %s.deprecated: %w", file, deprecatedSource.Line, path, err)
+		}
+		if value.Kind != KindString {
+			return Variable{}, fmt.Errorf("%s:%d: %s.deprecated must be a string", file, deprecatedSource.Line, path)
+		}
+		if value.String == "" {
+			return Variable{}, fmt.Errorf("%s:%d: %s.deprecated must be a non-empty string", file, deprecatedSource.Line, path)
+		}
+		variable.Deprecated = value.String
+	}
+	if defaultAttr, ok := block.Body.Attributes["default"]; ok {
+		defaultSource := ir.SourceRef{File: file, Line: defaultAttr.NameRange.Start.Line, Path: path + ".default"}
+		value, err := evalValue(defaultAttr.Expr, ctx, defaultSource)
+		if err != nil {
+			return Variable{}, fmt.Errorf("%s:%d: %s.default: %w", file, defaultSource.Line, path, err)
+		}
+		variable.Default = &value
+	}
+	if sensitiveAttr, ok := block.Body.Attributes["sensitive"]; ok {
+		value, err := parseBoolVariableAttribute(file, path, "sensitive", sensitiveAttr, ctx)
+		if err != nil {
+			return Variable{}, err
+		}
+		variable.Sensitive = value
+	}
+	if nullableAttr, ok := block.Body.Attributes["nullable"]; ok {
+		value, err := parseBoolVariableAttribute(file, path, "nullable", nullableAttr, ctx)
+		if err != nil {
+			return Variable{}, err
+		}
+		variable.Nullable = value
+	}
+	if ephemeralAttr, ok := block.Body.Attributes["ephemeral"]; ok {
+		value, err := parseBoolVariableAttribute(file, path, "ephemeral", ephemeralAttr, ctx)
+		if err != nil {
+			return Variable{}, err
+		}
+		variable.Ephemeral = value
+	}
+	if constAttr, ok := block.Body.Attributes["const"]; ok {
+		value, err := parseBoolVariableAttribute(file, path, "const", constAttr, ctx)
+		if err != nil {
+			return Variable{}, err
+		}
+		variable.Const = value
+	}
+	for i, child := range block.Body.Blocks {
+		validation, err := parseVariableValidationBlock(file, fmt.Sprintf("%s.validation[%d]", path, i), child, ctx)
+		if err != nil {
+			return Variable{}, err
+		}
+		variable.Validations = append(variable.Validations, validation)
+	}
+	return variable, nil
+}
+
+func parseBoolVariableAttribute(file, variablePath, name string, attr *hclsyntax.Attribute, ctx EvalContext) (bool, error) {
+	source := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: variablePath + "." + name}
+	value, err := evalValue(attr.Expr, ctx, source)
+	if err != nil {
+		return false, fmt.Errorf("%s:%d: %s.%s: %w", file, source.Line, variablePath, name, err)
+	}
+	if value.Kind != KindBool {
+		return false, fmt.Errorf("%s:%d: %s.%s must be a boolean", file, source.Line, variablePath, name)
+	}
+	return value.Bool, nil
 }
 
 func parseProfile(file string, block *hclsyntax.Block, ctx EvalContext) (Profile, error) {
@@ -848,6 +1000,34 @@ func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block
 }
 
 func parseComponentInputValidationBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (ComponentInputValidation, error) {
+	validation, err := parseValidationBlock(file, path, block, ctx)
+	if err != nil {
+		return ComponentInputValidation{}, err
+	}
+	return ComponentInputValidation{
+		Source:          validation.Source,
+		Condition:       validation.Condition,
+		ConditionSource: validation.ConditionSource,
+		Message:         validation.Message,
+		MessageSource:   validation.MessageSource,
+	}, nil
+}
+
+func parseVariableValidationBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (VariableValidation, error) {
+	validation, err := parseValidationBlock(file, path, block, ctx)
+	if err != nil {
+		return VariableValidation{}, err
+	}
+	return VariableValidation{
+		Source:          validation.Source,
+		Condition:       validation.Condition,
+		ConditionSource: validation.ConditionSource,
+		Message:         validation.Message,
+		MessageSource:   validation.MessageSource,
+	}, nil
+}
+
+func parseValidationBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (ComponentInputValidation, error) {
 	if len(block.Labels) != 0 {
 		return ComponentInputValidation{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
 	}

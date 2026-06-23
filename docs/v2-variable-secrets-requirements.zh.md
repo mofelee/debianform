@@ -616,32 +616,45 @@ Loop 0 实现记录：
 
 代码：
 
-- [ ] IR 增加 `Program.Variables map[string]VariableSpec` 或等价结构。
-- [ ] parser 支持顶层 `variable` block，且必须有且只有一个 label。
-- [ ] variable label 在同一 program 内必须唯一。
-- [ ] 复用 component input 的 type parser、type normalization 和 validation block parser。
-- [ ] `default` 按 type constraint 做归一化，但只保存 metadata，不注入表达式上下文。
-- [ ] HostSpec debug 输出可展示 non-sensitive variable metadata；sensitive default 必须
+- [x] IR 增加 `Program.Variables map[string]VariableSpec` 或等价结构。
+- [x] parser 支持顶层 `variable` block，且必须有且只有一个 label。
+- [x] variable label 在同一 program 内必须唯一。
+- [x] 复用 component input 的 type parser、type normalization 和 validation block parser。
+- [x] `default` 按 type constraint 做归一化，但只保存 metadata，不注入表达式上下文。
+- [x] HostSpec debug 输出可展示 non-sensitive variable metadata；sensitive default 必须
       redacted。
 
 测试：
 
-- [ ] parser 单测覆盖 primitive、`list(object(...))`、`map(...)`、`set(...)`、
+- [x] parser 单测覆盖 primitive、`list(object(...))`、`map(...)`、`set(...)`、
       `tuple(...)` 和 optional object attribute。
-- [ ] parser 负例覆盖重复 label、错误 label 数量、未知字段、错误 type expression。
-- [ ] default 归一化测试覆盖 object optional default、nullable 和类型不匹配。
-- [ ] sensitive default 的 JSON/debug 输出不包含明文。
+- [x] parser 负例覆盖重复 label、错误 label 数量、未知字段、错误 type expression。
+- [x] default 归一化测试覆盖 object optional default、nullable 和类型不匹配。
+- [x] sensitive default 的 JSON/debug 输出不包含明文。
 
 示例/文档：
 
-- [ ] 增加一个只声明 variable 的最小 fixture。
-- [ ] 文档注明本轮只接受声明，不允许引用。
+- [x] 增加一个只声明 variable 的最小 fixture。
+- [x] 文档注明本轮只接受声明，不允许引用。
 
 验收：
 
-- [ ] `dbf validate` 可以接受只声明 variable 但未引用的配置。
-- [ ] 现有 component input 行为和 golden 不变化。
-- [ ] `make test` 通过。
+- [x] `dbf validate` 可以接受只声明 variable 但未引用的配置。
+- [x] 现有 component input 行为和 golden 不变化。
+- [x] `make test` 通过。
+
+Loop 1 实现记录：
+
+- `parser.Config` 现在包含顶层 `Variables`，`variable "name"` 解析 `type`、`default`、
+  `description`、`nullable`、`sensitive`、`ephemeral`、`const`、`deprecated` 和重复
+  `validation` metadata。
+- `ir.Program` 现在包含 `Variables map[string]VariableSpec`。本轮只导出声明 metadata，不把
+  variable default 注入 `var` 求值上下文，也不执行 variable validation。
+- `default` 在 merge 阶段复用 component input 的结构化 type normalization；object
+  `optional(...)` 默认值会写入 IR metadata。
+- sensitive variable default 在 `Program` JSON 中输出为 `"<sensitive>"`。
+- 新增 `internal/v2/testdata/fixtures/v2-variable-declarations.dbf.hcl` 作为只声明 variable
+  的验收输入；`dbf validate` 可接受该 fixture。
 
 ### Loop 2：变量求值上下文和 `var.<name>`
 
