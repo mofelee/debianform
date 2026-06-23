@@ -197,6 +197,186 @@ func TestCLIVariableErrors(t *testing.T) {
 	}
 }
 
+func TestPlanAcceptsVarFilesAutoVarFilesAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(config, []byte(`
+variable "environment" {
+  type    = string
+  default = "default"
+}
+
+variable "ports" {
+  type    = list(number)
+  default = []
+}
+
+variable "labels" {
+  type = object({
+    tier   = string
+    source = string
+  })
+  default = {
+    tier   = "backend"
+    source = "default"
+  }
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/vars.json" {
+      content = jsonencode({
+        environment = var.environment
+        ports       = var.ports
+        labels      = var.labels
+      })
+    }
+  }
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "debianform.dbfvars"), []byte(`
+environment = "default-file"
+labels = {
+  tier   = "base"
+  source = "default-file"
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "10.auto.dbfvars"), []byte(`
+environment = "auto-a"
+ports       = [80]
+labels = {
+  tier   = "auto-a"
+  source = "auto-a"
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "20.auto.dbfvars.json"), []byte(`{
+  "environment": "auto-b",
+  "ports": [8080],
+  "labels": {
+    "tier": "auto-b",
+    "source": "auto-b"
+  }
+}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	explicitA := filepath.Join(dir, "explicit-a.dbfvars")
+	if err := os.WriteFile(explicitA, []byte(`
+environment = "file-a"
+ports       = [9000]
+labels = {
+  tier   = "file-a"
+  source = "file-a"
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	explicitB := filepath.Join(dir, "explicit-b.dbfvars.json")
+	if err := os.WriteFile(explicitB, []byte(`{
+  "environment": "file-b",
+  "ports": [9001, 9002],
+  "labels": {
+    "tier": "file-b",
+    "source": "file-b"
+  }
+}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("DBF_VAR_environment", "env")
+	t.Setenv("DBF_VAR_unknown_from_env", "ignored")
+	output := captureStdout(t, func() {
+		if err := run([]string{
+			"plan", "-f", config, "--offline",
+			"-var-file", explicitA,
+			"-var-file", explicitB,
+			"-var", "environment=cli",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	for _, want := range []string{
+		`"environment":"cli"`,
+		`"ports":[9001,9002]`,
+		`"labels":{"source":"file-b","tier":"file-b"}`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("plan output %q does not contain %q", output, want)
+		}
+	}
+	for _, notWant := range []string{
+		`"environment":"env"`,
+		`"environment":"default-file"`,
+		`"environment":"auto-a"`,
+		`"environment":"auto-b"`,
+		`"environment":"file-a"`,
+	} {
+		if strings.Contains(output, notWant) {
+			t.Fatalf("plan output contains lower-priority value %q: %q", notWant, output)
+		}
+	}
+}
+
+func TestVarFileUnknownVariableErrors(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(config, []byte(`
+variable "environment" {
+  type    = string
+  default = "dev"
+}
+
+host "server1" {}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	varFile := filepath.Join(dir, "bad.dbfvars")
+	if err := os.WriteFile(varFile, []byte(`missing = "value"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := run([]string{"validate", "-f", config, "-var-file", varFile})
+	if err == nil || !strings.Contains(err.Error(), `unknown variable "missing"`) {
+		t.Fatalf("validate unknown var-file error = %v, want unknown variable", err)
+	}
+}
+
+func TestAutoVariableFilesOrdering(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{
+		"main.dbf.hcl",
+		"debianform.dbfvars",
+		"debianform.dbfvars.json",
+		"20.auto.dbfvars",
+		"10.auto.dbfvars.json",
+		"notes.dbfvars",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := autoVariableFiles([]string{filepath.Join(dir, "main.dbf.hcl")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(dir, "debianform.dbfvars"),
+		filepath.Join(dir, "debianform.dbfvars.json"),
+		filepath.Join(dir, "10.auto.dbfvars.json"),
+		filepath.Join(dir, "20.auto.dbfvars"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("autoVariableFiles() = %#v, want %#v", got, want)
+	}
+}
+
 func TestValidateAndPlanPrintDeprecatedInputWarnings(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")

@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/mofelee/debianform/internal/v2/ir"
 )
@@ -22,6 +25,78 @@ func NormalizeVariableValue(variable Variable, value Value) (Value, error) {
 		return Value{}, err
 	}
 	return normalized, nil
+}
+
+func ParseVariableFile(path string) ([]ExternalVariableValue, error) {
+	if strings.HasSuffix(path, ".json") {
+		return parseJSONVariableFile(path)
+	}
+	return parseHCLVariableFile(path)
+}
+
+func parseHCLVariableFile(path string) ([]ExternalVariableValue, error) {
+	hclParser := hclparse.NewParser()
+	hclFile, diags := hclParser.ParseHCLFile(path)
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("%s", diags.Error())
+	}
+	body, ok := hclFile.Body.(*hclsyntax.Body)
+	if !ok {
+		return nil, fmt.Errorf("%s: unsupported HCL body type %T", path, hclFile.Body)
+	}
+	if len(body.Blocks) != 0 {
+		block := body.Blocks[0]
+		return nil, fmt.Errorf("%s:%d: var file does not support blocks", path, block.DefRange().Start.Line)
+	}
+
+	names := make([]string, 0, len(body.Attributes))
+	for name := range body.Attributes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	ctx := EvalContext{ModuleDir: filepath.Dir(path)}
+	values := make([]ExternalVariableValue, 0, len(names))
+	for _, name := range names {
+		attr := body.Attributes[name]
+		source := ir.SourceRef{File: path, Line: attr.NameRange.Start.Line, Path: "varfile." + name}
+		value, err := evalValue(attr.Expr, ctx, source)
+		if err != nil {
+			return nil, fmt.Errorf("%s:%d:%s: var file value %q: %w", source.File, source.Line, source.Path, name, err)
+		}
+		values = append(values, ExternalVariableValue{
+			Name:        name,
+			ParsedValue: &value,
+			Source:      source,
+		})
+	}
+	return values, nil
+}
+
+func parseJSONVariableFile(path string) ([]ExternalVariableValue, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	source := ir.SourceRef{File: path, Line: 1, Path: "varfile"}
+	value, err := parseJSONVariableValue(string(data), source)
+	if err != nil {
+		return nil, fmt.Errorf("%s:%d:%s: invalid JSON var file: %w", source.File, source.Line, source.Path, err)
+	}
+	if !value.IsMap() {
+		return nil, fmt.Errorf("%s:%d:%s: JSON var file must contain an object", source.File, source.Line, source.Path)
+	}
+
+	values := make([]ExternalVariableValue, 0, len(value.Map))
+	for _, name := range sortedValueKeys(value.Map) {
+		item := value.Map[name]
+		values = append(values, ExternalVariableValue{
+			Name:        name,
+			ParsedValue: &item,
+			Source:      item.Source,
+		})
+	}
+	return values, nil
 }
 
 func parseExternalVariableValue(variable Variable, item ExternalVariableValue) (Value, error) {

@@ -1,0 +1,8 @@
+environment = "prod"
+replicas    = 4
+enabled     = true
+ports       = [80, 443]
+
+labels = {
+  tier = "frontend"
+}

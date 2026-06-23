@@ -151,9 +151,11 @@ type ParseOptions struct {
 }
 
 type ExternalVariableValue struct {
-	Name   string
-	Value  string
-	Source ir.SourceRef
+	Name          string
+	Value         string
+	ParsedValue   *Value
+	Source        ir.SourceRef
+	IgnoreUnknown bool
 }
 
 func ParseFiles(files []string) (*Config, error) {
@@ -270,15 +272,24 @@ func resolveVariableValues(cfg *Config, external []ExternalVariableValue) error 
 	for i, item := range external {
 		variable, ok := cfg.Variables[item.Name]
 		if !ok {
+			if item.IgnoreUnknown {
+				continue
+			}
 			source := item.Source
 			if source.Path == "" {
 				source.Path = fmt.Sprintf("cli.var[%d]", i)
 			}
 			return fmt.Errorf("%s:%d:%s: unknown variable %q", source.File, source.Line, source.Path, item.Name)
 		}
-		value, err := parseExternalVariableValue(variable, item)
-		if err != nil {
-			return err
+		var value Value
+		if item.ParsedValue != nil {
+			value = *item.ParsedValue
+		} else {
+			parsed, err := parseExternalVariableValue(variable, item)
+			if err != nil {
+				return err
+			}
+			value = parsed
 		}
 		normalized, err := NormalizeVariableValue(variable, value)
 		if err != nil {

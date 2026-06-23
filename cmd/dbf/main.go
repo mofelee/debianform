@@ -201,7 +201,9 @@ func runConfigCommand(cmd string, args []string) error {
 	lockTimeout := fs.Duration("lock-timeout", 5*time.Minute, "state lock timeout")
 	autoApprove := fs.Bool("auto-approve", false, "skip apply confirmation")
 	var cliVars repeatedFlag
+	var cliVarFiles repeatedFlag
 	fs.Var(&cliVars, "var", "set a variable value as name=value")
+	fs.Var(&cliVarFiles, "var-file", "load variable values from a .dbfvars or .dbfvars.json file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -210,7 +212,7 @@ func runConfigCommand(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *debug, *offline, *parallel, *lockTimeout, *autoApprove, cliVars)
+	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *debug, *offline, *parallel, *lockTimeout, *autoApprove, cliVars, cliVarFiles)
 }
 
 type repeatedFlag []string
@@ -224,7 +226,7 @@ func (f *repeatedFlag) Set(value string) error {
 	return nil
 }
 
-func runV2ConfigCommand(cmd string, files []string, host string, format string, htmlPath string, debug bool, offline bool, parallel int, lockTimeout time.Duration, autoApprove bool, cliVars []string) error {
+func runV2ConfigCommand(cmd string, files []string, host string, format string, htmlPath string, debug bool, offline bool, parallel int, lockTimeout time.Duration, autoApprove bool, cliVars []string, cliVarFiles []string) error {
 	if format == "" {
 		format = "text"
 	}
@@ -250,7 +252,7 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 		return fmt.Errorf("--parallel is only supported for v2 apply")
 	}
 
-	variableValues, err := parseCLIVars(cliVars)
+	variableValues, err := collectExternalVariableValues(files, cliVarFiles, cliVars)
 	if err != nil {
 		return err
 	}
@@ -388,6 +390,102 @@ func printPlanDocument(doc v2plan.Document, format string, htmlPath string) erro
 	}
 }
 
+func collectExternalVariableValues(files []string, cliVarFiles []string, cliVars []string) ([]v2parser.ExternalVariableValue, error) {
+	values := parseEnvVars(os.Environ())
+	autoVarFiles, err := autoVariableFiles(files)
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range autoVarFiles {
+		fileValues, err := v2parser.ParseVariableFile(path)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, fileValues...)
+	}
+	for _, path := range cliVarFiles {
+		fileValues, err := v2parser.ParseVariableFile(path)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, fileValues...)
+	}
+	parsedCLIVars, err := parseCLIVars(cliVars)
+	if err != nil {
+		return nil, err
+	}
+	values = append(values, parsedCLIVars...)
+	return values, nil
+}
+
+func parseEnvVars(environ []string) []v2parser.ExternalVariableValue {
+	const prefix = "DBF_VAR_"
+	values := []v2parser.ExternalVariableValue{}
+	for _, item := range environ {
+		nameValue := strings.SplitN(item, "=", 2)
+		if len(nameValue) != 2 || !strings.HasPrefix(nameValue[0], prefix) {
+			continue
+		}
+		name := strings.TrimPrefix(nameValue[0], prefix)
+		if name == "" {
+			continue
+		}
+		values = append(values, v2parser.ExternalVariableValue{
+			Name:          name,
+			Value:         nameValue[1],
+			Source:        v2ir.SourceRef{File: "env", Line: 1, Path: nameValue[0]},
+			IgnoreUnknown: true,
+		})
+	}
+	sort.SliceStable(values, func(i, j int) bool {
+		return values[i].Source.Path < values[j].Source.Path
+	})
+	return values
+}
+
+func autoVariableFiles(files []string) ([]string, error) {
+	if len(files) == 0 {
+		return nil, nil
+	}
+	dir := filepath.Dir(files[0])
+	if dir == "" {
+		dir = "."
+	}
+	for _, file := range files[1:] {
+		otherDir := filepath.Dir(file)
+		if otherDir == "" {
+			otherDir = "."
+		}
+		if otherDir != dir {
+			return nil, fmt.Errorf("automatic var files require configuration files from one directory; got %s and %s", dir, otherDir)
+		}
+	}
+	defaultFiles := []string{}
+	for _, name := range []string{"debianform.dbfvars", "debianform.dbfvars.json"} {
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); err == nil {
+			defaultFiles = append(defaultFiles, path)
+		} else if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+	autoFiles, err := filepath.Glob(filepath.Join(dir, "*.auto.dbfvars"))
+	if err != nil {
+		return nil, err
+	}
+	autoJSONFiles, err := filepath.Glob(filepath.Join(dir, "*.auto.dbfvars.json"))
+	if err != nil {
+		return nil, err
+	}
+	autoFiles = append(autoFiles, autoJSONFiles...)
+	sort.Strings(autoFiles)
+
+	out := make([]string, 0, len(defaultFiles)+len(autoFiles))
+	out = append(out, defaultFiles...)
+	out = append(out, autoFiles...)
+	return out, nil
+}
+
 func parseCLIVars(values []string) ([]v2parser.ExternalVariableValue, error) {
 	out := make([]v2parser.ExternalVariableValue, 0, len(values))
 	for i, raw := range values {
@@ -521,10 +619,10 @@ func usage() {
 	fmt.Println(`dbf manages Debian hosts from .dbf.hcl files.
 
 Usage:
-  dbf validate [-f file]
-  dbf plan     [-f file] [--host name] [--format text|json] [--html file] [--debug]
-  dbf apply    [-f file] [--host name] [--parallel n] [--auto-approve]
-  dbf check    [-f file] [--host name]
+  dbf validate [-f file] [-var name=value] [-var-file path]
+  dbf plan     [-f file] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug]
+  dbf apply    [-f file] [-var name=value] [-var-file path] [--host name] [--parallel n] [--auto-approve]
+  dbf check    [-f file] [-var name=value] [-var-file path] [--host name]
   dbf fmt      [-f file]
   dbf version
 

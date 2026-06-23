@@ -804,35 +804,48 @@ stdin 或 secret backend。
 
 代码：
 
-- [ ] CLI 支持重复 `-var-file path`。
-- [ ] 支持 HCL 风格 var file：顶层 `name = value`。
-- [ ] 支持 JSON var file，至少覆盖对象顶层 key/value。
-- [ ] 自动加载 `*.auto.dbfvars`、`*.auto.dbfvars.json`、`debianform.dbfvars` 和
+- [x] CLI 支持重复 `-var-file path`。
+- [x] 支持 HCL 风格 var file：顶层 `name = value`。
+- [x] 支持 JSON var file，至少覆盖对象顶层 key/value。
+- [x] 自动加载 `*.auto.dbfvars`、`*.auto.dbfvars.json`、`debianform.dbfvars` 和
       `debianform.dbfvars.json`。
-- [ ] 支持环境变量 `DBF_VAR_<name>`。
-- [ ] 固定优先级：`-var` > `-var-file` > auto/default var files > env > default。
-- [ ] CLI/var-file 传入未声明变量时报错；env 未声明变量忽略。
+- [x] 支持环境变量 `DBF_VAR_<name>`。
+- [x] 固定优先级：`-var` > `-var-file` > auto/default var files > env > default。
+- [x] CLI/var-file 传入未声明变量时报错；env 未声明变量忽略。
 
 测试：
 
-- [ ] var file 中 string/list/object 正确解析。
-- [ ] 多个 `-var-file` 后者覆盖前者。
-- [ ] auto var file 按文件名字典序加载。
-- [ ] env 低于 var file 和 CLI。
-- [ ] var file 未声明变量报错。
-- [ ] env 未声明变量忽略。
+- [x] var file 中 string/list/object 正确解析。
+- [x] 多个 `-var-file` 后者覆盖前者。
+- [x] auto var file 按文件名字典序加载。
+- [x] env 低于 var file 和 CLI。
+- [x] var file 未声明变量报错。
+- [x] env 未声明变量忽略。
 - [ ] sensitive value 不进入错误输出、HostSpec、plan 或 state 明文。
 
 示例/文档：
 
-- [ ] 增加 `prod.dbfvars` 或等价 fixture。
-- [ ] 文档写清楚优先级和未声明变量处理规则。
+- [x] 增加 `prod.dbfvars` 或等价 fixture。
+- [x] 文档写清楚优先级和未声明变量处理规则。
 
 验收：
 
-- [ ] 普通部署参数可以完全从 var file/env 注入。
-- [ ] `dbf validate/plan/apply` 对 CLI、var file 和 env 的行为一致。
-- [ ] `make test` 通过。
+- [x] 普通部署参数可以完全从 var file/env 注入。
+- [x] `dbf validate/plan/apply` 对 CLI、var file 和 env 的行为一致。
+- [x] `make test` 通过。
+
+实现记录：
+
+- `dbf validate`、`dbf plan`、`dbf apply` 和 `dbf check` 现在都接受可重复的
+  `-var-file path`，格式支持 HCL 顶层属性和 JSON 顶层对象。
+- 自动 var file 从配置文件所在目录加载：先 `debianform.dbfvars`、再
+  `debianform.dbfvars.json`，随后按路径字典序加载 `*.auto.dbfvars` 和
+  `*.auto.dbfvars.json`。自动加载要求本次配置文件来自同一目录。
+- 环境变量使用 `DBF_VAR_<name>`，按 CLI 字面值规则解析；未声明环境变量会忽略。
+- 总优先级由低到高为：`DBF_VAR_*`、`debianform.dbfvars*`、`*.auto.dbfvars*`、
+  重复 `-var-file`、重复 `-var`。同一层级内后出现的值覆盖先出现的值。
+- CLI 和 var file 的未声明变量会报错；env 未声明变量忽略，避免 CI 环境污染导致失败。
+- sensitive 值的完整 HostSpec、plan 和 state 脱敏传播仍留在 Loop 6。
 
 ### Loop 5：validation、nullable、deprecated 和 inspect
 

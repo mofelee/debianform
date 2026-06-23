@@ -503,6 +503,80 @@ func TestParseRejectsInvalidExternalVariableValues(t *testing.T) {
 	}
 }
 
+func TestParseVariableFileValues(t *testing.T) {
+	vars, err := ParseVariableFile("../testdata/fixtures/v2-variable-prod.dbfvars")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := ParseFilesWithOptions([]string{"../testdata/fixtures/v2-variable-cli.dbf.hcl"}, ParseOptions{VariableValues: vars})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.VariableValues["environment"].String; got != "prod" {
+		t.Fatalf("environment = %q, want prod", got)
+	}
+	if got := cfg.VariableValues["replicas"].Number; got != "4" {
+		t.Fatalf("replicas = %q, want 4", got)
+	}
+	if !cfg.VariableValues["enabled"].Bool {
+		t.Fatalf("enabled = %#v, want true", cfg.VariableValues["enabled"])
+	}
+	if got := len(cfg.VariableValues["ports"].List); got != 2 {
+		t.Fatalf("ports length = %d, want 2", got)
+	}
+	if got := cfg.VariableValues["labels"].Map["tier"].String; got != "frontend" {
+		t.Fatalf("labels.tier = %q, want frontend", got)
+	}
+}
+
+func TestParseJSONVariableFileValues(t *testing.T) {
+	dir := t.TempDir()
+	varFile := filepath.Join(dir, "prod.dbfvars.json")
+	if err := os.WriteFile(varFile, []byte(`{"environment":"json","ports":[8080],"labels":{"tier":"api"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	vars, err := ParseVariableFile(varFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vars) != 3 {
+		t.Fatalf("vars length = %d, want 3", len(vars))
+	}
+	if vars[0].Name != "environment" || vars[0].ParsedValue == nil || vars[0].ParsedValue.String != "json" {
+		t.Fatalf("environment var = %#v", vars[0])
+	}
+	if vars[2].Name != "ports" || vars[2].ParsedValue == nil || len(vars[2].ParsedValue.List) != 1 {
+		t.Fatalf("ports var = %#v", vars[2])
+	}
+}
+
+func TestParseExternalVariablePrecedenceAndIgnoredUnknownEnv(t *testing.T) {
+	file := writeConfig(t, `
+variable "environment" {
+  type    = string
+  default = "dev"
+}
+
+host "server1" {}
+`)
+	envValue := Value{Kind: KindString, String: "env", Source: ir.SourceRef{File: "env", Line: 1, Path: "DBF_VAR_environment"}}
+	fileValue := Value{Kind: KindString, String: "file", Source: ir.SourceRef{File: "vars.dbfvars", Line: 1, Path: "varfile.environment"}}
+
+	cfg, err := ParseFilesWithOptions([]string{file}, ParseOptions{VariableValues: []ExternalVariableValue{
+		{Name: "environment", ParsedValue: &envValue, Source: envValue.Source, IgnoreUnknown: true},
+		{Name: "unused_env", Value: "ignored", Source: ir.SourceRef{File: "env", Line: 1, Path: "DBF_VAR_unused_env"}, IgnoreUnknown: true},
+		{Name: "environment", ParsedValue: &fileValue, Source: fileValue.Source},
+		{Name: "environment", Value: "cli", Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.VariableValues["environment"].String; got != "cli" {
+		t.Fatalf("environment = %q, want cli", got)
+	}
+}
+
 func TestParseLabeledObjectBlockSourcePath(t *testing.T) {
 	file := writeConfig(t, `
 host "web1" {
