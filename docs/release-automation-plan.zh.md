@@ -307,15 +307,15 @@ brew upgrade dbf
 
 代码/文件：
 
-- [ ] 新增或扩展 release workflow 的 verify job。
-- [ ] Linux amd64 验证：
+- [x] 新增或扩展 release workflow 的 verify job。
+- [x] Linux amd64 验证：
   - `curl` installer 安装指定 tag 到临时 prefix。
   - `dbf version` 包含 tag。
   - `dbf validate -f examples/v2-bbr.dbf.hcl`。
   - `dbf plan -f examples/v2-bbr.dbf.hcl --offline`。
   - Homebrew 安装和 `brew test`。
 - [ ] macOS amd64/arm64 验证尽量使用 GitHub hosted runners。
-- [ ] Linux arm64 如果暂时没有 runner，在 release notes 中标记为 artifact build verified，
+- [x] Linux arm64 如果暂时没有 runner，在 release notes 中标记为 artifact build verified，
   install path best-effort。
 
 验收：
