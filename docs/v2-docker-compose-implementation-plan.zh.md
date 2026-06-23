@@ -1,14 +1,14 @@
 # DebianForm v2 Docker / Docker Compose 实施计划
 
 本文档把 `docs/v2-docker-compose-requirements.zh.md` 拆成可实现、可检验的开发 loop。
-每个 loop 都必须形成一个可合并闭环：
+每个实现 loop 都必须形成一个可合并闭环，完成标准为：
 
-- [ ] 代码路径可运行
-- [ ] parser / merge / HostSpec / ResourceGraph / plan 中受影响层级有测试或 golden
-- [ ] apply / check 语义有 fake runner 或 provider 单测
-- [ ] 至少一个示例进入验收输入
-- [ ] 文档同步更新
-- [ ] `make test` 通过
+- 代码路径可运行
+- parser / merge / HostSpec / ResourceGraph / plan 中受影响层级有测试或 golden
+- apply / check 语义有 fake runner 或 provider 单测
+- 至少一个示例进入验收输入
+- 文档同步更新
+- `make test` 通过
 
 状态约定：
 
@@ -643,14 +643,14 @@ make test
 
 候选能力：
 
-- [ ] HCL `spec` 自动生成 Compose YAML
-- [ ] registry login
-- [ ] rootless Docker
-- [ ] Docker mirror 配置
-- [ ] image lifecycle
-- [ ] volume lifecycle
-- [ ] network lifecycle
-- [ ] secrets 管理
-- [ ] Podman backend
+- HCL `spec` 自动生成 Compose YAML
+- registry login
+- rootless Docker
+- Docker mirror 配置
+- image lifecycle
+- volume lifecycle
+- network lifecycle
+- secrets 管理
+- Podman backend
 
 进入实现前必须新增独立需求文档或扩展计划，不能直接塞进 MVP loop。
