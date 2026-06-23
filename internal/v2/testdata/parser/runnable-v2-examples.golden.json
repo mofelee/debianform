@@ -244,6 +244,22 @@
     ]
   },
   {
+    "fixture": "../../../examples/v2-realistic-systemd-app.dbf.hcl",
+    "hosts": [
+      {
+        "name": "demoapp1",
+        "body_keys": [
+          "directories",
+          "files",
+          "groups",
+          "services",
+          "systemd",
+          "users"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/v2-shadowsocks-rust.dbf.hcl",
     "components": [
       "shadowsocks_rust"

@@ -144,6 +144,7 @@ v2 领域块或 component。
 - `examples/v2-nftables.dbf.hcl`
 - `examples/v2-plan-preview.dbf.hcl`
 - `examples/v2-profile-merge.dbf.hcl`
+- `examples/v2-realistic-systemd-app.dbf.hcl`（真实部署模板：低权限 systemd app，离线可验证）
 - `examples/v2-shadowsocks-rust.dbf.hcl`
 - `examples/v2-systemd-service.dbf.hcl`
 - `examples/v2-systemd-service-unit.dbf.hcl`
@@ -167,6 +168,8 @@ dbf plan -f examples/v2-bbr.dbf.hcl --offline
 
 从第一台测试主机的 root SSH 准备、第一份配置、validate、在线 plan、apply、再次 plan
 no-op 到 check 的完整路径见 [quickstart](docs/quickstart.zh.md)。
+一个更接近真实服务部署的低权限 systemd app 模板见
+[realistic deployment example](docs/realistic-deployment-example.zh.md)。
 Stale lock、apply 中途失败、drift 恢复和常见故障排查见
 [operations runbook](docs/operations-runbook.zh.md)。
 

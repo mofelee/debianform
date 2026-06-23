@@ -145,6 +145,7 @@
 | `examples/v2-component-inputs.dbf.hcl` | Beta | typed input、validation、sensitive。 |
 | `examples/v2-docker-*.dbf.hcl` | Beta | Docker minimal、daemon、Compose、users、package source。 |
 | `examples/v2-nftables.dbf.hcl` | Beta | nftables validate/activate。 |
+| `examples/v2-realistic-systemd-app.dbf.hcl` | Beta | 低权限 systemd app 部署模板，覆盖 user/group、目录、文件、unit 和 service。 |
 | `examples/v2-systemd-service*.dbf.hcl` | Beta | raw unit 和 structured service_unit。 |
 | `examples/v2-user-group.dbf.hcl` | Beta | users/groups/directories/files。 |
 | `examples/v2-variable-secret-file.dbf.hcl` | Beta | variable + sensitive file 写入。 |

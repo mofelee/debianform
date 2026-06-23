@@ -161,7 +161,7 @@
 - [x] 依赖漏洞扫描进入 CI。
 - [x] release notes 模板，固定包含 breaking changes、known issues、verification matrix 和 migration notes。
 - [x] beta 用户反馈入口和 triage 流程。
-- [ ] 真实部署模板或小型案例。
+- [x] 真实部署模板或小型案例。
 - [x] 对高风险资源的 `prevent_destroy` 使用建议。
 
 ## P2：stable/GA 前必须完成
@@ -357,3 +357,18 @@
 结论：
 
 - [x] public beta 现在有明确反馈入口和 triage 流程；真实反馈收集本身仍需要后续外部使用。
+
+### 2026-06-23 真实部署模板补充
+
+本次检查命令：
+
+- [x] 新增 `examples/v2-realistic-systemd-app.dbf.hcl`，覆盖低权限 systemd app 的
+      group、user、directory、file、structured service unit 和 service 状态。
+- [x] 新增 `docs/realistic-deployment-example.zh.md`，说明本地验收、真实主机试用顺序和
+      定制建议。
+- [x] README 和 support matrix 增加入口。
+
+结论：
+
+- [x] public beta 现在有一个不依赖外网、不包含真实 secret、可 `validate` 和
+      `plan --offline` 的真实部署模板。

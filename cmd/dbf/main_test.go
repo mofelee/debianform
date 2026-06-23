@@ -1425,6 +1425,7 @@ func runnableV2Examples() []string {
 		"examples/v2-nftables.dbf.hcl",
 		"examples/v2-plan-preview.dbf.hcl",
 		"examples/v2-profile-merge.dbf.hcl",
+		"examples/v2-realistic-systemd-app.dbf.hcl",
 		"examples/v2-systemd-service.dbf.hcl",
 		"examples/v2-user-group.dbf.hcl",
 		"examples/v2-variable-secret-file.dbf.hcl",
