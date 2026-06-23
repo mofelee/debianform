@@ -6,7 +6,7 @@
     "host": "input1"
   },
   "summary": {
-    "create": 1,
+    "create": 2,
     "update": 0,
     "delete": 0,
     "no_op": 0,
@@ -14,12 +14,105 @@
   },
   "changes": [
     {
+      "address": "host.input1.components.proxy.files.file[\"/etc/reverse-proxy/environment.json\"]",
+      "action": "create",
+      "summary": "create file /etc/reverse-proxy/environment.json",
+      "source": {
+        "file": "../../../examples/v2-component-inputs.dbf.hcl",
+        "line": 42,
+        "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/environment.json\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": true,
+        "children": [
+          {
+            "path": [
+              "component"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "proxy"
+          },
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "sensitive",
+            "action": "create",
+            "sensitive": true,
+            "after_summary": {
+              "bytes": 36,
+              "sha256": "901872bae2ef4d5b57311cc1061aed39cf816aa3ce8340bb2a038e57cea2b08f"
+            }
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0600"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/reverse-proxy/environment.json"
+          },
+          {
+            "path": [
+              "sensitive"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          }
+        ]
+      }
+    },
+    {
       "address": "host.input1.components.proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]",
       "action": "create",
       "summary": "create file /etc/reverse-proxy/listeners.json",
       "source": {
         "file": "../../../examples/v2-component-inputs.dbf.hcl",
-        "line": 22,
+        "line": 37,
         "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]"
       },
       "diff": {

@@ -143,10 +143,11 @@ func hclEvalContext(ctx EvalContext) (*hcl.EvalContext, error) {
 func jsonencodeFunction() function.Function {
 	return function.New(&function.Spec{
 		Params: []function.Parameter{
-			{Name: "value", Type: cty.DynamicPseudoType, AllowNull: true},
+			{Name: "value", Type: cty.DynamicPseudoType, AllowNull: true, AllowMarked: true},
 		},
 		Type: function.StaticReturnType(cty.String),
 		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
+			sensitive := args[0].ContainsMarked()
 			value, err := ctyJSONValue(args[0])
 			if err != nil {
 				return cty.NilVal, err
@@ -155,7 +156,11 @@ func jsonencodeFunction() function.Function {
 			if err != nil {
 				return cty.NilVal, err
 			}
-			return cty.StringVal(string(data)), nil
+			out := cty.StringVal(string(data))
+			if sensitive {
+				out = out.Mark(SensitiveMark)
+			}
+			return out, nil
 		},
 	})
 }
@@ -206,22 +211,25 @@ func ctyJSONValue(value cty.Value) (any, error) {
 }
 
 func ctyToValue(value cty.Value, source ir.SourceRef) (Value, error) {
+	sensitive := value.ContainsMarked()
 	value, _ = value.UnmarkDeep()
 	if !value.IsKnown() {
 		return Value{}, fmt.Errorf("%s:%d: unknown values are not supported", source.File, source.Line)
 	}
 	if value.IsNull() {
-		return NullValue(source), nil
+		out := NullValue(source)
+		out.Sensitive = sensitive
+		return out, nil
 	}
 
 	ty := value.Type()
 	switch {
 	case ty.Equals(cty.String):
-		return Value{Kind: KindString, String: value.AsString(), Source: source}, nil
+		return Value{Kind: KindString, String: value.AsString(), Source: source, Sensitive: sensitive}, nil
 	case ty.Equals(cty.Bool):
-		return Value{Kind: KindBool, Bool: value.True(), Source: source}, nil
+		return Value{Kind: KindBool, Bool: value.True(), Source: source, Sensitive: sensitive}, nil
 	case ty.Equals(cty.Number):
-		return Value{Kind: KindNumber, Number: value.AsBigFloat().Text('g', -1), Source: source}, nil
+		return Value{Kind: KindNumber, Number: value.AsBigFloat().Text('g', -1), Source: source, Sensitive: sensitive}, nil
 	case ty.IsTupleType() || ty.IsListType() || ty.IsSetType():
 		out := []Value{}
 		it := value.ElementIterator()
@@ -237,7 +245,7 @@ func ctyToValue(value cty.Value, source ir.SourceRef) (Value, error) {
 			out = append(out, converted)
 			i++
 		}
-		return Value{Kind: KindList, List: out, Source: source}, nil
+		return Value{Kind: KindList, List: out, Source: source, Sensitive: sensitive}, nil
 	case ty.IsObjectType() || ty.IsMapType():
 		out := map[string]Value{}
 		it := value.ElementIterator()
@@ -251,7 +259,9 @@ func ctyToValue(value cty.Value, source ir.SourceRef) (Value, error) {
 			}
 			out[key.AsString()] = converted
 		}
-		return MapValue(out, source), nil
+		converted := MapValue(out, source)
+		converted.Sensitive = sensitive
+		return converted, nil
 	default:
 		return Value{}, fmt.Errorf("%s:%d: unsupported value type %s", source.File, source.Line, ty.FriendlyName())
 	}

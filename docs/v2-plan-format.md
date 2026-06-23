@@ -126,6 +126,8 @@ sensitive
 - scalar diff 使用 `before` 和 `after`。
 - text diff 使用 `hunks`。
 - sensitive diff 不得输出明文。
+- 由 sensitive component input 派生的 file 或 systemd unit content 也必须使用
+  sensitive diff，只输出 sha256 和 bytes 摘要。
 - terminal 和 HTML renderer 必须消费同一棵 `DiffNode`，不能各自重新计算差异。
 
 ## Text diff
@@ -178,6 +180,10 @@ sensitive
 ```
 
 要求：
+
+- `before_summary` / `after_summary` 优先来自资源的 `summary`，也可以来自
+  `content_sha256` 和 `content_bytes`。
+- JSON 和 text renderer 都不得包含 sensitive content 明文。
 
 - 不允许出现 secret 明文。
 - `sha256` 可以用于判断变化，但不能当成安全加密存储。

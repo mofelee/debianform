@@ -2,6 +2,7 @@ package plan
 
 import (
 	"encoding/json"
+	"github.com/mofelee/debianform/internal/v2/ir"
 	"reflect"
 	"sort"
 	"strconv"
@@ -182,6 +183,18 @@ func contentSummary(value any) map[string]any {
 	}
 	if summary, ok := values["summary"].(map[string]any); ok {
 		return cloneSummary(summary)
+	}
+	if summary, ok := values["summary"].(ir.ContentSummary); ok {
+		out := map[string]any{}
+		if summary.SHA256 != "" {
+			out["sha256"] = summary.SHA256
+		}
+		if summary.Bytes != 0 {
+			out["bytes"] = summary.Bytes
+		}
+		if len(out) > 0 {
+			return out
+		}
 	}
 	out := map[string]any{}
 	if sha, ok := values["content_sha256"]; ok {

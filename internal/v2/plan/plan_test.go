@@ -174,8 +174,8 @@ func TestComponentInputsPlanJSONGolden(t *testing.T) {
 	got := string(data) + "\n"
 	assertGolden(t, "../testdata/plan/v2-component-inputs.golden.json", got)
 
-	if doc.Summary.Create != 1 {
-		t.Fatalf("create count = %d, want 1", doc.Summary.Create)
+	if doc.Summary.Create != 2 {
+		t.Fatalf("create count = %d, want 2", doc.Summary.Create)
 	}
 }
 

@@ -59,7 +59,17 @@ type ComponentInput struct {
 	Default     *Value
 	Sensitive   bool
 	Nullable    bool
+	Deprecated  string
+	Validations []ComponentInputValidation
 	Source      ir.SourceRef
+}
+
+type ComponentInputValidation struct {
+	Source          ir.SourceRef
+	Condition       hcl.Expression
+	ConditionSource ir.SourceRef
+	Message         string
+	MessageSource   ir.SourceRef
 }
 
 type ComponentArtifactSource struct {
@@ -622,12 +632,14 @@ func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block
 	}
 	name := block.Labels[0]
 	path := fmt.Sprintf("%s.input[%s]", componentPath, strconv.Quote(name))
-	if len(block.Body.Blocks) != 0 {
-		return ComponentInput{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
-	}
 	for attrName, attr := range block.Body.Attributes {
-		if attrName != "type" && attrName != "default" && attrName != "sensitive" && attrName != "description" && attrName != "nullable" {
+		if attrName != "type" && attrName != "default" && attrName != "sensitive" && attrName != "description" && attrName != "nullable" && attrName != "deprecated" {
 			return ComponentInput{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, attrName)
+		}
+	}
+	for _, child := range block.Body.Blocks {
+		if child.Type != "validation" {
+			return ComponentInput{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
 		}
 	}
 	typeAttr, ok := block.Body.Attributes["type"]
@@ -656,6 +668,20 @@ func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block
 			return ComponentInput{}, fmt.Errorf("%s:%d: %s.description must be a string", file, descriptionSource.Line, path)
 		}
 		input.Description = value.String
+	}
+	if deprecatedAttr, ok := block.Body.Attributes["deprecated"]; ok {
+		deprecatedSource := ir.SourceRef{File: file, Line: deprecatedAttr.NameRange.Start.Line, Path: path + ".deprecated"}
+		value, err := evalValue(deprecatedAttr.Expr, ctx, deprecatedSource)
+		if err != nil {
+			return ComponentInput{}, fmt.Errorf("%s:%d: %s.deprecated: %w", file, deprecatedSource.Line, path, err)
+		}
+		if value.Kind != KindString {
+			return ComponentInput{}, fmt.Errorf("%s:%d: %s.deprecated must be a string", file, deprecatedSource.Line, path)
+		}
+		if value.String == "" {
+			return ComponentInput{}, fmt.Errorf("%s:%d: %s.deprecated must be a non-empty string", file, deprecatedSource.Line, path)
+		}
+		input.Deprecated = value.String
 	}
 	if defaultAttr, ok := block.Body.Attributes["default"]; ok {
 		defaultSource := ir.SourceRef{File: file, Line: defaultAttr.NameRange.Start.Line, Path: path + ".default"}
@@ -687,7 +713,56 @@ func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block
 		}
 		input.Nullable = value.Bool
 	}
+	for i, child := range block.Body.Blocks {
+		validation, err := parseComponentInputValidationBlock(file, fmt.Sprintf("%s.validation[%d]", path, i), child, ctx)
+		if err != nil {
+			return ComponentInput{}, err
+		}
+		input.Validations = append(input.Validations, validation)
+	}
 	return input, nil
+}
+
+func parseComponentInputValidationBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (ComponentInputValidation, error) {
+	if len(block.Labels) != 0 {
+		return ComponentInputValidation{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return ComponentInputValidation{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	for attrName, attr := range block.Body.Attributes {
+		if attrName != "condition" && attrName != "error_message" {
+			return ComponentInputValidation{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, attrName)
+		}
+	}
+	conditionAttr, ok := block.Body.Attributes["condition"]
+	if !ok {
+		return ComponentInputValidation{}, fmt.Errorf("%s:%d: %s.condition is required", file, block.TypeRange.Start.Line, path)
+	}
+	messageAttr, ok := block.Body.Attributes["error_message"]
+	if !ok {
+		return ComponentInputValidation{}, fmt.Errorf("%s:%d: %s.error_message is required", file, block.TypeRange.Start.Line, path)
+	}
+
+	messageSource := ir.SourceRef{File: file, Line: messageAttr.NameRange.Start.Line, Path: path + ".error_message"}
+	message, err := evalValue(messageAttr.Expr, ctx, messageSource)
+	if err != nil {
+		return ComponentInputValidation{}, fmt.Errorf("%s:%d: %s.error_message: %w", file, messageSource.Line, path, err)
+	}
+	if message.Kind != KindString {
+		return ComponentInputValidation{}, fmt.Errorf("%s:%d: %s.error_message must be a string", file, messageSource.Line, path)
+	}
+	if message.String == "" {
+		return ComponentInputValidation{}, fmt.Errorf("%s:%d: %s.error_message must be a non-empty string", file, messageSource.Line, path)
+	}
+
+	return ComponentInputValidation{
+		Source:          ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path},
+		Condition:       conditionAttr.Expr,
+		ConditionSource: ir.SourceRef{File: file, Line: conditionAttr.NameRange.Start.Line, Path: path + ".condition"},
+		Message:         message.String,
+		MessageSource:   messageSource,
+	}, nil
 }
 
 func ParseComponentBody(component Component, ctx EvalContext) (Value, error) {

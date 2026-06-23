@@ -99,6 +99,7 @@ func SanitizeDesired(desired map[string]any) map[string]any {
 	}
 	if sensitive {
 		delete(out, "source_path")
+		delete(out, "summary")
 	}
 	return out
 }

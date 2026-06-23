@@ -737,8 +737,19 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		if item.Content != "" && !item.Sensitive {
 			desired["content"] = item.Content
 		}
+		if item.Content != "" && item.Sensitive {
+			desired["content_sha256"] = item.Summary.SHA256
+			desired["content_bytes"] = item.Summary.Bytes
+		}
 		if item.SourcePath != "" {
 			desired["source_path"] = item.SourcePath
+		}
+		payload := cloneMap(desired)
+		if item.Content != "" {
+			payload["content"] = item.Content
+		}
+		if item.SourcePath != "" {
+			payload["source_path"] = item.SourcePath
 		}
 		nodes = append(nodes, Node{
 			Host:            host.Name,
@@ -750,7 +761,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Desired:         desired,
 			ProviderType:    "file",
 			ProviderAddress: "file." + providerName(host.Name, item.Path),
-			ProviderPayload: desired,
+			ProviderPayload: payload,
 		})
 	}
 
@@ -772,8 +783,19 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			if item.Content != "" && !item.Sensitive {
 				desired["content"] = item.Content
 			}
+			if item.Content != "" && item.Sensitive {
+				desired["content_sha256"] = item.Summary.SHA256
+				desired["content_bytes"] = item.Summary.Bytes
+			}
 			if item.SourcePath != "" {
 				desired["source_path"] = item.SourcePath
+			}
+			payload := cloneMap(desired)
+			if item.Content != "" {
+				payload["content"] = item.Content
+			}
+			if item.SourcePath != "" {
+				payload["source_path"] = item.SourcePath
 			}
 			nodes = append(nodes, Node{
 				Host:            host.Name,
@@ -786,7 +808,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				DependsOn:       ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses),
 				ProviderType:    "file",
 				ProviderAddress: "file." + providerName(host.Name, component.Name, item.Path),
-				ProviderPayload: desired,
+				ProviderPayload: payload,
 			})
 		}
 	}
@@ -1031,8 +1053,23 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			"summary":     item.Summary,
 			"source_path": item.SourcePath,
 		}
-		if item.Content != "" {
+		if item.Sensitive {
+			desired["sensitive"] = true
+			delete(desired, "source_path")
+		}
+		if item.Content != "" && !item.Sensitive {
 			desired["content"] = item.Content
+		}
+		if item.Content != "" && item.Sensitive {
+			desired["content_sha256"] = item.Summary.SHA256
+			desired["content_bytes"] = item.Summary.Bytes
+		}
+		payload := cloneMap(desired)
+		if item.SourcePath != "" {
+			payload["source_path"] = item.SourcePath
+		}
+		if item.Content != "" {
+			payload["content"] = item.Content
 		}
 		nodes = append(nodes, Node{
 			Host:            host.Name,
@@ -1044,7 +1081,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Desired:         desired,
 			ProviderType:    "systemd_unit",
 			ProviderAddress: "systemd_unit." + providerName(host.Name, item.Name),
-			ProviderPayload: desired,
+			ProviderPayload: payload,
 		})
 	}
 
@@ -1066,8 +1103,23 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				"summary":     item.Summary,
 				"source_path": item.SourcePath,
 			}
-			if item.Content != "" {
+			if item.Sensitive {
+				desired["sensitive"] = true
+				delete(desired, "source_path")
+			}
+			if item.Content != "" && !item.Sensitive {
 				desired["content"] = item.Content
+			}
+			if item.Content != "" && item.Sensitive {
+				desired["content_sha256"] = item.Summary.SHA256
+				desired["content_bytes"] = item.Summary.Bytes
+			}
+			payload := cloneMap(desired)
+			if item.SourcePath != "" {
+				payload["source_path"] = item.SourcePath
+			}
+			if item.Content != "" {
+				payload["content"] = item.Content
 			}
 			deps := ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses)
 			if installAddress, ok := componentArtifactInstallAddresses[component.Name]; ok {
@@ -1085,7 +1137,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				DependsOn:       deps,
 				ProviderType:    "systemd_unit",
 				ProviderAddress: "systemd_unit." + providerName(host.Name, component.Name, item.Name),
-				ProviderPayload: desired,
+				ProviderPayload: payload,
 			})
 		}
 	}
@@ -1584,6 +1636,34 @@ func dedupeStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func cloneMap(in map[string]any) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = cloneValue(value)
+	}
+	return out
+}
+
+func cloneValue(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		return cloneMap(v)
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = cloneValue(item)
+		}
+		return out
+	case []string:
+		return append([]string(nil), v...)
+	default:
+		return value
+	}
 }
 
 func shortHash(value string) string {

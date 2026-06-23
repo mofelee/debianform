@@ -1,0 +1,21 @@
+{
+  "name": "proxy",
+  "inputs": [
+    {
+      "name": "listeners",
+      "type": "list(object({name=string,port=number}))",
+      "default": [],
+      "nullable": false,
+      "sensitive": false,
+      "deprecated": "Use endpoints instead.",
+      "description": "Listeners."
+    },
+    {
+      "name": "token",
+      "type": "string",
+      "default": "<sensitive>",
+      "nullable": true,
+      "sensitive": true
+    }
+  ]
+}

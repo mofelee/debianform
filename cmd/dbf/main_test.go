@@ -105,6 +105,111 @@ host "server1" {
 	}
 }
 
+func TestValidateAndPlanPrintDeprecatedInputWarnings(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(config, []byte(`
+component "app" {
+  input "listen_addr" {
+    type       = string
+    default    = "127.0.0.1:8080"
+    deprecated = "Use listeners instead."
+  }
+}
+
+host "server1" {
+  component "app" {
+    source = component.app
+    inputs = {
+      listen_addr = "0.0.0.0:8080"
+    }
+  }
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, validateOutput := captureOutput(t, func() {
+		if err := run([]string{"validate", "-f", config}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(validateOutput, "warning:") || !strings.Contains(validateOutput, `input "listen_addr" is deprecated`) {
+		t.Fatalf("validate output = %q, want deprecated warning", validateOutput)
+	}
+
+	planStdout, planOutput := captureOutput(t, func() {
+		if err := run([]string{"plan", "-f", config, "--offline"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(planOutput, "warning:") || !strings.Contains(planOutput, `input "listen_addr" is deprecated`) {
+		t.Fatalf("plan output = %q, want deprecated warning", planOutput)
+	}
+	if strings.Contains(planStdout, "warning:") {
+		t.Fatalf("plan stdout contains warning: %q", planStdout)
+	}
+
+	planJSONStdout, planJSONStderr := captureOutput(t, func() {
+		if err := run([]string{"plan", "-f", config, "--offline", "--format", "json"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(planJSONStderr, "warning:") || !strings.Contains(planJSONStderr, `input "listen_addr" is deprecated`) {
+		t.Fatalf("plan JSON stderr = %q, want deprecated warning", planJSONStderr)
+	}
+	if strings.Contains(planJSONStdout, "warning:") {
+		t.Fatalf("plan JSON stdout contains warning: %q", planJSONStdout)
+	}
+	var doc struct {
+		FormatVersion string `json:"format_version"`
+	}
+	if err := json.Unmarshal([]byte(planJSONStdout), &doc); err != nil {
+		t.Fatalf("plan JSON stdout did not parse: %v\n%s", err, planJSONStdout)
+	}
+	if doc.FormatVersion != "debianform.plan.v2alpha1" {
+		t.Fatalf("format_version = %q", doc.FormatVersion)
+	}
+}
+
+func TestComponentInspect(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(config, []byte(`
+component "proxy" {
+  input "listeners" {
+    type        = list(object({ name = string, port = number }))
+    description = "Listeners."
+    nullable    = false
+    default     = []
+    deprecated  = "Use endpoints instead."
+  }
+
+  input "token" {
+    type      = string
+    default   = "secret-token"
+    sensitive = true
+  }
+}
+
+host "server1" {}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"component", "inspect", "-f", config, "proxy"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	assertGolden(t, filepath.Join("testdata", "component-inspect.golden.json"), output)
+
+	err := run([]string{"component", "inspect", "-f", config, "missing"})
+	if err == nil || !strings.Contains(err.Error(), "unknown component.missing") {
+		t.Fatalf("inspect unknown error = %v", err)
+	}
+}
+
 func TestPlanV2BBRText(t *testing.T) {
 	output := captureStdout(t, func() {
 		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"}); err != nil {
@@ -370,4 +475,62 @@ func captureStdout(t *testing.T, fn func()) string {
 		t.Fatal(err)
 	}
 	return string(output)
+}
+
+func captureOutput(t *testing.T, fn func()) (string, string) {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+	stdoutRead, stdoutWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderrRead, stderrWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = stdoutWrite
+	os.Stderr = stderrWrite
+	defer func() {
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+	}()
+
+	fn()
+	if err := stdoutWrite.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := stderrWrite.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := io.ReadAll(stdoutRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := io.ReadAll(stderrRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(stdout), string(stderr)
+}
+
+func assertGolden(t *testing.T, golden string, got string) {
+	t.Helper()
+	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		if err := os.MkdirAll(filepath.Dir(golden), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(golden, []byte(got), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(golden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Fatalf("golden mismatch\n--- got ---\n%s\n--- want ---\n%s", got, string(want))
+	}
 }

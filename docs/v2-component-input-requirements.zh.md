@@ -39,8 +39,8 @@ optional(T, default)
 ```
 
 其中 `optional(...)` 只能用于 object attribute。`description`、`nullable`、
-strict object schema 和 optional default 已实现；`validation`、完整 sensitive 传播、
-`deprecated` warning 和 `ephemeral` 仍由后续 loop 实现。
+strict object schema、optional default、`validation`、sensitive 派生传播和
+`deprecated` warning 已实现；`ephemeral` 仍保留为未来能力。
 
 真实部署组件通常需要结构化接口。例如：
 
@@ -509,7 +509,7 @@ input validation 隐式依赖其他 input。
 
 ### validation 函数
 
-第一阶段建议支持一组纯函数：
+当前实现支持一组纯函数：
 
 ```text
 length
@@ -788,15 +788,13 @@ listeners
 Terraform 会让引用 sensitive variable 的表达式继续保持 sensitive。DebianForm 也应采用
 类似策略。
 
-最低要求：
+当前实现：
 
 - `input.foo.sensitive = true` 时，`input.foo` 是 sensitive cty value。
 - 表达式求值后，如果任一输入带 sensitive mark，结果也带 sensitive mark。
 - `parser.Value` 保存 sensitive mark。
-- Graph/plan/provider/state 根据 sensitive mark 选择摘要或 redaction。
-
-如果短期无法完整传播，必须先把 `sensitive` 文档标为限制功能，并在用户把 sensitive
-input 用于非 secret/file-sensitive 内容时阻止编译。
+- file 和 systemd unit 内容会根据 sensitive mark 自动转为敏感资源。
+- HostSpec JSON、plan JSON/text 和 state JSON 根据 sensitive mark 选择摘要或 redaction。
 
 ## 错误信息要求
 
@@ -920,7 +918,7 @@ input "repo_uri" {
 
 ## 分阶段计划
 
-### Phase 1: 类型和 description
+### Phase 1: 类型和 description（已实现）
 
 - 新增 type parser，支持 primitive、`any`、`list`、`set`、`map`、`object`、`tuple`、
   `optional`。
@@ -931,7 +929,7 @@ input "repo_uri" {
 - 默认保持 strict primitive typing，不做 string/number/bool 自动互转。
 - 更新 IR、HostSpec golden 和 parser/merge 测试。
 
-### Phase 2: validation
+### Phase 2: validation（已实现）
 
 - 支持 input `validation` block。
 - 注入 `input.<current>` validation context。
@@ -939,17 +937,17 @@ input "repo_uri" {
 - 确保 validation 在 component body 展开前执行。
 - 增加错误 path 和 source location。
 
-### Phase 3: sensitive propagation
+### Phase 3: sensitive propagation（已实现）
 
 - 为 cty/parser.Value 增加 sensitive mark。
 - 表达式求值传播 sensitive。
 - file/unit/service/environment 等 provider payload 尊重 sensitive mark。
 - plan/state 只输出摘要或 redaction。
 
-### Phase 4: deprecated 和 tooling
+### Phase 4: deprecated 和 tooling（已实现）
 
 - 支持 `deprecated` warning。
-- 可选增加 `dbf component inspect`。
+- 增加 `dbf component inspect`。
 - README 和 examples 展示 component input API。
 
 ### Phase 5: ephemeral 评估

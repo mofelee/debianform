@@ -5,6 +5,11 @@ type Program struct {
 	Components map[string]ComponentTemplateSpec `json:"components,omitempty"`
 }
 
+type Warning struct {
+	Source  SourceRef `json:"source,omitempty"`
+	Message string    `json:"message"`
+}
+
 type HostSpec struct {
 	Name        string                  `json:"name"`
 	Source      SourceRef               `json:"source"`
@@ -243,6 +248,7 @@ type SystemdUnit struct {
 	Owner      string         `json:"owner"`
 	Group      string         `json:"group"`
 	Mode       string         `json:"mode"`
+	Sensitive  bool           `json:"sensitive,omitempty"`
 	Ensure     string         `json:"ensure"`
 	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
 	Summary    ContentSummary `json:"summary,omitempty"`
@@ -345,15 +351,23 @@ type ComponentTemplateSpec struct {
 }
 
 type ComponentInputSpec struct {
-	Name        string                 `json:"name"`
-	Type        string                 `json:"type"`
-	TypeExpr    string                 `json:"type_expr,omitempty"`
-	TypeSpec    ComponentInputTypeSpec `json:"type_spec,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	Default     any                    `json:"default,omitempty"`
-	Sensitive   bool                   `json:"sensitive,omitempty"`
-	Nullable    bool                   `json:"nullable,omitempty"`
-	Source      SourceRef              `json:"source,omitempty"`
+	Name        string                         `json:"name"`
+	Type        string                         `json:"type"`
+	TypeExpr    string                         `json:"type_expr,omitempty"`
+	TypeSpec    ComponentInputTypeSpec         `json:"type_spec,omitempty"`
+	Description string                         `json:"description,omitempty"`
+	Default     any                            `json:"default,omitempty"`
+	Sensitive   bool                           `json:"sensitive,omitempty"`
+	Nullable    bool                           `json:"nullable,omitempty"`
+	Deprecated  string                         `json:"deprecated,omitempty"`
+	Validations []ComponentInputValidationSpec `json:"validations,omitempty"`
+	Source      SourceRef                      `json:"source,omitempty"`
+}
+
+type ComponentInputValidationSpec struct {
+	ConditionSource SourceRef `json:"condition_source,omitempty"`
+	Message         string    `json:"message"`
+	MessageSource   SourceRef `json:"message_source,omitempty"`
 }
 
 type ComponentInputTypeSpec struct {

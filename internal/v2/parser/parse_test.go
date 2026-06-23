@@ -253,6 +253,45 @@ component "proxy" {
 	}
 }
 
+func TestParseComponentInputValidationAndDeprecated(t *testing.T) {
+	file := writeConfig(t, `
+component "proxy" {
+  input "listeners" {
+    type       = list(object({ name = string, port = number }))
+    deprecated = "Use endpoints instead."
+
+    validation {
+      condition     = alltrue([for listener in input.listeners : listener.port > 0])
+      error_message = "ports must be positive"
+    }
+
+    validation {
+      condition     = length(input.listeners) < 10
+      error_message = "too many listeners"
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := cfg.Components["proxy"].Inputs["listeners"]
+	if input.Deprecated != "Use endpoints instead." {
+		t.Fatalf("deprecated = %q", input.Deprecated)
+	}
+	if len(input.Validations) != 2 {
+		t.Fatalf("validations = %d, want 2", len(input.Validations))
+	}
+	if input.Validations[0].Source.Path != `component.proxy.input["listeners"].validation[0]` {
+		t.Fatalf("validation source path = %q", input.Validations[0].Source.Path)
+	}
+	if input.Validations[0].Message != "ports must be positive" {
+		t.Fatalf("validation message = %q", input.Validations[0].Message)
+	}
+}
+
 func TestParseRejectsInvalidComponentInputTypes(t *testing.T) {
 	tests := []struct {
 		name string
@@ -291,6 +330,94 @@ component "bad" {
 }
 `,
 			want: "optional() is only allowed inside object attribute type declarations",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := writeConfig(t, tt.hcl)
+			_, err := ParseFiles([]string{file})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ParseFiles error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseRejectsInvalidComponentInputValidationBlocks(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "validation label",
+			hcl: `
+component "bad" {
+  input "ports" {
+    type = list(number)
+    validation "range" {
+      condition     = true
+      error_message = "ok"
+    }
+  }
+}
+`,
+			want: "block must not have labels",
+		},
+		{
+			name: "missing condition",
+			hcl: `
+component "bad" {
+  input "ports" {
+    type = list(number)
+    validation {
+      error_message = "ok"
+    }
+  }
+}
+`,
+			want: ".condition is required",
+		},
+		{
+			name: "missing message",
+			hcl: `
+component "bad" {
+  input "ports" {
+    type = list(number)
+    validation {
+      condition = true
+    }
+  }
+}
+`,
+			want: ".error_message is required",
+		},
+		{
+			name: "empty message",
+			hcl: `
+component "bad" {
+  input "ports" {
+    type = list(number)
+    validation {
+      condition     = true
+      error_message = ""
+    }
+  }
+}
+`,
+			want: "error_message must be a non-empty string",
+		},
+		{
+			name: "empty deprecated",
+			hcl: `
+component "bad" {
+  input "ports" {
+    type       = list(number)
+    deprecated = ""
+  }
+}
+`,
+			want: "deprecated must be a non-empty string",
 		},
 	}
 	for _, tt := range tests {

@@ -30,15 +30,18 @@ const (
 )
 
 type Value struct {
-	Kind     Kind
-	String   string
-	Bool     bool
-	Number   string
-	List     []Value
-	Map      map[string]Value
-	Source   ir.SourceRef
-	Modifier Modifier
+	Kind      Kind
+	String    string
+	Bool      bool
+	Number    string
+	List      []Value
+	Map       map[string]Value
+	Source    ir.SourceRef
+	Modifier  Modifier
+	Sensitive bool
 }
+
+const SensitiveMark = "debianform:sensitive"
 
 func NullValue(source ir.SourceRef) Value {
 	return Value{Kind: KindNull, Source: source}
@@ -62,6 +65,27 @@ func (v Value) IsMap() bool {
 
 func (v Value) IsList() bool {
 	return v.Kind == KindList
+}
+
+func (v Value) ContainsSensitive() bool {
+	if v.Sensitive {
+		return true
+	}
+	switch v.Kind {
+	case KindList:
+		for _, item := range v.List {
+			if item.ContainsSensitive() {
+				return true
+			}
+		}
+	case KindMap:
+		for _, item := range v.Map {
+			if item.ContainsSensitive() {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (v Value) StringValue() (string, bool) {
@@ -140,6 +164,17 @@ func (v Value) canonical() any {
 }
 
 func (v Value) ToCty() (cty.Value, error) {
+	converted, err := v.toCty()
+	if err != nil {
+		return cty.NilVal, err
+	}
+	if v.Sensitive {
+		converted = converted.Mark(SensitiveMark)
+	}
+	return converted, nil
+}
+
+func (v Value) toCty() (cty.Value, error) {
 	switch v.Kind {
 	case KindNull:
 		return cty.NullVal(cty.DynamicPseudoType), nil

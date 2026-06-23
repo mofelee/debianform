@@ -454,6 +454,20 @@ func resourceStateForStep(step Step, observed map[string]any, updatedAt string) 
 	}
 }
 
+func providerNode(node graph.Node) graph.Node {
+	if len(node.ProviderPayload) == 0 {
+		return node
+	}
+	out := node
+	out.Desired = node.ProviderPayload
+	return out
+}
+
+func providerStep(step Step) Step {
+	step.Node = providerNode(step.Node)
+	return step
+}
+
 func destroysResource(action string) bool {
 	switch action {
 	case ActionDelete, ActionDestroy:
@@ -772,7 +786,7 @@ func (e Engine) executeResourceStep(ctx context.Context, hosts map[string]ir.Hos
 	var observed map[string]any
 	switch step.Action {
 	case ActionCreate, ActionUpdate, ActionDelete:
-		result, err := e.Provider.Apply(ctx, step)
+		result, err := e.Provider.Apply(ctx, providerStep(step))
 		if err != nil {
 			return fmt.Errorf("%s failed: %w", step.Address, err)
 		}

@@ -1165,6 +1165,289 @@ host "edge1" {
 	}
 }
 
+func TestCompileComponentInputValidations(t *testing.T) {
+	program := compileInline(t, `
+component "proxy" {
+  input "listeners" {
+    type     = list(object({ name = string, port = number }))
+    nullable = false
+
+    validation {
+      condition     = alltrue([for listener in input.listeners : listener.port >= 1 && listener.port <= 65535])
+      error_message = "Each listener.port must be between 1 and 65535."
+    }
+
+    validation {
+      condition     = !contains([for listener in input.listeners : listener.name], "")
+      error_message = "Listener names must be non-empty."
+    }
+  }
+}
+
+host "edge1" {
+  component "proxy" {
+    source = component.proxy
+
+    inputs = {
+      listeners = [
+        { name = "http", port = 80 },
+        { name = "https", port = 443 },
+      ]
+    }
+  }
+}
+`)
+	if got := program.Hosts[0].Components[0].InputValues["listeners"]; got == nil {
+		t.Fatalf("listeners input missing")
+	}
+}
+
+func TestCompileRejectsInvalidComponentInputValidations(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "validation failure",
+			hcl: `
+component "proxy" {
+  input "listeners" {
+    type = list(object({ port = number }))
+    validation {
+      condition     = alltrue([for listener in input.listeners : listener.port >= 1 && listener.port <= 65535])
+      error_message = "Each listener.port must be between 1 and 65535."
+    }
+  }
+}
+
+host "edge1" {
+  component "proxy" {
+    source = component.proxy
+    inputs = { listeners = [{ port = 70000 }] }
+  }
+}
+`,
+			want: `validation failed for input "listeners": Each listener.port must be between 1 and 65535.`,
+		},
+		{
+			name: "condition non bool",
+			hcl: `
+component "proxy" {
+  input "listeners" {
+    type = list(object({ port = number }))
+    validation {
+      condition     = length(input.listeners)
+      error_message = "bad"
+    }
+  }
+}
+
+host "edge1" {
+  component "proxy" {
+    source = component.proxy
+    inputs = { listeners = [{ port = 80 }] }
+  }
+}
+`,
+			want: `input validation condition must evaluate to a boolean`,
+		},
+		{
+			name: "other input",
+			hcl: `
+component "proxy" {
+  input "other" {
+    type    = string
+    default = "x"
+  }
+  input "listeners" {
+    type = list(object({ port = number }))
+    validation {
+      condition     = input.other == "x"
+      error_message = "bad"
+    }
+  }
+}
+
+host "edge1" {
+  component "proxy" {
+    source = component.proxy
+    inputs = { listeners = [{ port = 80 }] }
+  }
+}
+`,
+			want: `input validation can only read input.listeners`,
+		},
+		{
+			name: "target reference",
+			hcl: `
+component "proxy" {
+  input "listeners" {
+    type = list(object({ port = number }))
+    validation {
+      condition     = target.system.codename == "trixie"
+      error_message = "bad"
+    }
+  }
+}
+
+host "edge1" {
+  component "proxy" {
+    source = component.proxy
+    inputs = { listeners = [{ port = 80 }] }
+  }
+}
+`,
+			want: `input validation can only read input.listeners`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompileDeprecatedComponentInputWarnings(t *testing.T) {
+	cfg := parseInline(t, `
+component "app" {
+  input "listen_addr" {
+    type       = string
+    default    = "127.0.0.1:8080"
+    deprecated = "Use listeners instead."
+  }
+}
+
+host "default1" {
+  components = [component.app]
+}
+
+host "explicit1" {
+  component "app" {
+    source = component.app
+    inputs = {
+      listen_addr = "0.0.0.0:8080"
+    }
+  }
+}
+`)
+	warnings := []ir.Warning{}
+	if _, err := CompileWithOptions(cfg, CompileOptions{Warnings: &warnings}); err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %#v, want 1", warnings)
+	}
+	if !strings.Contains(warnings[0].Message, `input "listen_addr" is deprecated`) {
+		t.Fatalf("warning = %#v", warnings[0])
+	}
+	if !strings.Contains(warnings[0].Source.Path, `inputs["listen_addr"]`) {
+		t.Fatalf("warning source = %#v", warnings[0].Source)
+	}
+}
+
+func TestCompileSensitiveComponentInputPropagatesToFileContent(t *testing.T) {
+	program := compileInline(t, `
+component "app" {
+  input "environment" {
+    type      = map(string)
+    sensitive = true
+    default   = {}
+  }
+
+  files {
+    file "/etc/app/env.json" {
+      content = jsonencode(input.environment)
+    }
+  }
+}
+
+host "server1" {
+  component "app" {
+    source = component.app
+    inputs = {
+      environment = {
+        API_TOKEN = "super-secret-token"
+      }
+    }
+  }
+}
+`)
+	file := program.Hosts[0].Components[0].Files.Files["/etc/app/env.json"]
+	if !file.Sensitive {
+		t.Fatalf("file sensitive = false")
+	}
+	if !strings.Contains(file.Content, "super-secret-token") {
+		t.Fatalf("compiled in-memory content missing secret: %q", file.Content)
+	}
+	data, err := json.Marshal(program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "super-secret-token") {
+		t.Fatalf("HostSpec JSON leaked secret: %s", data)
+	}
+}
+
+func TestCompileSensitiveComponentInputPropagatesToSystemdUnits(t *testing.T) {
+	program := compileInline(t, `
+component "app" {
+  input "token" {
+    type      = string
+    sensitive = true
+  }
+
+  systemd {
+    unit "raw-token.service" {
+      content = "TOKEN=${input.token}\n"
+    }
+
+    service_unit "structured-token" {
+      run = "/usr/bin/true"
+      environment = {
+        API_TOKEN = input.token
+      }
+    }
+  }
+}
+
+host "server1" {
+  component "app" {
+    source = component.app
+    inputs = {
+      token = "systemd-secret-token"
+    }
+  }
+}
+`)
+	units := program.Hosts[0].Components[0].Systemd.Units
+	rawUnit := units["raw-token.service"]
+	if !rawUnit.Sensitive {
+		t.Fatalf("raw unit sensitive = false")
+	}
+	if !strings.Contains(rawUnit.Content, "systemd-secret-token") {
+		t.Fatalf("raw unit in-memory content missing secret: %q", rawUnit.Content)
+	}
+	structuredUnit := units["structured-token.service"]
+	if !structuredUnit.Sensitive {
+		t.Fatalf("structured unit sensitive = false")
+	}
+	if !strings.Contains(structuredUnit.Content, "systemd-secret-token") {
+		t.Fatalf("structured unit in-memory content missing secret: %q", structuredUnit.Content)
+	}
+
+	data, err := json.Marshal(program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "systemd-secret-token") {
+		t.Fatalf("HostSpec JSON leaked systemd secret: %s", data)
+	}
+}
+
 func TestCompileRejectsInvalidRichComponentInputs(t *testing.T) {
 	tests := []struct {
 		name string

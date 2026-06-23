@@ -2,12 +2,56 @@
   "nodes": [
     {
       "host": "input1",
+      "address": "host.input1.components.proxy.files.file[\"/etc/reverse-proxy/environment.json\"]",
+      "kind": "file",
+      "summary": "create file /etc/reverse-proxy/environment.json",
+      "source": {
+        "file": "../../../examples/v2-component-inputs.dbf.hcl",
+        "line": 42,
+        "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/environment.json\"]"
+      },
+      "desired": {
+        "component": "proxy",
+        "content_bytes": 36,
+        "content_sha256": "901872bae2ef4d5b57311cc1061aed39cf816aa3ce8340bb2a038e57cea2b08f",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0600",
+        "owner": "root",
+        "path": "/etc/reverse-proxy/environment.json",
+        "sensitive": true,
+        "summary": {
+          "sha256": "901872bae2ef4d5b57311cc1061aed39cf816aa3ce8340bb2a038e57cea2b08f",
+          "bytes": 36
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.input1_proxy__etc_reverse_proxy_environment_json",
+      "provider_payload": {
+        "component": "proxy",
+        "content": "{\"API_TOKEN\":\"example-secret-token\"}",
+        "content_bytes": 36,
+        "content_sha256": "901872bae2ef4d5b57311cc1061aed39cf816aa3ce8340bb2a038e57cea2b08f",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0600",
+        "owner": "root",
+        "path": "/etc/reverse-proxy/environment.json",
+        "sensitive": true,
+        "summary": {
+          "sha256": "901872bae2ef4d5b57311cc1061aed39cf816aa3ce8340bb2a038e57cea2b08f",
+          "bytes": 36
+        }
+      }
+    },
+    {
+      "host": "input1",
       "address": "host.input1.components.proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]",
       "kind": "file",
       "summary": "create file /etc/reverse-proxy/listeners.json",
       "source": {
         "file": "../../../examples/v2-component-inputs.dbf.hcl",
-        "line": 22,
+        "line": 37,
         "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]"
       },
       "desired": {

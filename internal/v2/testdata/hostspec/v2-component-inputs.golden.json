@@ -2,7 +2,7 @@
   "name": "input1",
   "source": {
     "file": "../../../examples/v2-component-inputs.dbf.hcl",
-    "line": 29,
+    "line": 49,
     "path": "host.input1"
   },
   "facts": {
@@ -18,7 +18,7 @@
     "user": "root",
     "source": {
       "file": "../../../examples/v2-component-inputs.dbf.hcl",
-      "line": 29,
+      "line": 49,
       "path": "host.input1"
     }
   },
@@ -27,7 +27,7 @@
     "lock_path": "/var/lock/debianform/state/input1.lock",
     "source": {
       "file": "../../../examples/v2-component-inputs.dbf.hcl",
-      "line": 29,
+      "line": 49,
       "path": "host.input1"
     }
   },
@@ -37,7 +37,7 @@
     "codename": "trixie",
     "source": {
       "file": "../../../examples/v2-component-inputs.dbf.hcl",
-      "line": 30,
+      "line": 50,
       "path": "host.input1.system"
     }
   },
@@ -79,6 +79,7 @@
       "name": "proxy",
       "template": "reverse_proxy",
       "input_values": {
+        "environment": "\u003csensitive\u003e",
         "listeners": [
           {
             "name": "http",
@@ -106,6 +107,23 @@
       },
       "files": {
         "files": {
+          "/etc/reverse-proxy/environment.json": {
+            "path": "/etc/reverse-proxy/environment.json",
+            "owner": "root",
+            "group": "root",
+            "mode": "0600",
+            "sensitive": true,
+            "ensure": "present",
+            "summary": {
+              "sha256": "901872bae2ef4d5b57311cc1061aed39cf816aa3ce8340bb2a038e57cea2b08f",
+              "bytes": 36
+            },
+            "source": {
+              "file": "../../../examples/v2-component-inputs.dbf.hcl",
+              "line": 42,
+              "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/environment.json\"]"
+            }
+          },
           "/etc/reverse-proxy/listeners.json": {
             "path": "/etc/reverse-proxy/listeners.json",
             "content": "[{\"name\":\"http\",\"note\":null,\"port\":80,\"tags\":{},\"tls\":false},{\"name\":\"https\",\"note\":null,\"port\":443,\"tags\":{\"public\":\"true\"},\"tls\":true}]",
@@ -119,14 +137,14 @@
             },
             "source": {
               "file": "../../../examples/v2-component-inputs.dbf.hcl",
-              "line": 22,
+              "line": 37,
               "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]"
             }
           }
         },
         "source": {
           "file": "../../../examples/v2-component-inputs.dbf.hcl",
-          "line": 21,
+          "line": 36,
           "path": "component.reverse_proxy.files"
         }
       },
@@ -150,7 +168,7 @@
       },
       "source": {
         "file": "../../../examples/v2-component-inputs.dbf.hcl",
-        "line": 35,
+        "line": 55,
         "path": "host.input1.component[\"proxy\"]"
       }
     }

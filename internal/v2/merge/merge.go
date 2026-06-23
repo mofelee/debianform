@@ -21,6 +21,7 @@ type CompileOptions struct {
 	HostFacts                map[string]ir.HostFacts
 	SkipComponents           bool
 	ValidateRuntimeTemplates bool
+	Warnings                 *[]ir.Warning
 }
 
 func Compile(cfg *parser.Config) (*ir.Program, error) {
@@ -32,6 +33,7 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 		cfg:          cfg,
 		profileCache: map[string]resolvedProfile{},
 		visiting:     map[string]bool{},
+		warnings:     opts.Warnings,
 	}
 
 	names := make([]string, 0, len(cfg.Hosts))
@@ -107,6 +109,7 @@ type compiler struct {
 	cfg          *parser.Config
 	profileCache map[string]resolvedProfile
 	visiting     map[string]bool
+	warnings     *[]ir.Warning
 }
 
 type resolvedProfile struct {
@@ -151,6 +154,8 @@ func componentTemplateSpecs(components map[string]parser.Component) (map[string]
 				Default:     defaultValue,
 				Sensitive:   input.Sensitive,
 				Nullable:    input.Nullable,
+				Deprecated:  input.Deprecated,
+				Validations: componentInputValidationSpecs(input.Validations),
 				Source:      input.Source,
 			}
 		}
@@ -283,7 +288,7 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 		if !ok {
 			return nil, fmt.Errorf("%s:%d:%s: unknown component.%s", instance.Source.File, instance.Source.Line, instance.Source.Path, instance.Template)
 		}
-		inputValues, inputJSON, err := componentInputValues(template, instance)
+		inputValues, inputJSON, err := componentInputValues(template, instance, c.warningSink())
 		if err != nil {
 			return nil, err
 		}
@@ -339,7 +344,7 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 		if !ok {
 			return fmt.Errorf("%s:%d:%s: unknown component.%s", instance.Source.File, instance.Source.Line, instance.Source.Path, instance.Template)
 		}
-		inputValues, inputJSON, err := componentInputValues(template, instance)
+		inputValues, inputJSON, err := componentInputValues(template, instance, c.warningSink())
 		if err != nil {
 			return err
 		}
@@ -449,14 +454,23 @@ func isRuntimeUnknownError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "unknown values are not supported")
 }
 
-func componentInputValues(template parser.Component, instance parser.ComponentInstance) (map[string]parser.Value, map[string]any, error) {
+func (c *compiler) warningSink() *[]ir.Warning {
+	if c == nil {
+		return nil
+	}
+	return c.warnings
+}
+
+func componentInputValues(template parser.Component, instance parser.ComponentInstance, warnings *[]ir.Warning) (map[string]parser.Value, map[string]any, error) {
 	values := map[string]parser.Value{}
 	jsonValues := map[string]any{}
+	explicit := map[string]bool{}
 	for name, value := range instance.Inputs {
 		if _, ok := template.Inputs[name]; !ok {
 			return nil, nil, fmt.Errorf("%s:%d:%s.inputs[%q]: unknown input for component.%s", value.Source.File, value.Source.Line, value.Source.Path, name, template.Name)
 		}
 		values[name] = value
+		explicit[name] = true
 	}
 	for _, name := range sortedKeys(template.Inputs) {
 		input := template.Inputs[name]
@@ -471,7 +485,19 @@ func componentInputValues(template parser.Component, instance parser.ComponentIn
 		if err != nil {
 			return nil, nil, err
 		}
+		if err := evaluateComponentInputValidations(input, normalized); err != nil {
+			return nil, nil, err
+		}
+		if input.Sensitive {
+			normalized.Sensitive = true
+		}
 		values[name] = normalized
+		if input.Deprecated != "" && explicit[name] && warnings != nil {
+			*warnings = append(*warnings, ir.Warning{
+				Source:  value.Source,
+				Message: fmt.Sprintf("component.%s input %q is deprecated: %s", template.Name, name, input.Deprecated),
+			})
+		}
 		if input.Sensitive {
 			jsonValues[name] = "<sensitive>"
 		} else {
@@ -483,7 +509,11 @@ func componentInputValues(template parser.Component, instance parser.ComponentIn
 
 func validateComponentInputDefinition(input parser.ComponentInput) error {
 	if input.Default != nil {
-		if _, err := normalizeComponentInput(input, *input.Default); err != nil {
+		normalized, err := normalizeComponentInput(input, *input.Default)
+		if err != nil {
+			return err
+		}
+		if err := evaluateComponentInputValidations(input, normalized); err != nil {
 			return err
 		}
 	}
@@ -2006,6 +2036,9 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 		if !ok {
 			sensitive = false
 		}
+		if hasContent && item.Map["content"].ContainsSensitive() {
+			sensitive = true
+		}
 		lifecycle, err := lifecycleSpec(item)
 		if err != nil {
 			return nil, err
@@ -2655,6 +2688,7 @@ func systemdUnitSpec(name string, item parser.Value) (ir.SystemdUnit, error) {
 	if ensure == "present" && hasContent == hasSource {
 		return ir.SystemdUnit{}, fmt.Errorf("%s:%d:%s: systemd.unit requires exactly one of content or source when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
 	}
+	sensitive := hasContent && item.Map["content"].ContainsSensitive()
 	owner, err := stringFieldDefault(item, "owner", "root")
 	if err != nil {
 		return ir.SystemdUnit{}, err
@@ -2679,6 +2713,7 @@ func systemdUnitSpec(name string, item parser.Value) (ir.SystemdUnit, error) {
 		Owner:      owner,
 		Group:      group,
 		Mode:       mode,
+		Sensitive:  sensitive,
 		Ensure:     ensure,
 		Lifecycle:  lifecycle,
 		Source:     item.Source,
@@ -2710,6 +2745,7 @@ func systemdServiceUnitSpec(name string, item parser.Value) (ir.SystemdUnit, err
 		return ir.SystemdUnit{}, err
 	}
 	hasRawUnit := hasContent || hasSource
+	rawContentSensitive := hasContent && item.Map["content"].ContainsSensitive()
 	hasStructuredFields := systemdServiceUnitHasStructuredFields(item)
 	if hasRawUnit {
 		if ensure == "present" && hasContent == hasSource {
@@ -2725,6 +2761,7 @@ func systemdServiceUnitSpec(name string, item parser.Value) (ir.SystemdUnit, err
 		}
 		hasContent = true
 	}
+	sensitive := rawContentSensitive || systemdServiceUnitStructuredSensitive(item)
 	owner, err := stringFieldDefault(item, "owner", "root")
 	if err != nil {
 		return ir.SystemdUnit{}, err
@@ -2749,6 +2786,7 @@ func systemdServiceUnitSpec(name string, item parser.Value) (ir.SystemdUnit, err
 		Owner:      owner,
 		Group:      group,
 		Mode:       mode,
+		Sensitive:  sensitive,
 		Ensure:     ensure,
 		Lifecycle:  lifecycle,
 		Source:     item.Source,
@@ -2772,6 +2810,19 @@ func systemdServiceUnitHasStructuredFields(item parser.Value) bool {
 		"wanted_by", "stdout", "stderr",
 	} {
 		if _, ok := item.Map[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func systemdServiceUnitStructuredSensitive(item parser.Value) bool {
+	for _, name := range []string{
+		"description", "run", "type", "user", "group", "working_dir",
+		"environment", "restart", "restart_delay", "wants", "after",
+		"wanted_by", "stdout", "stderr",
+	} {
+		if value, ok := item.Map[name]; ok && value.ContainsSensitive() {
 			return true
 		}
 	}

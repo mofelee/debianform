@@ -1501,6 +1501,9 @@ func desiredContent(node graph.Node) ([]byte, error) {
 }
 
 func desiredContentSHA(node graph.Node) (string, error) {
+	if sha := stringDesired(node, "content_sha256"); sha != "" {
+		return strings.ToLower(sha), nil
+	}
 	content, err := desiredContent(node)
 	if err != nil {
 		return "", err

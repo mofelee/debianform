@@ -1,8 +1,3 @@
-# DebianForm v2 rich component input 示例。
-#
-# 该示例展示 Terraform-like component input 能力：
-# list(object(...))、optional(...)、description、nullable、validation 和 sensitive 传播。
-
 component "reverse_proxy" {
   input "listeners" {
     type = list(object({
@@ -13,9 +8,7 @@ component "reverse_proxy" {
       tags = optional(map(string), {})
     }))
 
-    description = "Reverse proxy listener definitions."
-    default     = []
-    nullable    = false
+    nullable = false
 
     validation {
       condition = alltrue([
@@ -27,26 +20,36 @@ component "reverse_proxy" {
   }
 
   input "environment" {
-    type        = map(string)
-    description = "Environment values rendered into the service environment file."
-    default     = {}
-    sensitive   = true
+    type      = map(string)
+    default   = {}
+    sensitive = true
   }
 
   files {
-    file "/etc/reverse-proxy/listeners.json" {
+    file "/etc/debianform-component-inputs/listeners.json" {
       mode    = "0644"
       content = jsonencode(input.listeners)
     }
 
-    file "/etc/reverse-proxy/environment.json" {
+    file "/etc/debianform-component-inputs/environment.json" {
       mode    = "0600"
       content = jsonencode(input.environment)
     }
   }
 }
 
-host "input1" {
+host "cihost" {
+  ssh {
+    host          = "__DBF_VM_IP__"
+    user          = "root"
+    identity_file = "${path.module}/id_ed25519"
+  }
+
+  state {
+    path      = "/var/lib/debianform-integration/component-inputs-state.json"
+    lock_path = "/var/lock/debianform-integration/component-inputs-state.lock"
+  }
+
   system {
     architecture = "amd64"
     codename     = "trixie"
@@ -61,17 +64,9 @@ host "input1" {
           name = "http"
           port = 80
         },
-        {
-          name = "https"
-          port = 443
-          tls  = true
-          tags = {
-            public = "true"
-          }
-        },
       ]
       environment = {
-        API_TOKEN = "example-secret-token"
+        API_TOKEN = "component-input-secret"
       }
     }
   }
