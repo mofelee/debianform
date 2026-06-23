@@ -1,8 +1,14 @@
 # DebianForm v2 Docker daemon 示例。
 #
-# daemon.settings 会在后续 loop 中映射到 /etc/docker/daemon.json。
+# daemon.settings 会映射到 /etc/docker/daemon.json，并在变化后 restart Docker。
+# 离线 plan 需要显式声明目标 Debian runtime facts。
 
 host "docker-daemon1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
   docker {
     enable = true
 

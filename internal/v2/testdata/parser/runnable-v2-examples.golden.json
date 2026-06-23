@@ -112,7 +112,8 @@
       {
         "name": "docker-daemon1",
         "body_keys": [
-          "docker"
+          "docker",
+          "system"
         ]
       }
     ]

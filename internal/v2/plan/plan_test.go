@@ -145,6 +145,58 @@ func TestDockerMinimalPlanTextGolden(t *testing.T) {
 	}
 }
 
+func TestDockerDaemonPlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-docker-daemon.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-docker-daemon.dbf.hcl",
+		Host:        "docker-daemon1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-docker-daemon.golden.json", got)
+
+	if doc.Summary.Create != 9 {
+		t.Fatalf("create count = %d, want 9", doc.Summary.Create)
+	}
+	if doc.Summary.Operations != 2 {
+		t.Fatalf("operations = %d, want 2", doc.Summary.Operations)
+	}
+	if !hasChange(doc, `host.docker-daemon1.docker.daemon.file["/etc/docker/daemon.json"]`) {
+		t.Fatalf("docker daemon file change missing")
+	}
+	if !hasOperation(doc, "host.docker-daemon1.docker.daemon.restart") {
+		t.Fatalf("docker daemon restart operation missing: %#v", doc.Operations)
+	}
+}
+
+func TestDockerDaemonPlanTextGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-docker-daemon.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-docker-daemon.dbf.hcl",
+		Host:        "docker-daemon1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	assertGolden(t, "../testdata/plan/v2-docker-daemon.golden.txt", text.String())
+	for _, want := range []string{
+		`host.docker-daemon1.docker.daemon.file["/etc/docker/daemon.json"]`,
+		`+   "log-driver": "json-file",`,
+		`host.docker-daemon1.docker.daemon.restart`,
+	} {
+		if !strings.Contains(text.String(), want) {
+			t.Fatalf("docker daemon text plan missing %q:\n%s", want, text.String())
+		}
+	}
+}
+
 func TestNftablesPlanJSONGolden(t *testing.T) {
 	doc := planFixture(t, "../../../examples/v2-nftables.dbf.hcl", Options{
 		CommandFile: "../../../examples/v2-nftables.dbf.hcl",
@@ -695,6 +747,7 @@ func testHostFacts() map[string]ir.HostFacts {
 	for _, name := range []string{
 		"apt1",
 		"bbr1",
+		"docker-daemon1",
 		"docker1",
 		"edge1",
 		"foundation1",

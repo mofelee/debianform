@@ -179,6 +179,63 @@ func TestCompileDockerMinimalResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileDockerDaemonResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-docker-daemon.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-docker-daemon.golden.json", got)
+
+	daemonAddress := `host.docker-daemon1.docker.daemon.file["/etc/docker/daemon.json"]`
+	serviceAddress := `host.docker-daemon1.docker.service["docker"]`
+	restartAddress := `host.docker-daemon1.docker.daemon.restart`
+	packageAddress := `host.docker-daemon1.docker.package["docker-ce"]`
+
+	daemon := nodeFor(resourceGraph, daemonAddress)
+	if daemon == nil {
+		t.Fatalf("docker daemon file node missing")
+	}
+	if daemon.ProviderType != "file" || daemon.ProviderAddress != "file.docker_daemon1__etc_docker_daemon_json" {
+		t.Fatalf("daemon provider = %s %s, want file provider", daemon.ProviderType, daemon.ProviderAddress)
+	}
+	content, _ := daemon.Desired["content"].(string)
+	for _, want := range []string{
+		`"log-driver": "json-file"`,
+		`"max-file": "3"`,
+		`"registry-mirrors": [`,
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("daemon content missing %q:\n%s", want, content)
+		}
+	}
+	if !containsString(daemon.DependsOn, packageAddress) {
+		t.Fatalf("daemon deps = %#v, want docker package dependency", daemon.DependsOn)
+	}
+
+	serviceDeps := dependsOnFor(resourceGraph, serviceAddress)
+	if !containsString(serviceDeps, daemonAddress) {
+		t.Fatalf("docker service deps = %#v, want daemon file dependency", serviceDeps)
+	}
+	restart := operationFor(resourceGraph, restartAddress)
+	if restart == nil {
+		t.Fatalf("docker daemon restart operation missing")
+	}
+	if restart.CommandPreview != "systemctl restart docker.service" {
+		t.Fatalf("restart command = %q", restart.CommandPreview)
+	}
+	for _, want := range []string{daemonAddress, serviceAddress} {
+		if !containsString(restart.DependsOn, want) {
+			t.Fatalf("restart deps = %#v, want %q", restart.DependsOn, want)
+		}
+	}
+	if !containsString(restart.TriggeredBy, daemonAddress) {
+		t.Fatalf("restart triggered_by = %#v, want daemon file", restart.TriggeredBy)
+	}
+}
+
 func TestCompileDockerDisabledGeneratesNoDockerNodes(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {
@@ -219,6 +276,42 @@ host "server1" {
 `)
 	if err == nil || !strings.Contains(err.Error(), `docker package source "debian" is not implemented in this loop`) {
 		t.Fatalf("graph compile error = %v, want docker source not implemented", err)
+	}
+}
+
+func TestCompileDockerPackageSourceNoneAllowsDaemonAndService(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "server1" {
+  docker {
+    enable = true
+
+    package {
+      source = "none"
+    }
+
+    daemon {
+      settings = {
+        "log-driver" = "json-file"
+      }
+    }
+  }
+}
+`)
+
+	for _, unexpected := range []string{
+		`host.server1.docker.apt.repository["docker-official"]`,
+		`host.server1.docker.package["docker-ce"]`,
+		`host.server1.apt.cache_refresh`,
+	} {
+		if nodeFor(resourceGraph, unexpected) != nil || operationFor(resourceGraph, unexpected) != nil {
+			t.Fatalf("package source none generated %s", unexpected)
+		}
+	}
+	if nodeFor(resourceGraph, `host.server1.docker.daemon.file["/etc/docker/daemon.json"]`) == nil {
+		t.Fatalf("package source none did not generate daemon file")
+	}
+	if nodeFor(resourceGraph, `host.server1.docker.service["docker"]`) == nil {
+		t.Fatalf("package source none did not generate docker service")
 	}
 }
 
@@ -881,6 +974,7 @@ func testHostFacts() map[string]ir.HostFacts {
 	for _, name := range []string{
 		"apt1",
 		"bbr1",
+		"docker-daemon1",
 		"docker1",
 		"edge1",
 		"foundation1",

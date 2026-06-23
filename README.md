@@ -131,7 +131,7 @@ v2 领域块或 component。
 - `examples/v2-component-binary.dbf.hcl`（真实 apply 前需替换为上游下载物真实 sha256）
 - `examples/v2-component-inputs.dbf.hcl`
 - `examples/v2-docker-compose.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
-- `examples/v2-docker-daemon.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
+- `examples/v2-docker-daemon.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
 - `examples/v2-docker-minimal.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
 - `examples/v2-files-plan-preview.dbf.hcl`
 - `examples/v2-mihomo.dbf.hcl`
@@ -252,8 +252,9 @@ component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
 `ca_certificate` 变化会额外触发 `update-ca-certificates` operation。
 
 Docker v2 DSL 当前已接入 validate 和 HostSpec 编译。最小语法已经可以展开为官方 Docker
-APT 源、默认 Docker packages 和 `docker.service`，并可通过现有 provider apply/check；
-daemon、users、Compose 会在后续 loop 完成：
+APT 源、默认 Docker packages 和 `docker.service`，并可通过现有 provider apply/check。
+`daemon.settings` 会以稳定 JSON 写入 `/etc/docker/daemon.json`，文件变化后 MVP 统一触发
+`systemctl restart docker.service`；users 和 Compose 会在后续 loop 完成：
 
 ```hcl
 host "docker1" {
@@ -273,6 +274,33 @@ dbf validate -f examples/v2-docker-minimal.dbf.hcl
 dbf plan -f examples/v2-docker-minimal.dbf.hcl --offline
 dbf apply -f examples/v2-docker-minimal.dbf.hcl --auto-approve
 dbf check -f examples/v2-docker-minimal.dbf.hcl
+```
+
+```hcl
+host "docker-daemon1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  docker {
+    enable = true
+
+    daemon {
+      settings = {
+        "log-driver" = "json-file"
+        "log-opts" = {
+          "max-size" = "100m"
+          "max-file" = "3"
+        }
+      }
+    }
+  }
+}
+```
+
+```bash
+dbf plan -f examples/v2-docker-daemon.dbf.hcl --offline
 ```
 
 nftables 使用原生 ruleset/snippet 文件作为主路径，不提供通用 firewall 抽象。

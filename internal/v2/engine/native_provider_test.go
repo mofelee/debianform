@@ -315,6 +315,48 @@ func TestNativeProviderDockerRepositoryApplyScript(t *testing.T) {
 	}
 }
 
+func TestNativeProviderDockerDaemonFileApplyScript(t *testing.T) {
+	content := "{\n  \"log-driver\": \"json-file\",\n  \"log-opts\": {\n    \"max-file\": \"3\",\n    \"max-size\": \"100m\"\n  }\n}\n"
+	node := graph.Node{
+		Address: `host.docker-daemon1.docker.daemon.file["/etc/docker/daemon.json"]`,
+		Host:    "docker-daemon1",
+		Kind:    "file",
+		Desired: map[string]any{
+			"path":    "/etc/docker/daemon.json",
+			"content": content,
+			"owner":   "root",
+			"group":   "root",
+			"mode":    "0644",
+			"ensure":  "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "missing\n"}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing docker daemon file action = %q, want create", got.Action)
+	}
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.inputs) == 0 || runner.inputs[0] != content {
+		t.Fatalf("docker daemon apply input = %#v, want daemon JSON", runner.inputs)
+	}
+	applied := runner.scripts[len(runner.scripts)-1]
+	for _, want := range []string{
+		"dest='/etc/docker/daemon.json'",
+		"install -o 'root' -g 'root' -m '0644' \"$tmp\" \"$dest\"",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("docker daemon file script missing %q:\n%s", want, applied)
+		}
+	}
+}
+
 func TestNativeProviderAPTSourceFilePreservesOriginalAndRestores(t *testing.T) {
 	oldContent := "deb http://deb.debian.org/debian trixie main\n"
 	newContent := "deb https://mirrors.aliyun.com/debian/ trixie main\n"

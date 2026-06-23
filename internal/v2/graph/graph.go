@@ -143,19 +143,22 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 
 	dockerPackageAddresses := []string{}
 	dockerServiceAddress := ""
+	dockerDaemonFileAddress := ""
 	if host.Docker != nil {
-		dockerNodes, dockerTriggers, dockerPackages, serviceAddress, err := dockerEngineNodes(host, repositoryAddresses)
+		dockerGraph, err := dockerEngineNodes(host, repositoryAddresses)
 		if err != nil {
 			return nil, nil, err
 		}
-		nodes = append(nodes, dockerNodes...)
-		repositoryTriggers = append(repositoryTriggers, dockerTriggers...)
-		dockerPackageAddresses = dockerPackages
-		dockerServiceAddress = serviceAddress
-		if len(dockerTriggers) > 0 && aptCacheSource.File == "" {
+		nodes = append(nodes, dockerGraph.Nodes...)
+		operations = append(operations, dockerGraph.Operations...)
+		repositoryTriggers = append(repositoryTriggers, dockerGraph.RepositoryTriggers...)
+		dockerPackageAddresses = dockerGraph.PackageAddresses
+		dockerServiceAddress = dockerGraph.ServiceAddress
+		dockerDaemonFileAddress = dockerGraph.DaemonFileAddress
+		if len(dockerGraph.RepositoryTriggers) > 0 && aptCacheSource.File == "" {
 			aptCacheSource = host.Docker.Source
 		}
-		for _, packageAddress := range dockerPackages {
+		for _, packageAddress := range dockerGraph.PackageAddresses {
 			packageName := packageNameFromDockerPackageAddress(packageAddress)
 			if packageName != "" {
 				packageAddresses[packageName] = packageAddress
@@ -637,7 +640,11 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			if nodes[i].Address != dockerServiceAddress {
 				continue
 			}
-			nodes[i].DependsOn = dedupeStrings(append(nodes[i].DependsOn, dockerPackageAddresses...))
+			deps := append([]string(nil), dockerPackageAddresses...)
+			if dockerDaemonFileAddress != "" {
+				deps = append(deps, dockerDaemonFileAddress)
+			}
+			nodes[i].DependsOn = dedupeStrings(append(nodes[i].DependsOn, deps...))
 		}
 	}
 
@@ -1532,81 +1539,99 @@ var dockerOfficialPackages = []string{
 	"docker-compose-plugin",
 }
 
-func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) ([]Node, []string, []string, string, error) {
+type dockerEngineGraph struct {
+	Nodes              []Node
+	Operations         []Operation
+	RepositoryTriggers []string
+	PackageAddresses   []string
+	ServiceAddress     string
+	DaemonFileAddress  string
+}
+
+func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) (dockerEngineGraph, error) {
 	docker := host.Docker
 	if docker == nil || !docker.Enable {
-		return nil, nil, nil, "", nil
+		return dockerEngineGraph{}, nil
 	}
-	if docker.Package.Source != "official" {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: docker package source %q is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Source)
-	}
+	installPackages := true
 	if docker.Package.Channel != "stable" {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: docker package channel %q is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Channel)
+		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker package channel %q is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Channel)
 	}
 	if docker.Package.Version != nil {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: docker package version pinning is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path)
+		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker package version pinning is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path)
 	}
 	if docker.Package.RemoveConflicts != "auto" {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: docker conflict package removal is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path)
-	}
-	if docker.Daemon != nil {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: docker daemon settings are not implemented in this loop", docker.Daemon.Source.File, docker.Daemon.Source.Line, docker.Daemon.Source.Path)
+		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker conflict package removal is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path)
 	}
 	if len(docker.Users) > 0 {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s.users: docker users are not implemented in this loop", docker.Source.File, docker.Source.Line, docker.Source.Path)
+		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.users: docker users are not implemented in this loop", docker.Source.File, docker.Source.Line, docker.Source.Path)
 	}
 	if len(docker.Composes) > 0 {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s.compose: docker compose projects are not implemented in this loop", docker.Source.File, docker.Source.Line, docker.Source.Path)
-	}
-	if host.System.Architecture == "" {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s.system.architecture: host %q must declare system.architecture to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
-	}
-	if host.System.Codename == "" {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s.system.codename: host %q must declare system.codename to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
-	}
-	if _, exists := host.APT.Repositories[dockerOfficialRepositoryName]; exists {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: apt repository %q conflicts with docker official repository", host.Source.File, host.Source.Line, host.Source.Path, dockerOfficialRepositoryName)
-	}
-	if _, exists := repositoryAddresses[dockerOfficialRepositoryName]; exists {
-		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: apt repository %q conflicts with docker official repository", host.Source.File, host.Source.Line, host.Source.Path, dockerOfficialRepositoryName)
+		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.compose: docker compose projects are not implemented in this loop", docker.Source.File, docker.Source.Line, docker.Source.Path)
 	}
 
-	keyAddress := fmt.Sprintf("host.%s.docker.apt.signing_key[%s]", host.Name, strconv.Quote(dockerOfficialRepositoryName))
-	repositoryAddress := fmt.Sprintf("host.%s.docker.apt.repository[%s]", host.Name, strconv.Quote(dockerOfficialRepositoryName))
-	sourcePath := aptRepositorySourcePath(dockerOfficialRepositoryName)
+	switch docker.Package.Source {
+	case "official":
+	case "none":
+		installPackages = false
+	case "debian", "custom":
+		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker package source %q is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Source)
+	default:
+		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker package source %q is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Source)
+	}
 
-	keyDesired := map[string]any{
-		"name":   dockerOfficialRepositoryName,
-		"path":   dockerOfficialKeyPath,
-		"owner":  "root",
-		"group":  "root",
-		"mode":   "0644",
-		"ensure": "present",
-		"url":    dockerOfficialKeyURL,
-		"sha256": dockerOfficialKeySHA256,
-	}
-	repositorySpec := ir.APTRepositorySpec{
-		Name:          dockerOfficialRepositoryName,
-		URIs:          []string{"https://download.docker.com/linux/debian"},
-		Suites:        []string{host.System.Codename},
-		Components:    []string{docker.Package.Channel},
-		Architectures: []string{host.System.Architecture},
-		Ensure:        "present",
-		SigningKey: &ir.APTSigningKeySpec{
-			Path: dockerOfficialKeyPath,
-		},
-	}
-	repositoryDesired := map[string]any{
-		"name":    dockerOfficialRepositoryName,
-		"path":    sourcePath,
-		"owner":   "root",
-		"group":   "root",
-		"mode":    "0644",
-		"ensure":  "present",
-		"content": aptRepositorySourceContent(repositorySpec),
-	}
-	nodes := []Node{
-		{
+	out := dockerEngineGraph{}
+	repositoryAddress := ""
+
+	if installPackages {
+		if host.System.Architecture == "" {
+			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.system.architecture: host %q must declare system.architecture to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
+		}
+		if host.System.Codename == "" {
+			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.system.codename: host %q must declare system.codename to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
+		}
+		if _, exists := host.APT.Repositories[dockerOfficialRepositoryName]; exists {
+			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: apt repository %q conflicts with docker official repository", host.Source.File, host.Source.Line, host.Source.Path, dockerOfficialRepositoryName)
+		}
+		if _, exists := repositoryAddresses[dockerOfficialRepositoryName]; exists {
+			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: apt repository %q conflicts with docker official repository", host.Source.File, host.Source.Line, host.Source.Path, dockerOfficialRepositoryName)
+		}
+
+		keyAddress := fmt.Sprintf("host.%s.docker.apt.signing_key[%s]", host.Name, strconv.Quote(dockerOfficialRepositoryName))
+		repositoryAddress = fmt.Sprintf("host.%s.docker.apt.repository[%s]", host.Name, strconv.Quote(dockerOfficialRepositoryName))
+		sourcePath := aptRepositorySourcePath(dockerOfficialRepositoryName)
+
+		keyDesired := map[string]any{
+			"name":   dockerOfficialRepositoryName,
+			"path":   dockerOfficialKeyPath,
+			"owner":  "root",
+			"group":  "root",
+			"mode":   "0644",
+			"ensure": "present",
+			"url":    dockerOfficialKeyURL,
+			"sha256": dockerOfficialKeySHA256,
+		}
+		repositorySpec := ir.APTRepositorySpec{
+			Name:          dockerOfficialRepositoryName,
+			URIs:          []string{"https://download.docker.com/linux/debian"},
+			Suites:        []string{host.System.Codename},
+			Components:    []string{docker.Package.Channel},
+			Architectures: []string{host.System.Architecture},
+			Ensure:        "present",
+			SigningKey: &ir.APTSigningKeySpec{
+				Path: dockerOfficialKeyPath,
+			},
+		}
+		repositoryDesired := map[string]any{
+			"name":    dockerOfficialRepositoryName,
+			"path":    sourcePath,
+			"owner":   "root",
+			"group":   "root",
+			"mode":    "0644",
+			"ensure":  "present",
+			"content": aptRepositorySourceContent(repositorySpec),
+		}
+		out.Nodes = append(out.Nodes, Node{
 			Host:            host.Name,
 			Address:         keyAddress,
 			Kind:            "apt_signing_key",
@@ -1616,8 +1641,7 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) 
 			ProviderType:    "apt_signing_key",
 			ProviderAddress: "apt_signing_key." + providerName(host.Name, dockerOfficialRepositoryName),
 			ProviderPayload: keyDesired,
-		},
-		{
+		}, Node{
 			Host:            host.Name,
 			Address:         repositoryAddress,
 			Kind:            "file",
@@ -1628,30 +1652,43 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) 
 			ProviderType:    "file",
 			ProviderAddress: "file." + providerName(host.Name, sourcePath),
 			ProviderPayload: repositoryDesired,
-		},
+		})
+		out.RepositoryTriggers = append(out.RepositoryTriggers, keyAddress, repositoryAddress)
+
+		for _, name := range dockerOfficialPackages {
+			address := fmt.Sprintf("host.%s.docker.package[%s]", host.Name, strconv.Quote(name))
+			desired := map[string]any{
+				"name":         name,
+				"ensure":       "present",
+				"repositories": []string{dockerOfficialRepositoryName},
+			}
+			out.Nodes = append(out.Nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "package",
+				Summary:         "install docker package " + name,
+				Source:          docker.Package.SourceRef,
+				Desired:         desired,
+				DependsOn:       []string{repositoryAddress},
+				ProviderType:    "package",
+				ProviderAddress: "package." + providerName(host.Name, "docker", name),
+				ProviderPayload: desired,
+			})
+			out.PackageAddresses = append(out.PackageAddresses, address)
+		}
 	}
 
-	packageAddresses := make([]string, 0, len(dockerOfficialPackages))
-	for _, name := range dockerOfficialPackages {
-		address := fmt.Sprintf("host.%s.docker.package[%s]", host.Name, strconv.Quote(name))
-		desired := map[string]any{
-			"name":         name,
-			"ensure":       "present",
-			"repositories": []string{dockerOfficialRepositoryName},
+	if docker.Daemon != nil {
+		fileAddress, fileNode, restartOperation, err := dockerDaemonGraph(host)
+		if err != nil {
+			return dockerEngineGraph{}, err
 		}
-		nodes = append(nodes, Node{
-			Host:            host.Name,
-			Address:         address,
-			Kind:            "package",
-			Summary:         "install docker package " + name,
-			Source:          docker.Package.SourceRef,
-			Desired:         desired,
-			DependsOn:       []string{repositoryAddress},
-			ProviderType:    "package",
-			ProviderAddress: "package." + providerName(host.Name, "docker", name),
-			ProviderPayload: desired,
-		})
-		packageAddresses = append(packageAddresses, address)
+		if len(out.PackageAddresses) > 0 {
+			fileNode.DependsOn = dedupeStrings(append(fileNode.DependsOn, out.PackageAddresses...))
+		}
+		out.Nodes = append(out.Nodes, fileNode)
+		out.Operations = append(out.Operations, restartOperation)
+		out.DaemonFileAddress = fileAddress
 	}
 
 	serviceAddress := fmt.Sprintf("host.%s.docker.service[%s]", host.Name, strconv.Quote("docker"))
@@ -1661,7 +1698,7 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) 
 		"enabled": docker.Service.Enable,
 		"state":   docker.Service.State,
 	}
-	nodes = append(nodes, Node{
+	out.Nodes = append(out.Nodes, Node{
 		Host:            host.Name,
 		Address:         serviceAddress,
 		Kind:            "service",
@@ -1672,8 +1709,66 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) 
 		ProviderAddress: "service." + providerName(host.Name, "docker"),
 		ProviderPayload: serviceDesired,
 	})
+	out.ServiceAddress = serviceAddress
+	if len(out.Operations) > 0 {
+		for i := range out.Operations {
+			if out.Operations[i].Address == "host."+host.Name+".docker.daemon.restart" {
+				out.Operations[i].DependsOn = dedupeStrings(append(out.Operations[i].DependsOn, serviceAddress))
+			}
+		}
+	}
 
-	return nodes, []string{keyAddress, repositoryAddress}, packageAddresses, serviceAddress, nil
+	return out, nil
+}
+
+func dockerDaemonGraph(host ir.HostSpec) (string, Node, Operation, error) {
+	daemon := host.Docker.Daemon
+	if daemon == nil {
+		return "", Node{}, Operation{}, nil
+	}
+	content, err := deterministicJSON(daemon.Settings)
+	if err != nil {
+		return "", Node{}, Operation{}, err
+	}
+	address := fmt.Sprintf("host.%s.docker.daemon.file[%s]", host.Name, strconv.Quote("/etc/docker/daemon.json"))
+	desired := map[string]any{
+		"path":    "/etc/docker/daemon.json",
+		"content": content,
+		"owner":   "root",
+		"group":   "root",
+		"mode":    "0644",
+		"ensure":  "present",
+		"summary": daemon.Summary,
+	}
+	node := Node{
+		Host:            host.Name,
+		Address:         address,
+		Kind:            "file",
+		Summary:         "manage docker daemon configuration",
+		Source:          daemon.Source,
+		Desired:         desired,
+		ProviderType:    "file",
+		ProviderAddress: "file." + providerName(host.Name, "/etc/docker/daemon.json"),
+		ProviderPayload: desired,
+	}
+	operation := Operation{
+		Address:        "host." + host.Name + ".docker.daemon.restart",
+		Action:         "run",
+		Summary:        "restart docker service",
+		DependsOn:      []string{address},
+		TriggeredBy:    []string{address},
+		CommandPreview: "systemctl restart docker.service",
+		Source:         daemon.Source,
+	}
+	return address, node, operation, nil
+}
+
+func deterministicJSON(value any) (string, error) {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(data) + "\n", nil
 }
 
 func packageNameFromDockerPackageAddress(address string) string {

@@ -432,6 +432,58 @@ func TestDockerEngineMemoryApplyIsIdempotentAndPersistsHighLevelState(t *testing
 	}
 }
 
+func TestDockerDaemonDesiredChangePlansRestartOperation(t *testing.T) {
+	initial := `
+host "server1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  docker {
+    enable = true
+
+    daemon {
+      settings = {
+        "log-driver" = "json-file"
+        "log-opts" = {
+          "max-size" = "100m"
+          "max-file" = "3"
+        }
+      }
+    }
+  }
+}
+`
+	updated := strings.Replace(initial, `"100m"`, `"200m"`, 1)
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, initial))
+	backend := NewMemoryBackend()
+	provider := NewMemoryProvider()
+	engine := Engine{
+		Backend:  backend,
+		Provider: provider,
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{}); err != nil {
+		t.Fatal(err)
+	}
+
+	nextProgram, nextGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, updated))
+	plan, err := engine.Plan(context.Background(), nextProgram, nextGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasStepAction(plan, `host.server1.docker.daemon.file["/etc/docker/daemon.json"]`, ActionUpdate) {
+		t.Fatalf("daemon desired change plan missing daemon file update: %#v", plan.Steps)
+	}
+	if len(plan.Operations) != 1 || plan.Operations[0].Operation.Address != "host.server1.docker.daemon.restart" {
+		t.Fatalf("daemon desired change operations = %#v, want docker daemon restart", plan.Operations)
+	}
+}
+
 func TestDockerEngineMemoryCheckDetectsPackageAndServiceDrift(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-minimal.dbf.hcl")
 	provider := NewMemoryProvider()

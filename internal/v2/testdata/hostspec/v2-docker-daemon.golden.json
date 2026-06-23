@@ -2,7 +2,7 @@
   "name": "docker-daemon1",
   "source": {
     "file": "../../../examples/v2-docker-daemon.dbf.hcl",
-    "line": 5,
+    "line": 6,
     "path": "host.docker-daemon1"
   },
   "facts": {
@@ -14,7 +14,7 @@
     "user": "root",
     "source": {
       "file": "../../../examples/v2-docker-daemon.dbf.hcl",
-      "line": 5,
+      "line": 6,
       "path": "host.docker-daemon1"
     }
   },
@@ -23,16 +23,18 @@
     "lock_path": "/var/lock/debianform/state/docker-daemon1.lock",
     "source": {
       "file": "../../../examples/v2-docker-daemon.dbf.hcl",
-      "line": 5,
+      "line": 6,
       "path": "host.docker-daemon1"
     }
   },
   "system": {
     "hostname": "docker-daemon1",
+    "architecture": "amd64",
+    "codename": "trixie",
     "source": {
       "file": "../../../examples/v2-docker-daemon.dbf.hcl",
-      "line": 5,
-      "path": "host.docker-daemon1"
+      "line": 7,
+      "path": "host.docker-daemon1.system"
     }
   },
   "kernel": {
@@ -76,7 +78,7 @@
       "remove_conflicts": "auto",
       "source_ref": {
         "file": "../../../examples/v2-docker-daemon.dbf.hcl",
-        "line": 6,
+        "line": 12,
         "path": "host.docker-daemon1.docker"
       }
     },
@@ -86,7 +88,7 @@
       "name": "docker.service",
       "source_ref": {
         "file": "../../../examples/v2-docker-daemon.dbf.hcl",
-        "line": 6,
+        "line": 12,
         "path": "host.docker-daemon1.docker"
       }
     },
@@ -103,7 +105,7 @@
       },
       "source": {
         "file": "../../../examples/v2-docker-daemon.dbf.hcl",
-        "line": 9,
+        "line": 15,
         "path": "host.docker-daemon1.docker.daemon"
       },
       "summary": {
@@ -113,7 +115,7 @@
     },
     "source": {
       "file": "../../../examples/v2-docker-daemon.dbf.hcl",
-      "line": 6,
+      "line": 12,
       "path": "host.docker-daemon1.docker"
     }
   }

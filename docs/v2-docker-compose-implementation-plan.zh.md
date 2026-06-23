@@ -27,9 +27,10 @@
 - [x] 已支持 Docker Compose project 高阶对象的 validate / HostSpec 编译
 - [x] 已支持 `docker.enable` 官方源 ResourceGraph / offline plan 展开
 - [x] 已支持 Docker Engine apply / check 复用现有 provider 闭环
+- [x] 已支持 Docker daemon ResourceGraph / plan / apply / check 闭环
 - [ ] 尚未支持 Compose project 状态漂移检测
-- [ ] 尚未支持 Docker daemon / users / Compose ResourceGraph 展开
-- [ ] 尚未支持 Docker daemon / users / Compose apply / check 闭环
+- [ ] 尚未支持 users / Compose ResourceGraph 展开
+- [ ] 尚未支持 users / Compose apply / check 闭环
 
 ## 总体实现边界
 
@@ -241,33 +242,33 @@ make test
 
 代码：
 
-- [ ] 将 `daemon.settings` deterministic JSON 序列化为 `/etc/docker/daemon.json`
-- [ ] 编译 Docker daemon file 节点，默认 owner/group/mode 为 `root/root/0644`
-- [ ] daemon file 依赖 Docker package 安装
-- [ ] `docker.service` 依赖 daemon file，保证首次启动前配置已写入
-- [ ] 编译 `docker.daemon.restart` operation
-- [ ] restart operation 由 daemon file 变化触发
-- [ ] restart operation 依赖 daemon file 和 `docker.service`
-- [ ] `package.source = "none"` 时仍允许管理 daemon file 和 service
-- [ ] drift 检测显示 daemon JSON 内容 diff 或摘要
+- [x] 将 `daemon.settings` deterministic JSON 序列化为 `/etc/docker/daemon.json`
+- [x] 编译 Docker daemon file 节点，默认 owner/group/mode 为 `root/root/0644`
+- [x] daemon file 依赖 Docker package 安装
+- [x] `docker.service` 依赖 daemon file，保证首次启动前配置已写入
+- [x] 编译 `docker.daemon.restart` operation
+- [x] restart operation 由 daemon file 变化触发
+- [x] restart operation 依赖 daemon file 和 `docker.service`
+- [x] `package.source = "none"` 时仍允许管理 daemon file 和 service
+- [x] drift 检测显示 daemon JSON 内容 diff 或摘要
 
 测试：
 
-- [ ] HostSpec golden 覆盖 nested daemon settings
-- [ ] ResourceGraph golden 覆盖 daemon file 和 restart operation
-- [ ] plan text golden 覆盖 daemon JSON 行级 diff
-- [ ] NativeProvider fake runner 测试 daemon file 写入
-- [ ] Engine fake apply 后修改 daemon desired，plan 包含 restart operation
-- [ ] 负例覆盖 daemon settings 中不能 JSON 序列化的值
+- [x] HostSpec golden 覆盖 nested daemon settings
+- [x] ResourceGraph golden 覆盖 daemon file 和 restart operation
+- [x] plan text golden 覆盖 daemon JSON 行级 diff
+- [x] NativeProvider fake runner 测试 daemon file 写入
+- [x] Engine fake apply 后修改 daemon desired，plan 包含 restart operation
+- [x] 负例覆盖 daemon settings 中不能 JSON 序列化的值
 
 示例：
 
-- [ ] `examples/v2-docker-daemon.dbf.hcl` 进入 golden
+- [x] `examples/v2-docker-daemon.dbf.hcl` 进入 golden
 
 文档：
 
-- [ ] README 增加 daemon settings 示例
-- [ ] 文档明确 MVP 统一使用 restart，不做细粒度 reload
+- [x] README 增加 daemon settings 示例
+- [x] 文档明确 MVP 统一使用 restart，不做细粒度 reload
 
 验收：
 
