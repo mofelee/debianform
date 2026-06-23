@@ -314,7 +314,7 @@ brew upgrade dbf
   - `dbf validate -f examples/v2-bbr.dbf.hcl`。
   - `dbf plan -f examples/v2-bbr.dbf.hcl --offline`。
   - Homebrew 安装和 `brew test`。
-- [ ] macOS amd64/arm64 验证尽量使用 GitHub hosted runners。
+- [x] macOS amd64/arm64 验证尽量使用 GitHub hosted runners。
 - [x] Linux arm64 如果暂时没有 runner，在 release notes 中标记为 artifact build verified，
   install path best-effort。
 

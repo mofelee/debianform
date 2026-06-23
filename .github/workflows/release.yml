@@ -117,8 +117,8 @@ jobs:
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
         run: scripts/update-homebrew-formula.sh "${GITHUB_REF_NAME}" dist/checksums.txt
 
-  verify:
-    name: Post-release verification
+  verify-linux:
+    name: Post-release verification (linux/amd64)
     needs: release
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -192,20 +192,138 @@ jobs:
           brew upgrade dbf
           echo "status=yes" >> "$GITHUB_OUTPUT"
 
-      - name: Write verification matrix
+      - name: Write Linux verification result
         run: |
           homebrew_status="${{ steps.homebrew.outputs.status }}"
           if [ -z "$homebrew_status" ]; then
             homebrew_status="manual/best-effort"
           fi
+          cat > "${RUNNER_TEMP}/linux-verification.env" <<EOF
+          linux_amd64_curl=yes
+          linux_amd64_homebrew=${homebrew_status}
+          EOF
+
+      - name: Upload Linux verification result
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-verification-linux-amd64-${{ needs.release.outputs.tag }}
+          path: ${{ runner.temp }}/linux-verification.env
+          if-no-files-found: error
+          retention-days: 30
+
+  verify-macos:
+    name: Post-release verification (${{ matrix.platform }})
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin/amd64
+            runner: macos-26-intel
+            arch: amd64
+          - platform: darwin/arm64
+            runner: macos-26
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+
+      - name: Verify curl installer
+        run: |
+          prefix="${RUNNER_TEMP}/debianform-install"
+          sh scripts/install.sh \
+            --version "${{ needs.release.outputs.tag }}" \
+            --prefix "${prefix}" \
+            --os darwin \
+            --arch "${{ matrix.arch }}" \
+            --force
+          "${prefix}/bin/dbf" version | tee "${RUNNER_TEMP}/dbf-version.txt"
+          grep "${{ needs.release.outputs.tag }}" "${RUNNER_TEMP}/dbf-version.txt"
+          "${prefix}/bin/dbf" validate -f examples/v2-bbr.dbf.hcl
+          "${prefix}/bin/dbf" plan -f examples/v2-bbr.dbf.hcl --offline
+
+      - name: Verify Homebrew path when available
+        id: homebrew
+        run: |
+          if ! command -v brew >/dev/null 2>&1; then
+            echo "status=manual/best-effort" >> "$GITHUB_OUTPUT"
+            echo "Homebrew is not installed on this runner; skipping brew install/test." >&2
+            exit 0
+          fi
+          brew update
+          brew tap mofelee/debianform
+          brew install mofelee/debianform/dbf
+          brew test mofelee/debianform/dbf
+          brew upgrade dbf
+          echo "status=yes" >> "$GITHUB_OUTPUT"
+
+      - name: Write macOS verification result
+        run: |
+          homebrew_status="${{ steps.homebrew.outputs.status }}"
+          if [ -z "$homebrew_status" ]; then
+            homebrew_status="manual/best-effort"
+          fi
+          result_file="${RUNNER_TEMP}/macos-${{ matrix.arch }}-verification.env"
+          {
+            echo "darwin_${{ matrix.arch }}_curl=yes"
+            echo "darwin_${{ matrix.arch }}_homebrew=${homebrew_status}"
+          } > "$result_file"
+
+      - name: Upload macOS verification result
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-verification-darwin-${{ matrix.arch }}-${{ needs.release.outputs.tag }}
+          path: ${{ runner.temp }}/macos-${{ matrix.arch }}-verification.env
+          if-no-files-found: error
+          retention-days: 30
+
+  verify-summary:
+    name: Release verification summary
+    needs:
+      - release
+      - verify-linux
+      - verify-macos
+    if: always() && needs.release.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Download verification results
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v6.0.0
+        with:
+          pattern: release-verification-*-${{ needs.release.outputs.tag }}
+          path: ${{ runner.temp }}/verification-results
+          merge-multiple: true
+
+      - name: Write verification matrix
+        run: |
+          linux_amd64_curl="failed"
+          linux_amd64_homebrew="failed"
+          darwin_amd64_curl="failed"
+          darwin_amd64_homebrew="failed"
+          darwin_arm64_curl="failed"
+          darwin_arm64_homebrew="failed"
+
+          for result in "${RUNNER_TEMP}"/verification-results/*.env; do
+            [ -f "$result" ] && . "$result"
+          done
+
           cat > "${RUNNER_TEMP}/release-verification-matrix.md" <<EOF
           | Path | linux/amd64 | linux/arm64 | darwin/amd64 | darwin/arm64 |
           | --- | --- | --- | --- | --- |
           | Artifact build | yes | yes | yes | yes |
-          | curl install | yes | manual/best-effort | manual/best-effort | manual/best-effort |
-          | Homebrew install | ${homebrew_status} | manual/best-effort | manual/best-effort | manual/best-effort |
+          | curl install | ${linux_amd64_curl} | manual/best-effort | ${darwin_amd64_curl} | ${darwin_arm64_curl} |
+          | Homebrew install | ${linux_amd64_homebrew} | manual/best-effort | ${darwin_amd64_homebrew} | ${darwin_arm64_homebrew} |
           EOF
           cat "${RUNNER_TEMP}/release-verification-matrix.md" >> "$GITHUB_STEP_SUMMARY"
+
+          if grep -q 'failed' "${RUNNER_TEMP}/release-verification-matrix.md"; then
+            cat "${RUNNER_TEMP}/release-verification-matrix.md" >&2
+            exit 1
+          fi
 
       - name: Add verification matrix to release notes
         env:
