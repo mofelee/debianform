@@ -226,6 +226,32 @@ func TestSensitiveServiceEnvironmentPlanDoesNotLeak(t *testing.T) {
 	}
 }
 
+func TestSensitiveVariablePlanDoesNotLeak(t *testing.T) {
+	doc := planFixture(t, "../testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", Options{
+		CommandFile: "../testdata/fixtures/v2-sensitive-variable-files.dbf.hcl",
+		Host:        "varsecret1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive variable plan JSON", string(data))
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	rendered := text.String()
+	testassert.NoSecretLeak(t, "sensitive variable plan text", rendered)
+	if !strings.Contains(rendered, "<sensitive sha256=") {
+		t.Fatalf("plan text does not show sensitive summary:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "+ prod") {
+		t.Fatalf("plan text does not show non-sensitive variable content:\n%s", rendered)
+	}
+}
+
 func TestVariableDefaultsPlanOffline(t *testing.T) {
 	doc := planFixture(t, "../testdata/fixtures/v2-variable-defaults.dbf.hcl", Options{
 		CommandFile: "../testdata/fixtures/v2-variable-defaults.dbf.hcl",

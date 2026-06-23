@@ -960,32 +960,47 @@ stdin 或 secret backend。
 
 代码：
 
-- [ ] variable 注入 evaluator 时携带 `Sensitive` mark。
-- [ ] `jsonencode`、模板字符串、map/list/object 等表达式结果聚合 sensitive mark。
-- [ ] `files.file.content` 引用 sensitive 值时自动设置 file sensitive。
-- [ ] `systemd.unit.content` 和 service environment 引用 sensitive 值时自动设置 unit 或
+- [x] variable 注入 evaluator 时携带 `Sensitive` mark。
+- [x] `jsonencode`、模板字符串、map/list/object 等表达式结果聚合 sensitive mark。
+- [x] `files.file.content` 引用 sensitive 值时自动设置 file sensitive。
+- [x] `systemd.unit.content` 和 service environment 引用 sensitive 值时自动设置 unit 或
       environment sensitive。
-- [ ] 用户显式 `sensitive = false` 不能覆盖表达式传播出来的 sensitive mark。
-- [ ] CLI/inspect/错误上下文不得打印 sensitive 明文。
+- [x] 用户显式 `sensitive = false` 不能覆盖表达式传播出来的 sensitive mark。
+- [x] CLI/inspect/错误上下文不得打印 sensitive 明文。
 
 测试：
 
-- [ ] sensitive variable 写入 file 后，plan/state/HostSpec 不出现明文。
-- [ ] sensitive variable 经 `jsonencode`、模板字符串、map/list/object 传播后仍 sensitive。
-- [ ] 用户显式 `sensitive = false` 不能覆盖传播结果。
-- [ ] 普通 non-sensitive variable 仍显示 text diff。
-- [ ] 错误输出和 warning 中不包含 sensitive 明文。
+- [x] sensitive variable 写入 file 后，plan/state/HostSpec 不出现明文。
+- [x] sensitive variable 经 `jsonencode`、模板字符串、map/list/object 传播后仍 sensitive。
+- [x] 用户显式 `sensitive = false` 不能覆盖传播结果。
+- [x] 普通 non-sensitive variable 仍显示 text diff。
+- [x] 错误输出和 warning 中不包含 sensitive 明文。
 
 示例/文档：
 
-- [ ] 增加 sensitive variable 派生 file 的 fixture。
-- [ ] 文档明确 `sensitive` 不是 `ephemeral`，目标机文件仍会写入磁盘或 tmpfs。
+- [x] 增加 sensitive variable 派生 file 的 fixture。
+- [x] 文档明确 `sensitive` 不是 `ephemeral`，目标机文件仍会写入磁盘或 tmpfs。
 
 验收：
 
-- [ ] `sensitive` 可安全用于脱敏和摘要展示。
-- [ ] 本轮不引入“不持久化”语义。
-- [ ] `make test` 通过。
+- [x] `sensitive` 可安全用于脱敏和摘要展示。
+- [x] 本轮不引入“不持久化”语义。
+- [x] `make test` 通过。
+
+实现记录：
+
+- variable 最终值在归一化后如果声明了 `sensitive = true`，会携带 DebianForm 的
+  `Sensitive` mark 注入 evaluator；这适用于 default、CLI、var file 和 env。
+- evaluator 已通过 cty marks 聚合 `jsonencode`、模板字符串、map/list/object 等表达式的
+  sensitive 状态；merge 层在 `files.file.content`、`systemd.unit.content` 和 structured
+  service environment 检测到 sensitive 值时自动设置资源 sensitive。
+- 用户在 `files.file` 上显式写 `sensitive = false` 不能覆盖由表达式传播出的 sensitive
+  mark。
+- `sensitive` 只控制 DebianForm CLI、HostSpec、ResourceGraph、plan/state 的展示脱敏和摘要；
+  它不是 `ephemeral`，目标机文件或 systemd unit 仍会按配置写入目标磁盘或 tmpfs。
+- 新增 `internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl`，覆盖直接 file、
+  `jsonencode`、模板字符串、systemd raw unit、structured service environment 和普通
+  non-sensitive diff。
 
 ### Loop 7：`@path`、`@-` 和运行时输入
 

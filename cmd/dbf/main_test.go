@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mofelee/debianform/internal/v2/testassert"
 )
 
 func TestConfigFilesLoadsAllDBFHCLInCurrentDirectory(t *testing.T) {
@@ -176,6 +178,25 @@ func TestValidateAndPlanAcceptCLIVariableValues(t *testing.T) {
 	}
 	if strings.Contains(planOutput, `"environment":"prod"`) {
 		t.Fatalf("plan output kept earlier -var value: %q", planOutput)
+	}
+}
+
+func TestPlanSensitiveCLIVariableDoesNotLeak(t *testing.T) {
+	output, stderr := captureOutput(t, func() {
+		if err := run([]string{
+			"plan", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", "--offline",
+			"-var", "api_token=" + testassert.SensitiveVariableCLIValue,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	testassert.NoSecretLeak(t, "sensitive CLI variable plan stdout", output)
+	testassert.NoSecretLeak(t, "sensitive CLI variable plan stderr", stderr)
+	if !strings.Contains(output, "<sensitive sha256=") {
+		t.Fatalf("plan output does not show sensitive summary:\n%s", output)
+	}
+	if !strings.Contains(output, "+ prod") {
+		t.Fatalf("plan output does not show non-sensitive variable content:\n%s", output)
 	}
 }
 

@@ -274,6 +274,7 @@ func TestCompileHostSpecJSONDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 		{name: "sensitive file content", fixture: "../../../examples/v2-files-plan-preview.dbf.hcl"},
 		{name: "sensitive component input", fixture: "../../../examples/v2-component-inputs.dbf.hcl"},
 		{name: "sensitive service environment", fixture: "../testdata/fixtures/v2-sensitive-service-environment.dbf.hcl"},
+		{name: "sensitive variable content", fixture: "../testdata/fixtures/v2-sensitive-variable-files.dbf.hcl"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg, err := parser.ParseFiles([]string{tt.fixture})
@@ -1881,6 +1882,56 @@ host "server1" {
 	}
 	if strings.Contains(string(data), "systemd-secret-token") {
 		t.Fatalf("HostSpec JSON leaked systemd secret: %s", data)
+	}
+}
+
+func TestCompileSensitiveVariablePropagatesToResources(t *testing.T) {
+	cfg, err := parser.ParseFiles([]string{"../testdata/fixtures/v2-sensitive-variable-files.dbf.hcl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := program.Hosts[0]
+	for _, path := range []string{
+		"/etc/debianform/token.txt",
+		"/etc/debianform/config.json",
+		"/etc/debianform/template.txt",
+	} {
+		file := host.Files.Files[path]
+		if !file.Sensitive {
+			t.Fatalf("%s sensitive = false", path)
+		}
+		if !strings.Contains(file.Content, "not-a-real-variable-secret") {
+			t.Fatalf("%s in-memory content missing secret: %q", path, file.Content)
+		}
+	}
+	publicFile := host.Files.Files["/etc/debianform/public.txt"]
+	if publicFile.Sensitive {
+		t.Fatalf("public file sensitive = true")
+	}
+	if publicFile.Content != "prod" {
+		t.Fatalf("public file content = %q", publicFile.Content)
+	}
+
+	for _, name := range []string{"raw-token.service", "structured-token.service"} {
+		unit := host.Systemd.Units[name]
+		if !unit.Sensitive {
+			t.Fatalf("%s sensitive = false", name)
+		}
+		if !strings.Contains(unit.Content, "not-a-real-variable-secret") {
+			t.Fatalf("%s in-memory content missing secret: %q", name, unit.Content)
+		}
+	}
+
+	data, err := json.Marshal(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "not-a-real-variable-secret") {
+		t.Fatalf("Program JSON leaked variable secret: %s", data)
 	}
 }
 

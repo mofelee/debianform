@@ -11,6 +11,7 @@ const (
 	SensitiveComponentInputValue = "example-secret-token"
 	SensitiveServiceEnvironment  = "not-a-real-service-token"
 	SensitiveVariableDefault     = "not-a-real-variable-secret"
+	SensitiveVariableCLIValue    = "not-a-real-cli-variable-secret"
 )
 
 func NoSecretLeak(t *testing.T, label, text string, allowed ...string) {

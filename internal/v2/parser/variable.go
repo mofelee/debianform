@@ -24,6 +24,9 @@ func NormalizeVariableValue(variable Variable, value Value) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
+	if variable.Sensitive {
+		normalized.Sensitive = true
+	}
 	return normalized, nil
 }
 
