@@ -1,4 +1,5 @@
 .cache/
 /dbf
+/dist/
 examples/keys/
 examples/secrets/

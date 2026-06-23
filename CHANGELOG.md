@@ -8,6 +8,12 @@ This project follows semantic versioning after the public beta line begins.
 
 - No changes yet.
 
+## v0.1.0-beta.2
+
+- Mark beta releases as GitHub prereleases automatically.
+- Ignore GoReleaser's `dist/` output directory so release binaries are not
+  stamped as dirty by Go VCS metadata.
+
 ## v0.1.0-beta.1
 
 - First public beta / public preview release for the v2 DebianForm line.
