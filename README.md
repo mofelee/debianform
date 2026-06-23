@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./logo.png" alt="DebianForm logo" width="160">
+</p>
+
 # DebianForm
 
 DebianForm 是面向 Debian 主机的 v2 配置工具，目前处于 public preview / beta 阶段。
