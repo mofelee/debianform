@@ -286,11 +286,20 @@ brew test mofelee/debianform/dbf
 brew upgrade dbf
 ```
 
+已验证自动更新链路：`v0.0.0-homebrew-test.2` 触发的 release workflow run
+`28011757388` 通过，`Update Homebrew tap` step 成功推送 tap commit
+`efebb289ead82df3b2f94b303c14049cbf5b14b7`，commit message 为
+`dbf v0.0.0-homebrew-test.2`，作者为 `github-actions[bot]`。`Formula/dbf.rb`
+中的四个平台 URL 和 sha256 已与该 release 的 `checksums.txt` 对齐。
+当前执行环境没有 `brew`，因此 `brew install/test/upgrade` 仍需在有 Homebrew 的环境执行。
+测试 release `v0.0.0-homebrew-test.2` 暂时保留，避免 tap 公式指向不存在的 artifact；
+正式 release 会自动覆盖该公式。
+
 需要你介入：
 
-- 创建 `HOMEBREW_TAP_GITHUB_TOKEN` secret。
-- token 需要对 `mofelee/homebrew-debianform` 有 contents write 权限。
-- 确认 CI bot 的 commit author 名称和邮箱。
+- 已创建 `HOMEBREW_TAP_GITHUB_TOKEN` secret。
+- token 已验证可以向 `mofelee/homebrew-debianform` 推送。
+- CI bot 的 commit author 已验证为 `github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>`。
 
 ## Loop 7: 发布后自动验证
 
