@@ -4,6 +4,7 @@
 macOS 上用 `curl` 或 Homebrew 安装 `dbf`，并支持 `amd64` 和 `arm64`。
 
 自动化落地步骤见 [release automation plan](release-automation-plan.zh.md)。
+日常发布操作见 [release quick runbook](release-quick-runbook.zh.md)。
 
 ## 支持矩阵
 

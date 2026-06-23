@@ -96,6 +96,7 @@ v2 领域块或 component。
 - [v2 implementation plan](docs/v2-implementation-plan.zh.md)
 - [release process](docs/release-process.zh.md)
 - [release automation plan](docs/release-automation-plan.zh.md)
+- [release quick runbook](docs/release-quick-runbook.zh.md)
 
 ## v2 示例
 

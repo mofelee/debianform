@@ -2,10 +2,10 @@
 
 本文档把 DebianForm 的发布自动化拆成可验证 loop。每个 loop 都应该形成一个可以合并的闭环：
 
-- [ ] 代码或配置可运行
-- [ ] 文档同步更新
-- [ ] 本地或 CI 验收命令通过
-- [ ] 需要人工介入的事项明确列出
+- [x] 代码或配置可运行
+- [x] 文档同步更新
+- [x] 本地或 CI 验收命令通过
+- [x] 需要人工介入的事项明确列出
 
 总体目标：
 
@@ -313,7 +313,8 @@ brew upgrade dbf
   - `dbf version` 包含 tag。
   - `dbf validate -f examples/v2-bbr.dbf.hcl`。
   - `dbf plan -f examples/v2-bbr.dbf.hcl --offline`。
-  - Homebrew 安装和 `brew test`。
+  - Homebrew 路径在 runner 有 `brew` 时执行，否则 release notes 标记为
+    `manual/best-effort`。
 - [x] macOS amd64/arm64 验证尽量使用 GitHub hosted runners。
 - [x] Linux arm64 如果暂时没有 runner，在 release notes 中标记为 artifact build verified，
   install path best-effort。
@@ -338,7 +339,16 @@ release notes 中必须包含验证矩阵：
 | --- | --- | --- | --- | --- |
 | Artifact build | yes | yes | yes | yes |
 | curl install | yes | manual/best-effort | yes | yes |
-| Homebrew install | yes | manual/best-effort | yes | yes |
+| Homebrew install | manual/best-effort | manual/best-effort | yes | yes |
+
+最终端到端验收：`v0.0.0-final-release-test.1` 触发的 release workflow run
+`28012984066` 通过。该 run 包含 `GitHub Release`、`Post-release verification
+(linux/amd64)`、`Post-release verification (darwin/amd64)`、`Post-release verification
+(darwin/arm64)` 和 `Release verification summary`，所有 job 均为 success。release notes
+已写入验证矩阵；macOS amd64 和 macOS arm64 均通过 curl installer、`dbf validate`、
+`dbf plan --offline`、Homebrew install/test/upgrade 路径。Linux amd64 通过 curl installer、
+签名、SBOM 和 provenance 验证；Ubuntu runner 没有 Homebrew，因此 Homebrew 标记为
+`manual/best-effort`。
 
 需要你介入：
 
@@ -374,6 +384,11 @@ cosign verify-blob \
 `Verified OK`，同时 `gh attestation verify dbf_v0.0.0-supply-chain-test.1_linux_amd64.tar.gz
 --repo mofelee/debianform` 通过。
 
+最终端到端验收 `v0.0.0-final-release-test.1` / run `28012984066` 也通过了相同供应链验证。
+该 release 包含四个平台 tarball、`checksums.txt`、`checksums.txt.sigstore.json` 和四个
+`*.sbom.spdx.json`；Linux verify job 已校验 checksum、cosign keyless bundle 和 GitHub
+provenance attestation。
+
 需要你介入：
 
 - 已选择 cosign keyless；无需长期 GPG 私钥。
@@ -396,13 +411,14 @@ beta。
 
 ## 人工介入清单
 
-发布自动化推进过程中，需要你处理或确认：
+发布自动化推进过程中，人工事项状态：
 
-- 选择 license。
-- 确认安全报告方式。
-- 创建 `mofelee/homebrew-debianform` 仓库。
-- 创建 `HOMEBREW_TAP_GITHUB_TOKEN` secret。
-- 确认是否允许临时 test tag 验证 release workflow。
-- 正式发布时创建 signed tag。
-- 确认 Linux arm64 和 macOS 验证范围。
-- stable 前选择签名方案。
+- 已选择 MIT license。
+- 已确认使用 GitHub Security Advisory 作为安全报告方式。
+- 已创建 `mofelee/homebrew-debianform` 仓库。
+- 已创建并验证 `HOMEBREW_TAP_GITHUB_TOKEN` secret。
+- 已允许并使用临时 test tag 验证 release workflow。
+- 正式发布时仍由维护者手动创建 signed tag。
+- Linux arm64 暂无 hosted runner，release notes 标记为 `manual/best-effort`。
+- macOS amd64 和 macOS arm64 已纳入自动验证。
+- 已选择 cosign keyless 作为签名方案。
