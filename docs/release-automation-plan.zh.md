@@ -207,8 +207,8 @@ dbf version
 
 代码/文件：
 
-- [ ] 新增 `.github/workflows/release.yml`。
-- [ ] workflow 触发条件：
+- [x] 新增 `.github/workflows/release.yml`。
+- [x] workflow 触发条件：
 
   ```yaml
   on:
@@ -217,20 +217,20 @@ dbf version
         - "v*"
   ```
 
-- [ ] workflow 权限：
+- [x] workflow 权限：
 
   ```yaml
   permissions:
     contents: write
   ```
 
-- [ ] release job 执行：
+- [x] release job 执行：
   - checkout with full history
   - setup-go
   - `go vet ./...`
   - `go test -race -count=1 ./...`
   - `goreleaser release --clean`
-- [ ] GoReleaser 自动生成 GitHub Release 和 `checksums.txt`。
+- [x] GoReleaser 自动生成 GitHub Release 和 `checksums.txt`。
 
 验收：
 
