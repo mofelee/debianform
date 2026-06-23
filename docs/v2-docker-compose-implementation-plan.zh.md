@@ -25,8 +25,10 @@
 - [x] 已支持顶层 `docker` DSL 的 validate / HostSpec 编译
 - [x] 已支持 Docker daemon JSON 高阶配置的 validate / HostSpec 编译
 - [x] 已支持 Docker Compose project 高阶对象的 validate / HostSpec 编译
+- [x] 已支持 `docker.enable` 官方源 ResourceGraph / offline plan 展开
 - [ ] 尚未支持 Compose project 状态漂移检测
-- [ ] 尚未支持 Docker ResourceGraph / plan / apply / check 展开
+- [ ] 尚未支持 Docker daemon / users / Compose ResourceGraph 展开
+- [ ] 尚未支持 Docker apply / check 闭环
 
 ## 总体实现边界
 
@@ -150,42 +152,42 @@ make test
 
 代码：
 
-- [ ] ResourceGraph 编译 Docker 官方 APT signing key 节点
-- [ ] ResourceGraph 编译 Docker 官方 APT repository 节点
-- [ ] ResourceGraph 编译 host-scoped APT cache refresh operation
-- [ ] ResourceGraph 编译默认 packages：
+- [x] ResourceGraph 编译 Docker 官方 APT signing key 节点
+- [x] ResourceGraph 编译 Docker 官方 APT repository 节点
+- [x] ResourceGraph 编译 host-scoped APT cache refresh operation
+- [x] ResourceGraph 编译默认 packages：
   - `docker-ce`
   - `docker-ce-cli`
   - `containerd.io`
   - `docker-buildx-plugin`
   - `docker-compose-plugin`
-- [ ] ResourceGraph 编译 `docker.service` service 节点
-- [ ] 官方 repository 使用目标 host 的 `system.codename`
-- [ ] 官方 repository 使用目标 host 的 `system.architecture`
-- [ ] 在线 plan 使用 runtime facts 后重新编译 Docker repository
-- [ ] `plan --offline` 缺少 architecture/codename 时给出清晰错误
-- [ ] Docker 领域节点使用高阶地址，provider payload 复用现有 APT/package/service provider
-- [ ] 推导依赖：signing key -> repository -> apt cache refresh -> packages -> service
-- [ ] `enable = false` 不生成任何 Docker 节点
+- [x] ResourceGraph 编译 `docker.service` service 节点
+- [x] 官方 repository 使用目标 host 的 `system.codename`
+- [x] 官方 repository 使用目标 host 的 `system.architecture`
+- [x] 在线 plan 使用 runtime facts 后重新编译 Docker repository
+- [x] `plan --offline` 缺少 architecture/codename 时给出清晰错误
+- [x] Docker 领域节点使用高阶地址，provider payload 复用现有 APT/package/service provider
+- [x] 推导依赖：signing key -> repository -> apt cache refresh -> packages -> service
+- [x] `enable = false` 不生成任何 Docker 节点
 
 测试：
 
-- [ ] ResourceGraph golden 覆盖官方 signing key、repository、packages、service 地址
-- [ ] ResourceGraph 单测覆盖依赖顺序
-- [ ] plan JSON golden 覆盖 Docker 最小 create plan
-- [ ] plan text golden 覆盖高阶 Docker 地址
-- [ ] 负例覆盖 offline 缺失 runtime facts
-- [ ] 负例覆盖 `package.source = "debian"` 在本轮返回 not implemented 诊断
+- [x] ResourceGraph golden 覆盖官方 signing key、repository、packages、service 地址
+- [x] ResourceGraph 单测覆盖依赖顺序
+- [x] plan JSON golden 覆盖 Docker 最小 create plan
+- [x] plan text golden 覆盖高阶 Docker 地址
+- [x] 负例覆盖 offline 缺失 runtime facts
+- [x] 负例覆盖 `package.source = "debian"` 在本轮返回 not implemented 诊断
 
 示例：
 
-- [ ] `examples/v2-docker-minimal.dbf.hcl` 进入 graph / plan golden
-- [ ] 示例中为 offline golden 显式声明 `system.architecture` 和 `system.codename`
+- [x] `examples/v2-docker-minimal.dbf.hcl` 进入 graph / plan golden
+- [x] 示例中为 offline golden 显式声明 `system.architecture` 和 `system.codename`
 
 文档：
 
-- [ ] README 标明 `docker { enable = true }` 已可 plan
-- [ ] Docker 需求文档旁补充实现状态链接到本文档
+- [x] README 标明 `docker { enable = true }` 已可 plan
+- [x] Docker 需求文档旁补充实现状态链接到本文档
 
 验收：
 

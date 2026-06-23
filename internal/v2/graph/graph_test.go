@@ -104,6 +104,124 @@ func TestCompileAPTRepositoryResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileDockerMinimalResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-docker-minimal.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-docker-minimal.golden.json", got)
+
+	keyAddress := `host.docker1.docker.apt.signing_key["docker-official"]`
+	repositoryAddress := `host.docker1.docker.apt.repository["docker-official"]`
+	refreshAddress := `host.docker1.apt.cache_refresh`
+	serviceAddress := `host.docker1.docker.service["docker"]`
+	packageAddresses := []string{
+		`host.docker1.docker.package["docker-ce"]`,
+		`host.docker1.docker.package["docker-ce-cli"]`,
+		`host.docker1.docker.package["containerd.io"]`,
+		`host.docker1.docker.package["docker-buildx-plugin"]`,
+		`host.docker1.docker.package["docker-compose-plugin"]`,
+	}
+
+	repository := nodeFor(resourceGraph, repositoryAddress)
+	if repository == nil {
+		t.Fatalf("docker repository node missing")
+	}
+	if !containsString(repository.DependsOn, keyAddress) {
+		t.Fatalf("docker repository deps = %#v, want signing key", repository.DependsOn)
+	}
+	content, _ := repository.Desired["content"].(string)
+	for _, want := range []string{
+		"URIs: https://download.docker.com/linux/debian",
+		"Suites: trixie",
+		"Components: stable",
+		"Architectures: amd64",
+		"Signed-By: /etc/apt/keyrings/docker.asc",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("docker repository content missing %q:\n%s", want, content)
+		}
+	}
+
+	refresh := operationFor(resourceGraph, refreshAddress)
+	if refresh == nil {
+		t.Fatalf("apt cache refresh operation missing")
+	}
+	for _, want := range []string{keyAddress, repositoryAddress} {
+		if !containsString(refresh.DependsOn, want) || !containsString(refresh.TriggeredBy, want) {
+			t.Fatalf("refresh deps=%#v triggered_by=%#v, want %q", refresh.DependsOn, refresh.TriggeredBy, want)
+		}
+	}
+	for _, packageAddress := range packageAddresses {
+		deps := dependsOnFor(resourceGraph, packageAddress)
+		for _, want := range []string{repositoryAddress, refreshAddress} {
+			if !containsString(deps, want) {
+				t.Fatalf("%s deps = %#v, want %q", packageAddress, deps, want)
+			}
+		}
+	}
+	serviceDeps := dependsOnFor(resourceGraph, serviceAddress)
+	for _, want := range packageAddresses {
+		if !containsString(serviceDeps, want) {
+			t.Fatalf("docker service deps = %#v, want %q", serviceDeps, want)
+		}
+	}
+
+	order := topologicalOrder(t, resourceGraph)
+	assertBefore(t, order, keyAddress, repositoryAddress)
+	assertBefore(t, order, repositoryAddress, refreshAddress)
+	for _, packageAddress := range packageAddresses {
+		assertBefore(t, order, refreshAddress, packageAddress)
+		assertBefore(t, order, packageAddress, serviceAddress)
+	}
+}
+
+func TestCompileDockerDisabledGeneratesNoDockerNodes(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "server1" {
+  docker {
+    enable = false
+  }
+}
+`)
+
+	for _, node := range resourceGraph.Nodes {
+		if strings.Contains(node.Address, ".docker.") {
+			t.Fatalf("docker disabled generated node %s", node.Address)
+		}
+	}
+	for _, operation := range resourceGraph.Operations {
+		if strings.Contains(operation.Address, ".docker.") {
+			t.Fatalf("docker disabled generated operation %s", operation.Address)
+		}
+	}
+}
+
+func TestCompileDockerPackageSourceDebianNotImplemented(t *testing.T) {
+	err := compileGraphInlineError(t, `
+host "server1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  docker {
+    enable = true
+
+    package {
+      source = "debian"
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), `docker package source "debian" is not implemented in this loop`) {
+		t.Fatalf("graph compile error = %v, want docker source not implemented", err)
+	}
+}
+
 func TestCompileProfileMergeResourceGraphGolden(t *testing.T) {
 	resourceGraph := compileGraphFixture(t, "../../../examples/v2-profile-merge.dbf.hcl")
 
@@ -763,6 +881,7 @@ func testHostFacts() map[string]ir.HostFacts {
 	for _, name := range []string{
 		"apt1",
 		"bbr1",
+		"docker1",
 		"edge1",
 		"foundation1",
 		"input1",
@@ -793,6 +912,26 @@ func compileGraphInline(t *testing.T, content string) *ResourceGraph {
 		t.Fatal(err)
 	}
 	return compileGraphFixture(t, file)
+}
+
+func compileGraphInlineError(t *testing.T, content string) error {
+	t.Helper()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(file, []byte(strings.TrimPrefix(content, "\n")), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := parser.ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := merge.CompileWithOptions(cfg, merge.CompileOptions{HostFacts: testHostFacts()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Compile(program)
+	return err
 }
 
 func dependsOnFor(resourceGraph *ResourceGraph, address string) []string {
@@ -829,6 +968,36 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func topologicalOrder(t *testing.T, resourceGraph *ResourceGraph) map[string]int {
+	t.Helper()
+
+	items, err := resourceGraph.TopologicalSort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make(map[string]int, len(items))
+	for i, item := range items {
+		out[item.Address] = i
+	}
+	return out
+}
+
+func assertBefore(t *testing.T, order map[string]int, before string, after string) {
+	t.Helper()
+
+	beforeIndex, ok := order[before]
+	if !ok {
+		t.Fatalf("topological order missing %q", before)
+	}
+	afterIndex, ok := order[after]
+	if !ok {
+		t.Fatalf("topological order missing %q", after)
+	}
+	if beforeIndex >= afterIndex {
+		t.Fatalf("topological order puts %q at %d after %q at %d", before, beforeIndex, after, afterIndex)
+	}
 }
 
 func hasOperation(resourceGraph *ResourceGraph, address string) bool {

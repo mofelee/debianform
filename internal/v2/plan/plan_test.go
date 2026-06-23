@@ -89,6 +89,62 @@ func TestAPTRepositoryPlanJSONGolden(t *testing.T) {
 	}
 }
 
+func TestDockerMinimalPlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-docker-minimal.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-docker-minimal.dbf.hcl",
+		Host:        "docker1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-docker-minimal.golden.json", got)
+
+	if doc.Summary.Create != 8 {
+		t.Fatalf("create count = %d, want 8", doc.Summary.Create)
+	}
+	if doc.Summary.Operations != 1 {
+		t.Fatalf("operations = %d, want 1", doc.Summary.Operations)
+	}
+	for _, want := range []string{
+		`host.docker1.docker.apt.signing_key["docker-official"]`,
+		`host.docker1.docker.apt.repository["docker-official"]`,
+		`host.docker1.docker.package["docker-ce"]`,
+		`host.docker1.docker.service["docker"]`,
+	} {
+		if !hasChange(doc, want) {
+			t.Fatalf("docker plan missing change %q", want)
+		}
+	}
+	if !hasOperation(doc, "host.docker1.apt.cache_refresh") {
+		t.Fatalf("docker apt cache refresh operation missing: %#v", doc.Operations)
+	}
+}
+
+func TestDockerMinimalPlanTextGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-docker-minimal.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-docker-minimal.dbf.hcl",
+		Host:        "docker1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	assertGolden(t, "../testdata/plan/v2-docker-minimal.golden.txt", text.String())
+	if !strings.Contains(text.String(), `host.docker1.docker.package["docker-ce"]`) {
+		t.Fatalf("docker text plan missing high-level address:\n%s", text.String())
+	}
+	if strings.Contains(text.String(), "provider:") {
+		t.Fatalf("docker text plan leaked provider addresses:\n%s", text.String())
+	}
+}
+
 func TestNftablesPlanJSONGolden(t *testing.T) {
 	doc := planFixture(t, "../../../examples/v2-nftables.dbf.hcl", Options{
 		CommandFile: "../../../examples/v2-nftables.dbf.hcl",
@@ -639,6 +695,7 @@ func testHostFacts() map[string]ir.HostFacts {
 	for _, name := range []string{
 		"apt1",
 		"bbr1",
+		"docker1",
 		"edge1",
 		"foundation1",
 		"input1",

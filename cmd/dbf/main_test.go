@@ -974,6 +974,28 @@ func TestOfflinePlanExplainsRuntimeFactsDependency(t *testing.T) {
 	}
 }
 
+func TestOfflinePlanExplainsDockerRuntimeFactsDependency(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "docker.dbf.hcl")
+	if err := os.WriteFile(file, []byte(`
+host "docker1" {
+  docker {
+    enable = true
+  }
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := run([]string{"plan", "-f", file, "--offline"})
+	if err == nil || !strings.Contains(err.Error(), "offline plan cannot resolve runtime facts") {
+		t.Fatalf("docker plan --offline error = %v, want runtime facts explanation", err)
+	}
+	if !strings.Contains(err.Error(), "must declare system.architecture") {
+		t.Fatalf("docker plan --offline error = %v, want missing architecture detail", err)
+	}
+}
+
 func TestParallelFlagIsApplyOnlyAndPositive(t *testing.T) {
 	err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "2"})
 	if err == nil || !strings.Contains(err.Error(), "--parallel is only supported for v2 apply") {

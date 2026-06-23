@@ -1,5 +1,7 @@
 # DebianForm v2 Docker / Docker Compose 管理需求文档
 
+实现拆分与当前状态见：`docs/v2-docker-compose-implementation-plan.zh.md`。
+
 ## 1. 背景
 
 DebianForm 是一个面向 Debian 系统运维的声明式配置工具，设计上借鉴 Terraform 的 `plan / apply / state` 思路，以及 NixOS 的系统声明式配置体验。

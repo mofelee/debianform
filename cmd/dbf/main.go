@@ -383,6 +383,9 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 			}
 			resourceGraph, err := v2graph.Compile(program)
 			if err != nil {
+				if isRuntimeFactCompileError(err) {
+					return fmt.Errorf("offline plan cannot resolve runtime facts; run dbf plan without --offline or declare matching system facts: %w", err)
+				}
 				return err
 			}
 			doc = v2plan.New(resourceGraph, v2plan.Options{
@@ -742,6 +745,9 @@ func isRuntimeFactCompileError(err error) bool {
 	}
 	msg := err.Error()
 	if strings.Contains(msg, "must declare system.architecture") {
+		return true
+	}
+	if strings.Contains(msg, "must declare system.codename") {
 		return true
 	}
 	return strings.Contains(msg, ".suites") && strings.Contains(msg, "non-empty")

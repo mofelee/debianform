@@ -132,7 +132,7 @@ v2 领域块或 component。
 - `examples/v2-component-inputs.dbf.hcl`
 - `examples/v2-docker-compose.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
 - `examples/v2-docker-daemon.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
-- `examples/v2-docker-minimal.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
+- `examples/v2-docker-minimal.dbf.hcl`（当前支持 validate、HostSpec 和 offline plan）
 - `examples/v2-files-plan-preview.dbf.hcl`
 - `examples/v2-mihomo.dbf.hcl`
 - `examples/v2-nftables.dbf.hcl`
@@ -251,12 +251,17 @@ component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
 远程 URL source 必须声明 64 位 sha256，plan 会生成 download 和 install 节点；
 `ca_certificate` 变化会额外触发 `update-ca-certificates` operation。
 
-Docker v2 DSL 当前已接入 validate 和 HostSpec 编译。最小语法会归一化为官方 Docker 源、
-默认 Docker packages 和 `docker.service` 默认值；ResourceGraph、plan、apply 和 check
-展开将在后续 loop 完成：
+Docker v2 DSL 当前已接入 validate 和 HostSpec 编译。最小语法已经可以展开为官方 Docker
+APT 源、默认 Docker packages 和 `docker.service` 的 offline plan；daemon、users、Compose、
+apply 和 check 会在后续 loop 完成：
 
 ```hcl
 host "docker1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
   docker {
     enable = true
   }
@@ -265,6 +270,7 @@ host "docker1" {
 
 ```bash
 dbf validate -f examples/v2-docker-minimal.dbf.hcl
+dbf plan -f examples/v2-docker-minimal.dbf.hcl --offline
 ```
 
 nftables 使用原生 ruleset/snippet 文件作为主路径，不提供通用 firewall 抽象。
@@ -394,10 +400,10 @@ hash、长度等摘要。新配置优先使用 `variable + files.file` 表达敏
 ## 常见错误
 
 - `offline plan cannot resolve runtime facts`：离线 plan 遇到依赖
-  `target.system.codename` 或 `target.system.architecture` 的 component。改用
-  `dbf validate` 做本地检查，或对真实目标主机运行在线 plan。
-- `must declare system.architecture` / `must declare system.codename`：component 需要
-  runtime facts。真实主机会在线探测；纯本地 fixture 需要在 `host.system` 中显式声明。
+  `target.system.codename` 或 `target.system.architecture` 的 component，或需要生成 Docker 官方
+  APT 源。改用 `dbf validate` 做本地检查，或对真实目标主机运行在线 plan。
+- `must declare system.architecture` / `must declare system.codename`：component 或 Docker 官方源
+  需要 runtime facts。真实主机会在线探测；纯本地 fixture 需要在 `host.system` 中显式声明。
 - component input validation 失败：错误会指向
   `component.<name>.input["..."].validation[n]`，先修正调用方传入的 input 值。
 - object 字段类型错误：错误路径会包含嵌套字段或列表下标，例如

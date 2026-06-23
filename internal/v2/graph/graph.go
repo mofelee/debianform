@@ -86,6 +86,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	repositoryAddresses := map[string]string{}
 	repositoryTriggers := []string{}
 	aptCacheSource := host.APT.Source
+	aptCacheRefreshAddress := ""
 	groupAddresses := map[string]string{}
 	userAddresses := map[string]string{}
 	unitAddresses := map[string]string{}
@@ -137,6 +138,28 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 		for _, label := range sortedKeys(component.Systemd.Networkd.Networks) {
 			networkdAddresses[component.Systemd.Networkd.Networks[label].Path] = fmt.Sprintf("%s.systemd.networkd.network[%s]", componentPrefix, strconv.Quote(label))
+		}
+	}
+
+	dockerPackageAddresses := []string{}
+	dockerServiceAddress := ""
+	if host.Docker != nil {
+		dockerNodes, dockerTriggers, dockerPackages, serviceAddress, err := dockerEngineNodes(host, repositoryAddresses)
+		if err != nil {
+			return nil, nil, err
+		}
+		nodes = append(nodes, dockerNodes...)
+		repositoryTriggers = append(repositoryTriggers, dockerTriggers...)
+		dockerPackageAddresses = dockerPackages
+		dockerServiceAddress = serviceAddress
+		if len(dockerTriggers) > 0 && aptCacheSource.File == "" {
+			aptCacheSource = host.Docker.Source
+		}
+		for _, packageAddress := range dockerPackages {
+			packageName := packageNameFromDockerPackageAddress(packageAddress)
+			if packageName != "" {
+				packageAddresses[packageName] = packageAddress
+			}
 		}
 	}
 
@@ -410,7 +433,6 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 	}
 
-	aptCacheRefreshAddress := ""
 	if len(repositoryTriggers) > 0 {
 		aptCacheRefreshAddress = "host." + host.Name + ".apt.cache_refresh"
 		operations = append(operations, Operation{
@@ -422,6 +444,13 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			CommandPreview: "apt-get update",
 			Source:         aptCacheSource,
 		})
+	}
+	if aptCacheRefreshAddress != "" {
+		for i := range nodes {
+			if strings.HasPrefix(nodes[i].Address, "host."+host.Name+".docker.package[") {
+				nodes[i].DependsOn = dedupeStrings(append(nodes[i].DependsOn, aptCacheRefreshAddress))
+			}
+		}
 	}
 
 	for _, item := range host.Packages.Install {
@@ -601,6 +630,15 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			ProviderAddress: "service." + providerName(host.Name, "nftables"),
 			ProviderPayload: desired,
 		})
+	}
+
+	if dockerServiceAddress != "" {
+		for i := range nodes {
+			if nodes[i].Address != dockerServiceAddress {
+				continue
+			}
+			nodes[i].DependsOn = dedupeStrings(append(nodes[i].DependsOn, dockerPackageAddresses...))
+		}
 	}
 
 	caCertificateTriggers := []string{}
@@ -1477,6 +1515,178 @@ func providerName(parts ...string) string {
 
 func aptRepositorySourcePath(name string) string {
 	return "/etc/apt/sources.list.d/" + providerName(name) + ".sources"
+}
+
+const (
+	dockerOfficialRepositoryName = "docker-official"
+	dockerOfficialKeyPath        = "/etc/apt/keyrings/docker.asc"
+	dockerOfficialKeyURL         = "https://download.docker.com/linux/debian/gpg"
+	dockerOfficialKeySHA256      = "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
+)
+
+var dockerOfficialPackages = []string{
+	"docker-ce",
+	"docker-ce-cli",
+	"containerd.io",
+	"docker-buildx-plugin",
+	"docker-compose-plugin",
+}
+
+func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) ([]Node, []string, []string, string, error) {
+	docker := host.Docker
+	if docker == nil || !docker.Enable {
+		return nil, nil, nil, "", nil
+	}
+	if docker.Package.Source != "official" {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: docker package source %q is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Source)
+	}
+	if docker.Package.Channel != "stable" {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: docker package channel %q is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Channel)
+	}
+	if docker.Package.Version != nil {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: docker package version pinning is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path)
+	}
+	if docker.Package.RemoveConflicts != "auto" {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: docker conflict package removal is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path)
+	}
+	if docker.Daemon != nil {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: docker daemon settings are not implemented in this loop", docker.Daemon.Source.File, docker.Daemon.Source.Line, docker.Daemon.Source.Path)
+	}
+	if len(docker.Users) > 0 {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s.users: docker users are not implemented in this loop", docker.Source.File, docker.Source.Line, docker.Source.Path)
+	}
+	if len(docker.Composes) > 0 {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s.compose: docker compose projects are not implemented in this loop", docker.Source.File, docker.Source.Line, docker.Source.Path)
+	}
+	if host.System.Architecture == "" {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s.system.architecture: host %q must declare system.architecture to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
+	}
+	if host.System.Codename == "" {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s.system.codename: host %q must declare system.codename to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
+	}
+	if _, exists := host.APT.Repositories[dockerOfficialRepositoryName]; exists {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: apt repository %q conflicts with docker official repository", host.Source.File, host.Source.Line, host.Source.Path, dockerOfficialRepositoryName)
+	}
+	if _, exists := repositoryAddresses[dockerOfficialRepositoryName]; exists {
+		return nil, nil, nil, "", fmt.Errorf("%s:%d:%s: apt repository %q conflicts with docker official repository", host.Source.File, host.Source.Line, host.Source.Path, dockerOfficialRepositoryName)
+	}
+
+	keyAddress := fmt.Sprintf("host.%s.docker.apt.signing_key[%s]", host.Name, strconv.Quote(dockerOfficialRepositoryName))
+	repositoryAddress := fmt.Sprintf("host.%s.docker.apt.repository[%s]", host.Name, strconv.Quote(dockerOfficialRepositoryName))
+	sourcePath := aptRepositorySourcePath(dockerOfficialRepositoryName)
+
+	keyDesired := map[string]any{
+		"name":   dockerOfficialRepositoryName,
+		"path":   dockerOfficialKeyPath,
+		"owner":  "root",
+		"group":  "root",
+		"mode":   "0644",
+		"ensure": "present",
+		"url":    dockerOfficialKeyURL,
+		"sha256": dockerOfficialKeySHA256,
+	}
+	repositorySpec := ir.APTRepositorySpec{
+		Name:          dockerOfficialRepositoryName,
+		URIs:          []string{"https://download.docker.com/linux/debian"},
+		Suites:        []string{host.System.Codename},
+		Components:    []string{docker.Package.Channel},
+		Architectures: []string{host.System.Architecture},
+		Ensure:        "present",
+		SigningKey: &ir.APTSigningKeySpec{
+			Path: dockerOfficialKeyPath,
+		},
+	}
+	repositoryDesired := map[string]any{
+		"name":    dockerOfficialRepositoryName,
+		"path":    sourcePath,
+		"owner":   "root",
+		"group":   "root",
+		"mode":    "0644",
+		"ensure":  "present",
+		"content": aptRepositorySourceContent(repositorySpec),
+	}
+	nodes := []Node{
+		{
+			Host:            host.Name,
+			Address:         keyAddress,
+			Kind:            "apt_signing_key",
+			Summary:         "manage docker official apt signing key",
+			Source:          docker.Package.SourceRef,
+			Desired:         keyDesired,
+			ProviderType:    "apt_signing_key",
+			ProviderAddress: "apt_signing_key." + providerName(host.Name, dockerOfficialRepositoryName),
+			ProviderPayload: keyDesired,
+		},
+		{
+			Host:            host.Name,
+			Address:         repositoryAddress,
+			Kind:            "file",
+			Summary:         "manage docker official apt repository",
+			Source:          docker.Package.SourceRef,
+			Desired:         repositoryDesired,
+			DependsOn:       []string{keyAddress},
+			ProviderType:    "file",
+			ProviderAddress: "file." + providerName(host.Name, sourcePath),
+			ProviderPayload: repositoryDesired,
+		},
+	}
+
+	packageAddresses := make([]string, 0, len(dockerOfficialPackages))
+	for _, name := range dockerOfficialPackages {
+		address := fmt.Sprintf("host.%s.docker.package[%s]", host.Name, strconv.Quote(name))
+		desired := map[string]any{
+			"name":         name,
+			"ensure":       "present",
+			"repositories": []string{dockerOfficialRepositoryName},
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         address,
+			Kind:            "package",
+			Summary:         "install docker package " + name,
+			Source:          docker.Package.SourceRef,
+			Desired:         desired,
+			DependsOn:       []string{repositoryAddress},
+			ProviderType:    "package",
+			ProviderAddress: "package." + providerName(host.Name, "docker", name),
+			ProviderPayload: desired,
+		})
+		packageAddresses = append(packageAddresses, address)
+	}
+
+	serviceAddress := fmt.Sprintf("host.%s.docker.service[%s]", host.Name, strconv.Quote("docker"))
+	serviceDesired := map[string]any{
+		"name":    "docker",
+		"unit":    "docker.service",
+		"enabled": docker.Service.Enable,
+		"state":   docker.Service.State,
+	}
+	nodes = append(nodes, Node{
+		Host:            host.Name,
+		Address:         serviceAddress,
+		Kind:            "service",
+		Summary:         "manage docker service",
+		Source:          docker.Service.SourceRef,
+		Desired:         serviceDesired,
+		ProviderType:    "service",
+		ProviderAddress: "service." + providerName(host.Name, "docker"),
+		ProviderPayload: serviceDesired,
+	})
+
+	return nodes, []string{keyAddress, repositoryAddress}, packageAddresses, serviceAddress, nil
+}
+
+func packageNameFromDockerPackageAddress(address string) string {
+	start := strings.LastIndex(address, "[")
+	end := strings.LastIndex(address, "]")
+	if start < 0 || end <= start+1 {
+		return ""
+	}
+	name, err := strconv.Unquote(address[start+1 : end])
+	if err != nil {
+		return ""
+	}
+	return name
 }
 
 func networkdNetDevNode(hostName, address, component string, item ir.NetworkdNetDev, deps []string) Node {

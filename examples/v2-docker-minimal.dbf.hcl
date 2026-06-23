@@ -1,9 +1,14 @@
 # DebianForm v2 Docker minimal 示例。
 #
-# Loop 1 只完成 docker DSL 的 validate / HostSpec 编译。
-# 后续 loop 会把该高阶块展开为 Docker 官方 APT 源、packages 和 docker.service。
+# 最小语法会展开为 Docker 官方 APT 源、默认 packages 和 docker.service。
+# 离线 plan 需要显式声明目标 Debian runtime facts。
 
 host "docker1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
   docker {
     enable = true
   }

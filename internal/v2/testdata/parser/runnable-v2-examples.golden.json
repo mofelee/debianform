@@ -123,7 +123,8 @@
       {
         "name": "docker1",
         "body_keys": [
-          "docker"
+          "docker",
+          "system"
         ]
       }
     ]
