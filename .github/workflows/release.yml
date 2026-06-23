@@ -291,6 +291,9 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+
       - name: Download verification results
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v6.0.0
         with:
@@ -332,7 +335,7 @@ jobs:
           tag="${{ needs.release.outputs.tag }}"
           release_body="${RUNNER_TEMP}/release-body.md"
           updated_body="${RUNNER_TEMP}/release-body-updated.md"
-          gh release view "$tag" --json body --jq '.body // ""' > "$release_body"
+          gh release view "$tag" --repo mofelee/debianform --json body --jq '.body // ""' > "$release_body"
           awk '
             /^## Verification Matrix$/ { skip = 1; next }
             skip && /^## / { skip = 0 }
@@ -342,7 +345,7 @@ jobs:
             printf '\n## Verification Matrix\n\n'
             cat "${RUNNER_TEMP}/release-verification-matrix.md"
           } >> "$updated_body"
-          gh release edit "$tag" --notes-file "$updated_body"
+          gh release edit "$tag" --repo mofelee/debianform --notes-file "$updated_body"
 
       - name: Upload verification matrix
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
