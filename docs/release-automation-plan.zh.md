@@ -130,8 +130,8 @@ gh run watch
 
 代码/文件：
 
-- [ ] 新增 `scripts/install.sh`。
-- [ ] 支持参数：
+- [x] 新增 `scripts/install.sh`。
+- [x] 支持参数：
   - `--version`
   - `--prefix`
   - `--bin-dir`
@@ -139,24 +139,24 @@ gh run watch
   - `--arch`
   - `--dry-run`
   - `--force`
-- [ ] 自动检测 OS：
+- [x] 自动检测 OS：
   - `Linux` -> `linux`
   - `Darwin` -> `darwin`
-- [ ] 自动检测 arch：
+- [x] 自动检测 arch：
   - `x86_64`/`amd64` -> `amd64`
   - `aarch64`/`arm64` -> `arm64`
-- [ ] 下载对应 tarball 和 `checksums.txt`。
-- [ ] 校验 SHA256。
-- [ ] 原子替换 `dbf`。
-- [ ] 安装 docs/examples 到 `<prefix>/share/debianform`。
-- [ ] 安装完成后执行 `dbf version`。
+- [x] 下载对应 tarball 和 `checksums.txt`。
+- [x] 校验 SHA256。
+- [x] 原子替换 `dbf`。
+- [x] 安装 docs/examples 到 `<prefix>/share/debianform`。
+- [x] 安装完成后执行 `dbf version`。
 
 测试：
 
-- [ ] `scripts/install.sh --dry-run --version v0.1.0-beta.1 --os linux --arch amd64`。
-- [ ] `scripts/install.sh --dry-run --version v0.1.0-beta.1 --os darwin --arch arm64`。
-- [ ] 使用本地 `file://` 或测试 URL 模式验证 checksum 失败会中止。
-- [ ] 使用 `/tmp/debianform-install` 验证无需 root 的安装路径。
+- [x] `scripts/install.sh --dry-run --version v0.1.0-beta.1 --os linux --arch amd64`。
+- [x] `scripts/install.sh --dry-run --version v0.1.0-beta.1 --os darwin --arch arm64`。
+- [x] 使用本地 `file://` 或测试 URL 模式验证 checksum 失败会中止。
+- [x] 使用 `/tmp/debianform-install` 验证无需 root 的安装路径。
 
 验收：
 
@@ -167,7 +167,7 @@ sh scripts/install.sh --dry-run --version v0.1.0-beta.1 --os darwin --arch arm64
 
 需要你介入：
 
-- 确认是否接受 README 里的 `curl | sh` 入口。
+- README 已包含 `curl | sh` 入口；第一次真实发布前仍需最终确认。
 - 第一次真实发布前，需要确认 GitHub Release URL 和 artifact 命名稳定。
 
 ## Loop 4: Homebrew tap 初始仓库
