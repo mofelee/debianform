@@ -127,14 +127,14 @@
 - [x] README 包含升级和回滚说明。
 - [x] README 包含 `dbf version` 安装验证。
 - [x] README 包含 validate、offline plan、json plan、html plan、apply、check 的基础示例。
-- [x] [CLI 文档](cli.zh.md) 说明 `validate`、`plan`、`apply`、`check`、`fmt`、`component inspect` 和 version。
+- [x] [CLI 文档](cli.zh.md) 说明 `validate`、`plan`、`apply`、`check`、`fmt`、`variable inspect`、`component inspect` 和 version。
 - [x] [CLI 文档](cli.zh.md) 说明 `--host`、`--parallel` 和 `--lock-timeout`。
 - [x] [v2 state](v2-state.md) 说明 state path、lock path、ownership、lock 和 atomic write。
 - [x] [release quick runbook](release-quick-runbook.zh.md) 说明发布前、发布中、发布后和回滚流程。
 - [x] 新增独立 quickstart，覆盖准备 SSH 用户、写第一份配置、validate、在线 plan、apply、check。
 - [x] 新增 operations/runbook，覆盖 stale lock、apply 中途失败、state 与远端不一致、资源移除和恢复步骤。
 - [x] 新增常见故障排查文档，使用真实错误信息和修复步骤。
-- [ ] 新增简明支持矩阵，把 DSL block、resource/domain 类型和当前稳定性放在一处。
+- [x] 新增简明支持矩阵，把 DSL block、resource/domain 类型和当前稳定性放在一处。
 
 ### beta 验证
 
@@ -237,6 +237,7 @@
 - [x] [v2 requirements](v2-requirements.md) 和相关设计文档存在。
 - [x] [v2 state](v2-state.md) 文档存在。
 - [x] [v2 plan format](v2-plan-format.md) 文档存在。
+- [x] [support matrix](support-matrix.zh.md) 文档存在。
 - [x] 发布流程、自动化计划和快速操作手册存在。
 - [x] 面向新用户的一页 quickstart 已独立成文。
 - [x] 面向运维恢复的 runbook 已覆盖 stale lock、失败 apply、drift、资源移除和常见错误恢复。
@@ -309,3 +310,17 @@
 
 - [x] 运维恢复文档现在覆盖 public beta 阶段常见失败场景，并从 README、CLI 文档和
       quickstart 提供入口。
+
+### 2026-06-23 支持矩阵补充
+
+本次检查命令：
+
+- [x] 核对 README、release process、parser allowed attrs、IR types 和 Docker graph 实现。
+- [x] 新增 `docs/support-matrix.zh.md`，覆盖 CLI 平台、目标主机、CLI 命令、v2 顶层
+      DSL、host domain、resource/provider 类型、Docker DSL、component/variable 和示例验证。
+- [x] 同步补齐 CLI 文档中的 `variable inspect` 命令入口。
+
+结论：
+
+- [x] 支持矩阵现在把 DSL block、resource/domain 类型和当前 beta/preview/compat/design-only
+      状态集中到一处，并从 README 与 release process 提供入口。

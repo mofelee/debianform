@@ -31,6 +31,7 @@ dbf plan     [-f file ...] [--host name] [--format text|json] [--html file] [--d
 dbf apply    [-f file ...] [--host name] [--parallel n] [--lock-timeout duration] [--auto-approve]
 dbf check    [-f file ...] [--host name] [--lock-timeout duration]
 dbf fmt      [-f file ...]
+dbf variable inspect [-f file ...] [-var name=value] [-var-file path]
 dbf component inspect [-f file ...] component_name
 dbf version
 dbf --version
@@ -44,7 +45,7 @@ dbf help
 
 | 选项 | 适用命令 | 说明 |
 | --- | --- | --- |
-| `-f file` | `validate`、`plan`、`apply`、`check`、`fmt`、`component inspect` | 可重复。传入一个或多个 `-f` 时，只读取显式指定的文件；不传时读取当前目录所有 `*.dbf.hcl`。 |
+| `-f file` | `validate`、`plan`、`apply`、`check`、`fmt`、`variable inspect`、`component inspect` | 可重复。传入一个或多个 `-f` 时，只读取显式指定的文件；不传时读取当前目录所有 `*.dbf.hcl`。 |
 | `--host name` | `validate`、`plan`、`apply`、`check` | 只处理指定 host。host 不存在时命令失败。 |
 
 `-f` 不会读取目录，也不会自动加载同目录的其他 `.dbf.hcl` 文件；它表示“精确使用这些显式指定的文件”，并按命令行出现顺序解析。
@@ -263,6 +264,25 @@ dbf component inspect -f examples/v2-component-inputs.dbf.hcl reverse_proxy
 
 如果 input 设置了 `sensitive = true`，且默认值存在，输出中的默认值会显示为
 `"<sensitive>"`，不会泄露明文。
+
+## variable inspect
+
+`variable inspect` 输出顶层 variable 的公开输入 API，格式为 JSON。它适合用于查看配置
+需要哪些外部变量、变量类型、默认值、nullable/sensitive/ephemeral/deprecated 标记和说明。
+
+```bash
+dbf variable inspect -f examples/v2-variable-secret-file.dbf.hcl
+```
+
+选项：
+
+| 选项 | 说明 |
+| --- | --- |
+| `-f file` | 可重复；只读取显式指定的文件。不传时读取当前目录所有 `*.dbf.hcl`。 |
+| `-var name=value` | 可重复；为 inspect 时的变量求值提供字面值。 |
+| `-var-file path` | 可重复；从 `.dbfvars` 或 `.dbfvars.json` 文件加载变量值。 |
+
+如果 variable 设置了 `sensitive = true`，输出中的默认值会显示为 `"<sensitive>"`。
 
 ## version
 

@@ -8,6 +8,9 @@ macOS 上用 `curl` 或 Homebrew 安装 `dbf`，并支持 `amd64` 和 `arm64`。
 
 ## 支持矩阵
 
+完整用户能力、DSL block、resource/domain 类型和验证覆盖见
+[support matrix](support-matrix.zh.md)。本节只列 release artifact 平台。
+
 DebianForm 的 CLI 可以运行在控制机或 CI runner 上，通过 SSH 管理目标 Debian 主机。
 CLI 运行平台和被管理目标系统是两个不同概念。
 
