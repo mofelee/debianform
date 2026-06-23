@@ -538,28 +538,28 @@ loop 都应能独立提交、独立测试，并保持现有示例和集成测试
 
 状态约定：
 
-- [x] 已完成
-- [ ] 未完成
+- `[x]` 已完成
+- `[ ]` 未完成
 
-总体原则：
+总体原则（规则，不作为未完成任务统计）：
 
-- [ ] 每个 loop 都必须形成代码、测试、示例或 fixture、文档和验收输入的闭环。
-- [ ] parser、CLI、HostSpec、ResourceGraph、plan/state、provider 和 runner 的边界变更
-      应分轮推进；除非本轮目标明确要求，不在同一轮同时改多个安全边界。
-- [ ] golden fixture 只更新本 loop 直接影响的内容。
-- [ ] 文档中的新增语法至少有一个对应测试、fixture 或 CLI smoke。
-- [ ] 涉及 sensitive、ephemeral、write-only 或 runner payload 的 loop 必须增加“不泄露
-      明文”的负向断言。
-- [ ] `make test` 必须通过；如果某类集成测试暂时无法运行，需要在实现记录中说明原因。
+- 每个 loop 都必须形成代码、测试、示例或 fixture、文档和验收输入的闭环。
+- parser、CLI、HostSpec、ResourceGraph、plan/state、provider 和 runner 的边界变更
+  应分轮推进；除非本轮目标明确要求，不在同一轮同时改多个安全边界。
+- golden fixture 只更新本 loop 直接影响的内容。
+- 文档中的新增语法至少有一个对应测试、fixture 或 CLI smoke。
+- 涉及 sensitive、ephemeral、write-only 或 runner payload 的 loop 必须增加“不泄露
+  明文”的负向断言。
+- `make test` 必须通过；如果某类集成测试暂时无法运行，需要在实现记录中说明原因。
 
 ### 当前基线
 
 - [x] v2 已有 `secrets.file`，并要求 plan/state 不写 secret 明文。
 - [x] component input 已支持 `sensitive` 标记和派生 file/unit content 脱敏。
 - [x] plan/state 已有 sensitive content 摘要或 redaction 机制。
-- [ ] 顶层 `variable` 尚未实现。
-- [ ] 外部赋值来源、`ephemeral`、write-only provider payload 和 redacted runner channel
-      尚未完整打通。
+- [x] 顶层 `variable` 已实现。
+- [x] 外部赋值来源、`ephemeral`、write-only provider payload 和 redacted runner channel
+      已按 Loop 3-10 打通。
 
 ### Loop 0：现状基线和回归护栏
 
@@ -854,7 +854,7 @@ stdin 或 secret backend。
 - [x] env 低于 var file 和 CLI。
 - [x] var file 未声明变量报错。
 - [x] env 未声明变量忽略。
-- [ ] sensitive value 不进入错误输出、HostSpec、plan 或 state 明文。
+- [x] sensitive value 不进入错误输出、HostSpec、plan 或 state 明文。
 
 示例/文档：
 
@@ -878,7 +878,8 @@ stdin 或 secret backend。
 - 总优先级由低到高为：`DBF_VAR_*`、`debianform.dbfvars*`、`*.auto.dbfvars*`、
   重复 `-var-file`、重复 `-var`。同一层级内后出现的值覆盖先出现的值。
 - CLI 和 var file 的未声明变量会报错；env 未声明变量忽略，避免 CI 环境污染导致失败。
-- sensitive 值的完整 HostSpec、plan 和 state 脱敏传播仍留在 Loop 6。
+- sensitive 值的完整 HostSpec、plan 和 state 脱敏传播由 Loop 6 补齐；当前
+  `v2-sensitive-variable-files` fixture 和 no-leak 断言已覆盖这条验收项。
 
 ### Loop 5：validation、nullable、deprecated 和 inspect
 

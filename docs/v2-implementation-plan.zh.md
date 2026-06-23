@@ -2,16 +2,16 @@
 
 本文档把 v2 设计落成可执行的开发计划。每个 loop 都必须形成一个可合并闭环：
 
-- [ ] 代码路径可运行
-- [ ] 单元测试和 golden 测试覆盖本轮语义
-- [ ] 至少一个示例进入验收输入
-- [ ] 文档同步更新
-- [ ] `make test` 通过
+- 代码路径可运行
+- 单元测试和 golden 测试覆盖本轮语义
+- 至少一个示例进入验收输入
+- 文档同步更新
+- `make test` 通过
 
 状态约定：
 
-- [x] 已完成
-- [ ] 未完成
+- `[x]` 已完成
+- `[ ]` 未完成
 
 ## 当前基线
 
@@ -19,7 +19,7 @@
 - [x] v2 中间表达文档已存在：`docs/v2-ir-requirements.zh.md`
 - [x] v2 plan JSON 格式文档已存在：`docs/v2-plan-format.md`
 - [x] v2 设计示例已存在：`examples/v2-*.dbf.hcl`
-- [ ] v2 编译器尚未完整实现；已支持 HostSpec、ResourceGraph、state、plan、apply 和 check
+- [x] v2 编译器主流程已支持 HostSpec、ResourceGraph、state、plan、apply 和 check
 - [x] v2 CLI 已接入 `validate`、`plan`、`apply`、`check` 和 `fmt`
 - [x] v2 plan/apply 已接入 observed 检测、远端 state 和 SSH 执行路径
 
