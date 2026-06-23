@@ -597,8 +597,11 @@ ca_certificate  安装 CA 证书，并在内容变化后生成 update-ca-certifi
 - 所有远程下载必须有内容校验和。第一版 `sha256` 使用 64 位小写十六进制；
   后续如果支持 SRI，应使用独立 `checksum` 字段，不能让同一字段接受多种格式。
 - `extract.format` 可以显式声明；省略时只允许根据 URL 后缀无歧义推导。
+- binary artifact 的 `extract.format` 支持 `zip`、`tar.gz`、`tar.xz`、`bz2` 和 `gz`；
+  其中 `bz2`/`gz` 表示压缩后的单个可执行文件。
 - `strip_components` 必须大于等于 0。
-- `include` 对 binary component 必须最终只匹配一个普通文件。
+- `zip`、`tar.gz`、`tar.xz` binary extract 的 `include` 必须最终只匹配一个普通文件；
+  `bz2`/`gz` 单文件 extract 不支持 `include`。
 - `install.path` 必须是绝对路径。
 - 校验和必须在解压前验证；校验失败不能触碰目标路径。
 - 解压必须拒绝绝对路径、`..` 路径穿越，以及逃出 staging directory 的 symlink。

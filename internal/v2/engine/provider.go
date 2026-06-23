@@ -634,7 +634,7 @@ func (p NativeProvider) applyComponentBinary(ctx context.Context, step Step) (ma
 		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
 	}
 	if format := stringDesired(step.Node, "extract_format"); format != "" {
-		if format != "zip" && format != "tar.gz" && format != "tar.xz" && format != "bz2" {
+		if format != "zip" && format != "tar.gz" && format != "tar.xz" && format != "bz2" && format != "gz" {
 			return nil, fmt.Errorf("%s unsupported component binary extract format %q", step.Address, format)
 		}
 		lines = append(lines, componentBinaryExtractInstallScript(step.Node)...)
@@ -818,16 +818,22 @@ func componentBinaryExtractInstallScript(node graph.Node) []string {
 	cachePath := stringDesired(node, "cache_path")
 	path := stringDesired(node, "path")
 	format := stringDesired(node, "extract_format")
-	if format == "bz2" {
+	if format == "bz2" || format == "gz" {
+		command := "bzip2"
+		packageName := "bzip2"
+		if format == "gz" {
+			command = "gzip"
+			packageName = "gzip"
+		}
 		return []string{
-			"if ! command -v bzip2 >/dev/null 2>&1; then",
+			"if ! command -v " + command + " >/dev/null 2>&1; then",
 			"  export DEBIAN_FRONTEND=noninteractive",
 			"  apt-get update",
-			"  apt-get install -y bzip2",
+			"  apt-get install -y " + packageName,
 			"fi",
 			"work=$(mktemp -d)",
 			"trap 'rm -rf -- \"$work\"' EXIT",
-			"bzip2 -dc " + shellQuote(cachePath) + " > \"$work/binary\"",
+			command + " -dc " + shellQuote(cachePath) + " > \"$work/binary\"",
 			"install -o " + shellQuote(stringDesired(node, "owner")) +
 				" -g " + shellQuote(stringDesired(node, "group")) +
 				" -m " + shellQuote(stringDesired(node, "mode")) +

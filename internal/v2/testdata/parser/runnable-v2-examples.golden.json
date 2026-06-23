@@ -107,6 +107,23 @@
     ]
   },
   {
+    "fixture": "../../../examples/v2-mihomo.dbf.hcl",
+    "components": [
+      "mihomo"
+    ],
+    "hosts": [
+      {
+        "name": "proxy1",
+        "components": [
+          "mihomo=mihomo"
+        ],
+        "body_keys": [
+          "system"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/v2-nftables.dbf.hcl",
     "hosts": [
       {

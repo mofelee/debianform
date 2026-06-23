@@ -609,6 +609,43 @@ func TestNativeProviderComponentBinaryTarXZInstall(t *testing.T) {
 	}
 }
 
+func TestNativeProviderComponentBinaryGzipInstall(t *testing.T) {
+	node := graph.Node{
+		Address: "host.server1.components.tool.artifact.install[\"/usr/local/bin/tool\"]",
+		Host:    "server1",
+		Kind:    "component_binary",
+		Desired: map[string]any{
+			"path":           "/usr/local/bin/tool",
+			"cache_path":     "/var/cache/debianform/components/tool/source",
+			"extract_format": "gz",
+			"owner":          "root",
+			"group":          "root",
+			"mode":           "0755",
+			"ensure":         "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{
+		{Stdout: "missing\n"},
+		{},
+		{Stdout: "file\nroot\nroot\n755\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"},
+	}}
+	provider := NewNativeProvider(runner)
+
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[len(runner.scripts)-2]
+	for _, want := range []string{
+		"apt-get install -y gzip",
+		"gzip -dc '/var/cache/debianform/components/tool/source' > \"$work/binary\"",
+		"install -o 'root' -g 'root' -m '0755' \"$work/binary\" '/usr/local/bin/tool'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("component binary gzip script missing %q:\n%s", want, applied)
+		}
+	}
+}
+
 func TestNativeProviderComponentFileInstall(t *testing.T) {
 	node := graph.Node{
 		Address: "host.server1.components.config.artifact.install[\"/etc/myapp/config.yaml\"]",

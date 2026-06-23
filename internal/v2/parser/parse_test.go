@@ -1174,6 +1174,7 @@ func runnableV2ExampleFixtures() []string {
 		"../../../examples/v2-component-inputs.dbf.hcl",
 		"../../../examples/v2-component-source-build.dbf.hcl",
 		"../../../examples/v2-files-plan-preview.dbf.hcl",
+		"../../../examples/v2-mihomo.dbf.hcl",
 		"../../../examples/v2-nftables.dbf.hcl",
 		"../../../examples/v2-plan-preview.dbf.hcl",
 		"../../../examples/v2-profile-merge.dbf.hcl",

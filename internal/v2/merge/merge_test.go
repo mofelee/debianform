@@ -736,6 +736,38 @@ host "server1" {
 	}
 }
 
+func TestCompileComponentBinaryArtifactInfersGzip(t *testing.T) {
+	program := compileInline(t, `
+component "tool" {
+  type = "binary"
+
+  source "amd64" {
+    url    = "https://downloads.example/tool-v1.0.0-linux-amd64.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  extract {}
+
+  install {
+    path = "/usr/local/bin/tool"
+  }
+}
+
+host "server1" {
+  components = [component.tool]
+
+  system {
+    architecture = "amd64"
+  }
+}
+`)
+
+	component := program.Hosts[0].Components[0]
+	if component.Extract == nil || component.Extract.Format != "gz" {
+		t.Fatalf("extract = %#v, want gz", component.Extract)
+	}
+}
+
 func TestCompileComponentSourceArtifactBuild(t *testing.T) {
 	program := compileInline(t, `
 component "hello" {

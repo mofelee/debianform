@@ -1011,15 +1011,15 @@ func componentArtifactExtractSpec(artifactType string, extract parser.ComponentA
 	}
 	switch artifactType {
 	case "binary":
-		if format != "zip" && format != "tar.gz" && format != "tar.xz" && format != "bz2" {
-			return nil, fmt.Errorf("%s:%d:%s.format: binary extract format must be zip, tar.gz, tar.xz, or bz2", extract.Source.File, extract.Source.Line, extract.Source.Path)
+		if format != "zip" && format != "tar.gz" && format != "tar.xz" && format != "bz2" && format != "gz" {
+			return nil, fmt.Errorf("%s:%d:%s.format: binary extract format must be zip, tar.gz, tar.xz, bz2, or gz", extract.Source.File, extract.Source.Line, extract.Source.Path)
 		}
-		if format == "bz2" {
+		if format == "bz2" || format == "gz" {
 			if extract.Include != "" {
-				return nil, fmt.Errorf("%s:%d:%s.include: bz2 binary extract does not support include", extract.Source.File, extract.Source.Line, extract.Source.Path)
+				return nil, fmt.Errorf("%s:%d:%s.include: %s binary extract does not support include", extract.Source.File, extract.Source.Line, extract.Source.Path, format)
 			}
 			if extract.StripComponents != 0 {
-				return nil, fmt.Errorf("%s:%d:%s.strip_components: bz2 binary extract requires strip_components = 0", extract.Source.File, extract.Source.Line, extract.Source.Path)
+				return nil, fmt.Errorf("%s:%d:%s.strip_components: %s binary extract requires strip_components = 0", extract.Source.File, extract.Source.Line, extract.Source.Path, format)
 			}
 		} else if extract.Include == "" {
 			return nil, fmt.Errorf("%s:%d:%s.include: binary extract requires include", extract.Source.File, extract.Source.Line, extract.Source.Path)
@@ -1166,6 +1166,8 @@ func inferArtifactFormat(sourceURL string) string {
 		return "tar.xz"
 	case strings.HasSuffix(strings.ToLower(base), ".bz2"):
 		return "bz2"
+	case strings.HasSuffix(strings.ToLower(base), ".gz"):
+		return "gz"
 	default:
 		return ""
 	}

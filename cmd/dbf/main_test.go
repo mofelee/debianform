@@ -1181,6 +1181,7 @@ func runnableV2Examples() []string {
 		"examples/v2-bird2.dbf.hcl",
 		"examples/v2-component-binary.dbf.hcl",
 		"examples/v2-files-plan-preview.dbf.hcl",
+		"examples/v2-mihomo.dbf.hcl",
 		"examples/v2-nftables.dbf.hcl",
 		"examples/v2-plan-preview.dbf.hcl",
 		"examples/v2-profile-merge.dbf.hcl",
