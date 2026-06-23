@@ -2,6 +2,10 @@
 
 实现拆分与当前状态见：`docs/v2-docker-compose-implementation-plan.zh.md`。
 
+当前实现状态：Compose systemd unit 先使用固定模板，生成 `Type=oneshot`、
+`RemainAfterExit=yes`、`ExecStart=docker compose ... up -d` 和 `ExecStop=docker compose ... stop`。
+MVP 暂不支持为 Compose unit 自定义 `Type`、`Restart`、`User`、`Group` 或额外 `Exec*` 行。
+
 ## 1. 背景
 
 DebianForm 是一个面向 Debian 系统运维的声明式配置工具，设计上借鉴 Terraform 的 `plan / apply / state` 思路，以及 NixOS 的系统声明式配置体验。

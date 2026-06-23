@@ -212,11 +212,11 @@ func TestDockerComposePlanJSONGolden(t *testing.T) {
 	got := string(data) + "\n"
 	assertGolden(t, "../testdata/plan/v2-docker-compose.golden.json", got)
 
-	if doc.Summary.Create != 12 {
-		t.Fatalf("create count = %d, want 12", doc.Summary.Create)
+	if doc.Summary.Create != 14 {
+		t.Fatalf("create count = %d, want 14", doc.Summary.Create)
 	}
-	if doc.Summary.Operations != 2 {
-		t.Fatalf("operations = %d, want 2", doc.Summary.Operations)
+	if doc.Summary.Operations != 3 {
+		t.Fatalf("operations = %d, want 3", doc.Summary.Operations)
 	}
 	if !hasChange(doc, `host.compose1.docker.compose["app"].directory`) {
 		t.Fatalf("compose directory change missing")
@@ -230,8 +230,17 @@ func TestDockerComposePlanJSONGolden(t *testing.T) {
 	if !hasChange(doc, `host.compose1.docker.compose["app"].project`) {
 		t.Fatalf("compose project change missing")
 	}
+	if !hasChange(doc, `host.compose1.docker.compose["app"].systemd_unit`) {
+		t.Fatalf("compose systemd unit change missing")
+	}
+	if !hasChange(doc, `host.compose1.docker.compose["app"].service`) {
+		t.Fatalf("compose service change missing")
+	}
 	if !hasOperation(doc, `host.compose1.docker.compose["app"].validate`) {
 		t.Fatalf("compose validate operation missing: %#v", doc.Operations)
+	}
+	if !hasOperation(doc, `host.compose1.docker.compose["app"].daemon_reload`) {
+		t.Fatalf("compose daemon-reload operation missing: %#v", doc.Operations)
 	}
 	data, err = json.Marshal(doc)
 	if err != nil {
@@ -258,6 +267,8 @@ func TestDockerComposePlanTextGolden(t *testing.T) {
 	for _, want := range []string{
 		`host.compose1.docker.compose["app"].file`,
 		`host.compose1.docker.compose["app"].project`,
+		`host.compose1.docker.compose["app"].systemd_unit`,
+		`ExecStart=/usr/bin/docker compose -p app -f /opt/app/compose.yaml up -d`,
 		`+     image: nginx:1.27-alpine`,
 		`host.compose1.docker.compose["app"].validate`,
 		`docker compose -p app -f /opt/app/compose.yaml config`,

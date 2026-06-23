@@ -1075,6 +1075,14 @@ case "$input" in
     printf 'enabled=enabled\nactive=active\n'
     exit 0
     ;;
+  *"systemctl is-enabled 'debianform-compose-app.service'"*)
+    printf 'enabled=enabled\nactive=active\n'
+    exit 0
+    ;;
+  *"/etc/systemd/system/debianform-compose-app.service"*)
+    printf 'file\nroot\nroot\n644\n6cd6cbb3f51b6cd295517fa585d8573a31c5d55879472513038c5329b490072a\n'
+    exit 0
+    ;;
   *"/opt/app/compose.yaml"*)
     printf 'file\nroot\nroot\n644\nd1f744f61ab84b59402583765d65b4d6b984fd44c128388ac3ea0a07ef123d0f\n'
     exit 0

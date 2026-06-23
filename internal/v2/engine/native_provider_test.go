@@ -943,6 +943,23 @@ func TestNativeProviderDockerComposeValidateOperation(t *testing.T) {
 	}
 }
 
+func TestNativeProviderDockerComposeDaemonReloadOperation(t *testing.T) {
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+	operation := graph.Operation{
+		Address:        `host.compose1.docker.compose["app"].daemon_reload`,
+		Action:         "run",
+		CommandPreview: "systemctl daemon-reload",
+	}
+
+	if err := provider.RunOperation(context.Background(), operation); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 1 || runner.scripts[0] != operation.CommandPreview {
+		t.Fatalf("compose daemon-reload command = %#v, want %q", runner.scripts, operation.CommandPreview)
+	}
+}
+
 func TestNativeProviderDockerComposeProjectPlanStates(t *testing.T) {
 	tests := []struct {
 		name   string

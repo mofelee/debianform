@@ -225,7 +225,79 @@
       },
       "depends_on": [
         "host.compose1.docker.compose[\"app\"].validate",
+        "host.compose1.docker.compose[\"app\"].service"
+      ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.compose[\"app\"].service",
+      "kind": "service",
+      "summary": "manage docker compose service debianform-compose-app",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
+      },
+      "desired": {
+        "enabled": true,
+        "name": "debianform-compose-app",
+        "state": "running",
+        "unit": "debianform-compose-app.service"
+      },
+      "provider_type": "service",
+      "provider_address": "service.compose1_docker_compose_app",
+      "provider_payload": {
+        "enabled": true,
+        "name": "debianform-compose-app",
+        "state": "running",
+        "unit": "debianform-compose-app.service"
+      },
+      "depends_on": [
+        "host.compose1.docker.compose[\"app\"].systemd_unit",
+        "host.compose1.docker.compose[\"app\"].daemon_reload",
         "host.compose1.docker.service[\"docker\"]"
+      ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.compose[\"app\"].systemd_unit",
+      "kind": "systemd_unit",
+      "summary": "create docker compose systemd unit debianform-compose-app.service",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
+      },
+      "desired": {
+        "content": "[Unit]\nDescription=DebianForm Compose Project app\nRequires=docker.service\nAfter=docker.service network-online.target\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nWorkingDirectory=/opt/app\nExecStart=/usr/bin/docker compose -p app -f /opt/app/compose.yaml up -d\nExecStop=/usr/bin/docker compose -p app -f /opt/app/compose.yaml stop\nTimeoutStartSec=0\n\n[Install]\nWantedBy=multi-user.target\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "debianform-compose-app.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/debianform-compose-app.service",
+        "summary": {
+          "sha256": "6cd6cbb3f51b6cd295517fa585d8573a31c5d55879472513038c5329b490072a",
+          "bytes": 385
+        }
+      },
+      "provider_type": "systemd_unit",
+      "provider_address": "systemd_unit.compose1_docker_compose_app_debianform_compose_app_service",
+      "provider_payload": {
+        "content": "[Unit]\nDescription=DebianForm Compose Project app\nRequires=docker.service\nAfter=docker.service network-online.target\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nWorkingDirectory=/opt/app\nExecStart=/usr/bin/docker compose -p app -f /opt/app/compose.yaml up -d\nExecStop=/usr/bin/docker compose -p app -f /opt/app/compose.yaml stop\nTimeoutStartSec=0\n\n[Install]\nWantedBy=multi-user.target\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "debianform-compose-app.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/debianform-compose-app.service",
+        "summary": {
+          "sha256": "6cd6cbb3f51b6cd295517fa585d8573a31c5d55879472513038c5329b490072a",
+          "bytes": 385
+        }
+      },
+      "depends_on": [
+        "host.compose1.docker.compose[\"app\"].validate"
       ]
     },
     {
@@ -434,6 +506,23 @@
         "file": "../../../examples/v2-docker-compose.dbf.hcl",
         "line": 13,
         "path": "host.compose1.docker"
+      }
+    },
+    {
+      "address": "host.compose1.docker.compose[\"app\"].daemon_reload",
+      "action": "run",
+      "summary": "reload systemd manager configuration",
+      "depends_on": [
+        "host.compose1.docker.compose[\"app\"].systemd_unit"
+      ],
+      "triggered_by": [
+        "host.compose1.docker.compose[\"app\"].systemd_unit"
+      ],
+      "command_preview": "systemctl daemon-reload",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
       }
     },
     {

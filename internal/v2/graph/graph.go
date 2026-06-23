@@ -1848,9 +1848,60 @@ func dockerComposeGraph(host ir.HostSpec, packageAddresses []string, fileService
 			Source:         compose.Source,
 		})
 
+		unitAddress := ""
+		daemonReloadAddress := ""
+		serviceAddress := ""
+		if compose.Service.Enable {
+			unitAddress = prefix + ".systemd_unit"
+			daemonReloadAddress = prefix + ".daemon_reload"
+			serviceAddress = prefix + ".service"
+			unitName := composeSystemdUnitName(compose)
+			unitDesired := dockerComposeSystemdUnitDesired(compose, unitName)
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         unitAddress,
+				Kind:            "systemd_unit",
+				Summary:         "create docker compose systemd unit " + unitName,
+				Source:          compose.Source,
+				Desired:         unitDesired,
+				DependsOn:       []string{validateAddress},
+				ProviderType:    "systemd_unit",
+				ProviderAddress: "systemd_unit." + providerName(host.Name, "docker", "compose", name, unitName),
+				ProviderPayload: unitDesired,
+			})
+			operations = append(operations, Operation{
+				Address:        daemonReloadAddress,
+				Action:         "run",
+				Summary:        "reload systemd manager configuration",
+				DependsOn:      []string{unitAddress},
+				TriggeredBy:    []string{unitAddress},
+				CommandPreview: "systemctl daemon-reload",
+				Source:         compose.Source,
+			})
+			serviceDesired := dockerComposeServiceDesired(compose, unitName)
+			serviceDeps := []string{unitAddress, daemonReloadAddress}
+			if projectServiceAddress != "" {
+				serviceDeps = append(serviceDeps, projectServiceAddress)
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         serviceAddress,
+				Kind:            "service",
+				Summary:         "manage docker compose service " + compose.Service.Name,
+				Source:          compose.Source,
+				Desired:         serviceDesired,
+				DependsOn:       dedupeStrings(serviceDeps),
+				ProviderType:    "service",
+				ProviderAddress: "service." + providerName(host.Name, "docker", "compose", name),
+				ProviderPayload: serviceDesired,
+			})
+		}
+
 		projectAddress := prefix + ".project"
 		projectDeps := []string{validateAddress}
-		if projectServiceAddress != "" {
+		if serviceAddress != "" {
+			projectDeps = append(projectDeps, serviceAddress)
+		} else if projectServiceAddress != "" {
 			projectDeps = append(projectDeps, projectServiceAddress)
 		}
 		projectDesired := dockerComposeProjectDesired(compose)
@@ -1868,6 +1919,89 @@ func dockerComposeGraph(host ir.HostSpec, packageAddresses []string, fileService
 		})
 	}
 	return nodes, operations, validateAddresses, nil
+}
+
+func composeSystemdUnitName(compose ir.DockerComposeSpec) string {
+	return serviceUnitName(compose.Service.Name)
+}
+
+func serviceUnitName(name string) string {
+	if strings.Contains(name, ".") {
+		return name
+	}
+	return name + ".service"
+}
+
+func dockerComposeSystemdUnitDesired(compose ir.DockerComposeSpec, unitName string) map[string]any {
+	content := dockerComposeSystemdUnitContent(compose)
+	summary := contentSummary([]byte(content))
+	return map[string]any{
+		"name":    unitName,
+		"path":    "/etc/systemd/system/" + unitName,
+		"content": content,
+		"owner":   "root",
+		"group":   "root",
+		"mode":    "0644",
+		"ensure":  "present",
+		"summary": summary,
+	}
+}
+
+func dockerComposeSystemdUnitContent(compose ir.DockerComposeSpec) string {
+	lines := []string{
+		"[Unit]",
+		"Description=DebianForm Compose Project " + compose.Project,
+		"Requires=docker.service",
+		"After=" + strings.Join(compose.After, " "),
+		"",
+		"[Service]",
+		"Type=oneshot",
+		"RemainAfterExit=yes",
+		"WorkingDirectory=" + compose.Directory,
+		"ExecStart=" + dockerComposeUnitCommand(compose, "up", "-d"),
+		"ExecStop=" + dockerComposeUnitCommand(compose, "stop"),
+		"TimeoutStartSec=0",
+		"",
+		"[Install]",
+		"WantedBy=" + strings.Join(compose.WantedBy, " "),
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func dockerComposeUnitCommand(compose ir.DockerComposeSpec, command ...string) string {
+	args := []string{
+		"/usr/bin/docker",
+		"compose",
+		"-p",
+		compose.Project,
+	}
+	if compose.File != nil {
+		args = append(args, "-f", compose.File.Path)
+	}
+	args = append(args, command...)
+	return quoteCommand(args)
+}
+
+func dockerComposeServiceDesired(compose ir.DockerComposeSpec, unitName string) map[string]any {
+	state := "stopped"
+	enabled := false
+	switch compose.State {
+	case "running":
+		enabled = true
+		state = "running"
+	case "stopped":
+		enabled = true
+		state = "stopped"
+	case "absent":
+		enabled = false
+		state = "stopped"
+	}
+	return map[string]any{
+		"name":    compose.Service.Name,
+		"unit":    unitName,
+		"enabled": enabled,
+		"state":   state,
+	}
 }
 
 func dockerComposeProjectDesired(compose ir.DockerComposeSpec) map[string]any {
@@ -1957,6 +2091,11 @@ func deterministicJSON(value any) (string, error) {
 		return "", err
 	}
 	return string(data) + "\n", nil
+}
+
+func contentSummary(data []byte) ir.ContentSummary {
+	sum := sha256.Sum256(data)
+	return ir.ContentSummary{SHA256: hex.EncodeToString(sum[:]), Bytes: int64(len(data))}
 }
 
 func packageNameFromDockerPackageAddress(address string) string {

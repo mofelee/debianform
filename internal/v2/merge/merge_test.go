@@ -3292,6 +3292,68 @@ host "compose1" {
 `,
 			want: "docker compose service name",
 		},
+		{
+			name: "empty compose after entry",
+			hcl: `
+host "compose1" {
+  docker {
+    compose "app" {
+      directory = "/opt/app"
+      after     = [""]
+
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+    }
+  }
+}
+`,
+			want: "after entries must be non-empty strings",
+		},
+		{
+			name: "empty compose wanted_by entry",
+			hcl: `
+host "compose1" {
+  docker {
+    compose "app" {
+      directory = "/opt/app"
+      wanted_by = [""]
+
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+    }
+  }
+}
+`,
+			want: "wanted_by entries must be non-empty strings",
+		},
+		{
+			name: "compose generated unit path conflicts with systemd unit",
+			hcl: `
+host "compose1" {
+  systemd {
+    unit "debianform-compose-app.service" {
+      content = "[Service]\nExecStart=/bin/true\n"
+    }
+  }
+
+  docker {
+    compose "app" {
+      directory = "/opt/app"
+
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+    }
+  }
+}
+`,
+			want: "docker compose systemd unit path",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

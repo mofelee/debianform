@@ -503,8 +503,10 @@ func TestDockerComposeMemoryApplyDoesNotLeakEnvFileContent(t *testing.T) {
 	if !hasStepAction(plan, `host.compose1.docker.compose["app"].env_file["app"]`, ActionCreate) {
 		t.Fatalf("compose apply plan missing env file create: %#v", plan.Steps)
 	}
-	if len(provider.Operations) != 2 || !containsString(provider.Operations, `host.compose1.docker.compose["app"].validate`) {
-		t.Fatalf("compose operations = %#v, want apt refresh and compose validate", provider.Operations)
+	if len(provider.Operations) != 3 ||
+		!containsString(provider.Operations, `host.compose1.docker.compose["app"].validate`) ||
+		!containsString(provider.Operations, `host.compose1.docker.compose["app"].daemon_reload`) {
+		t.Fatalf("compose operations = %#v, want apt refresh, compose daemon_reload, and compose validate", provider.Operations)
 	}
 
 	st, err := backend.Read(context.Background(), program.Hosts[0])
@@ -543,6 +545,29 @@ func TestDockerComposeMemoryApplyIsIdempotent(t *testing.T) {
 	}
 	if len(next.Steps) != 0 || next.Summary.Create != 0 || next.Summary.Update != 0 || next.Summary.Delete != 0 || next.Summary.Operations != 0 {
 		t.Fatalf("second compose plan should be no-op, got steps=%#v summary=%#v", next.Steps, next.Summary)
+	}
+}
+
+func TestDockerComposeMemoryApplyIncludesSystemdUnitAndService(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-compose.dbf.hcl")
+	backend := NewMemoryBackend()
+	provider := &recordingPayloadProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{Host: "compose1"}); err != nil {
+		t.Fatal(err)
+	}
+	if !containsString(provider.Operations, `host.compose1.docker.compose["app"].daemon_reload`) {
+		t.Fatalf("compose operations = %#v, want daemon_reload", provider.Operations)
+	}
+	unitPayload := provider.Payloads[`host.compose1.docker.compose["app"].systemd_unit`]
+	content, _ := unitPayload["content"].(string)
+	if !strings.Contains(content, "ExecStart=/usr/bin/docker compose -p app -f /opt/app/compose.yaml up -d") {
+		t.Fatalf("compose unit payload missing ExecStart:\n%s", content)
+	}
+	servicePayload := provider.Payloads[`host.compose1.docker.compose["app"].service`]
+	if servicePayload["unit"] != "debianform-compose-app.service" || servicePayload["enabled"] != true || servicePayload["state"] != "running" {
+		t.Fatalf("compose service payload = %#v", servicePayload)
 	}
 }
 

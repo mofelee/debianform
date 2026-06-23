@@ -4069,6 +4069,17 @@ func validateHostSpec(spec ir.HostSpec) error {
 		}
 		for _, name := range sortedKeys(spec.Docker.Composes) {
 			compose := spec.Docker.Composes[name]
+			if compose.Service.Enable {
+				unitName := serviceUnitName(compose.Service.Name)
+				unitPath := "/etc/systemd/system/" + unitName
+				if previous, exists := files[unitPath]; exists {
+					return fmt.Errorf("%s:%d:%s.service.name: docker compose systemd unit path %q conflicts with file declared at %s:%d:%s", compose.Source.File, compose.Source.Line, compose.Source.Path, unitPath, previous.File, previous.Line, previous.Path)
+				}
+				if previous, exists := secrets[unitPath]; exists {
+					return fmt.Errorf("%s:%d:%s.service.name: docker compose systemd unit path %q conflicts with secret declared at %s:%d:%s", compose.Source.File, compose.Source.Line, compose.Source.Path, unitPath, previous.File, previous.Line, previous.Path)
+				}
+				files[unitPath] = compose.Source
+			}
 			if compose.File != nil {
 				if err := validateDockerComposePath("docker compose file", *compose.File, files, secrets); err != nil {
 					return err

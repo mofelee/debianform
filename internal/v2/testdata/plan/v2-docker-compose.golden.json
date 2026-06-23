@@ -6,11 +6,11 @@
     "host": "compose1"
   },
   "summary": {
-    "create": 12,
+    "create": 14,
     "update": 0,
     "delete": 0,
     "no_op": 0,
-    "operations": 2
+    "operations": 3
   },
   "changes": [
     {
@@ -644,6 +644,240 @@
       }
     },
     {
+      "address": "host.compose1.docker.compose[\"app\"].service",
+      "action": "create",
+      "summary": "manage docker compose service debianform-compose-app",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "enabled"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "debianform-compose-app"
+          },
+          {
+            "path": [
+              "state"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "running"
+          },
+          {
+            "path": [
+              "unit"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "debianform-compose-app.service"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.compose[\"app\"].systemd_unit",
+      "action": "create",
+      "summary": "create docker compose systemd unit debianform-compose-app.service",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 15,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "[Unit]"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Description=DebianForm Compose Project app"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Requires=docker.service"
+                  },
+                  {
+                    "op": "create",
+                    "text": "After=docker.service network-online.target"
+                  },
+                  {
+                    "op": "create",
+                    "text": ""
+                  },
+                  {
+                    "op": "create",
+                    "text": "[Service]"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Type=oneshot"
+                  },
+                  {
+                    "op": "create",
+                    "text": "RemainAfterExit=yes"
+                  },
+                  {
+                    "op": "create",
+                    "text": "WorkingDirectory=/opt/app"
+                  },
+                  {
+                    "op": "create",
+                    "text": "ExecStart=/usr/bin/docker compose -p app -f /opt/app/compose.yaml up -d"
+                  },
+                  {
+                    "op": "create",
+                    "text": "ExecStop=/usr/bin/docker compose -p app -f /opt/app/compose.yaml stop"
+                  },
+                  {
+                    "op": "create",
+                    "text": "TimeoutStartSec=0"
+                  },
+                  {
+                    "op": "create",
+                    "text": ""
+                  },
+                  {
+                    "op": "create",
+                    "text": "[Install]"
+                  },
+                  {
+                    "op": "create",
+                    "text": "WantedBy=multi-user.target"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "debianform-compose-app.service"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/systemd/system/debianform-compose-app.service"
+          },
+          {
+            "path": [
+              "summary"
+            ],
+            "kind": "map",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "summary",
+                  "bytes"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": 385
+              },
+              {
+                "path": [
+                  "summary",
+                  "sha256"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "6cd6cbb3f51b6cd295517fa585d8573a31c5d55879472513038c5329b490072a"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "address": "host.compose1.docker.package[\"containerd.io\"]",
       "action": "create",
       "summary": "install docker package containerd.io",
@@ -996,6 +1230,23 @@
         "file": "../../../examples/v2-docker-compose.dbf.hcl",
         "line": 13,
         "path": "host.compose1.docker"
+      }
+    },
+    {
+      "address": "host.compose1.docker.compose[\"app\"].daemon_reload",
+      "action": "run",
+      "summary": "reload systemd manager configuration",
+      "depends_on": [
+        "host.compose1.docker.compose[\"app\"].systemd_unit"
+      ],
+      "triggered_by": [
+        "host.compose1.docker.compose[\"app\"].systemd_unit"
+      ],
+      "command_preview": "systemctl daemon-reload",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
       }
     },
     {

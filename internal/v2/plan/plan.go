@@ -268,6 +268,10 @@ func printDiffNode(w io.Writer, node DiffNode, indent int) {
 		for _, hunk := range node.Hunks {
 			fmt.Fprintf(w, "%s  @@ -%d,%d +%d,%d @@\n", padding, hunk.OldStart, hunk.OldLines, hunk.NewStart, hunk.NewLines)
 			for _, line := range hunk.Lines {
+				if line.Text == "" {
+					fmt.Fprintf(w, "%s  %s\n", padding, actionSymbol(line.Op))
+					continue
+				}
 				fmt.Fprintf(w, "%s  %s %s\n", padding, actionSymbol(line.Op), line.Text)
 			}
 		}

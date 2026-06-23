@@ -80,6 +80,42 @@ Plan:
     + recreate: "auto"
     + remove_orphans: false
     + state: "running"
+  + host.compose1.docker.compose["app"].service
+    manage docker compose service debianform-compose-app
+    source: ../../../examples/v2-docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"]
+    + enabled: true
+    + name: "debianform-compose-app"
+    + state: "running"
+    + unit: "debianform-compose-app.service"
+  + host.compose1.docker.compose["app"].systemd_unit
+    create docker compose systemd unit debianform-compose-app.service
+    source: ../../../examples/v2-docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"]
+    + content
+      @@ -1,0 +1,15 @@
+      + [Unit]
+      + Description=DebianForm Compose Project app
+      + Requires=docker.service
+      + After=docker.service network-online.target
+      +
+      + [Service]
+      + Type=oneshot
+      + RemainAfterExit=yes
+      + WorkingDirectory=/opt/app
+      + ExecStart=/usr/bin/docker compose -p app -f /opt/app/compose.yaml up -d
+      + ExecStop=/usr/bin/docker compose -p app -f /opt/app/compose.yaml stop
+      + TimeoutStartSec=0
+      +
+      + [Install]
+      + WantedBy=multi-user.target
+    + ensure: "present"
+    + group: "root"
+    + mode: "0644"
+    + name: "debianform-compose-app.service"
+    + owner: "root"
+    + path: "/etc/systemd/system/debianform-compose-app.service"
+    + summary
+      + summary.bytes: 385
+      + summary.sha256: "6cd6cbb3f51b6cd295517fa585d8573a31c5d55879472513038c5329b490072a"
   + host.compose1.docker.package["containerd.io"]
     install docker package containerd.io
     source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
@@ -126,9 +162,13 @@ Plan:
     refresh apt package cache
     triggered_by: host.compose1.docker.apt.signing_key["docker-official"], host.compose1.docker.apt.repository["docker-official"]
     command: apt-get update
+  ! host.compose1.docker.compose["app"].daemon_reload
+    reload systemd manager configuration
+    triggered_by: host.compose1.docker.compose["app"].systemd_unit
+    command: systemctl daemon-reload
   ! host.compose1.docker.compose["app"].validate
     validate docker compose project app
     triggered_by: host.compose1.docker.compose["app"].file, host.compose1.docker.compose["app"].env_file["app"]
     command: docker compose -p app -f /opt/app/compose.yaml config
 
-Summary: 12 create, 0 update, 0 delete, 0 no-op, 2 operations
+Summary: 14 create, 0 update, 0 delete, 0 no-op, 3 operations

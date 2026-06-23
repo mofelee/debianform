@@ -30,8 +30,9 @@
 - [x] 已支持 Docker daemon ResourceGraph / plan / apply / check 闭环
 - [x] 已支持 Compose directory / compose file / env file / config validate ResourceGraph 闭环
 - [x] 已支持 Compose project 状态 ResourceGraph 展开和状态漂移检测
-- [ ] 尚未支持 users / Compose systemd ResourceGraph 展开
-- [ ] 尚未支持 users / Compose systemd apply / check 闭环
+- [x] 已支持 Compose systemd ResourceGraph / apply / check 闭环
+- [ ] 尚未支持 users ResourceGraph 展开
+- [ ] 尚未支持 users apply / check 闭环
 
 ## 总体实现边界
 
@@ -398,41 +399,41 @@ make test
 
 代码：
 
-- [ ] 生成默认 unit 名称 `debianform-compose-<name>.service`
-- [ ] 支持 `compose.service.enable`
-- [ ] 支持 `compose.service.name`
-- [ ] 支持 `after`
-- [ ] 支持 `wanted_by`
-- [ ] unit 内容包含 `Requires=docker.service`
-- [ ] unit 内容包含默认 `After=docker.service network-online.target`
-- [ ] unit `WorkingDirectory` 使用 compose directory
-- [ ] unit `ExecStart` 使用 `docker compose -p <project> -f <file> up -d`
-- [ ] unit `ExecStop` 使用 `docker compose -p <project> -f <file> stop`
-- [ ] 编译 systemd unit 节点，复用现有 `systemd_unit` provider
-- [ ] 编译 systemd daemon-reload operation
-- [ ] 编译 compose service 节点，复用现有 service provider
-- [ ] `state = "running"` 时默认 service enabled/running
-- [ ] `state = "stopped"` 时默认 service enabled/stopped
-- [ ] `state = "absent"` 时默认 service disabled/stopped，并由 project provider 执行 down
-- [ ] project 状态 provider 和 systemd service 的执行顺序稳定且幂等
+- [x] 生成默认 unit 名称 `debianform-compose-<name>.service`
+- [x] 支持 `compose.service.enable`
+- [x] 支持 `compose.service.name`
+- [x] 支持 `after`
+- [x] 支持 `wanted_by`
+- [x] unit 内容包含 `Requires=docker.service`
+- [x] unit 内容包含默认 `After=docker.service network-online.target`
+- [x] unit `WorkingDirectory` 使用 compose directory
+- [x] unit `ExecStart` 使用 `docker compose -p <project> -f <file> up -d`
+- [x] unit `ExecStop` 使用 `docker compose -p <project> -f <file> stop`
+- [x] 编译 systemd unit 节点，复用现有 `systemd_unit` provider
+- [x] 编译 systemd daemon-reload operation
+- [x] 编译 compose service 节点，复用现有 service provider
+- [x] `state = "running"` 时默认 service enabled/running
+- [x] `state = "stopped"` 时默认 service enabled/stopped
+- [x] `state = "absent"` 时默认 service disabled/stopped，并由 project provider 执行 down
+- [x] project 状态 provider 和 systemd service 的执行顺序稳定且幂等
 
 测试：
 
-- [ ] ResourceGraph golden 覆盖 generated systemd unit
-- [ ] plan golden 覆盖 unit 内容 diff
-- [ ] 单测覆盖默认 unit 名称和自定义 unit 名称
-- [ ] 单测覆盖 state running/stopped/absent 对 service desired 的影响
-- [ ] Engine fake runner 测试 daemon-reload 和 service enable/start
-- [ ] 负例覆盖非法 service name、非法 after/wanted_by 空值
+- [x] ResourceGraph golden 覆盖 generated systemd unit
+- [x] plan golden 覆盖 unit 内容 diff
+- [x] 单测覆盖默认 unit 名称和自定义 unit 名称
+- [x] 单测覆盖 state running/stopped/absent 对 service desired 的影响
+- [x] Engine fake runner 测试 daemon-reload 和 service enable/start
+- [x] 负例覆盖非法 service name、非法 after/wanted_by 空值
 
 示例：
 
-- [ ] `examples/v2-docker-compose.dbf.hcl` 增加 systemd 默认行为注释
+- [x] `examples/v2-docker-compose.dbf.hcl` 增加 systemd 默认行为注释
 
 文档：
 
-- [ ] README 增加 Compose systemd unit 简短说明
-- [ ] Docker 需求文档旁补充当前 unit 模板限制
+- [x] README 增加 Compose systemd unit 简短说明
+- [x] Docker 需求文档旁补充当前 unit 模板限制
 
 验收：
 

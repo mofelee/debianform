@@ -250,6 +250,9 @@ func TestCompileDockerComposeResourceGraphGolden(t *testing.T) {
 	composeFileAddress := `host.compose1.docker.compose["app"].file`
 	envFileAddress := `host.compose1.docker.compose["app"].env_file["app"]`
 	validateAddress := `host.compose1.docker.compose["app"].validate`
+	unitAddress := `host.compose1.docker.compose["app"].systemd_unit`
+	daemonReloadAddress := `host.compose1.docker.compose["app"].daemon_reload`
+	composeServiceAddress := `host.compose1.docker.compose["app"].service`
 	projectAddress := `host.compose1.docker.compose["app"].project`
 	serviceAddress := `host.compose1.docker.service["docker"]`
 	packageAddress := `host.compose1.docker.package["docker-compose-plugin"]`
@@ -296,6 +299,48 @@ func TestCompileDockerComposeResourceGraphGolden(t *testing.T) {
 			t.Fatalf("validate deps=%#v triggered_by=%#v, want %q", validate.DependsOn, validate.TriggeredBy, want)
 		}
 	}
+	unit := nodeFor(resourceGraph, unitAddress)
+	if unit == nil {
+		t.Fatal("compose systemd unit node missing")
+	}
+	content, _ := unit.Desired["content"].(string)
+	for _, want := range []string{
+		"Requires=docker.service",
+		"After=docker.service network-online.target",
+		"WorkingDirectory=/opt/app",
+		"ExecStart=/usr/bin/docker compose -p app -f /opt/app/compose.yaml up -d",
+		"ExecStop=/usr/bin/docker compose -p app -f /opt/app/compose.yaml stop",
+		"WantedBy=multi-user.target",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("compose systemd unit content missing %q:\n%s", want, content)
+		}
+	}
+	if unit.Desired["name"] != "debianform-compose-app.service" || unit.Desired["path"] != "/etc/systemd/system/debianform-compose-app.service" {
+		t.Fatalf("compose systemd unit desired = %#v", unit.Desired)
+	}
+	if !containsString(unit.DependsOn, validateAddress) {
+		t.Fatalf("compose systemd unit deps = %#v, want validate", unit.DependsOn)
+	}
+	reload := operationFor(resourceGraph, daemonReloadAddress)
+	if reload == nil {
+		t.Fatal("compose daemon-reload operation missing")
+	}
+	if !containsString(reload.DependsOn, unitAddress) || !containsString(reload.TriggeredBy, unitAddress) {
+		t.Fatalf("compose daemon-reload deps=%#v triggered_by=%#v, want unit", reload.DependsOn, reload.TriggeredBy)
+	}
+	service := nodeFor(resourceGraph, composeServiceAddress)
+	if service == nil {
+		t.Fatal("compose service node missing")
+	}
+	if service.Kind != "service" || service.Desired["unit"] != "debianform-compose-app.service" || service.Desired["enabled"] != true || service.Desired["state"] != "running" {
+		t.Fatalf("compose service node = %#v", service)
+	}
+	for _, want := range []string{unitAddress, daemonReloadAddress, serviceAddress} {
+		if !containsString(service.DependsOn, want) {
+			t.Fatalf("compose service deps = %#v, want %q", service.DependsOn, want)
+		}
+	}
 	project := nodeFor(resourceGraph, projectAddress)
 	if project == nil {
 		t.Fatal("compose project node missing")
@@ -303,7 +348,7 @@ func TestCompileDockerComposeResourceGraphGolden(t *testing.T) {
 	if project.Kind != "docker_compose_project" || project.Desired["state"] != "running" || project.Desired["pull"] != "missing" {
 		t.Fatalf("compose project node = %#v", project)
 	}
-	for _, want := range []string{validateAddress, serviceAddress} {
+	for _, want := range []string{validateAddress, composeServiceAddress} {
 		if !containsString(project.DependsOn, want) {
 			t.Fatalf("project deps = %#v, want %q", project.DependsOn, want)
 		}
@@ -353,6 +398,75 @@ host "server1" {
 	}
 	if !containsString(project.DependsOn, `host.server1.docker.compose["app"].validate`) {
 		t.Fatalf("source none compose project deps = %#v, want validate dependency", project.DependsOn)
+	}
+	if !containsString(project.DependsOn, `host.server1.docker.compose["app"].service`) {
+		t.Fatalf("source none compose project deps = %#v, want compose service dependency", project.DependsOn)
+	}
+	service := nodeFor(resourceGraph, `host.server1.docker.compose["app"].service`)
+	if service == nil {
+		t.Fatal("compose service node missing")
+	}
+	if containsString(service.DependsOn, `host.server1.docker.service["docker"]`) {
+		t.Fatalf("source none compose service deps = %#v, want no docker service dependency", service.DependsOn)
+	}
+}
+
+func TestCompileDockerComposeServiceNameAndStateMapping(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		state     string
+		service   string
+		wantUnit  string
+		wantState string
+		enabled   bool
+	}{
+		{name: "running default", state: "running", wantUnit: "debianform-compose-app.service", wantState: "running", enabled: true},
+		{name: "stopped custom", state: "stopped", service: "custom-compose-app", wantUnit: "custom-compose-app.service", wantState: "stopped", enabled: true},
+		{name: "absent", state: "absent", wantUnit: "debianform-compose-app.service", wantState: "stopped", enabled: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			serviceBlock := ""
+			if tt.service != "" {
+				serviceBlock = `
+      service {
+        name = "` + tt.service + `"
+      }
+`
+			}
+			resourceGraph := compileGraphInline(t, `
+host "server1" {
+  docker {
+    enable = true
+
+    package {
+      source = "none"
+    }
+
+    compose "app" {
+      state     = "`+tt.state+`"
+      directory = "/opt/app"
+`+serviceBlock+`
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+    }
+  }
+}
+`)
+
+			unit := nodeFor(resourceGraph, `host.server1.docker.compose["app"].systemd_unit`)
+			if unit == nil || unit.Desired["name"] != tt.wantUnit {
+				t.Fatalf("compose unit = %#v, want unit %q", unit, tt.wantUnit)
+			}
+			service := nodeFor(resourceGraph, `host.server1.docker.compose["app"].service`)
+			if service == nil {
+				t.Fatal("compose service node missing")
+			}
+			if service.Desired["unit"] != tt.wantUnit || service.Desired["state"] != tt.wantState || service.Desired["enabled"] != tt.enabled {
+				t.Fatalf("compose service desired = %#v, want unit=%q state=%q enabled=%v", service.Desired, tt.wantUnit, tt.wantState, tt.enabled)
+			}
+		})
 	}
 }
 
