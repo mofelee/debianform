@@ -216,5 +216,20 @@
         ]
       }
     ]
+  },
+  {
+    "fixture": "../../../examples/v2-variable-secret-file.dbf.hcl",
+    "variables": [
+      "app_token",
+      "app_token_version"
+    ],
+    "hosts": [
+      {
+        "name": "secret_file1",
+        "body_keys": [
+          "files"
+        ]
+      }
+    ]
   }
 ]

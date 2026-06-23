@@ -899,6 +899,7 @@ func TestREADMELocalCommandsAreCopyRunnable(t *testing.T) {
 		{name: "fmt-bbr-copy", args: []string{"fmt", "-f", fmtFixture}},
 		{name: "validate-bird2", args: []string{"validate", "-f", "../../examples/v2-bird2.dbf.hcl"}},
 		{name: "plan-nftables-offline", args: []string{"plan", "-f", "../../examples/v2-nftables.dbf.hcl", "--offline"}},
+		{name: "plan-variable-secret-file-offline", args: []string{"plan", "-f", "../../examples/v2-variable-secret-file.dbf.hcl", "--offline"}},
 	}
 	for _, command := range commands {
 		t.Run(command.name, func(t *testing.T) {
@@ -969,6 +970,7 @@ func runnableV2Examples() []string {
 		"examples/v2-profile-merge.dbf.hcl",
 		"examples/v2-systemd-service.dbf.hcl",
 		"examples/v2-user-group.dbf.hcl",
+		"examples/v2-variable-secret-file.dbf.hcl",
 	}
 }
 

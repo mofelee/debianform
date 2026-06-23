@@ -820,40 +820,19 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	for _, path := range sortedKeys(host.Files.Files) {
 		item := host.Files.Files[path]
 		address := fmt.Sprintf("host.%s.files.file[%s]", host.Name, strconv.Quote(path))
-		desired := map[string]any{
-			"path":      item.Path,
-			"owner":     item.Owner,
-			"group":     item.Group,
-			"mode":      item.Mode,
-			"ensure":    item.Ensure,
-			"sensitive": item.Sensitive,
-		}
-		if !item.ContentWriteOnly {
-			desired["summary"] = item.Summary
-		}
-		if item.ContentWriteOnly {
-			desired["content_write_only"] = true
-		}
-		if item.ContentVersion != "" {
-			desired["content_version"] = item.ContentVersion
-		}
-		if item.Content != "" && !item.Sensitive {
-			desired["content"] = item.Content
-		}
-		if item.Content != "" && item.Sensitive && !item.ContentWriteOnly {
-			desired["content_sha256"] = item.Summary.SHA256
-			desired["content_bytes"] = item.Summary.Bytes
-		}
-		if item.SourcePath != "" {
-			desired["source_path"] = item.SourcePath
-		}
-		payload := cloneMap(desired)
-		if item.Content != "" {
-			payload["content"] = item.Content
-		}
-		if item.SourcePath != "" {
-			payload["source_path"] = item.SourcePath
-		}
+		desired, payload := fileResourceDesiredPayload(fileResourceSpec{
+			Path:             item.Path,
+			Content:          item.Content,
+			ContentVersion:   item.ContentVersion,
+			ContentWriteOnly: item.ContentWriteOnly,
+			SourcePath:       item.SourcePath,
+			Owner:            item.Owner,
+			Group:            item.Group,
+			Mode:             item.Mode,
+			Sensitive:        item.Sensitive,
+			Ensure:           item.Ensure,
+			Summary:          item.Summary,
+		})
 		nodes = append(nodes, Node{
 			Host:            host.Name,
 			Address:         address,
@@ -873,41 +852,20 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		for _, path := range sortedKeys(component.Files.Files) {
 			item := component.Files.Files[path]
 			address := fmt.Sprintf("%s.files.file[%s]", componentPrefix, strconv.Quote(path))
-			desired := map[string]any{
-				"path":      item.Path,
-				"component": component.Name,
-				"owner":     item.Owner,
-				"group":     item.Group,
-				"mode":      item.Mode,
-				"ensure":    item.Ensure,
-				"sensitive": item.Sensitive,
-			}
-			if !item.ContentWriteOnly {
-				desired["summary"] = item.Summary
-			}
-			if item.ContentWriteOnly {
-				desired["content_write_only"] = true
-			}
-			if item.ContentVersion != "" {
-				desired["content_version"] = item.ContentVersion
-			}
-			if item.Content != "" && !item.Sensitive {
-				desired["content"] = item.Content
-			}
-			if item.Content != "" && item.Sensitive && !item.ContentWriteOnly {
-				desired["content_sha256"] = item.Summary.SHA256
-				desired["content_bytes"] = item.Summary.Bytes
-			}
-			if item.SourcePath != "" {
-				desired["source_path"] = item.SourcePath
-			}
-			payload := cloneMap(desired)
-			if item.Content != "" {
-				payload["content"] = item.Content
-			}
-			if item.SourcePath != "" {
-				payload["source_path"] = item.SourcePath
-			}
+			desired, payload := fileResourceDesiredPayload(fileResourceSpec{
+				Path:             item.Path,
+				Component:        component.Name,
+				Content:          item.Content,
+				ContentVersion:   item.ContentVersion,
+				ContentWriteOnly: item.ContentWriteOnly,
+				SourcePath:       item.SourcePath,
+				Owner:            item.Owner,
+				Group:            item.Group,
+				Mode:             item.Mode,
+				Sensitive:        item.Sensitive,
+				Ensure:           item.Ensure,
+				Summary:          item.Summary,
+			})
 			nodes = append(nodes, Node{
 				Host:            host.Name,
 				Address:         address,
@@ -927,16 +885,16 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	for _, path := range sortedKeys(host.Secrets.Files) {
 		item := host.Secrets.Files[path]
 		address := fmt.Sprintf("host.%s.secrets.file[%s]", host.Name, strconv.Quote(path))
-		desired := map[string]any{
-			"path":        item.Path,
-			"source_path": item.SourcePath,
-			"owner":       item.Owner,
-			"group":       item.Group,
-			"mode":        item.Mode,
-			"ensure":      item.Ensure,
-			"sensitive":   true,
-			"summary":     item.Summary,
-		}
+		desired, payload := fileResourceDesiredPayload(fileResourceSpec{
+			Path:       item.Path,
+			SourcePath: item.SourcePath,
+			Owner:      item.Owner,
+			Group:      item.Group,
+			Mode:       item.Mode,
+			Sensitive:  true,
+			Ensure:     item.Ensure,
+			Summary:    item.Summary,
+		})
 		nodes = append(nodes, Node{
 			Host:            host.Name,
 			Address:         address,
@@ -947,7 +905,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Desired:         desired,
 			ProviderType:    "file",
 			ProviderAddress: "file." + providerName(host.Name, item.Path),
-			ProviderPayload: desired,
+			ProviderPayload: payload,
 		})
 	}
 
@@ -956,17 +914,17 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		for _, path := range sortedKeys(component.Secrets.Files) {
 			item := component.Secrets.Files[path]
 			address := fmt.Sprintf("%s.secrets.file[%s]", componentPrefix, strconv.Quote(path))
-			desired := map[string]any{
-				"path":        item.Path,
-				"component":   component.Name,
-				"source_path": item.SourcePath,
-				"owner":       item.Owner,
-				"group":       item.Group,
-				"mode":        item.Mode,
-				"ensure":      item.Ensure,
-				"sensitive":   true,
-				"summary":     item.Summary,
-			}
+			desired, payload := fileResourceDesiredPayload(fileResourceSpec{
+				Path:       item.Path,
+				Component:  component.Name,
+				SourcePath: item.SourcePath,
+				Owner:      item.Owner,
+				Group:      item.Group,
+				Mode:       item.Mode,
+				Sensitive:  true,
+				Ensure:     item.Ensure,
+				Summary:    item.Summary,
+			})
 			nodes = append(nodes, Node{
 				Host:            host.Name,
 				Address:         address,
@@ -978,7 +936,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				DependsOn:       ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses),
 				ProviderType:    "file",
 				ProviderAddress: "file." + providerName(host.Name, component.Name, item.Path),
-				ProviderPayload: desired,
+				ProviderPayload: payload,
 			})
 		}
 	}
@@ -1668,6 +1626,62 @@ func nftablesFileNode(hostName string, address string, item ir.NftablesFileSpec,
 		ProviderAddress: "nftables_file." + providerName(hostName, item.Label),
 		ProviderPayload: desired,
 	}
+}
+
+type fileResourceSpec struct {
+	Path             string
+	Component        string
+	Content          string
+	ContentVersion   string
+	ContentWriteOnly bool
+	SourcePath       string
+	Owner            string
+	Group            string
+	Mode             string
+	Sensitive        bool
+	Ensure           string
+	Summary          ir.ContentSummary
+}
+
+func fileResourceDesiredPayload(item fileResourceSpec) (map[string]any, map[string]any) {
+	desired := map[string]any{
+		"path":      item.Path,
+		"owner":     item.Owner,
+		"group":     item.Group,
+		"mode":      item.Mode,
+		"ensure":    item.Ensure,
+		"sensitive": item.Sensitive,
+	}
+	if item.Component != "" {
+		desired["component"] = item.Component
+	}
+	if !item.ContentWriteOnly {
+		desired["summary"] = item.Summary
+	}
+	if item.ContentWriteOnly {
+		desired["content_write_only"] = true
+	}
+	if item.ContentVersion != "" {
+		desired["content_version"] = item.ContentVersion
+	}
+	if item.Content != "" && !item.Sensitive {
+		desired["content"] = item.Content
+	}
+	if item.Content != "" && item.Sensitive && !item.ContentWriteOnly {
+		desired["content_sha256"] = item.Summary.SHA256
+		desired["content_bytes"] = item.Summary.Bytes
+	}
+	if item.SourcePath != "" {
+		desired["source_path"] = item.SourcePath
+	}
+	payload := cloneMap(desired)
+	if item.Content != "" {
+		payload["content"] = item.Content
+	}
+	if item.SourcePath != "" {
+		payload["source_path"] = item.SourcePath
+	}
+	return desired, payload
 }
 
 func componentArtifactSourceLabel(source ir.ComponentArtifactSourceSpec) string {

@@ -1181,6 +1181,7 @@ func runnableV2ExampleFixtures() []string {
 		"../../../examples/v2-systemd-service.dbf.hcl",
 		"../../../examples/v2-systemd-service-unit.dbf.hcl",
 		"../../../examples/v2-user-group.dbf.hcl",
+		"../../../examples/v2-variable-secret-file.dbf.hcl",
 	}
 }
 

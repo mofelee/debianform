@@ -60,6 +60,7 @@ v2 领域块或 component。
 - [v2 requirements](docs/v2-requirements.md)
 - [v2 IR requirements](docs/v2-ir-requirements.zh.md)
 - [v2 component input requirements](docs/v2-component-input-requirements.zh.md)
+- [v2 variable and secrets](docs/v2-variable-secrets-requirements.zh.md)
 - [v2 plan format](docs/v2-plan-format.md)
 - [v2 state](docs/v2-state.md)
 - [v2 systemd service units](docs/v2-systemd-service-units.md)
@@ -88,6 +89,7 @@ v2 领域块或 component。
 - `examples/v2-systemd-service.dbf.hcl`
 - `examples/v2-systemd-service-unit.dbf.hcl`
 - `examples/v2-user-group.dbf.hcl`
+- `examples/v2-variable-secret-file.dbf.hcl`
 - `examples/v2-wireguard-networkd.dbf.hcl`（真实 validate/apply 前需准备本地 `examples/secrets/wg-a.key` 和 `wg-b.key`）
 - `examples/v2-systemd-networkd-wireguard.dbf.hcl`（同上，展示 systemd-networkd 原生写法）
 
@@ -174,6 +176,15 @@ input "listeners" {
 
 ```bash
 dbf component inspect -f examples/v2-component-inputs.dbf.hcl reverse_proxy
+```
+
+顶层 `variable` 用于 program 级外部输入。写入敏感文件时，推荐使用
+`variable + files.file`：敏感值放在 `content`，非敏感 `content_version` 负责触发
+write-only 更新。`secrets.file` 仍保留为兼容层，旧配置和 state address 不会因为新写法
+立即失效。
+
+```bash
+dbf plan -f examples/v2-variable-secret-file.dbf.hcl --offline
 ```
 
 component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
@@ -303,9 +314,9 @@ host "service2" {
 }
 ```
 
-`files.file sensitive = true` 和 `secrets.file` 不会在 plan 中输出明文；plan 只输出
-hash、长度等摘要。`services.service.state` 支持 `running`、`stopped`、`restarted`
-和 `reloaded`。
+`files.file sensitive = true` 和兼容层 `secrets.file` 不会在 plan 中输出明文；plan 只输出
+hash、长度等摘要。新配置优先使用 `variable + files.file` 表达敏感文件来源。
+`services.service.state` 支持 `running`、`stopped`、`restarted` 和 `reloaded`。
 
 ## 常见错误
 

@@ -406,6 +406,9 @@ files {
 - 第一阶段保留 `secrets.file`，不改变现有配置行为。
 - 第二阶段将 `secrets.file` 编译为 `files.file` 的敏感语法糖，内部复用同一条 file
   provider 路径。
+- 当前实现中 `secrets.file` 是兼容层：resource address 仍是
+  `host.<host>.secrets.file["<path>"]`，provider 仍走统一 file-like 写入、安全和 state
+  脱敏逻辑；新配置优先使用 `variable + files.file`。
 - 第三阶段给 `secrets.file` 增加 deprecation warning，提示用户改用
   `variable + files.file`。
 - 删除 `secrets.file` 只能在 `files.file` 支持 sensitive/ephemeral/write-only 后进行。
@@ -1281,29 +1284,41 @@ stdin 或 secret backend。
 
 代码：
 
-- [ ] `secrets.file` 内部编译为敏感 file 资源，或与 `files.file` 共用同一 helper。
-- [ ] 保持原 resource address，避免立即破坏 state。
-- [ ] `secrets.file` 和 `files.file` 写同一路径仍报错。
-- [ ] 新示例优先使用 `variable + files.file`。
-- [ ] 文档标记 `secrets.file` 为兼容层。
+- [x] `secrets.file` 内部编译为敏感 file 资源，或与 `files.file` 共用同一 helper。
+- [x] 保持原 resource address，避免立即破坏 state。
+- [x] `secrets.file` 和 `files.file` 写同一路径仍报错。
+- [x] 新示例优先使用 `variable + files.file`。
+- [x] 文档标记 `secrets.file` 为兼容层。
 
 测试：
 
-- [ ] 旧 `secrets.file` 示例 plan/state 与旧行为兼容。
-- [ ] `secrets.file` 和 `files.file` 路径冲突仍报错。
-- [ ] state address 不意外变化。
-- [ ] `secrets.file` 复用新 sensitive/write-only 泄漏断言。
+- [x] 旧 `secrets.file` 示例 plan/state 与旧行为兼容。
+- [x] `secrets.file` 和 `files.file` 路径冲突仍报错。
+- [x] state address 不意外变化。
+- [x] `secrets.file` 复用新 sensitive/write-only 泄漏断言。
 
 示例/文档：
 
-- [ ] README 和本文档展示新写法，同时保留旧写法兼容说明。
-- [ ] 示例中新增推荐写法，不立即删除旧 fixture。
+- [x] README 和本文档展示新写法，同时保留旧写法兼容说明。
+- [x] 示例中新增推荐写法，不立即删除旧 fixture。
 
 验收：
 
-- [ ] 新旧 secret 文件路径共用同一安全逻辑。
-- [ ] 现有 state 和示例不被破坏。
-- [ ] `make test` 通过。
+- [x] 新旧 secret 文件路径共用同一安全逻辑。
+- [x] 现有 state 和示例不被破坏。
+- [x] `make test` 通过。
+
+实现记录：
+
+- ResourceGraph 编译新增 file-like desired/payload helper，`files.file` 与 `secrets.file`
+  共用同一套 summary、sensitive、write-only 和 provider payload 构造逻辑。
+- `secrets.file` 继续保留 `secret` kind 和原始
+  `host.<host>.secrets.file["<path>"]` / component address，因此不需要本轮强制 state
+  migration；provider type/address 仍映射到 file provider。
+- 既有路径冲突校验继续在 merge 层生效；测试固定了 `files.file` 与 `secrets.file` 同路径
+  冲突、旧地址进入 state、旧 fixture plan/state 不泄漏 secret。
+- 新增 `examples/v2-variable-secret-file.dbf.hcl` 展示推荐写法：
+  `sensitive+ephemeral` variable + `files.file.content` + 非敏感 `content_version`。
 
 ### Loop 12：`secrets.file` 废弃评估和用户收口
 

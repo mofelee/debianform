@@ -104,6 +104,14 @@ func TestApplyWithMemoryProviderIsIdempotent(t *testing.T) {
 			t.Fatalf("state resource %s has no provider address", address)
 		}
 	}
+	secretAddress := `host.foundation1.secrets.file["/etc/myapp/token"]`
+	secret, ok := st.Resources[secretAddress]
+	if !ok {
+		t.Fatalf("state missing compatibility secret address %s", secretAddress)
+	}
+	if secret.Kind != "secret" || secret.ProviderType != "file" {
+		t.Fatalf("state secret kind/provider = %s/%s, want secret/file", secret.Kind, secret.ProviderType)
+	}
 }
 
 func TestApplyStateDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
