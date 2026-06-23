@@ -28,6 +28,8 @@ func NoSecretLeak(t *testing.T, label, text string, allowed ...string) {
 		SensitiveComponentInputValue,
 		SensitiveServiceEnvironment,
 		SensitiveVariableDefault,
+		SensitiveVariableCLIValue,
+		EphemeralVariableValue,
 	} {
 		if secret == "" || allowedSet[secret] {
 			continue

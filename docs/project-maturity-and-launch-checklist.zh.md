@@ -118,7 +118,7 @@
 - [x] README 说明 root-only SSH 执行模型，不支持 sudo/become/非 root 管理连接。
 - [x] [CLI 文档](cli.zh.md) 说明 root-only SSH 执行模型。
 - [x] [v2 requirements](v2-requirements.md) 说明 root-only 权限边界。
-- [ ] 增加覆盖 text/json/html plan、stdout/stderr、state 的集中式 secret redaction 回归矩阵。
+- [x] 增加覆盖 text/json/html plan、stdout/stderr、state 的集中式 secret redaction 回归矩阵。
 
 ### 用户文档
 
@@ -271,6 +271,7 @@
 - [x] `go test ./...`
 - [x] `go test -race -count=1 ./...`
 - [x] `make vulncheck`
+- [x] `go test ./cmd/dbf -run TestSecretRedactionRegressionMatrix`
 - [x] `make build`
 - [x] `make test-integration-layout`
 - [x] GitHub Actions CI 等价完整 libvirt 矩阵：`28015644419`
@@ -284,6 +285,8 @@
 
 - [x] 项目成熟度从「beta 初期」提升到「public beta 可上线候选」。
 - [x] 本地代码质量、race 单测、build 和 integration layout 检查通过。
+- [x] 已新增集中式 secret redaction 回归矩阵，覆盖 text/json/html plan、CLI
+      stdout/stderr、HostSpec、ResourceGraph desired、state 和 native provider preview/error。
 - [x] 发布、安装和供应链自动化已从计划状态推进为仓库内可执行配置。
 - [x] 正式 public beta `v0.1.0-beta.2` 已按 release runbook 创建 tag，并确认 CI、GitHub Release、Homebrew tap 和 clean install 验证全部通过。
 - [ ] stable/GA 仍需要真实使用反馈、兼容性政策、state migration 策略和恢复手册。
