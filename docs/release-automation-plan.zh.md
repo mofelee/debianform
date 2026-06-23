@@ -270,12 +270,12 @@ gh release delete v0.0.0-test.1 --cleanup-tag
 
 代码/文件：
 
-- [ ] 在 `.goreleaser.yaml` 中配置 Homebrew formula 发布，或新增 release workflow step
+- [x] 在 `.goreleaser.yaml` 中配置 Homebrew formula 发布，或新增 release workflow step
   生成并推送 `Formula/dbf.rb`。
-- [ ] 使用二进制 tarball URL 和四个平台 sha256。
-- [ ] workflow 使用 `HOMEBREW_TAP_GITHUB_TOKEN`，不使用默认 `GITHUB_TOKEN` 跨仓库推送。
-- [ ] tap commit message 包含版本号，例如 `dbf v0.1.0-beta.1`。
-- [ ] release workflow 在 Homebrew 更新失败时失败，并保留 GitHub Release。
+- [x] 使用二进制 tarball URL 和四个平台 sha256。
+- [x] workflow 使用 `HOMEBREW_TAP_GITHUB_TOKEN`，不使用默认 `GITHUB_TOKEN` 跨仓库推送。
+- [x] tap commit message 包含版本号，例如 `dbf v0.1.0-beta.1`。
+- [x] release workflow 在 Homebrew 更新失败时失败，并保留 GitHub Release。
 
 验收：
 

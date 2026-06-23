@@ -57,3 +57,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: goreleaser release --clean
+
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: scripts/update-homebrew-formula.sh "${GITHUB_REF_NAME}" dist/checksums.txt
