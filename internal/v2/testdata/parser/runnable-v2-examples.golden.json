@@ -79,6 +79,23 @@
     ]
   },
   {
+    "fixture": "../../../examples/v2-component-source-build.dbf.hcl",
+    "components": [
+      "hello_from_source"
+    ],
+    "hosts": [
+      {
+        "name": "build1",
+        "components": [
+          "hello_from_source=hello_from_source"
+        ],
+        "body_keys": [
+          "system"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/v2-files-plan-preview.dbf.hcl",
     "hosts": [
       {

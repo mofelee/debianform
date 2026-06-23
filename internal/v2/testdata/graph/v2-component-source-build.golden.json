@@ -1,0 +1,197 @@
+{
+  "nodes": [
+    {
+      "host": "build1",
+      "address": "host.build1.components.hello_from_source.artifact.build[\"/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build/out/3d38698d9f464df9/hello-from-source\"]",
+      "kind": "component_build",
+      "summary": "build component hello_from_source from source",
+      "source": {
+        "file": "../../../examples/v2-component-source-build.dbf.hcl",
+        "line": 27,
+        "path": "component.hello_from_source.build"
+      },
+      "desired": {
+        "architecture": "amd64",
+        "build_path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build",
+        "cache_path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/source",
+        "commands": [
+          [
+            "cc",
+            "-O2",
+            "-Wall",
+            "-o",
+            "hello-from-source",
+            "hello.c"
+          ]
+        ],
+        "component": "hello_from_source",
+        "ensure": "present",
+        "extract_format": "tar.gz",
+        "group": "root",
+        "mode": "0644",
+        "output": "hello-from-source",
+        "output_path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build/out/3d38698d9f464df9/hello-from-source",
+        "owner": "root",
+        "packages": [
+          "gcc"
+        ],
+        "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source_url": "https://downloads.example/hello-from-source-1.0.0.tar.gz",
+        "strip_components": 1,
+        "type": "source",
+        "version": "1.0.0",
+        "working_dir": ""
+      },
+      "provider_type": "component_build",
+      "provider_address": "component_build.build1_hello_from_source",
+      "provider_payload": {
+        "architecture": "amd64",
+        "build_path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build",
+        "cache_path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/source",
+        "commands": [
+          [
+            "cc",
+            "-O2",
+            "-Wall",
+            "-o",
+            "hello-from-source",
+            "hello.c"
+          ]
+        ],
+        "component": "hello_from_source",
+        "ensure": "present",
+        "extract_format": "tar.gz",
+        "group": "root",
+        "mode": "0644",
+        "output": "hello-from-source",
+        "output_path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build/out/3d38698d9f464df9/hello-from-source",
+        "owner": "root",
+        "packages": [
+          "gcc"
+        ],
+        "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source_url": "https://downloads.example/hello-from-source-1.0.0.tar.gz",
+        "strip_components": 1,
+        "type": "source",
+        "version": "1.0.0",
+        "working_dir": ""
+      },
+      "depends_on": [
+        "host.build1.components.hello_from_source.artifact.download[\"amd64\"]",
+        "host.build1.components.hello_from_source.build.package[\"gcc\"]"
+      ]
+    },
+    {
+      "host": "build1",
+      "address": "host.build1.components.hello_from_source.artifact.download[\"amd64\"]",
+      "kind": "component_download",
+      "summary": "download component hello_from_source source",
+      "source": {
+        "file": "../../../examples/v2-component-source-build.dbf.hcl",
+        "line": 12,
+        "path": "component.hello_from_source.source[\"amd64\"]"
+      },
+      "desired": {
+        "architecture": "amd64",
+        "component": "hello_from_source",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/source",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "type": "source",
+        "url": "https://downloads.example/hello-from-source-1.0.0.tar.gz",
+        "version": "1.0.0"
+      },
+      "provider_type": "component_download",
+      "provider_address": "component_download.build1_hello_from_source_amd64",
+      "provider_payload": {
+        "architecture": "amd64",
+        "component": "hello_from_source",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/source",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "type": "source",
+        "url": "https://downloads.example/hello-from-source-1.0.0.tar.gz",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "host": "build1",
+      "address": "host.build1.components.hello_from_source.artifact.install[\"/usr/local/bin/hello-from-source\"]",
+      "kind": "component_binary",
+      "summary": "install component hello_from_source source /usr/local/bin/hello-from-source",
+      "source": {
+        "file": "../../../examples/v2-component-source-build.dbf.hcl",
+        "line": 27,
+        "path": "component.hello_from_source.build"
+      },
+      "desired": {
+        "architecture": "amd64",
+        "build_output": "hello-from-source",
+        "build_path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build",
+        "cache_path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build/out/3d38698d9f464df9/hello-from-source",
+        "component": "hello_from_source",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/usr/local/bin/hello-from-source",
+        "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source_url": "https://downloads.example/hello-from-source-1.0.0.tar.gz",
+        "type": "source",
+        "version": "1.0.0"
+      },
+      "provider_type": "component_binary",
+      "provider_address": "component_binary.build1_hello_from_source__usr_local_bin_hello_from_source",
+      "provider_payload": {
+        "architecture": "amd64",
+        "build_output": "hello-from-source",
+        "build_path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build",
+        "cache_path": "/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build/out/3d38698d9f464df9/hello-from-source",
+        "component": "hello_from_source",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/usr/local/bin/hello-from-source",
+        "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source_url": "https://downloads.example/hello-from-source-1.0.0.tar.gz",
+        "type": "source",
+        "version": "1.0.0"
+      },
+      "depends_on": [
+        "host.build1.components.hello_from_source.artifact.build[\"/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build/out/3d38698d9f464df9/hello-from-source\"]"
+      ]
+    },
+    {
+      "host": "build1",
+      "address": "host.build1.components.hello_from_source.build.package[\"gcc\"]",
+      "kind": "package",
+      "summary": "install build package gcc",
+      "source": {
+        "file": "../../../examples/v2-component-source-build.dbf.hcl",
+        "line": 27,
+        "path": "component.hello_from_source.build"
+      },
+      "desired": {
+        "component": "hello_from_source",
+        "ensure": "present",
+        "name": "gcc",
+        "scope": "build"
+      },
+      "provider_type": "package",
+      "provider_address": "package.build1_hello_from_source_build_gcc",
+      "provider_payload": {
+        "component": "hello_from_source",
+        "ensure": "present",
+        "name": "gcc",
+        "scope": "build"
+      }
+    }
+  ]
+}

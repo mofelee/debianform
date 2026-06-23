@@ -47,6 +47,7 @@ type Component struct {
 	Version   string
 	Sources   map[string]ComponentArtifactSource
 	Extract   *ComponentArtifactExtract
+	Build     *ComponentArtifactBuild
 	Install   *ComponentArtifactInstall
 }
 
@@ -84,6 +85,15 @@ type ComponentArtifactExtract struct {
 	StripComponents int
 	Include         string
 	Source          ir.SourceRef
+}
+
+type ComponentArtifactBuild struct {
+	Commands   [][]string
+	Packages   []string
+	WorkingDir string
+	Output     string
+	SourceName string
+	Source     ir.SourceRef
 }
 
 type ComponentArtifactInstall struct {
@@ -311,6 +321,15 @@ func parseComponent(file string, block *hclsyntax.Block, ctx EvalContext) (Compo
 				return Component{}, err
 			}
 			component.Extract = &extract
+		case "build":
+			if component.Build != nil {
+				return Component{}, fmt.Errorf("%s:%d: duplicate %s.build block", file, child.TypeRange.Start.Line, source.Path)
+			}
+			build, err := parseComponentBuildBlock(file, source.Path, child, ctx)
+			if err != nil {
+				return Component{}, err
+			}
+			component.Build = &build
 		case "install":
 			if component.Install != nil {
 				return Component{}, fmt.Errorf("%s:%d: duplicate %s.install block", file, child.TypeRange.Start.Line, source.Path)
@@ -320,6 +339,10 @@ func parseComponent(file string, block *hclsyntax.Block, ctx EvalContext) (Compo
 				return Component{}, err
 			}
 			component.Install = &install
+		case "apt", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services":
+			continue
+		default:
+			return Component{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, source.Path, child.Type)
 		}
 	}
 	return component, nil
@@ -396,6 +419,54 @@ func parseComponentExtractBlock(file, componentPath string, block *hclsyntax.Blo
 	return extract, nil
 }
 
+func parseComponentBuildBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentArtifactBuild, error) {
+	path := componentPath + ".build"
+	if len(block.Labels) != 0 {
+		return ComponentArtifactBuild{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return ComponentArtifactBuild{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	build := ComponentArtifactBuild{Source: ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}}
+	for name, attr := range block.Body.Attributes {
+		switch name {
+		case "commands":
+			commands, err := parseCommandMatrixAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactBuild{}, err
+			}
+			build.Commands = commands
+		case "packages":
+			packages, err := parseStringListAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactBuild{}, err
+			}
+			build.Packages = packages
+		case "working_dir":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactBuild{}, err
+			}
+			build.WorkingDir = value
+		case "output":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactBuild{}, err
+			}
+			build.Output = value
+		case "source_name":
+			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
+			if err != nil {
+				return ComponentArtifactBuild{}, err
+			}
+			build.SourceName = value
+		default:
+			return ComponentArtifactBuild{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	return build, nil
+}
+
 func parseComponentInstallBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentArtifactInstall, error) {
 	path := componentPath + ".install"
 	if len(block.Labels) != 0 {
@@ -466,6 +537,59 @@ func parseIntAttribute(file, path string, attr *hclsyntax.Attribute, ctx EvalCon
 		return 0, fmt.Errorf("%s:%d: %s must be an integer", file, source.Line, path)
 	}
 	return n, nil
+}
+
+func parseCommandMatrixAttribute(file, path string, attr *hclsyntax.Attribute, ctx EvalContext) ([][]string, error) {
+	source := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path}
+	value, err := evalValue(attr.Expr, ctx, source)
+	if err != nil {
+		return nil, fmt.Errorf("%s:%d: %s: %w", file, source.Line, path, err)
+	}
+	if !value.IsList() {
+		return nil, fmt.Errorf("%s:%d: %s must be a list of command argument lists", file, source.Line, path)
+	}
+	commands := make([][]string, 0, len(value.List))
+	for i, item := range value.List {
+		itemPath := fmt.Sprintf("%s[%d]", path, i)
+		if !item.IsList() {
+			return nil, fmt.Errorf("%s:%d: %s must be a command argument list", file, item.Source.Line, itemPath)
+		}
+		command := make([]string, 0, len(item.List))
+		for j, arg := range item.List {
+			str, ok := arg.StringValue()
+			if !ok {
+				return nil, fmt.Errorf("%s:%d: %s[%d] must be a string", file, arg.Source.Line, itemPath, j)
+			}
+			command = append(command, str)
+		}
+		commands = append(commands, command)
+	}
+	return commands, nil
+}
+
+func parseStringListAttribute(file, path string, attr *hclsyntax.Attribute, ctx EvalContext) ([]string, error) {
+	source := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path}
+	value, err := evalValue(attr.Expr, ctx, source)
+	if err != nil {
+		return nil, fmt.Errorf("%s:%d: %s: %w", file, source.Line, path, err)
+	}
+	if !value.IsList() {
+		return nil, fmt.Errorf("%s:%d: %s must be a list of strings", file, source.Line, path)
+	}
+	out := make([]string, 0, len(value.List))
+	seen := map[string]struct{}{}
+	for i, item := range value.List {
+		str, ok := item.StringValue()
+		if !ok || str == "" {
+			return nil, fmt.Errorf("%s:%d: %s[%d] must be a non-empty string", file, item.Source.Line, path, i)
+		}
+		if _, exists := seen[str]; exists {
+			return nil, fmt.Errorf("%s:%d: duplicate %s entry %q", file, item.Source.Line, path, str)
+		}
+		seen[str] = struct{}{}
+		out = append(out, str)
+	}
+	return out, nil
 }
 
 func parseLabeledHeader(file, typ string, block *hclsyntax.Block) (ir.SourceRef, string, error) {
@@ -780,7 +904,7 @@ func ParseComponentBody(component Component, ctx EvalContext) (Value, error) {
 		switch block.Type {
 		case "input":
 			continue
-		case "source", "extract", "install":
+		case "source", "extract", "build", "install":
 			continue
 		case "apt", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services":
 			if len(block.Labels) != 0 {
@@ -814,7 +938,7 @@ func ValidateComponentBodyShape(component Component) error {
 	values := map[string]struct{}{}
 	for _, block := range component.Body.Blocks {
 		switch block.Type {
-		case "input", "source", "extract", "install":
+		case "input", "source", "extract", "build", "install":
 			continue
 		case "apt", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services":
 			if len(block.Labels) != 0 {

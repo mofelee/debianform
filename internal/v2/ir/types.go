@@ -346,6 +346,7 @@ type ComponentTemplateSpec struct {
 	Inputs       map[string]ComponentInputSpec          `json:"inputs,omitempty"`
 	Sources      map[string]ComponentArtifactSourceSpec `json:"sources,omitempty"`
 	Extract      *ComponentArtifactExtractSpec          `json:"extract,omitempty"`
+	Build        *ComponentArtifactBuildSpec            `json:"build,omitempty"`
 	Install      *ComponentArtifactInstallSpec          `json:"install,omitempty"`
 	Source       SourceRef                              `json:"source,omitempty"`
 }
@@ -391,6 +392,7 @@ type ComponentInstanceSpec struct {
 	Version        string                        `json:"version,omitempty"`
 	SelectedSource *ComponentArtifactSourceSpec  `json:"selected_source,omitempty"`
 	Extract        *ComponentArtifactExtractSpec `json:"extract,omitempty"`
+	Build          *ComponentArtifactBuildSpec   `json:"build,omitempty"`
 	Install        *ComponentArtifactInstallSpec `json:"install,omitempty"`
 	APT            APTSpec                       `json:"apt"`
 	Packages       PackageSpec                   `json:"packages"`
@@ -416,6 +418,15 @@ type ComponentArtifactExtractSpec struct {
 	StripComponents int       `json:"strip_components,omitempty"`
 	Include         string    `json:"include,omitempty"`
 	Source          SourceRef `json:"source,omitempty"`
+}
+
+type ComponentArtifactBuildSpec struct {
+	Commands   [][]string `json:"commands,omitempty"`
+	Packages   []string   `json:"packages,omitempty"`
+	WorkingDir string     `json:"working_dir,omitempty"`
+	Output     string     `json:"output"`
+	SourceName string     `json:"source_name,omitempty"`
+	Source     SourceRef  `json:"source,omitempty"`
 }
 
 type ComponentArtifactInstallSpec struct {

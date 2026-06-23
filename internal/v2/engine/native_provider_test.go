@@ -295,12 +295,103 @@ func TestNativeProviderComponentDownloadURL(t *testing.T) {
 	}
 	applied := runner.scripts[len(runner.scripts)-1]
 	for _, want := range []string{
-		"curl -fsSL 'https://downloads.example/rclone.zip'",
+		"source_url='https://downloads.example/rclone.zip'",
+		`curl -fsSL "$source_url"`,
 		"sha256sum --check --status",
 		"install -o 'root' -g 'root' -m '0644'",
 	} {
 		if !strings.Contains(applied, want) {
 			t.Fatalf("component download apply script missing %q:\n%s", want, applied)
+		}
+	}
+}
+
+func TestNativeProviderComponentDownloadFileURL(t *testing.T) {
+	node := graph.Node{
+		Address: "host.server1.components.hello.artifact.download[\"default\"]",
+		Host:    "server1",
+		Kind:    "component_download",
+		Desired: map[string]any{
+			"path":   "/var/cache/debianform/components/hello/source",
+			"url":    "file:///var/lib/debianform-integration/hello.c",
+			"sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"owner":  "root",
+			"group":  "root",
+			"mode":   "0644",
+			"ensure": "present",
+		},
+	}
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[len(runner.scripts)-1]
+	for _, want := range []string{
+		`source_url='file:///var/lib/debianform-integration/hello.c'`,
+		`cp -- "${source_url#file://}"`,
+		"sha256sum --check --status",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("file URL download script missing %q:\n%s", want, applied)
+		}
+	}
+	if !strings.Contains(applied, "file://*) ;;") {
+		t.Fatalf("file URL download should skip curl install at runtime:\n%s", applied)
+	}
+}
+
+func TestNativeProviderComponentBuildSingleSourceFile(t *testing.T) {
+	builtSHA := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	node := graph.Node{
+		Address: "host.server1.components.hello.artifact.build[\"/var/cache/debianform/components/hello/build/out/hash/hello\"]",
+		Host:    "server1",
+		Kind:    "component_build",
+		Desired: map[string]any{
+			"cache_path":  "/var/cache/debianform/components/hello/source",
+			"build_path":  "/var/cache/debianform/components/hello/build",
+			"output_path": "/var/cache/debianform/components/hello/build/out/hash/hello",
+			"commands": [][]string{
+				{"cc", "-O2", "-o", "hello", "hello.c"},
+			},
+			"output":      "hello",
+			"source_name": "hello.c",
+			"owner":       "root",
+			"group":       "root",
+			"mode":        "0644",
+			"ensure":      "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{
+		{Stdout: "missing\n"},
+		{},
+		{Stdout: "file\nroot\nroot\n644\n" + builtSHA + "\n"},
+	}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing component build action = %q, want create", got.Action)
+	}
+	observed, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observed["sha256"] != builtSHA {
+		t.Fatalf("observed sha256 = %#v, want %s", observed["sha256"], builtSHA)
+	}
+	applied := runner.scripts[len(runner.scripts)-2]
+	for _, want := range []string{
+		"cp -- '/var/cache/debianform/components/hello/source' \"$src/hello.c\"",
+		"set -- 'cc' '-O2' '-o' 'hello' 'hello.c'\n\"$@\"",
+		"install -o 'root' -g 'root' -m '0644' \"$built\" '/var/cache/debianform/components/hello/build/out/hash/hello'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("component build script missing %q:\n%s", want, applied)
 		}
 	}
 }

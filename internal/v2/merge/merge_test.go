@@ -568,6 +568,62 @@ host "server1" {
 	}
 }
 
+func TestCompileComponentSourceArtifactBuild(t *testing.T) {
+	program := compileInline(t, `
+component "hello" {
+  type    = "source"
+  version = "1.0.0"
+
+  source "amd64" {
+    url    = "https://downloads.example/hello.c"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  build {
+    packages = ["gcc"]
+
+    commands = [
+      ["cc", "-O2", "-o", "hello", "hello.c"],
+    ]
+    output      = "hello"
+    source_name = "hello.c"
+  }
+
+  install {
+    path = "/usr/local/bin/hello"
+  }
+}
+
+host "tool1" {
+  components = [component.hello]
+
+  system {
+    architecture = "amd64"
+  }
+}
+`)
+
+	component := program.Hosts[0].Components[0]
+	if component.ArtifactType != "source" || component.Version != "1.0.0" {
+		t.Fatalf("artifact = %#v", component)
+	}
+	if component.Build == nil {
+		t.Fatalf("build was not compiled")
+	}
+	if got := component.Build.Commands[0]; !reflect.DeepEqual(got, []string{"cc", "-O2", "-o", "hello", "hello.c"}) {
+		t.Fatalf("build command = %#v", got)
+	}
+	if !reflect.DeepEqual(component.Build.Packages, []string{"gcc"}) {
+		t.Fatalf("build packages = %#v", component.Build.Packages)
+	}
+	if component.Build.Output != "hello" || component.Build.SourceName != "hello.c" {
+		t.Fatalf("build attrs = %#v", component.Build)
+	}
+	if component.Install == nil || component.Install.Mode != "0755" {
+		t.Fatalf("install defaults = %#v", component.Install)
+	}
+}
+
 func TestCompileUsesRuntimeFactsForTargetAndArtifactSelection(t *testing.T) {
 	cfg := parseInline(t, `
 component "tools" {
@@ -1026,6 +1082,55 @@ host "tool1" {
 }
 `,
 			want: "file component does not support extract",
+		},
+		{
+			name: "source missing build",
+			hcl: `
+component "hello" {
+  type = "source"
+
+  source {
+    url    = "https://downloads.example/hello.c"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/usr/local/bin/hello"
+  }
+}
+
+host "tool1" {
+  components = [component.hello]
+}
+`,
+			want: "source component requires a build block",
+		},
+		{
+			name: "binary with build",
+			hcl: `
+component "hello" {
+  type = "binary"
+
+  source {
+    url    = "https://downloads.example/hello"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  build {
+    commands = [["cc", "-o", "hello", "hello.c"]]
+    output   = "hello"
+  }
+
+  install {
+    path = "/usr/local/bin/hello"
+  }
+}
+
+host "tool1" {
+  components = [component.hello]
+}
+`,
+			want: "binary component does not support build",
 		},
 	}
 	for _, tt := range tests {
@@ -1825,6 +1930,10 @@ func TestCompileBIRD2HostSpecGolden(t *testing.T) {
 
 func TestCompileComponentBinaryHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-component-binary.dbf.hcl", "../testdata/hostspec/v2-component-binary.golden.json")
+}
+
+func TestCompileComponentSourceBuildHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../../../examples/v2-component-source-build.dbf.hcl", "../testdata/hostspec/v2-component-source-build.golden.json")
 }
 
 func TestCompileComponentInputsHostSpecGolden(t *testing.T) {

@@ -35,6 +35,8 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2stat
 		return p.planAPTSigningKey(ctx, node, prior)
 	case "component_download":
 		return p.planComponentDownload(ctx, node, prior)
+	case "component_build":
+		return p.planComponentBuild(ctx, node, prior)
 	case "component_binary":
 		return p.planComponentBinary(ctx, node, prior)
 	case "component_file", "component_ca_certificate":
@@ -74,6 +76,8 @@ func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, e
 		return p.applyAPTSigningKey(ctx, step)
 	case "component_download":
 		return p.applyComponentDownload(ctx, step)
+	case "component_build":
+		return p.applyComponentBuild(ctx, step)
 	case "component_binary":
 		return p.applyComponentBinary(ctx, step)
 	case "component_file", "component_ca_certificate":
@@ -110,6 +114,8 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 	switch step.Prior.Kind {
 	case "apt_source_file":
 		return p.destroyAPTSourceFile(ctx, step)
+	case "component_build":
+		return p.removePath(ctx, host, stringMapValue(desired, "output_path"), false)
 	case "file", "secret", "nftables_file", "networkd_netdev", "networkd_network", "apt_signing_key", "component_download", "component_binary", "component_file", "component_ca_certificate":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), false)
 	case "component_archive":
@@ -472,12 +478,21 @@ func (p NativeProvider) applyComponentDownload(ctx context.Context, step Step) (
 	lines := []string{
 		"set -eu",
 		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
-		"if ! command -v curl >/dev/null 2>&1; then",
-		"  export DEBIAN_FRONTEND=noninteractive",
-		"  apt-get update",
-		"  apt-get install -y ca-certificates curl",
-		"fi",
-		"curl -fsSL " + shellQuote(url) + " -o " + shellQuote(tmp),
+		"source_url=" + shellQuote(url),
+		"case \"$source_url\" in",
+		"  file://*) ;;",
+		"  *)",
+		"    if ! command -v curl >/dev/null 2>&1; then",
+		"      export DEBIAN_FRONTEND=noninteractive",
+		"      apt-get update",
+		"      apt-get install -y ca-certificates curl",
+		"    fi",
+		"    ;;",
+		"esac",
+		"case \"$source_url\" in",
+		"  file://*) cp -- \"${source_url#file://}\" " + shellQuote(tmp) + " ;;",
+		"  *) curl -fsSL \"$source_url\" -o " + shellQuote(tmp) + " ;;",
+		"esac",
 		"printf '%s  %s\\n' " + shellQuote(sha) + " " + shellQuote(tmp) + " | sha256sum --check --status",
 		"install -o " + shellQuote(stringDesired(step.Node, "owner")) +
 			" -g " + shellQuote(stringDesired(step.Node, "group")) +
@@ -490,6 +505,77 @@ func (p NativeProvider) applyComponentDownload(ctx context.Context, step Step) (
 		return nil, err
 	}
 	return map[string]any{"exists": true, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planComponentBuild(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	path := stringDesired(node, "output_path")
+	current, err := p.readPath(ctx, node.Host, path)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	if ensureAbsent(node) {
+		if current.Exists {
+			return ProviderPlan{Action: ActionDelete, Summary: "remove component build output " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return absentInSyncPlan(prior, "already absent component build output "+path, observed), nil
+	}
+	if path == "" || stringDesired(node, "cache_path") == "" || stringDesired(node, "build_path") == "" {
+		return ProviderPlan{}, fmt.Errorf("%s component build requires cache_path, build_path, and output_path", node.Address)
+	}
+	if len(commandMatrixDesired(node, "commands")) == 0 {
+		return ProviderPlan{}, fmt.Errorf("%s component build requires commands", node.Address)
+	}
+	if stringDesired(node, "output") == "" {
+		return ProviderPlan{}, fmt.Errorf("%s component build requires output", node.Address)
+	}
+	if !current.Exists {
+		return ProviderPlan{Action: ActionCreate, Summary: "build component output " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if current.IsDir ||
+		current.Owner != stringDesired(node, "owner") ||
+		current.Group != stringDesired(node, "group") ||
+		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update component build output " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	desiredDigest := v2state.DesiredDigest(node.Desired)
+	priorSHA := ""
+	if prior != nil {
+		priorSHA = stringMapValue(prior.Observed, "sha256")
+	}
+	if prior == nil || prior.DesiredDigest != desiredDigest || priorSHA == "" || priorSHA != current.SHA256 {
+		return ProviderPlan{Action: ActionUpdate, Summary: "rebuild component output " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	observed["desired_digest"] = desiredDigest
+	return ProviderPlan{Action: ActionNoOp, Summary: "no changes for component build output " + path, Observed: observed, Ownership: ownership(prior)}, nil
+}
+
+func (p NativeProvider) applyComponentBuild(ctx context.Context, step Step) (map[string]any, error) {
+	outputPath := stringDesired(step.Node, "output_path")
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		if err := p.removePath(ctx, step.Node.Host, outputPath, false); err != nil {
+			return nil, err
+		}
+		return map[string]any{"exists": false}, nil
+	}
+	if outputPath == "" {
+		return nil, fmt.Errorf("%s component build requires output_path", step.Address)
+	}
+	lines, err := componentBuildScript(step.Node)
+	if err != nil {
+		return nil, err
+	}
+	_, err = p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	current, err := p.readPath(ctx, step.Node.Host, outputPath)
+	if err != nil {
+		return nil, err
+	}
+	observed := current.observed()
+	observed["desired_digest"] = v2state.DesiredDigest(step.Node.Desired)
+	return observed, nil
 }
 
 func (p NativeProvider) planComponentBinary(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
@@ -799,6 +885,100 @@ func componentBinaryExtractInstallScript(node graph.Node) []string {
 			" \"$src\" "+shellQuote(path),
 	)
 	return lines
+}
+
+func componentBuildScript(node graph.Node) ([]string, error) {
+	cachePath := stringDesired(node, "cache_path")
+	buildPath := stringDesired(node, "build_path")
+	outputPath := stringDesired(node, "output_path")
+	output := stringDesired(node, "output")
+	if cachePath == "" || buildPath == "" || outputPath == "" || output == "" {
+		return nil, fmt.Errorf("%s component build requires cache_path, build_path, output_path, and output", node.Address)
+	}
+	commands := commandMatrixDesired(node, "commands")
+	if len(commands) == 0 {
+		return nil, fmt.Errorf("%s component build requires commands", node.Address)
+	}
+	for i, command := range commands {
+		if len(command) == 0 {
+			return nil, fmt.Errorf("%s component build command %d is empty", node.Address, i)
+		}
+	}
+	format := stringDesired(node, "extract_format")
+	if format != "" && format != "zip" && format != "tar.gz" && format != "tar.xz" {
+		return nil, fmt.Errorf("%s unsupported component source extract format %q", node.Address, format)
+	}
+	stripComponents := fmt.Sprintf("%v", node.Desired["strip_components"])
+	if stripComponents == "" || stripComponents == "<nil>" {
+		stripComponents = "0"
+	}
+	sourceName := stringDesired(node, "source_name")
+	if sourceName == "" {
+		sourceName = "source"
+	}
+	lines := []string{
+		"set -eu",
+		"if [ " + shellQuote(format) + " = 'zip' ] && ! command -v unzip >/dev/null 2>&1; then",
+		"  export DEBIAN_FRONTEND=noninteractive",
+		"  apt-get update",
+		"  apt-get install -y unzip",
+		"fi",
+		"if [ " + shellQuote(format) + " = 'tar.gz' ] && ! command -v tar >/dev/null 2>&1; then",
+		"  export DEBIAN_FRONTEND=noninteractive",
+		"  apt-get update",
+		"  apt-get install -y tar gzip",
+		"fi",
+		"if [ " + shellQuote(format) + " = 'tar.xz' ] && { ! command -v tar >/dev/null 2>&1 || ! command -v xz >/dev/null 2>&1; }; then",
+		"  export DEBIAN_FRONTEND=noninteractive",
+		"  apt-get update",
+		"  apt-get install -y tar xz-utils",
+		"fi",
+		"work=$(mktemp -d)",
+		"trap 'rm -rf -- \"$work\"' EXIT",
+		"src=\"$work/src\"",
+		"mkdir -p \"$src\"",
+	}
+	switch format {
+	case "zip":
+		lines = append(lines, "unzip -q "+shellQuote(cachePath)+" -d \"$src\"")
+	case "tar.gz":
+		lines = append(lines, "tar --no-same-owner -xzf "+shellQuote(cachePath)+" -C \"$src\" --strip-components "+shellQuote(stripComponents))
+	case "tar.xz":
+		lines = append(lines, "tar --no-same-owner -xJf "+shellQuote(cachePath)+" -C \"$src\" --strip-components "+shellQuote(stripComponents))
+	default:
+		lines = append(lines, "cp -- "+shellQuote(cachePath)+" \"$src/"+sourceName+"\"")
+	}
+	lines = append(lines,
+		"build_root="+shellQuote(buildPath),
+		"rm -rf -- \"$build_root/work\"",
+		"mkdir -p \"$build_root\"",
+		"mv \"$src\" \"$build_root/work\"",
+		"cd \"$build_root/work\"",
+	)
+	if workingDir := stringDesired(node, "working_dir"); workingDir != "" {
+		lines = append(lines, "cd "+shellQuote(workingDir))
+	}
+	for _, command := range commands {
+		lines = append(lines, shellCommandArgv(command))
+	}
+	lines = append(lines,
+		"built="+shellQuote(output),
+		"if [ ! -f \"$built\" ]; then echo \"component build output is missing: $built\" >&2; exit 1; fi",
+		"mkdir -p \"$(dirname "+shellQuote(outputPath)+")\"",
+		"install -o "+shellQuote(stringDesired(node, "owner"))+
+			" -g "+shellQuote(stringDesired(node, "group"))+
+			" -m "+shellQuote(stringDesired(node, "mode"))+
+			" \"$built\" "+shellQuote(outputPath),
+	)
+	return lines, nil
+}
+
+func shellCommandArgv(args []string) string {
+	quoted := make([]string, 0, len(args))
+	for _, arg := range args {
+		quoted = append(quoted, shellQuote(arg))
+	}
+	return "set -- " + strings.Join(quoted, " ") + "\n\"$@\""
 }
 
 func (p NativeProvider) planDirectory(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
@@ -1606,6 +1786,40 @@ func stringListDesired(node graph.Node, name string) []string {
 		for _, item := range v {
 			if str, ok := item.(string); ok {
 				out = append(out, str)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func commandMatrixDesired(node graph.Node, name string) [][]string {
+	value, ok := node.Desired[name]
+	if !ok || value == nil {
+		return nil
+	}
+	switch v := value.(type) {
+	case [][]string:
+		out := make([][]string, 0, len(v))
+		for _, command := range v {
+			out = append(out, append([]string(nil), command...))
+		}
+		return out
+	case []any:
+		out := make([][]string, 0, len(v))
+		for _, rawCommand := range v {
+			switch command := rawCommand.(type) {
+			case []string:
+				out = append(out, append([]string(nil), command...))
+			case []any:
+				args := make([]string, 0, len(command))
+				for _, rawArg := range command {
+					if arg, ok := rawArg.(string); ok {
+						args = append(args, arg)
+					}
+				}
+				out = append(out, args)
 			}
 		}
 		return out

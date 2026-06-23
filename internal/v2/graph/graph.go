@@ -623,8 +623,79 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			ProviderPayload: downloadDesired,
 		})
 
+		buildAddress := ""
+		buildOutputPath := ""
+		if component.ArtifactType == "source" && component.Build != nil {
+			buildOutputPath = componentArtifactBuildOutputPath(component)
+			buildAddress = fmt.Sprintf("%s.artifact.build[%s]", componentPrefix, strconv.Quote(buildOutputPath))
+			buildDeps := []string{downloadAddress}
+			for _, packageName := range component.Build.Packages {
+				packageAddress := fmt.Sprintf("%s.build.package[%s]", componentPrefix, strconv.Quote(packageName))
+				packageDesired := map[string]any{
+					"name":      packageName,
+					"component": component.Name,
+					"scope":     "build",
+					"ensure":    "present",
+				}
+				nodes = append(nodes, Node{
+					Host:            host.Name,
+					Address:         packageAddress,
+					Kind:            "package",
+					Summary:         "install build package " + packageName,
+					Source:          component.Build.Source,
+					Desired:         packageDesired,
+					ProviderType:    "package",
+					ProviderAddress: "package." + providerName(host.Name, component.Name, "build", packageName),
+					ProviderPayload: packageDesired,
+				})
+				buildDeps = append(buildDeps, packageAddress)
+			}
+			buildDesired := map[string]any{
+				"component":     component.Name,
+				"type":          component.ArtifactType,
+				"version":       component.Version,
+				"architecture":  component.SelectedSource.Architecture,
+				"source_url":    component.SelectedSource.URL,
+				"source_sha256": component.SelectedSource.SHA256,
+				"cache_path":    cachePath,
+				"build_path":    componentArtifactBuildPath(component),
+				"output_path":   buildOutputPath,
+				"commands":      cloneCommandMatrix(component.Build.Commands),
+				"packages":      append([]string(nil), component.Build.Packages...),
+				"working_dir":   component.Build.WorkingDir,
+				"output":        component.Build.Output,
+				"owner":         "root",
+				"group":         "root",
+				"mode":          "0644",
+				"ensure":        "present",
+			}
+			if component.Build.SourceName != "" {
+				buildDesired["source_name"] = component.Build.SourceName
+			}
+			if component.Extract != nil {
+				buildDesired["extract_format"] = component.Extract.Format
+				buildDesired["strip_components"] = component.Extract.StripComponents
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         buildAddress,
+				Kind:            "component_build",
+				Summary:         "build component " + component.Name + " from source",
+				Source:          component.Build.Source,
+				Desired:         buildDesired,
+				DependsOn:       dedupeStrings(buildDeps),
+				ProviderType:    "component_build",
+				ProviderAddress: "component_build." + providerName(host.Name, component.Name),
+				ProviderPayload: buildDesired,
+			})
+		}
+
 		installAddress := fmt.Sprintf("%s.artifact.install[%s]", componentPrefix, strconv.Quote(component.Install.Path))
 		installKind := componentArtifactInstallKind(component.ArtifactType)
+		installCachePath := cachePath
+		if buildOutputPath != "" {
+			installCachePath = buildOutputPath
+		}
 		installDesired := map[string]any{
 			"component":     component.Name,
 			"type":          component.ArtifactType,
@@ -632,7 +703,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			"architecture":  component.SelectedSource.Architecture,
 			"source_url":    component.SelectedSource.URL,
 			"source_sha256": component.SelectedSource.SHA256,
-			"cache_path":    cachePath,
+			"cache_path":    installCachePath,
 			"path":          component.Install.Path,
 			"owner":         component.Install.Owner,
 			"group":         component.Install.Group,
@@ -647,6 +718,15 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			source = component.Extract.Source
 		}
 		deps := []string{downloadAddress}
+		if buildAddress != "" {
+			deps = []string{buildAddress}
+			source = component.Build.Source
+			installDesired["build_path"] = componentArtifactBuildPath(component)
+			installDesired["build_output"] = component.Build.Output
+			delete(installDesired, "extract_format")
+			delete(installDesired, "strip_components")
+			delete(installDesired, "include")
+		}
 		deps = append(deps, ownershipDependencies(component.Install.Owner, component.Install.Group, userAddresses, groupAddresses)...)
 		deps = dedupeStrings(deps)
 		nodes = append(nodes, Node{
@@ -1574,6 +1654,8 @@ func componentArtifactInstallKind(artifactType string) string {
 		return "component_file"
 	case "ca_certificate":
 		return "component_ca_certificate"
+	case "source":
+		return "component_binary"
 	default:
 		return "component_binary"
 	}
@@ -1596,6 +1678,35 @@ func componentArtifactCachePath(component ir.ComponentInstanceSpec) string {
 		name = providerName(component.Template, component.Name)
 	}
 	return "/var/cache/debianform/components/" + name + "/" + component.SelectedSource.SHA256 + "/source"
+}
+
+func componentArtifactBuildPath(component ir.ComponentInstanceSpec) string {
+	if component.SelectedSource == nil {
+		return ""
+	}
+	name := providerName(component.Name)
+	if component.Template != "" && component.Template != component.Name {
+		name = providerName(component.Template, component.Name)
+	}
+	return "/var/cache/debianform/components/" + name + "/" + component.SelectedSource.SHA256 + "/build"
+}
+
+func componentArtifactBuildOutputPath(component ir.ComponentInstanceSpec) string {
+	if component.Build == nil {
+		return ""
+	}
+	return componentArtifactBuildPath(component) + "/out/" + shortHash(component.Build.Output) + "/" + component.Build.Output
+}
+
+func cloneCommandMatrix(in [][]string) [][]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([][]string, 0, len(in))
+	for _, command := range in {
+		out = append(out, append([]string(nil), command...))
+	}
+	return out
 }
 
 func ownershipDependencies(owner, group string, userAddresses, groupAddresses map[string]string) []string {

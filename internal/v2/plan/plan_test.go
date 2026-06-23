@@ -159,6 +159,26 @@ func TestComponentBinaryPlanJSONGolden(t *testing.T) {
 	}
 }
 
+func TestComponentSourceBuildPlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-component-source-build.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-component-source-build.dbf.hcl",
+		Host:        "build1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-component-source-build.golden.json", got)
+
+	if doc.Summary.Create != 4 {
+		t.Fatalf("create count = %d, want 4", doc.Summary.Create)
+	}
+}
+
 func TestComponentInputsPlanJSONGolden(t *testing.T) {
 	doc := planFixture(t, "../../../examples/v2-component-inputs.dbf.hcl", Options{
 		CommandFile: "../../../examples/v2-component-inputs.dbf.hcl",

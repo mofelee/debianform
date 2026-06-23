@@ -1,0 +1,163 @@
+{
+  "name": "build1",
+  "source": {
+    "file": "../../../examples/v2-component-source-build.dbf.hcl",
+    "line": 44,
+    "path": "host.build1"
+  },
+  "facts": {
+    "system": {}
+  },
+  "ssh": {
+    "host": "build1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../../../examples/v2-component-source-build.dbf.hcl",
+      "line": 44,
+      "path": "host.build1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/build1.json",
+    "lock_path": "/var/lock/debianform/state/build1.lock",
+    "source": {
+      "file": "../../../examples/v2-component-source-build.dbf.hcl",
+      "line": 44,
+      "path": "host.build1"
+    }
+  },
+  "system": {
+    "hostname": "build1",
+    "architecture": "amd64",
+    "source": {
+      "file": "../../../examples/v2-component-source-build.dbf.hcl",
+      "line": 49,
+      "path": "host.build1.system"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  },
+  "components": [
+    {
+      "name": "hello_from_source",
+      "template": "hello_from_source",
+      "artifact_type": "source",
+      "version": "1.0.0",
+      "selected_source": {
+        "architecture": "amd64",
+        "url": "https://downloads.example/hello-from-source-1.0.0.tar.gz",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source": {
+          "file": "../../../examples/v2-component-source-build.dbf.hcl",
+          "line": 12,
+          "path": "component.hello_from_source.source[\"amd64\"]"
+        }
+      },
+      "extract": {
+        "format": "tar.gz",
+        "strip_components": 1,
+        "source": {
+          "file": "../../../examples/v2-component-source-build.dbf.hcl",
+          "line": 22,
+          "path": "component.hello_from_source.extract"
+        }
+      },
+      "build": {
+        "commands": [
+          [
+            "cc",
+            "-O2",
+            "-Wall",
+            "-o",
+            "hello-from-source",
+            "hello.c"
+          ]
+        ],
+        "packages": [
+          "gcc"
+        ],
+        "output": "hello-from-source",
+        "source": {
+          "file": "../../../examples/v2-component-source-build.dbf.hcl",
+          "line": 27,
+          "path": "component.hello_from_source.build"
+        }
+      },
+      "install": {
+        "path": "/usr/local/bin/hello-from-source",
+        "owner": "root",
+        "group": "root",
+        "mode": "0755",
+        "source": {
+          "file": "../../../examples/v2-component-source-build.dbf.hcl",
+          "line": 36,
+          "path": "component.hello_from_source.install"
+        }
+      },
+      "apt": {
+        "source": {}
+      },
+      "packages": {
+        "source": {}
+      },
+      "files": {
+        "source": {}
+      },
+      "secrets": {
+        "source": {}
+      },
+      "directories": {
+        "source": {}
+      },
+      "groups": {
+        "source": {}
+      },
+      "users": {
+        "source": {}
+      },
+      "systemd": {
+        "source": {}
+      },
+      "services": {
+        "source": {}
+      },
+      "source": {
+        "file": "../../../examples/v2-component-source-build.dbf.hcl",
+        "line": 46,
+        "path": "host.build1.components[0]"
+      }
+    }
+  ]
+}

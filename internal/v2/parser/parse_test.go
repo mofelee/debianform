@@ -448,6 +448,18 @@ component "rclone" {
     include          = "rclone"
   }
 
+  build {
+    packages = ["make"]
+
+    commands = [
+      ["make"],
+      ["make", "install"],
+    ]
+    working_dir = "src"
+    output      = "bin/rclone"
+    source_name = "rclone.c"
+  }
+
   install {
     path = "/usr/local/bin/rclone"
   }
@@ -471,6 +483,15 @@ component "rclone" {
 	}
 	if component.Extract == nil || component.Extract.StripComponents != 1 || component.Extract.Include != "rclone" {
 		t.Fatalf("extract = %#v", component.Extract)
+	}
+	if component.Build == nil || len(component.Build.Commands) != 2 || component.Build.Commands[1][1] != "install" {
+		t.Fatalf("build commands = %#v", component.Build)
+	}
+	if !reflect.DeepEqual(component.Build.Packages, []string{"make"}) {
+		t.Fatalf("build packages = %#v", component.Build.Packages)
+	}
+	if component.Build.WorkingDir != "src" || component.Build.Output != "bin/rclone" || component.Build.SourceName != "rclone.c" {
+		t.Fatalf("build attrs = %#v", component.Build)
 	}
 	if component.Install == nil || component.Install.Path != "/usr/local/bin/rclone" {
 		t.Fatalf("install = %#v", component.Install)
@@ -598,6 +619,7 @@ func runnableV2ExampleFixtures() []string {
 		"../../../examples/v2-bird2.dbf.hcl",
 		"../../../examples/v2-component-binary.dbf.hcl",
 		"../../../examples/v2-component-inputs.dbf.hcl",
+		"../../../examples/v2-component-source-build.dbf.hcl",
 		"../../../examples/v2-files-plan-preview.dbf.hcl",
 		"../../../examples/v2-nftables.dbf.hcl",
 		"../../../examples/v2-plan-preview.dbf.hcl",

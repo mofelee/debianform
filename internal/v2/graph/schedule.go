@@ -54,7 +54,7 @@ func SafeParallelKind(kind string) bool {
 	case "file", "secret", "systemd_unit", "nftables_file",
 		"networkd_netdev", "networkd_network",
 		"directory",
-		"component_download", "component_binary", "component_file",
+		"component_download", "component_build", "component_binary", "component_file",
 		"component_ca_certificate", "component_archive":
 		return true
 	default:

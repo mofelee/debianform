@@ -546,7 +546,7 @@ func desiredEnsureAbsent(node graph.Node) bool {
 }
 
 func identity(node graph.Node) string {
-	for _, key := range []string{"name", "path", "key", "user"} {
+	for _, key := range []string{"name", "path", "output_path", "key", "user"} {
 		if value, ok := node.Desired[key].(string); ok && value != "" {
 			return value
 		}

@@ -218,6 +218,29 @@ func TestCompileComponentBinaryResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileComponentSourceBuildResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-component-source-build.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-component-source-build.golden.json", got)
+
+	installDeps := dependsOnFor(resourceGraph, `host.build1.components.hello_from_source.artifact.install["/usr/local/bin/hello-from-source"]`)
+	foundBuild := false
+	for _, dep := range installDeps {
+		if strings.HasPrefix(dep, `host.build1.components.hello_from_source.artifact.build[`) {
+			foundBuild = true
+			break
+		}
+	}
+	if !foundBuild {
+		t.Fatalf("source install deps = %#v, want artifact build", installDeps)
+	}
+}
+
 func TestCompileComponentInputsResourceGraphGolden(t *testing.T) {
 	resourceGraph := compileGraphFixture(t, "../../../examples/v2-component-inputs.dbf.hcl")
 
@@ -326,6 +349,68 @@ host "server1" {
 		if !containsString(archiveDeps, want) {
 			t.Fatalf("archive deps = %#v, want %q", archiveDeps, want)
 		}
+	}
+}
+
+func TestCompileComponentSourceBuildGraph(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+component "hello" {
+  type = "source"
+
+  source "amd64" {
+    url    = "https://downloads.example/hello.c"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  build {
+    packages = ["gcc"]
+
+    commands = [
+      ["cc", "-O2", "-o", "hello", "hello.c"],
+    ]
+    output      = "hello"
+    source_name = "hello.c"
+  }
+
+  install {
+    path = "/usr/local/bin/hello"
+  }
+}
+
+host "server1" {
+  components = [component.hello]
+
+  system {
+    architecture = "amd64"
+  }
+}
+`)
+
+	var build *Node
+	for i := range resourceGraph.Nodes {
+		if strings.HasPrefix(resourceGraph.Nodes[i].Address, `host.server1.components.hello.artifact.build[`) {
+			build = &resourceGraph.Nodes[i]
+			break
+		}
+	}
+	if build == nil || build.Kind != "component_build" {
+		t.Fatalf("build node = %#v", build)
+	}
+	if !containsString(build.DependsOn, `host.server1.components.hello.artifact.download["amd64"]`) {
+		t.Fatalf("build deps = %#v, want download dependency", build.DependsOn)
+	}
+	if !containsString(build.DependsOn, `host.server1.components.hello.build.package["gcc"]`) {
+		t.Fatalf("build deps = %#v, want gcc package dependency", build.DependsOn)
+	}
+	install := nodeFor(resourceGraph, `host.server1.components.hello.artifact.install["/usr/local/bin/hello"]`)
+	if install == nil || install.Kind != "component_binary" {
+		t.Fatalf("install node = %#v", install)
+	}
+	if !containsString(install.DependsOn, build.Address) {
+		t.Fatalf("install deps = %#v, want build dependency %q", install.DependsOn, build.Address)
+	}
+	if got := install.Desired["cache_path"]; got != build.Desired["output_path"] {
+		t.Fatalf("install cache_path = %#v, want build output %#v", got, build.Desired["output_path"])
 	}
 }
 

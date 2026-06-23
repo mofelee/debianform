@@ -182,6 +182,16 @@ func componentTemplateSpecs(components map[string]parser.Component) (map[string]
 				Source:          component.Extract.Source,
 			}
 		}
+		if component.Build != nil {
+			spec.Build = &ir.ComponentArtifactBuildSpec{
+				Commands:   cloneCommandMatrix(component.Build.Commands),
+				Packages:   append([]string(nil), component.Build.Packages...),
+				WorkingDir: component.Build.WorkingDir,
+				Output:     component.Build.Output,
+				SourceName: component.Build.SourceName,
+				Source:     component.Build.Source,
+			}
+		}
 		if component.Install != nil {
 			spec.Install = &ir.ComponentArtifactInstallSpec{
 				Path:   component.Install.Path,
@@ -720,11 +730,11 @@ func attributePath(name string) string {
 }
 
 func applyComponentArtifact(spec *ir.ComponentInstanceSpec, template parser.Component, target ir.HostSpec) error {
-	if template.Type == "" && template.Version == "" && len(template.Sources) == 0 && template.Extract == nil && template.Install == nil {
+	if template.Type == "" && template.Version == "" && len(template.Sources) == 0 && template.Extract == nil && template.Build == nil && template.Install == nil {
 		return nil
 	}
 	if template.Type == "" {
-		return fmt.Errorf("%s:%d:%s.type: component artifact type is required when source, extract, install, or version is declared", template.Source.File, template.Source.Line, template.Source.Path)
+		return fmt.Errorf("%s:%d:%s.type: component artifact type is required when source, extract, build, install, or version is declared", template.Source.File, template.Source.Line, template.Source.Path)
 	}
 	if !supportedComponentArtifactType(template.Type) {
 		return fmt.Errorf("%s:%d:%s.type: component artifact type %q is not supported yet", template.Source.File, template.Source.Line, template.Source.Path, template.Type)
@@ -753,6 +763,15 @@ func applyComponentArtifact(spec *ir.ComponentInstanceSpec, template parser.Comp
 	if template.Extract != nil && (template.Type == "file" || template.Type == "ca_certificate") {
 		return fmt.Errorf("%s:%d:%s.extract: %s component does not support extract", template.Extract.Source.File, template.Extract.Source.Line, template.Extract.Source.Path, template.Type)
 	}
+	if template.Type == "source" {
+		build, err := componentArtifactBuildSpec(template)
+		if err != nil {
+			return err
+		}
+		spec.Build = build
+	} else if template.Build != nil {
+		return fmt.Errorf("%s:%d:%s: %s component does not support build", template.Build.Source.File, template.Build.Source.Line, template.Build.Source.Path, template.Type)
+	}
 	install, err := componentArtifactInstallSpec(template)
 	if err != nil {
 		return err
@@ -762,11 +781,11 @@ func applyComponentArtifact(spec *ir.ComponentInstanceSpec, template parser.Comp
 }
 
 func validateComponentArtifactTemplate(template parser.Component) (*ir.ComponentArtifactInstallSpec, error) {
-	if template.Type == "" && template.Version == "" && len(template.Sources) == 0 && template.Extract == nil && template.Install == nil {
+	if template.Type == "" && template.Version == "" && len(template.Sources) == 0 && template.Extract == nil && template.Build == nil && template.Install == nil {
 		return nil, nil
 	}
 	if template.Type == "" {
-		return nil, fmt.Errorf("%s:%d:%s.type: component artifact type is required when source, extract, install, or version is declared", template.Source.File, template.Source.Line, template.Source.Path)
+		return nil, fmt.Errorf("%s:%d:%s.type: component artifact type is required when source, extract, build, install, or version is declared", template.Source.File, template.Source.Line, template.Source.Path)
 	}
 	if !supportedComponentArtifactType(template.Type) {
 		return nil, fmt.Errorf("%s:%d:%s.type: component artifact type %q is not supported yet", template.Source.File, template.Source.Line, template.Source.Path, template.Type)
@@ -790,6 +809,13 @@ func validateComponentArtifactTemplate(template parser.Component) (*ir.Component
 			return nil, fmt.Errorf("%s:%d:%s.extract: archive component requires an extract block", template.Source.File, template.Source.Line, template.Source.Path)
 		}
 	}
+	if template.Type == "source" {
+		if _, err := componentArtifactBuildSpec(template); err != nil {
+			return nil, err
+		}
+	} else if template.Build != nil {
+		return nil, fmt.Errorf("%s:%d:%s: %s component does not support build", template.Build.Source.File, template.Build.Source.Line, template.Build.Source.Path, template.Type)
+	}
 	install, err := componentArtifactInstallSpec(template)
 	if err != nil {
 		return nil, err
@@ -799,7 +825,7 @@ func validateComponentArtifactTemplate(template parser.Component) (*ir.Component
 
 func supportedComponentArtifactType(artifactType string) bool {
 	switch artifactType {
-	case "binary", "archive", "file", "ca_certificate":
+	case "binary", "archive", "file", "ca_certificate", "source":
 		return true
 	default:
 		return false
@@ -877,6 +903,13 @@ func componentArtifactExtractSpec(artifactType string, extract parser.ComponentA
 		if extract.Include != "" {
 			return nil, fmt.Errorf("%s:%d:%s.include: archive extract does not support include", extract.Source.File, extract.Source.Line, extract.Source.Path)
 		}
+	case "source":
+		if format != "zip" && format != "tar.gz" && format != "tar.xz" {
+			return nil, fmt.Errorf("%s:%d:%s.format: source extract format must be zip, tar.gz, or tar.xz", extract.Source.File, extract.Source.Line, extract.Source.Path)
+		}
+		if extract.Include != "" {
+			return nil, fmt.Errorf("%s:%d:%s.include: source extract does not support include", extract.Source.File, extract.Source.Line, extract.Source.Path)
+		}
 	default:
 		return nil, fmt.Errorf("%s:%d:%s: %s component does not support extract", extract.Source.File, extract.Source.Line, extract.Source.Path, artifactType)
 	}
@@ -888,6 +921,51 @@ func componentArtifactExtractSpec(artifactType string, extract parser.ComponentA
 		StripComponents: extract.StripComponents,
 		Include:         extract.Include,
 		Source:          extract.Source,
+	}, nil
+}
+
+func componentArtifactBuildSpec(template parser.Component) (*ir.ComponentArtifactBuildSpec, error) {
+	if template.Build == nil {
+		return nil, fmt.Errorf("%s:%d:%s.build: source component requires a build block", template.Source.File, template.Source.Line, template.Source.Path)
+	}
+	build := *template.Build
+	if len(build.Commands) == 0 {
+		return nil, fmt.Errorf("%s:%d:%s.commands: build commands must contain at least one command", build.Source.File, build.Source.Line, build.Source.Path)
+	}
+	for i, command := range build.Commands {
+		if len(command) == 0 {
+			return nil, fmt.Errorf("%s:%d:%s.commands[%d]: build command must contain at least one argument", build.Source.File, build.Source.Line, build.Source.Path, i)
+		}
+		for j, arg := range command {
+			if arg == "" {
+				return nil, fmt.Errorf("%s:%d:%s.commands[%d][%d]: build command arguments must be non-empty strings", build.Source.File, build.Source.Line, build.Source.Path, i, j)
+			}
+		}
+	}
+	for i, pkg := range build.Packages {
+		if pkg == "" {
+			return nil, fmt.Errorf("%s:%d:%s.packages[%d]: build packages must be non-empty strings", build.Source.File, build.Source.Line, build.Source.Path, i)
+		}
+	}
+	if build.WorkingDir != "" && filepath.IsAbs(build.WorkingDir) {
+		return nil, fmt.Errorf("%s:%d:%s.working_dir: build working_dir must be relative", build.Source.File, build.Source.Line, build.Source.Path)
+	}
+	if build.Output == "" {
+		return nil, fmt.Errorf("%s:%d:%s.output: build output must be non-empty", build.Source.File, build.Source.Line, build.Source.Path)
+	}
+	if filepath.IsAbs(build.Output) {
+		return nil, fmt.Errorf("%s:%d:%s.output: build output must be relative", build.Source.File, build.Source.Line, build.Source.Path)
+	}
+	if build.SourceName != "" && (filepath.IsAbs(build.SourceName) || strings.Contains(build.SourceName, "/") || strings.Contains(build.SourceName, "\\")) {
+		return nil, fmt.Errorf("%s:%d:%s.source_name: build source_name must be a relative file name", build.Source.File, build.Source.Line, build.Source.Path)
+	}
+	return &ir.ComponentArtifactBuildSpec{
+		Commands:   cloneCommandMatrix(build.Commands),
+		Packages:   append([]string(nil), build.Packages...),
+		WorkingDir: build.WorkingDir,
+		Output:     build.Output,
+		SourceName: build.SourceName,
+		Source:     build.Source,
 	}, nil
 }
 
@@ -933,6 +1011,17 @@ func defaultArtifactInstallMode(artifactType string) string {
 	default:
 		return "0755"
 	}
+}
+
+func cloneCommandMatrix(in [][]string) [][]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([][]string, 0, len(in))
+	for _, command := range in {
+		out = append(out, append([]string(nil), command...))
+	}
+	return out
 }
 
 func inferArtifactFormat(sourceURL string) string {

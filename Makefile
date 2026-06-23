@@ -15,7 +15,7 @@ LDFLAGS := -s -w \
 	-X $(VERSION_PACKAGE).Commit=$(COMMIT) \
 	-X $(VERSION_PACKAGE).Date=$(BUILD_DATE)
 
-.PHONY: build install test test-unit update-golden test-integration test-integration-case test-integration-layout clean
+.PHONY: build install test test-unit update-golden test-integration test-integration-case test-integration-layout test-integration-source-build clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PACKAGE)
@@ -45,6 +45,9 @@ test-integration-case:
 
 test-integration-layout:
 	./test/integration/libvirt/validate-cases.sh
+
+test-integration-source-build:
+	go test -count=1 ./test/integration/sourcebuild
 
 clean:
 	go clean
