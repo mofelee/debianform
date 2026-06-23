@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CASE_SOURCE="${1:?usage: run-two-host-case.sh CASE_DIR}"
 CASE_NAME="$(basename "$CASE_SOURCE")"
 DBF_BIN="${DBF_INTEGRATION_DBF_BIN:?missing DBF_INTEGRATION_DBF_BIN}"
@@ -18,8 +19,8 @@ SAFE_CASE_NAME="$(tr -c 'a-zA-Z0-9' '-' <<<"$CASE_NAME" | sed 's/-*$//')"
 VM_A_NAME="dbf-v2-${SAFE_CASE_NAME}-a-${RUN_SUFFIX}"
 VM_B_NAME="dbf-v2-${SAFE_CASE_NAME}-b-${RUN_SUFFIX}"
 NETWORK_NAME="dbf-v2-${SAFE_CASE_NAME}-${RUN_SUFFIX}-net"
-BRIDGE_NAME="virbr-dbf-${RANDOM}"
-SUBNET_OCTET=$((100 + RANDOM % 100))
+BRIDGE_NAME=""
+SUBNET_OCTET=""
 printf -v VM_A_MAC '52:54:00:%02x:%02x:%02x' \
   "$((RANDOM % 256))" "$((RANDOM % 256))" "$((RANDOM % 256))"
 printf -v VM_B_MAC '52:54:00:%02x:%02x:%02x' \
@@ -182,6 +183,8 @@ run_hook() {
   source "$hook"
 }
 
+source "$SCRIPT_DIR/network.sh"
+
 write_seed() {
   local label=$1
   local seed_image=$2
@@ -315,19 +318,6 @@ chmod 0755 "$CASE_WORK"
 chmod 0644 "$VM_A_SEED" "$VM_B_SEED"
 chmod 0666 "$VM_A_DISK" "$VM_B_DISK"
 
-cat >"$CASE_WORK/network.xml" <<EOF
-<network>
-  <name>$NETWORK_NAME</name>
-  <forward mode='nat'/>
-  <bridge name='$BRIDGE_NAME' stp='on' delay='0'/>
-  <ip address='192.168.$SUBNET_OCTET.1' netmask='255.255.255.0'>
-    <dhcp>
-      <range start='192.168.$SUBNET_OCTET.10' end='192.168.$SUBNET_OCTET.250'/>
-    </dhcp>
-  </ip>
-</network>
-EOF
-
 CPU_XML=""
 if [[ "$VIRT_TYPE" == "kvm" ]]; then
   CPU_XML="<cpu mode='host-passthrough' check='none'/>"
@@ -336,9 +326,7 @@ write_domain "$VM_A_NAME" "$VM_A_DISK" "$VM_A_SEED" "$VM_A_MAC" "$VM_A_CONSOLE" 
 write_domain "$VM_B_NAME" "$VM_B_DISK" "$VM_B_SEED" "$VM_B_MAC" "$VM_B_CONSOLE" "$VM_B_DOMAIN"
 
 log "starting fresh Debian VMs using $VIRT_TYPE"
-virsh_system net-define "$CASE_WORK/network.xml" >/dev/null
-NETWORK_DEFINED=1
-virsh_system net-start "$NETWORK_NAME" >/dev/null
+dbf_integration_start_network "$CASE_WORK/network.xml"
 virsh_system define "$VM_A_DOMAIN" >/dev/null
 VM_A_DEFINED=1
 virsh_system define "$VM_B_DOMAIN" >/dev/null

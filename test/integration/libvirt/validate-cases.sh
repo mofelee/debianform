@@ -25,6 +25,9 @@ fi
 
 bash -n "$ROOT_DIR/test/integration/libvirt/run-case.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/run-two-host-case.sh"
+bash -n "$ROOT_DIR/test/integration/libvirt/network.sh"
+bash -n "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
+bash "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
 
 failed=0
 case_count=0

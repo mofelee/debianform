@@ -2,6 +2,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CASE_SOURCE="${1:?usage: run-case.sh CASE_DIR}"
 CASE_NAME="$(basename "$CASE_SOURCE")"
 DBF_BIN="${DBF_INTEGRATION_DBF_BIN:?missing DBF_INTEGRATION_DBF_BIN}"
@@ -19,8 +20,8 @@ RUN_SUFFIX="${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 SAFE_CASE_NAME="$(tr -c 'a-zA-Z0-9' '-' <<<"$CASE_NAME" | sed 's/-*$//')"
 VM_NAME="dbf-v2-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
 NETWORK_NAME="${VM_NAME}-net"
-BRIDGE_NAME="virbr-dbf-${RANDOM}"
-SUBNET_OCTET=$((100 + RANDOM % 100))
+BRIDGE_NAME=""
+SUBNET_OCTET=""
 printf -v MAC_ADDRESS '52:54:00:%02x:%02x:%02x' \
   "$((RANDOM % 256))" "$((RANDOM % 256))" "$((RANDOM % 256))"
 
@@ -143,6 +144,8 @@ run_hook() {
   source "$hook"
 }
 
+source "$SCRIPT_DIR/network.sh"
+
 mkdir -p "$CASE_WORK" "$CASE_DIR" "$LOG_DIR" "$DBF_HOME/.ssh"
 cp -a "$CASE_SOURCE/." "$CASE_DIR/"
 chmod 0700 "$DBF_HOME" "$DBF_HOME/.ssh"
@@ -192,19 +195,6 @@ qemu-img create -q -f qcow2 -F qcow2 -b "$BASE_IMAGE" "$VM_DISK" 12G
 chmod 0755 "$CASE_WORK"
 chmod 0644 "$SEED_IMAGE"
 chmod 0666 "$VM_DISK"
-
-cat >"$CASE_WORK/network.xml" <<EOF
-<network>
-  <name>$NETWORK_NAME</name>
-  <forward mode='nat'/>
-  <bridge name='$BRIDGE_NAME' stp='on' delay='0'/>
-  <ip address='192.168.$SUBNET_OCTET.1' netmask='255.255.255.0'>
-    <dhcp>
-      <range start='192.168.$SUBNET_OCTET.10' end='192.168.$SUBNET_OCTET.250'/>
-    </dhcp>
-  </ip>
-</network>
-EOF
 
 CPU_XML=""
 if [[ "$VIRT_TYPE" == "kvm" ]]; then
@@ -263,9 +253,7 @@ cat >"$CASE_WORK/domain.xml" <<EOF
 EOF
 
 log "starting fresh Debian VM using $VIRT_TYPE"
-virsh_system net-define "$CASE_WORK/network.xml" >/dev/null
-NETWORK_DEFINED=1
-virsh_system net-start "$NETWORK_NAME" >/dev/null
+dbf_integration_start_network "$CASE_WORK/network.xml"
 virsh_system define "$CASE_WORK/domain.xml" >/dev/null
 VM_DEFINED=1
 virsh_system start "$VM_NAME" >/dev/null
