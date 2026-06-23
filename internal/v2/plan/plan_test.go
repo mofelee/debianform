@@ -13,6 +13,7 @@ import (
 	"github.com/mofelee/debianform/internal/v2/ir"
 	"github.com/mofelee/debianform/internal/v2/merge"
 	"github.com/mofelee/debianform/internal/v2/parser"
+	"github.com/mofelee/debianform/internal/v2/testassert"
 )
 
 func TestBBRPlanJSONGolden(t *testing.T) {
@@ -59,9 +60,7 @@ func TestFoundationPlanJSONGoldenDoesNotLeakSecrets(t *testing.T) {
 	got := string(data) + "\n"
 	assertGolden(t, "../testdata/plan/v2-foundation.golden.json", got)
 
-	if strings.Contains(got, "not-a-real-secret-token") {
-		t.Fatalf("plan JSON leaked secret content:\n%s", got)
-	}
+	testassert.NoSecretLeak(t, "foundation plan JSON", got)
 	if doc.Summary.Operations != 1 {
 		t.Fatalf("operations = %d, want 1", doc.Summary.Operations)
 	}
@@ -197,6 +196,34 @@ func TestComponentInputsPlanJSONGolden(t *testing.T) {
 	if doc.Summary.Create != 2 {
 		t.Fatalf("create count = %d, want 2", doc.Summary.Create)
 	}
+	testassert.NoSecretLeak(t, "component input plan JSON", got)
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	testassert.NoSecretLeak(t, "component input plan text", text.String())
+}
+
+func TestSensitiveServiceEnvironmentPlanDoesNotLeak(t *testing.T) {
+	doc := planFixture(t, "../testdata/fixtures/v2-sensitive-service-environment.dbf.hcl", Options{
+		CommandFile: "../testdata/fixtures/v2-sensitive-service-environment.dbf.hcl",
+		Host:        "server1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive service environment plan JSON", string(data))
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	rendered := text.String()
+	testassert.NoSecretLeak(t, "sensitive service environment plan text", rendered)
+	if !strings.Contains(rendered, "<sensitive sha256=") {
+		t.Fatalf("plan text does not show sensitive summary:\n%s", rendered)
+	}
 }
 
 func TestProfileMergePlanJSONGolden(t *testing.T) {
@@ -300,9 +327,7 @@ func TestPlanHTMLDoesNotLeakSecrets(t *testing.T) {
 			t.Fatalf("HTML output does not contain %q:\n%s", want, html)
 		}
 	}
-	if strings.Contains(html, "not-a-real-secret-token") {
-		t.Fatalf("plan HTML leaked secret content:\n%s", html)
-	}
+	testassert.NoSecretLeak(t, "plan HTML", html)
 }
 
 func TestFilesPlanPreviewHasTextAndSensitiveDiffs(t *testing.T) {
@@ -340,9 +365,7 @@ func TestFilesPlanPreviewHasTextAndSensitiveDiffs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), "not-a-real-preview-secret") {
-		t.Fatalf("preview plan leaked sensitive content: %s", data)
-	}
+	testassert.NoSecretLeak(t, "files preview plan JSON", string(data))
 
 	var text bytes.Buffer
 	PrintText(&text, doc)
@@ -358,9 +381,7 @@ func TestFilesPlanPreviewHasTextAndSensitiveDiffs(t *testing.T) {
 			t.Fatalf("text plan does not contain %q:\n%s", want, rendered)
 		}
 	}
-	if strings.Contains(rendered, "not-a-real-preview-secret") {
-		t.Fatalf("text plan leaked sensitive content:\n%s", rendered)
-	}
+	testassert.NoSecretLeak(t, "files preview plan text", rendered)
 }
 
 func TestNftablesPlanPreviewDoesNotLeakSecret(t *testing.T) {
@@ -378,9 +399,7 @@ func TestNftablesPlanPreviewDoesNotLeakSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), "not-a-real-secret-token") {
-		t.Fatalf("nftables preview leaked secret content: %s", data)
-	}
+	testassert.NoSecretLeak(t, "nftables preview plan JSON", string(data))
 	if !hasChange(doc, `host.preview1.nftables.file["20-services"]`) {
 		t.Fatalf("nftables snippet change missing: %#v", doc.Changes)
 	}

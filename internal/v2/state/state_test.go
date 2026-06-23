@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/mofelee/debianform/internal/v2/ir"
+	"github.com/mofelee/debianform/internal/v2/testassert"
 )
 
 func TestSanitizeDesiredRedactsContentAndSensitiveSource(t *testing.T) {
@@ -23,9 +24,7 @@ func TestSanitizeDesiredRedactsContentAndSensitiveSource(t *testing.T) {
 	}
 	text := string(data)
 
-	if strings.Contains(text, "not-a-real-secret-token") {
-		t.Fatalf("sanitized desired leaked content: %s", text)
-	}
+	testassert.NoSecretLeak(t, "sanitized desired", text)
 	if strings.Contains(text, "fixtures/app-token.txt") {
 		t.Fatalf("sanitized desired leaked sensitive source path: %s", text)
 	}
@@ -34,6 +33,29 @@ func TestSanitizeDesiredRedactsContentAndSensitiveSource(t *testing.T) {
 	}
 	if got["content_bytes"] != len("not-a-real-secret-token") {
 		t.Fatalf("content_bytes = %#v", got["content_bytes"])
+	}
+}
+
+func TestSanitizeObservedUsesSensitiveRedaction(t *testing.T) {
+	observed := map[string]any{
+		"path":        "/etc/app/token",
+		"content":     "not-a-real-secret-token",
+		"source_path": "fixtures/app-token.txt",
+		"sensitive":   true,
+	}
+
+	got := SanitizeObserved(observed)
+	data, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	testassert.NoSecretLeak(t, "sanitized observed", text)
+	if strings.Contains(text, "fixtures/app-token.txt") {
+		t.Fatalf("sanitized observed leaked sensitive source path: %s", text)
+	}
+	if got["content_sha256"] == "" {
+		t.Fatalf("content_sha256 missing from sanitized observed: %#v", got)
 	}
 }
 

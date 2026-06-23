@@ -15,6 +15,7 @@ import (
 	"github.com/mofelee/debianform/internal/v2/merge"
 	"github.com/mofelee/debianform/internal/v2/parser"
 	v2state "github.com/mofelee/debianform/internal/v2/state"
+	"github.com/mofelee/debianform/internal/v2/testassert"
 )
 
 func TestCompareActionMatrix(t *testing.T) {
@@ -97,13 +98,58 @@ func TestApplyWithMemoryProviderIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), "not-a-real-secret-token") {
-		t.Fatalf("state leaked secret content:\n%s", string(data))
-	}
+	testassert.NoSecretLeak(t, "foundation apply state", string(data))
 	for address, resource := range st.Resources {
 		if resource.ProviderAddress == "" {
 			t.Fatalf("state resource %s has no provider address", address)
 		}
+	}
+}
+
+func TestApplyStateDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		fixture string
+		host    string
+	}{
+		{name: "secrets file", fixture: "../testdata/fixtures/v2-foundation.dbf.hcl", host: "foundation1"},
+		{name: "sensitive file content", fixture: "../../../examples/v2-files-plan-preview.dbf.hcl", host: "preview1"},
+		{name: "sensitive component input", fixture: "../../../examples/v2-component-inputs.dbf.hcl", host: "input1"},
+		{name: "sensitive service environment", fixture: "../testdata/fixtures/v2-sensitive-service-environment.dbf.hcl", host: "server1"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			program, resourceGraph := fixtureProgramAndGraph(t, tt.fixture)
+			backend := NewMemoryBackend()
+			engine := Engine{
+				Backend:  backend,
+				Provider: NewMemoryProvider(),
+				Now: func() time.Time {
+					return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+				},
+			}
+			if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{Host: tt.host}); err != nil {
+				t.Fatal(err)
+			}
+			var host ir.HostSpec
+			for _, candidate := range program.Hosts {
+				if candidate.Name == tt.host {
+					host = candidate
+					break
+				}
+			}
+			if host.Name == "" {
+				t.Fatalf("host %q not found", tt.host)
+			}
+			st, err := backend.Read(context.Background(), host)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := v2state.Encode(st)
+			if err != nil {
+				t.Fatal(err)
+			}
+			testassert.NoSecretLeak(t, tt.name+" apply state", string(data))
+		})
 	}
 }
 

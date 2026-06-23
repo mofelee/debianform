@@ -550,27 +550,43 @@ provider 重构让已有安全边界退化。
 
 代码：
 
-- [ ] 整理现有 sensitive/secret 测试 fixture，形成后续 loop 可复用的泄漏断言 helper。
-- [ ] 明确当前允许出现的非 secret 元数据，例如非 state 调试输出里的 `source_path`。
-- [ ] 对当前不能立刻收口的元数据泄漏点加 TODO，并写清楚后续 loop 负责关闭。
+- [x] 整理现有 sensitive/secret 测试 fixture，形成后续 loop 可复用的泄漏断言 helper。
+- [x] 明确当前允许出现的非 secret 元数据，例如非 state 调试输出里的 `source_path`。
+- [x] 对当前不能立刻收口的元数据泄漏点加 TODO，并写清楚后续 loop 负责关闭。
 
 测试：
 
-- [ ] `secrets.file` 明文不进入 state 和 plan。
-- [ ] `files.file sensitive = true` 明文不进入 HostSpec JSON、plan 和 state。
-- [ ] sensitive component input 派生的 file/unit content 不进入 HostSpec JSON、plan 和
+- [x] `secrets.file` 明文不进入 state 和 plan。
+- [x] `files.file sensitive = true` 明文不进入 HostSpec JSON、plan 和 state。
+- [x] sensitive component input 派生的 file/unit content 不进入 HostSpec JSON、plan 和
       state。
-- [ ] 普通 non-sensitive file 仍保留可读 text diff。
+- [x] 普通 non-sensitive file 仍保留可读 text diff。
 
 示例/文档：
 
-- [ ] 保持现有示例语法不变。
-- [ ] 在本文档记录当前 baseline 和已知 TODO，不新增用户可见语法。
+- [x] 保持现有示例语法不变。
+- [x] 在本文档记录当前 baseline 和已知 TODO，不新增用户可见语法。
 
 验收：
 
-- [ ] 不改变用户语法和 plan/state 格式。
-- [ ] `make test` 通过。
+- [x] 不改变用户语法和 plan/state 格式。
+- [x] `make test` 通过。
+
+Loop 0 实现记录：
+
+- 新增 `internal/v2/testassert.NoSecretLeak`，统一检查当前 placeholder secret
+  明文不会进入 HostSpec JSON、ResourceGraph desired、plan text/JSON/HTML、state JSON。
+- 复用现有 `v2-foundation`、`v2-files-plan-preview`、`v2-component-inputs` fixture，并新增
+  `internal/v2/testdata/fixtures/v2-sensitive-service-environment.dbf.hcl` 覆盖 structured
+  `systemd.service_unit.environment` 的 sensitive 传播。
+- 当前允许的非明文元数据：plan/state 可保留 `content_sha256`、`content_bytes` 等摘要；
+  非 sensitive 的普通 file 仍输出可读 text diff。
+- 已知 TODO：`ResourceGraph.Node.ProviderPayload` 仍是 provider apply 输入通道，可能携带
+  sensitive content；本轮测试只把 `Node.Desired` 作为 plan/state 可见 desired 边界。该
+  payload 应在 write-only provider payload 和 redacted runner channel loop 中收口。
+- 已知 TODO：native runner 的实际 apply script 仍可能包含 base64 编码后的文件内容；本轮
+  不改 runner API，后续 redacted runner channel loop 负责避免 command preview、日志和
+  错误输出泄漏。
 
 ### Loop 1：解析顶层 variable 声明
 

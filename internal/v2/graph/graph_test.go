@@ -10,6 +10,7 @@ import (
 	"github.com/mofelee/debianform/internal/v2/ir"
 	"github.com/mofelee/debianform/internal/v2/merge"
 	"github.com/mofelee/debianform/internal/v2/parser"
+	"github.com/mofelee/debianform/internal/v2/testassert"
 )
 
 func TestCompileBBRResourceGraphGolden(t *testing.T) {
@@ -253,6 +254,31 @@ func TestCompileComponentInputsResourceGraphGolden(t *testing.T) {
 
 	if node := nodeFor(resourceGraph, `host.input1.components.proxy.files.file["/etc/reverse-proxy/listeners.json"]`); node == nil {
 		t.Fatalf("component input generated file node was not found")
+	}
+}
+
+func TestResourceGraphDesiredDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		fixture string
+	}{
+		{name: "secrets file", fixture: "../testdata/fixtures/v2-foundation.dbf.hcl"},
+		{name: "sensitive file content", fixture: "../../../examples/v2-files-plan-preview.dbf.hcl"},
+		{name: "sensitive component input", fixture: "../../../examples/v2-component-inputs.dbf.hcl"},
+		{name: "sensitive service environment", fixture: "../testdata/fixtures/v2-sensitive-service-environment.dbf.hcl"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resourceGraph := compileGraphFixture(t, tt.fixture)
+			desired := make(map[string]map[string]any, len(resourceGraph.Nodes))
+			for _, node := range resourceGraph.Nodes {
+				desired[node.Address] = node.Desired
+			}
+			data, err := json.MarshalIndent(desired, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			testassert.NoSecretLeak(t, tt.name+" ResourceGraph desired", string(data))
+		})
 	}
 }
 

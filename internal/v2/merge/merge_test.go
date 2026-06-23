@@ -10,6 +10,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/v2/ir"
 	"github.com/mofelee/debianform/internal/v2/parser"
+	"github.com/mofelee/debianform/internal/v2/testassert"
 )
 
 func TestCompileMergesImportsListsMapsAndScalars(t *testing.T) {
@@ -262,6 +263,55 @@ host "server1" {
 	if got := host.Packages.Install[0].Repositories; !reflect.DeepEqual(got, []string{"tools"}) {
 		t.Fatalf("package repositories = %#v", got)
 	}
+}
+
+func TestCompileHostSpecJSONDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		fixture string
+	}{
+		{name: "secrets file", fixture: "../testdata/fixtures/v2-foundation.dbf.hcl"},
+		{name: "sensitive file content", fixture: "../../../examples/v2-files-plan-preview.dbf.hcl"},
+		{name: "sensitive component input", fixture: "../../../examples/v2-component-inputs.dbf.hcl"},
+		{name: "sensitive service environment", fixture: "../testdata/fixtures/v2-sensitive-service-environment.dbf.hcl"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := parser.ParseFiles([]string{tt.fixture})
+			if err != nil {
+				t.Fatal(err)
+			}
+			program, err := CompileWithOptions(cfg, CompileOptions{HostFacts: testHostFacts()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := json.MarshalIndent(program, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			testassert.NoSecretLeak(t, tt.name+" HostSpec JSON", string(data))
+		})
+	}
+}
+
+func TestCompileStructuredServiceEnvironmentMarksUnitSensitive(t *testing.T) {
+	cfg, err := parser.ParseFiles([]string{"../testdata/fixtures/v2-sensitive-service-environment.dbf.hcl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	unit := program.Hosts[0].Components[0].Systemd.Units["worker.service"]
+	if !unit.Sensitive {
+		t.Fatalf("structured service unit was not marked sensitive: %#v", unit)
+	}
+	data, err := json.MarshalIndent(program, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "structured service HostSpec JSON", string(data))
 }
 
 func TestCompileNftablesDefaults(t *testing.T) {
