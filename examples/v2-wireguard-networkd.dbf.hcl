@@ -1,7 +1,7 @@
 # DebianForm v2 WireGuard deployment with native systemd-networkd.
 #
-# Do not commit real WireGuard private keys. Generate wg-a.key and wg-b.key on
-# your own machine, keep them outside git, and point the two hosts at them.
+# Do not commit real WireGuard private keys. Generate keys on your own machine,
+# keep them outside git, and point each interface at its local key source.
 
 component "wireguard_networkd" {
   input "private_key_source" {
@@ -12,7 +12,7 @@ component "wireguard_networkd" {
 
   input "interface" {
     type = object({
-      name        = optional(string, "wg0")
+      name        = string
       address     = string
       listen_port = optional(number, 51820)
       route_table = optional(string, "off")
@@ -22,20 +22,21 @@ component "wireguard_networkd" {
     nullable    = false
   }
 
-  input "peer" {
-    type = object({
+  input "peers" {
+    type = map(object({
       public_key           = string
       allowed_ips          = list(string)
-      endpoint             = string
+      endpoint             = optional(string)
       persistent_keepalive = optional(number, 25)
-    })
+    }))
 
-    description = "WireGuard peer settings."
+    description = "WireGuard peer settings keyed by stable peer label."
+    default     = {}
     nullable    = false
 
     validation {
-      condition     = length(input.peer.allowed_ips) > 0
-      error_message = "peer.allowed_ips must contain at least one CIDR."
+      condition     = alltrue([for peer in values(input.peers) : length(peer.allowed_ips) > 0])
+      error_message = "Each peer.allowed_ips must contain at least one CIDR."
     }
   }
 
@@ -48,7 +49,8 @@ component "wireguard_networkd" {
   }
 
   secrets {
-    file "/etc/wireguard/private.key" {
+    file "private_key" {
+      path   = "/etc/wireguard/${input.interface.name}.key"
       source = input.private_key_source
       owner  = "root"
       group  = "systemd-network"
@@ -60,7 +62,9 @@ component "wireguard_networkd" {
     networkd {
       enable = true
 
-      netdev "10-wg0" {
+      netdev "wireguard" {
+        path = "/etc/systemd/network/10-${input.interface.name}.netdev"
+
         netdev = {
           Name = input.interface.name
           Kind = "wireguard"
@@ -68,19 +72,23 @@ component "wireguard_networkd" {
 
         wireguard = {
           ListenPort     = input.interface.listen_port
-          PrivateKeyFile = "/etc/wireguard/private.key"
+          PrivateKeyFile = "/etc/wireguard/${input.interface.name}.key"
           RouteTable     = input.interface.route_table
         }
 
-        wireguard_peer "peer" {
-          PublicKey           = input.peer.public_key
-          AllowedIPs          = input.peer.allowed_ips
-          Endpoint            = input.peer.endpoint
-          PersistentKeepalive = input.peer.persistent_keepalive
+        wireguard_peer = {
+          for name, peer in input.peers : name => {
+            PublicKey           = peer.public_key
+            AllowedIPs          = peer.allowed_ips
+            Endpoint            = peer.endpoint
+            PersistentKeepalive = peer.persistent_keepalive
+          }
         }
       }
 
-      network "20-wg0" {
+      network "wireguard" {
+        path = "/etc/systemd/network/20-${input.interface.name}.network"
+
         match = {
           Name = input.interface.name
         }
@@ -105,13 +113,20 @@ host "wg-a" {
     inputs = {
       private_key_source = "secrets/wg-a.key"
       interface = {
+        name        = "wg-prod"
         address     = "10.80.0.1/30"
         route_table = "off"
       }
-      peer = {
-        public_key  = "<wg-b-public-key>"
-        allowed_ips = ["10.80.0.2/32"]
-        endpoint    = "wg-b.example.net:51820"
+      peers = {
+        wg_b = {
+          public_key  = "<wg-b-public-key>"
+          allowed_ips = ["10.80.0.2/32"]
+          endpoint    = "wg-b.example.net:51820"
+        }
+        laptop = {
+          public_key  = "<laptop-public-key>"
+          allowed_ips = ["10.80.0.10/32"]
+        }
       }
     }
   }
@@ -129,13 +144,16 @@ host "wg-b" {
     inputs = {
       private_key_source = "secrets/wg-b.key"
       interface = {
+        name        = "wg-prod"
         address     = "10.80.0.2/30"
         route_table = "off"
       }
-      peer = {
-        public_key  = "<wg-a-public-key>"
-        allowed_ips = ["10.80.0.1/32"]
-        endpoint    = "wg-a.example.net:51820"
+      peers = {
+        wg_a = {
+          public_key  = "<wg-a-public-key>"
+          allowed_ips = ["10.80.0.1/32"]
+          endpoint    = "wg-a.example.net:51820"
+        }
       }
     }
   }

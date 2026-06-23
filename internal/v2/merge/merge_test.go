@@ -1879,6 +1879,69 @@ host "server1" {
 	}
 }
 
+func TestCompileFileAndSecretPathAttribute(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "token.txt"), []byte("not-a-real-secret-token"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(file, []byte(strings.TrimPrefix(`
+host "server1" {
+  files {
+    file "app_config" {
+      path    = "/etc/app/config"
+      content = "ok"
+    }
+  }
+
+  secrets {
+    file "app_token" {
+      path   = "/etc/app/token"
+      source = "token.txt"
+    }
+  }
+}
+`, "\n")), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := parser.ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := CompileWithOptions(cfg, CompileOptions{SuppressSecretFileDeprecationWarning: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := program.Hosts[0]
+	if _, ok := host.Files.Files["/etc/app/config"]; !ok {
+		t.Fatalf("files = %#v", host.Files.Files)
+	}
+	if _, ok := host.Secrets.Files["/etc/app/token"]; !ok {
+		t.Fatalf("secrets = %#v", host.Secrets.Files)
+	}
+}
+
+func TestCompileRejectsDuplicateExplicitFilePath(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+host "server1" {
+  files {
+    file "one" {
+      path    = "/etc/app/config"
+      content = "one"
+    }
+
+    file "two" {
+      path    = "/etc/app/config"
+      content = "two"
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), `file path "/etc/app/config" conflicts with file declared`) {
+		t.Fatalf("error = %v, want duplicate file path rejection", err)
+	}
+}
+
 func TestCompileSensitiveComponentInputPropagatesToFileContent(t *testing.T) {
 	program := compileInline(t, `
 component "app" {
@@ -2867,25 +2930,28 @@ component "wireguard_networkd" {
     nullable = false
   }
 
-  input "peer" {
-    type = object({
+  input "peers" {
+    type = map(object({
       public_key           = string
       allowed_ips          = list(string)
-      endpoint             = string
+      endpoint             = optional(string)
       persistent_keepalive = optional(number, 25)
-    })
+    }))
 
+    default  = {}
     nullable = false
 
     validation {
-      condition     = length(input.peer.allowed_ips) > 0
-      error_message = "peer.allowed_ips must contain at least one CIDR."
+      condition     = alltrue([for peer in values(input.peers) : length(peer.allowed_ips) > 0])
+      error_message = "each peer.allowed_ips must contain at least one CIDR."
     }
   }
 
   systemd {
     networkd {
-      netdev "10-wg0" {
+      netdev "wireguard" {
+        path = "/etc/systemd/network/10-${input.interface.name}.netdev"
+
         netdev = {
           Name = input.interface.name
           Kind = "wireguard"
@@ -2893,19 +2959,23 @@ component "wireguard_networkd" {
 
         wireguard = {
           ListenPort     = input.interface.listen_port
-          PrivateKeyFile = "/etc/wireguard/private.key"
+          PrivateKeyFile = "/etc/wireguard/${input.interface.name}.key"
           RouteTable     = input.interface.route_table
         }
 
-        wireguard_peer "peer" {
-          PublicKey           = input.peer.public_key
-          AllowedIPs          = input.peer.allowed_ips
-          Endpoint            = input.peer.endpoint
-          PersistentKeepalive = input.peer.persistent_keepalive
+        wireguard_peer = {
+          for name, peer in input.peers : name => {
+            PublicKey           = peer.public_key
+            AllowedIPs          = peer.allowed_ips
+            Endpoint            = peer.endpoint
+            PersistentKeepalive = peer.persistent_keepalive
+          }
         }
       }
 
-      network "20-wg0" {
+      network "wireguard" {
+        path = "/etc/systemd/network/20-${input.interface.name}.network"
+
         match = {
           Name = input.interface.name
         }
@@ -2925,12 +2995,19 @@ host "server1" {
     inputs = {
       private_key_source = "secrets/server1.key"
       interface = {
-        address = "10.80.0.1/30"
+        name    = "wg-prod"
+        address = "10.80.0.1/24"
       }
-      peer = {
-        public_key  = "peer-public-key"
-        allowed_ips = ["10.80.0.2/32"]
-        endpoint    = "server2.example.net:51820"
+      peers = {
+        server2 = {
+          public_key  = "peer-public-key"
+          allowed_ips = ["10.80.0.2/32"]
+          endpoint    = "server2.example.net:51820"
+        }
+        laptop = {
+          public_key  = "laptop-public-key"
+          allowed_ips = ["10.80.0.10/32"]
+        }
       }
     }
   }
@@ -2942,12 +3019,210 @@ host "server1" {
 	if got := inputs["interface"].(map[string]any)["route_table"]; got != "off" {
 		t.Fatalf("interface.route_table input = %#v, want off", got)
 	}
-	netdev := component.Systemd.Networkd.NetDevs["10-wg0"]
+	netdev := component.Systemd.Networkd.NetDevs["wireguard"]
+	if netdev.Path != "/etc/systemd/network/10-wg-prod.netdev" {
+		t.Fatalf("netdev path = %q", netdev.Path)
+	}
 	if got := firstSectionValue(netdev.WireGuard, "RouteTable"); got != "off" {
 		t.Fatalf("RouteTable section value = %q, want off", got)
 	}
+	if got := firstSectionValue(netdev.WireGuard, "PrivateKeyFile"); got != "/etc/wireguard/wg-prod.key" {
+		t.Fatalf("PrivateKeyFile section value = %q", got)
+	}
 	if !strings.Contains(netdev.Content, "RouteTable=off\n") {
 		t.Fatalf("netdev content does not disable networkd route table writes:\n%s", netdev.Content)
+	}
+	if !strings.Contains(netdev.Content, "PublicKey=laptop-public-key\n") || !strings.Contains(netdev.Content, "PublicKey=peer-public-key\n") {
+		t.Fatalf("netdev content does not contain both WireGuard peers:\n%s", netdev.Content)
+	}
+	network := component.Systemd.Networkd.Networks["wireguard"]
+	if network.Path != "/etc/systemd/network/20-wg-prod.network" {
+		t.Fatalf("network path = %q", network.Path)
+	}
+}
+
+func TestCompileWireGuardComponentCanBeMountedTwiceWithDifferentInterfaces(t *testing.T) {
+	program, err := parseOrCompileInlineWithFiles(t, `
+component "wireguard_networkd" {
+  input "private_key_source" {
+    type      = string
+    sensitive = true
+  }
+
+  input "interface" {
+    type = object({
+      name        = string
+      address     = string
+      listen_port = optional(number, 51820)
+      route_table = optional(string, "off")
+    })
+
+    nullable = false
+  }
+
+  secrets {
+    file "private_key" {
+      path   = "/etc/wireguard/${input.interface.name}.key"
+      source = input.private_key_source
+      owner  = "root"
+      group  = "systemd-network"
+      mode   = "0640"
+    }
+  }
+
+  systemd {
+    networkd {
+      netdev "wireguard" {
+        path = "/etc/systemd/network/10-${input.interface.name}.netdev"
+
+        netdev = {
+          Name = input.interface.name
+          Kind = "wireguard"
+        }
+
+        wireguard = {
+          ListenPort     = input.interface.listen_port
+          PrivateKeyFile = "/etc/wireguard/${input.interface.name}.key"
+          RouteTable     = input.interface.route_table
+        }
+      }
+
+      network "wireguard" {
+        path = "/etc/systemd/network/20-${input.interface.name}.network"
+
+        match = {
+          Name = input.interface.name
+        }
+
+        network = {
+          Address = [input.interface.address]
+        }
+      }
+    }
+  }
+}
+
+host "edge1" {
+  component "wg_prod" {
+    source = component.wireguard_networkd
+
+    inputs = {
+      private_key_source = "prod.key"
+      interface = {
+        name    = "wg-prod"
+        address = "10.80.0.10/24"
+      }
+    }
+  }
+
+  component "wg_backup" {
+    source = component.wireguard_networkd
+
+    inputs = {
+      private_key_source = "backup.key"
+      interface = {
+        name        = "wg-backup"
+        address     = "10.90.0.10/24"
+        listen_port = 51821
+      }
+    }
+  }
+}
+`, map[string]string{
+		"prod.key":   "prod-private-key",
+		"backup.key": "backup-private-key",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	components := map[string]ir.ComponentInstanceSpec{}
+	for _, component := range program.Hosts[0].Components {
+		components[component.Name] = component
+	}
+	prod := components["wg_prod"]
+	if _, ok := prod.Secrets.Files["/etc/wireguard/wg-prod.key"]; !ok {
+		t.Fatalf("wg_prod secrets = %#v", prod.Secrets.Files)
+	}
+	if prod.Systemd.Networkd.NetDevs["wireguard"].Path != "/etc/systemd/network/10-wg-prod.netdev" {
+		t.Fatalf("wg_prod netdev path = %q", prod.Systemd.Networkd.NetDevs["wireguard"].Path)
+	}
+	backup := components["wg_backup"]
+	if _, ok := backup.Secrets.Files["/etc/wireguard/wg-backup.key"]; !ok {
+		t.Fatalf("wg_backup secrets = %#v", backup.Secrets.Files)
+	}
+	if backup.Systemd.Networkd.NetDevs["wireguard"].Path != "/etc/systemd/network/10-wg-backup.netdev" {
+		t.Fatalf("wg_backup netdev path = %q", backup.Systemd.Networkd.NetDevs["wireguard"].Path)
+	}
+	if got := firstSectionValue(backup.Systemd.Networkd.NetDevs["wireguard"].WireGuard, "ListenPort"); got != "51821" {
+		t.Fatalf("wg_backup ListenPort = %q", got)
+	}
+}
+
+func TestCompileNetworkdWireGuardPeerAttributeMap(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  systemd {
+    networkd {
+      netdev "10-wg0" {
+        netdev = {
+          Name = "wg0"
+          Kind = "wireguard"
+        }
+
+        wireguard_peer = {
+          laptop = {
+            PublicKey  = "laptop-public-key"
+            AllowedIPs = ["10.80.0.10/32"]
+          }
+          server2 = {
+            PublicKey  = "peer-public-key"
+            AllowedIPs = ["10.80.0.2/32"]
+          }
+        }
+      }
+    }
+  }
+}
+`)
+	netdev := program.Hosts[0].Systemd.Networkd.NetDevs["10-wg0"]
+	if len(netdev.WireGuardPeers) != 2 {
+		t.Fatalf("wireguard peers = %#v", netdev.WireGuardPeers)
+	}
+	if !strings.Contains(netdev.Content, "PublicKey=laptop-public-key\n") || !strings.Contains(netdev.Content, "PublicKey=peer-public-key\n") {
+		t.Fatalf("netdev content does not contain both WireGuard peers:\n%s", netdev.Content)
+	}
+}
+
+func TestCompileRejectsDuplicateWireGuardPeerAttributeAndBlock(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+host "server1" {
+  systemd {
+    networkd {
+      netdev "10-wg0" {
+        netdev = {
+          Name = "wg0"
+          Kind = "wireguard"
+        }
+
+        wireguard_peer = {
+          server2 = {
+            PublicKey  = "peer-public-key"
+            AllowedIPs = ["10.80.0.2/32"]
+          }
+        }
+
+        wireguard_peer "server2" {
+          PublicKey  = "other-peer-public-key"
+          AllowedIPs = ["10.80.0.3/32"]
+        }
+      }
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), `duplicate host.server1.systemd.networkd.netdev["10-wg0"].wireguard_peer["server2"]`) {
+		t.Fatalf("error = %v, want duplicate wireguard peer rejection", err)
 	}
 }
 

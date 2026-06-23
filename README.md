@@ -158,7 +158,6 @@ DSL、CLI、state schema 和 plan JSON 的 beta/stable 兼容规则见
 - `examples/v2-user-group.dbf.hcl`
 - `examples/v2-variable-secret-file.dbf.hcl`
 - `examples/v2-wireguard-networkd.dbf.hcl`（真实 validate/apply 前需准备本地 `examples/secrets/wg-a.key` 和 `wg-b.key`）
-- `examples/v2-systemd-networkd-wireguard.dbf.hcl`（同上，展示 systemd-networkd 原生写法）
 
 其他示例仍为 design-only fixture，仅用于表达设计方向，不作为第一版可运行样例：
 

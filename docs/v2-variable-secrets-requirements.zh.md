@@ -527,6 +527,8 @@ dbf plan -f app.dbf.hcl -var app_token=@secrets/app-token -var app_token_version
 - write-only 值不得用于 plan 阶段必须比较的普通 desired 字段。
 - `files.file.content` 可接受 sensitive/ephemeral 值。
 - `files.file.path`、`owner`、`group`、`mode`、`ensure` 不接受 ephemeral 值。
+- `files.file` 和 `secrets.file` 支持显式 `path` 属性；没有 `path` 时沿用 block
+  label 作为目标路径。component 内可用静态 label 加动态 `path` 来复用同一模板。
 - sensitive 值进入非敏感输出字段时，系统应自动 taint，而不是要求用户手写
   `sensitive = true`。
 - 如果用户显式设置 `sensitive = false`，但 content 引用了 sensitive 值，应以传播结果为准。
@@ -1343,9 +1345,10 @@ stdin 或 secret backend。
 
 - ResourceGraph 编译新增 file-like desired/payload helper，`files.file` 与 `secrets.file`
   共用同一套 summary、sensitive、write-only 和 provider payload 构造逻辑。
-- `secrets.file` 继续保留 `secret` kind 和原始
-  `host.<host>.secrets.file["<path>"]` / component address，因此不需要本轮强制 state
-  migration；provider type/address 仍映射到 file provider。
+- `secrets.file` 继续保留 `secret` kind 和
+  `host.<host>.secrets.file["<path>"]` / component address；显式 `path` 时使用解析后的
+  目标路径作为 address，因此不需要本轮强制 state migration；provider type/address
+  仍映射到 file provider。
 - 既有路径冲突校验继续在 merge 层生效；测试固定了 `files.file` 与 `secrets.file` 同路径
   冲突、旧地址进入 state、旧 fixture plan/state 不泄漏 secret。
 - 新增 `examples/v2-variable-secret-file.dbf.hcl` 展示推荐写法：

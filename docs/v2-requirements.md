@@ -942,7 +942,19 @@ secrets {
 
 要求：
 
-- secret file label 是远端绝对路径，也是稳定 identity。
+- secret file label 默认是远端绝对路径，也是稳定 identity。
+- component 需要复用同一个 block label 但按 input 生成不同目标路径时，可以显式设置
+  `path`。此时 resource identity 和冲突检测使用解析后的 `path`：
+
+```hcl
+secrets {
+  file "wireguard_private_key" {
+    path   = "/etc/wireguard/${input.interface.name}.key"
+    source = input.private_key_source
+  }
+}
+```
+
 - `source` 是本地文件路径，相对当前配置文件所在目录解析。
 - 第一版只支持本地文件 source；后续可增加外部 secret provider。
 - `owner` 默认 `root`，`group` 默认 `root`，`mode` 默认 `0600`。

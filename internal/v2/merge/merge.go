@@ -1840,6 +1840,17 @@ func listField(root parser.Value, name string) (parser.Value, bool, error) {
 	return value, true, nil
 }
 
+func objectPath(root parser.Value, name string, defaultPath string) (string, error) {
+	path, ok, err := stringField(root, name)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return path, nil
+	}
+	return defaultPath, nil
+}
+
 func objectCollection(root parser.Value, field string) (map[string]parser.Value, bool, error) {
 	collection, ok := root.Map[field]
 	if !ok {
@@ -2263,10 +2274,17 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 		return map[string]ir.ManagedFile{}, err
 	}
 	out := make(map[string]ir.ManagedFile, len(objects))
-	for _, path := range sortedKeys(objects) {
-		item := objects[path]
+	for _, label := range sortedKeys(objects) {
+		item := objects[label]
+		path, err := objectPath(item, "path", label)
+		if err != nil {
+			return nil, err
+		}
 		if path == "" || !filepath.IsAbs(path) {
 			return nil, fmt.Errorf("%s:%d:%s: file path must be absolute and non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		if previous, exists := out[path]; exists {
+			return nil, fmt.Errorf("%s:%d:%s: file path %q conflicts with file declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, path, previous.Source.File, previous.Source.Line, previous.Source.Path)
 		}
 		ensure, err := ensureField(item, "present")
 		if err != nil {
@@ -2355,10 +2373,17 @@ func secretSpecs(secrets parser.Value) (map[string]ir.SecretFile, error) {
 		return map[string]ir.SecretFile{}, err
 	}
 	out := make(map[string]ir.SecretFile, len(objects))
-	for _, path := range sortedKeys(objects) {
-		item := objects[path]
+	for _, label := range sortedKeys(objects) {
+		item := objects[label]
+		path, err := objectPath(item, "path", label)
+		if err != nil {
+			return nil, err
+		}
 		if path == "" || !filepath.IsAbs(path) {
 			return nil, fmt.Errorf("%s:%d:%s: secret path must be absolute and non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		if previous, exists := out[path]; exists {
+			return nil, fmt.Errorf("%s:%d:%s: secret path %q conflicts with secret declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, path, previous.Source.File, previous.Source.Line, previous.Source.Path)
 		}
 		ensure, err := ensureField(item, "present")
 		if err != nil {
@@ -2838,6 +2863,9 @@ func networkdSection(root parser.Value) (ir.NetworkdSection, error) {
 	out := ir.NetworkdSection{}
 	for _, key := range sortedKeys(root.Map) {
 		item := root.Map[key]
+		if item.Kind == parser.KindNull {
+			continue
+		}
 		values, err := networkdSectionValues(item)
 		if err != nil {
 			return nil, err

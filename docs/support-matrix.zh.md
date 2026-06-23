@@ -157,8 +157,7 @@ Linux Homebrew best-effort 规则见
 | `examples/v2-systemd-service*.dbf.hcl` | Beta | raw unit 和 structured service_unit。 |
 | `examples/v2-user-group.dbf.hcl` | Beta | users/groups/directories/files。 |
 | `examples/v2-variable-secret-file.dbf.hcl` | Beta | variable + sensitive file 写入。 |
-| `examples/v2-wireguard-networkd.dbf.hcl` | Preview | WireGuard networkd，需准备本地 secrets。 |
-| `examples/v2-systemd-networkd-wireguard.dbf.hcl` | Preview | systemd-networkd 原生写法，需准备本地 secrets。 |
+| `examples/v2-wireguard-networkd.dbf.hcl` | Preview | WireGuard networkd component，多 peer 和多 interface 复用，需准备本地 secrets。 |
 | `examples/v2-fleet.dbf.hcl` | Design-only | fleet 方向 fixture，不作为当前可运行样例。 |
 | `test/integration/libvirt/cases/*` | Beta | Debian 13 VM 上 validate/apply/check/drift/remove/restore 覆盖。 |
 

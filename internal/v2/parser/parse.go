@@ -1711,7 +1711,7 @@ func validateNetworkdObjectBlockShape(file, path string, block *hclsyntax.Block)
 	var allowed map[string]struct{}
 	switch block.Type {
 	case "netdev":
-		allowed = attrSet("path", "owner", "group", "mode", "ensure", "netdev", "wireguard")
+		allowed = attrSet("path", "owner", "group", "mode", "ensure", "netdev", "wireguard", "wireguard_peer")
 	case "network":
 		allowed = attrSet("path", "owner", "group", "mode", "ensure", "match", "network")
 	default:
@@ -1984,7 +1984,7 @@ func parseNetworkdObjectBlock(file, path string, block *hclsyntax.Block, ctx Eva
 	var allowed map[string]struct{}
 	switch block.Type {
 	case "netdev":
-		allowed = attrSet("path", "owner", "group", "mode", "ensure", "netdev", "wireguard")
+		allowed = attrSet("path", "owner", "group", "mode", "ensure", "netdev", "wireguard", "wireguard_peer")
 	case "network":
 		allowed = attrSet("path", "owner", "group", "mode", "ensure", "match", "network")
 	default:
@@ -2030,6 +2030,9 @@ func parseNetworkdObjectBlock(file, path string, block *hclsyntax.Block, ctx Eva
 			collection, ok := values["wireguard_peer"]
 			if !ok {
 				collection = MapValue(nil, ir.SourceRef{File: file, Line: child.TypeRange.Start.Line, Path: path + ".wireguard_peer"})
+			}
+			if !collection.IsMap() {
+				return Value{}, fmt.Errorf("%s:%d:%s: must be a map", collection.Source.File, collection.Source.Line, collection.Source.Path)
 			}
 			if _, exists := collection.Map[label]; exists {
 				return Value{}, fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, peerPath)
@@ -2295,9 +2298,9 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 	case "packages.package":
 		return attrSet("repositories")
 	case "files.file":
-		return attrSet("content", "content_version", "source", "owner", "group", "mode", "ensure", "sensitive")
+		return attrSet("path", "content", "content_version", "source", "owner", "group", "mode", "ensure", "sensitive")
 	case "secrets.file":
-		return attrSet("source", "owner", "group", "mode", "ensure")
+		return attrSet("path", "source", "owner", "group", "mode", "ensure")
 	case "directories.directory":
 		return attrSet("owner", "group", "mode", "ensure")
 	case "groups.group":
