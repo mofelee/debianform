@@ -4,9 +4,14 @@
 `secrets.file` 的关系。目标是把 secret 的“来源”和“落到目标机的资源”拆开，避免
 继续把本地 secret 文件路径绑定为唯一输入方式。
 
-Terraform 是主要参照对象，但 DebianForm 不实现 Terraform 兼容层。这里借鉴它把
-`sensitive`、`ephemeral` 和 write-only provider 参数拆开的设计，并按 DebianForm 的
-HostSpec、ResourceGraph、plan/state 和 SSH runner 做取舍。
+Terraform 是主要参照对象，但 DebianForm 不实现 Terraform 兼容层。这里借鉴它的
+`variable` block、类型约束、赋值来源优先级，以及把 `sensitive`、`ephemeral` 和
+write-only provider 参数拆开的设计，并按 DebianForm 的 HostSpec、ResourceGraph、
+plan/state 和 SSH runner 做取舍。
+
+这里的 `variable` 不能只是为了 secret 做的窄接口。它应成为 DebianForm program 的
+通用外部输入机制，用来参数化 host/profile/component 中的环境差异、部署尺寸、功能开关、
+版本、目标路径和运行时凭据。secret 只是其中一个高风险使用场景。
 
 ## 背景
 
@@ -40,6 +45,14 @@ files.file 定义目标机文件资源
 ## 目标
 
 - 支持顶层 `variable`，用于 host/profile/component 配置中的外部输入。
+- `variable` 是通用配置参数，不只服务于 secret；普通非敏感配置也应使用同一机制。
+- 支持接近 Terraform 的 variable block 字段：`type`、`default`、`description`、
+  `validation`、`sensitive`、`nullable`、`ephemeral`、`const`、`deprecated`。
+- 支持与 component input 一致的结构化类型能力，包括 `list(object(...))`、嵌套
+  `object`、`map(...)`、`set(...)`、`tuple(...)` 和 `optional(...)`。
+- 支持多种外部赋值来源：CLI `-var`、`-var-file`、自动加载的 var file、环境变量、
+  prompt/stdin，以及本地文件内容读取。
+- 定义稳定、可解释的 variable 赋值优先级。
 - 支持运行时注入 secret，避免要求用户在配置目录旁长期保留本地 secret 文件。
 - 明确区分 `sensitive`、`ephemeral` 和 write-only 三种语义。
 - 敏感值进入 `files.file.content`、`systemd.unit.content` 等字段时，自动传播
@@ -54,13 +67,90 @@ files.file 定义目标机文件资源
 ## 非目标
 
 - 不实现 Terraform module system。
-- 不要求兼容 Terraform `.tfvars` 文件格式或完整 CLI 行为。
+- 不要求完全兼容 Terraform `.tfvars` 文件格式、文件名约定或完整 CLI 行为；DebianForm
+  可以采用 `.dbfvars`，但语义应同样清楚。
+- 不实现 HCP Terraform workspace、variable set、remote run 等平台能力。
 - 不承诺第一阶段支持所有 secret backend，例如 Vault、AWS Secrets Manager、GCP Secret
   Manager。
 - 不承诺解决目标机 at-rest secret 问题。如果服务要求文件，secret 最终仍会写入目标机
   磁盘或 tmpfs。
 - 不把 `sensitive = true` 解释成“不落盘”。`sensitive` 只负责脱敏和传播。
 - 不允许 ephemeral 值参与会影响资源地址、集合 key、排序、依赖图结构的表达式。
+
+## 与 Terraform variable 的差异
+
+Terraform 的 `variable` 是 module 参数：root module 可以从 CLI、环境变量、`.tfvars`
+和 HCP Terraform workspace 接收值，child module 由父 module 通过 `module` block 传值。
+DebianForm 目前没有 Terraform module system，所以 v2 `variable` 应先定义为 program
+级输入：同一个 `.dbf.hcl` program 中的 host/profile/component 都可以通过 `var.<name>`
+引用它。
+
+DebianForm 应尽量对齐 Terraform 的强能力：
+
+| 能力 | Terraform | DebianForm 目标 |
+| --- | --- | --- |
+| 引用语法 | `var.name` | 使用 `var.name`，避免另造概念。 |
+| 类型约束 | primitive、collection、structural、`any` | 与 component input 使用同一套 type system。 |
+| 默认值 | `default` 可选；无 default 时必填 | 同样支持；默认值不得依赖 runtime facts 或其他 variable。 |
+| 校验 | `validation` block | 同样支持，错误定位到用户 DSL source path。 |
+| 脱敏 | `sensitive` 隐藏 CLI/UI 输出，但普通 sensitive 仍可进 state | 同样脱敏；并要求 taint 传播到 DebianForm resource content。 |
+| 不持久化 | `ephemeral` 不进 plan/state，且可引用位置受限 | 同样支持；额外要求不进 HostSpec/ResourceGraph/debug JSON。 |
+| write-only | provider resource 参数声明 write-only | DebianForm 需要 provider apply payload 边界，不把值写回 state/diff。 |
+| early eval | `const` 可用于 init 等早期阶段 | 可保留 `const`，用于未来 imports、backend、plugin/source 等早期解析场景。 |
+| 废弃提示 | `deprecated` | 同样支持，便于长期维护配置接口。 |
+| 赋值来源 | CLI、var-file、auto tfvars、env、workspace | 支持 CLI、dbfvars、auto dbfvars、env、prompt/stdin；不做 workspace。 |
+| 文件内容输入 | Terraform CLI 没有通用 `@path` 语义 | DebianForm 应增加 `@path`/`@-`，作为部署工具的实用扩展。 |
+
+关键差异：
+
+- Terraform 的 variable 是 module API；DebianForm 的 variable 是 program API。component
+  仍保留自己的 `input` 作为组件 API，但两者应共享类型系统、validation、sensitive 和
+  ephemeral 传播实现。
+- Terraform 的 `sensitive` 只保证显示层脱敏，不保证不进入 state；DebianForm 必须保持
+  同样清晰的语义，不能把 `sensitive` 偷偷解释成 ephemeral。
+- DebianForm 有 HostSpec 和 ResourceGraph 两层内部产物，因此 ephemeral 的禁止落盘范围
+  比 Terraform 的 plan/state 更宽。
+- DebianForm 通过 SSH runner 写目标机，write-only 的安全边界必须覆盖 command preview、
+  stdout/stderr、临时文件和 provider payload。
+
+## 能力分级
+
+为了避免实现成弱版 variable，能力按三层定义。
+
+### Core
+
+Core 是第一版 variable 必须具备的通用配置能力：
+
+- `var.<name>` 引用。
+- `type`、`default`、`description`、`nullable`。
+- primitive、collection、structural type constraints。
+- 外部赋值：`-var`、`-var-file`、环境变量。
+- required variable 校验。
+- `validation` block。
+- source path 清晰的错误信息。
+
+### Secure
+
+Secure 是 secret 场景必须具备的能力：
+
+- `sensitive` 脱敏和表达式传播。
+- `ephemeral` 传播和持久化禁止。
+- write-only provider payload。
+- redacted runner channel。
+- `@path`、`@-`、prompt/stdin 输入。
+- `content_version` 或同类非敏感版本触发机制。
+
+### Ergonomic
+
+Ergonomic 是让 variable 足够好用的能力：
+
+- `.dbfvars` 和 `.auto.dbfvars`。
+- JSON var file。
+- env 前缀，例如 `DBF_VAR_name`。
+- complex value 在 CLI/env 中可用 JSON 表达。
+- `deprecated` warning。
+- `const` early-eval 变量。
+- `dbf variable inspect` 或等价命令，用于列出变量接口、类型、默认值、是否敏感和说明。
 
 ## 术语
 
@@ -117,7 +207,59 @@ variable "wg_private_key" {
 - `nullable` 可选，默认 `true`。
 - `sensitive` 可选，默认 `false`。
 - `ephemeral` 可选，默认 `false`。
+- `const` 可选，默认 `false`。
+- `deprecated` 可选，值为非空字符串。
 - `validation` block 可重复。
+
+完整形态：
+
+```hcl
+variable "name" {
+  type        = <TYPE>
+  default     = <DEFAULT_VALUE>
+  description = "<DESCRIPTION>"
+  sensitive   = <true|false>
+  nullable    = <true|false>
+  ephemeral   = <true|false>
+  const       = <true|false>
+  deprecated  = "<MESSAGE>"
+
+  validation {
+    condition     = <EXPRESSION>
+    error_message = "<MESSAGE>"
+  }
+}
+```
+
+### 普通配置变量
+
+```hcl
+variable "environment" {
+  type        = string
+  description = "Deployment environment."
+  default     = "prod"
+  nullable    = false
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be dev, staging, or prod."
+  }
+}
+
+variable "listeners" {
+  type = list(object({
+    name = string
+    port = number
+    tls  = optional(bool, false)
+  }))
+
+  default  = []
+  nullable = false
+}
+```
+
+这些变量不是 secret，也不应走 secret-only 特例。它们应和 component input 一样参与类型
+检查、默认值填充、validation 和 source path 错误定位。
 
 ### 外部赋值
 
@@ -126,6 +268,7 @@ variable "wg_private_key" {
 ```bash
 dbf plan  -f site.dbf.hcl -var wg_private_key=@/run/secrets/wg.key
 dbf apply -f site.dbf.hcl -var wg_private_key=@/run/secrets/wg.key
+dbf apply -f site.dbf.hcl -var-file prod.dbfvars
 ```
 
 建议语义：
@@ -134,7 +277,7 @@ dbf apply -f site.dbf.hcl -var wg_private_key=@/run/secrets/wg.key
 - `name=@path` 表示从本地文件读取，读取结果作为 value，不把 path 当作资源语义写入
   HostSpec/graph/state。
 - `name=@-` 表示从 stdin 读取。
-- 重复赋值同一 variable 应报错，除非未来显式支持优先级。
+- `-var-file` 支持 HCL 风格 key/value；后续可支持 JSON。
 - CLI 参数中的 sensitive value 不得出现在错误、debug log 或 shell command preview 中。
 
 后续可增加：
@@ -146,6 +289,21 @@ dbf apply -var wg_private_key=cmd:pass-show-wireguard
 ```
 
 这些来源必须遵守同一套 sensitive/ephemeral 语义。
+
+赋值优先级建议从高到低：
+
+1. CLI `-var`，按出现顺序后者覆盖前者。
+2. CLI `-var-file`，按出现顺序后者覆盖前者。
+3. 自动加载的 `*.auto.dbfvars` 或 `*.auto.dbfvars.json`，按文件名字典序。
+4. `debianform.dbfvars` 或 `debianform.dbfvars.json`。
+5. 环境变量，例如 `DBF_VAR_<name>`。
+6. variable `default`。
+
+未声明变量的处理：
+
+- CLI `-var` 传入未声明变量应报错。
+- var file 中的未声明变量应 warning 或 error；建议第一版直接 error，避免拼写错误静默生效。
+- 环境变量中的未声明变量可以忽略，避免污染 CI 环境导致失败。
 
 ### 用 variable 写敏感文件
 
