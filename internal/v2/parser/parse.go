@@ -146,7 +146,21 @@ type Assert struct {
 	MessageSource   ir.SourceRef
 }
 
+type ParseOptions struct {
+	VariableValues []ExternalVariableValue
+}
+
+type ExternalVariableValue struct {
+	Name   string
+	Value  string
+	Source ir.SourceRef
+}
+
 func ParseFiles(files []string) (*Config, error) {
+	return ParseFilesWithOptions(files, ParseOptions{})
+}
+
+func ParseFilesWithOptions(files []string, opts ParseOptions) (*Config, error) {
 	cfg := &Config{
 		Files:          append([]string(nil), files...),
 		Locals:         map[string]Value{},
@@ -187,7 +201,7 @@ func ParseFiles(files []string) (*Config, error) {
 			return nil, err
 		}
 	}
-	if err := resolveVariableValues(cfg); err != nil {
+	if err := resolveVariableValues(cfg, opts.VariableValues); err != nil {
 		return nil, err
 	}
 
@@ -250,10 +264,34 @@ func parseVariables(cfg *Config, file string, body *hclsyntax.Body) error {
 	return nil
 }
 
-func resolveVariableValues(cfg *Config) error {
+func resolveVariableValues(cfg *Config, external []ExternalVariableValue) error {
 	values := make(map[string]Value, len(cfg.Variables))
+	explicit := map[string]Value{}
+	for i, item := range external {
+		variable, ok := cfg.Variables[item.Name]
+		if !ok {
+			source := item.Source
+			if source.Path == "" {
+				source.Path = fmt.Sprintf("cli.var[%d]", i)
+			}
+			return fmt.Errorf("%s:%d:%s: unknown variable %q", source.File, source.Line, source.Path, item.Name)
+		}
+		value, err := parseExternalVariableValue(variable, item)
+		if err != nil {
+			return err
+		}
+		normalized, err := NormalizeVariableValue(variable, value)
+		if err != nil {
+			return err
+		}
+		explicit[item.Name] = normalized
+	}
 	for _, name := range sortedVariableNames(cfg.Variables) {
 		variable := cfg.Variables[name]
+		if value, ok := explicit[name]; ok {
+			values[name] = value
+			continue
+		}
 		if variable.Default == nil {
 			return fmt.Errorf("%s:%d:%s: variable %q is required", variable.Source.File, variable.Source.Line, variable.Source.Path, variable.Name)
 		}

@@ -200,6 +200,8 @@ func runConfigCommand(cmd string, args []string) error {
 	parallel := fs.Int("parallel", 1, "maximum number of hosts to apply concurrently")
 	lockTimeout := fs.Duration("lock-timeout", 5*time.Minute, "state lock timeout")
 	autoApprove := fs.Bool("auto-approve", false, "skip apply confirmation")
+	var cliVars repeatedFlag
+	fs.Var(&cliVars, "var", "set a variable value as name=value")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -208,10 +210,21 @@ func runConfigCommand(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *debug, *offline, *parallel, *lockTimeout, *autoApprove)
+	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *debug, *offline, *parallel, *lockTimeout, *autoApprove, cliVars)
 }
 
-func runV2ConfigCommand(cmd string, files []string, host string, format string, htmlPath string, debug bool, offline bool, parallel int, lockTimeout time.Duration, autoApprove bool) error {
+type repeatedFlag []string
+
+func (f *repeatedFlag) String() string {
+	return strings.Join(*f, ",")
+}
+
+func (f *repeatedFlag) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
+func runV2ConfigCommand(cmd string, files []string, host string, format string, htmlPath string, debug bool, offline bool, parallel int, lockTimeout time.Duration, autoApprove bool, cliVars []string) error {
 	if format == "" {
 		format = "text"
 	}
@@ -237,7 +250,11 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 		return fmt.Errorf("--parallel is only supported for v2 apply")
 	}
 
-	cfg, err := v2parser.ParseFiles(files)
+	variableValues, err := parseCLIVars(cliVars)
+	if err != nil {
+		return err
+	}
+	cfg, err := v2parser.ParseFilesWithOptions(files, v2parser.ParseOptions{VariableValues: variableValues})
 	if err != nil {
 		return err
 	}
@@ -369,6 +386,23 @@ func printPlanDocument(doc v2plan.Document, format string, htmlPath string) erro
 		v2plan.PrintText(os.Stdout, doc)
 		return nil
 	}
+}
+
+func parseCLIVars(values []string) ([]v2parser.ExternalVariableValue, error) {
+	out := make([]v2parser.ExternalVariableValue, 0, len(values))
+	for i, raw := range values {
+		name, value, ok := strings.Cut(raw, "=")
+		source := v2ir.SourceRef{File: "cli", Line: i + 1, Path: fmt.Sprintf("cli.var[%d]", i)}
+		if !ok || strings.TrimSpace(name) == "" {
+			return nil, fmt.Errorf("%s:%d:%s: -var must be name=value", source.File, source.Line, source.Path)
+		}
+		out = append(out, v2parser.ExternalVariableValue{
+			Name:   strings.TrimSpace(name),
+			Value:  value,
+			Source: source,
+		})
+	}
+	return out, nil
 }
 
 func printWarnings(warnings []v2ir.Warning) {

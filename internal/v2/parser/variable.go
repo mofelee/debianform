@@ -1,9 +1,15 @@
 package parser
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
+	"strconv"
+	"strings"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/mofelee/debianform/internal/v2/ir"
 )
 
@@ -16,6 +22,132 @@ func NormalizeVariableValue(variable Variable, value Value) (Value, error) {
 		return Value{}, err
 	}
 	return normalized, nil
+}
+
+func parseExternalVariableValue(variable Variable, item ExternalVariableValue) (Value, error) {
+	source := item.Source
+	if source.Path == "" {
+		source.Path = "cli.var." + variable.Name
+	}
+	if variable.TypeSpec.Kind == ComponentInputTypeString {
+		return Value{Kind: KindString, String: item.Value, Source: source}, nil
+	}
+	if isComplexType(variable.TypeSpec.Kind) && looksLikeJSON(item.Value) {
+		value, err := parseJSONVariableValue(item.Value, source)
+		if err != nil {
+			if variable.Sensitive {
+				return Value{}, fmt.Errorf("%s:%d:%s: invalid value for sensitive variable %q", source.File, source.Line, source.Path, variable.Name)
+			}
+			return Value{}, fmt.Errorf("%s:%d:%s: invalid JSON value for variable %q: %w", source.File, source.Line, source.Path, variable.Name, err)
+		}
+		return value, nil
+	}
+
+	expr, diags := hclsyntax.ParseExpression([]byte(item.Value), source.File, hclPos(source.Line))
+	if diags.HasErrors() {
+		if variable.Sensitive {
+			return Value{}, fmt.Errorf("%s:%d:%s: invalid value for sensitive variable %q", source.File, source.Line, source.Path, variable.Name)
+		}
+		return Value{}, fmt.Errorf("%s:%d:%s: invalid value for variable %q: %s", source.File, source.Line, source.Path, variable.Name, diags.Error())
+	}
+	value, err := evalValue(expr, EvalContext{}, source)
+	if err != nil {
+		if variable.Sensitive {
+			return Value{}, fmt.Errorf("%s:%d:%s: invalid value for sensitive variable %q", source.File, source.Line, source.Path, variable.Name)
+		}
+		return Value{}, fmt.Errorf("%s:%d:%s: invalid value for variable %q: %w", source.File, source.Line, source.Path, variable.Name, err)
+	}
+	return value, nil
+}
+
+func isComplexType(kind ComponentInputTypeKind) bool {
+	switch kind {
+	case ComponentInputTypeList, ComponentInputTypeSet, ComponentInputTypeMap, ComponentInputTypeObject, ComponentInputTypeTuple, ComponentInputTypeAny:
+		return true
+	default:
+		return false
+	}
+}
+
+func looksLikeJSON(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") || trimmed == "null"
+}
+
+func parseJSONVariableValue(raw string, source ir.SourceRef) (Value, error) {
+	var decoded any
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&decoded); err != nil {
+		return Value{}, err
+	}
+	var trailing struct{}
+	err := decoder.Decode(&trailing)
+	if err == nil {
+		return Value{}, fmt.Errorf("invalid trailing JSON data")
+	}
+	if err != io.EOF {
+		return Value{}, err
+	}
+	return jsonValueToValue(decoded, source)
+}
+
+func jsonValueToValue(decoded any, source ir.SourceRef) (Value, error) {
+	switch value := decoded.(type) {
+	case nil:
+		return NullValue(source), nil
+	case string:
+		return Value{Kind: KindString, String: value, Source: source}, nil
+	case bool:
+		return Value{Kind: KindBool, Bool: value, Source: source}, nil
+	case json.Number:
+		if _, err := strconv.ParseFloat(value.String(), 64); err != nil {
+			return Value{}, err
+		}
+		return Value{Kind: KindNumber, Number: value.String(), Source: source}, nil
+	case []any:
+		items := make([]Value, 0, len(value))
+		for i, item := range value {
+			itemSource := source
+			itemSource.Path = fmt.Sprintf("%s[%d]", source.Path, i)
+			converted, err := jsonValueToValue(item, itemSource)
+			if err != nil {
+				return Value{}, err
+			}
+			items = append(items, converted)
+		}
+		return Value{Kind: KindList, List: items, Source: source}, nil
+	case map[string]any:
+		items := make(map[string]Value, len(value))
+		for _, key := range sortedJSONKeys(value) {
+			itemSource := source
+			itemSource.Path = fmt.Sprintf("%s[%q]", source.Path, key)
+			converted, err := jsonValueToValue(value[key], itemSource)
+			if err != nil {
+				return Value{}, err
+			}
+			items[key] = converted
+		}
+		return MapValue(items, source), nil
+	default:
+		return Value{}, fmt.Errorf("unsupported JSON value %T", decoded)
+	}
+}
+
+func sortedJSONKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func hclPos(line int) hcl.Pos {
+	if line <= 0 {
+		line = 1
+	}
+	return hcl.Pos{Line: line, Column: 1, Byte: 0}
 }
 
 func normalizeValueForType(name string, spec ComponentInputTypeSpec, value Value, path string) (Value, error) {

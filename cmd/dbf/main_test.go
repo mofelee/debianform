@@ -136,6 +136,67 @@ func TestValidateAndPlanAcceptVariableDefaults(t *testing.T) {
 	}
 }
 
+func TestValidateAndPlanAcceptCLIVariableValues(t *testing.T) {
+	fixture := "../../internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl"
+	args := []string{
+		"-var", "environment=prod",
+		"-var", "environment=stage",
+		"-var", "replicas=3",
+		"-var", "enabled=true",
+		"-var", "ports=[80,443]",
+		"-var", `labels={"tier":"frontend"}`,
+	}
+
+	validateArgs := append([]string{"validate", "-f", fixture}, args...)
+	validateOutput := captureStdout(t, func() {
+		if err := run(validateArgs); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(validateOutput, "v2 configuration is valid: 1 host(s)") {
+		t.Fatalf("validate output = %q", validateOutput)
+	}
+
+	planArgs := append([]string{"plan", "-f", fixture, "--offline"}, args...)
+	planOutput := captureStdout(t, func() {
+		if err := run(planArgs); err != nil {
+			t.Fatal(err)
+		}
+	})
+	for _, want := range []string{
+		`"environment":"stage"`,
+		`"replicas":3`,
+		`"enabled":true`,
+		`"ports":[80,443]`,
+		`"labels":{"canary":false,"tier":"frontend"}`,
+	} {
+		if !strings.Contains(planOutput, want) {
+			t.Fatalf("plan output %q does not contain %q", planOutput, want)
+		}
+	}
+	if strings.Contains(planOutput, `"environment":"prod"`) {
+		t.Fatalf("plan output kept earlier -var value: %q", planOutput)
+	}
+}
+
+func TestCLIVariableErrors(t *testing.T) {
+	fixture := "../../internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl"
+
+	err := run([]string{"validate", "-f", fixture, "-var", "missing=value"})
+	if err == nil || !strings.Contains(err.Error(), `unknown variable "missing"`) {
+		t.Fatalf("validate unknown -var error = %v, want unknown variable", err)
+	}
+
+	secret := "not-a-real-cli-secret"
+	err = run([]string{"validate", "-f", fixture, "-var", "token_seed=" + secret})
+	if err == nil || !strings.Contains(err.Error(), `invalid value for sensitive variable "token_seed"`) {
+		t.Fatalf("validate sensitive -var error = %v, want redacted invalid value", err)
+	}
+	if err != nil && strings.Contains(err.Error(), secret) {
+		t.Fatalf("sensitive CLI value leaked in error: %v", err)
+	}
+}
+
 func TestValidateAndPlanPrintDeprecatedInputWarnings(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")

@@ -742,31 +742,43 @@ stdin 或 secret backend。
 
 代码：
 
-- [ ] CLI 支持重复 `-var name=value`。
-- [ ] `-var` 优先级高于 default。
-- [ ] 重复 `-var` 按出现顺序后者覆盖前者。
-- [ ] 未声明 variable 通过 `-var` 传入时报错。
-- [ ] string/number/bool 按目标 type 解析；复杂类型第一版可要求 JSON 字符串。
-- [ ] sensitive variable 的 CLI value 不进入错误上下文和 debug log。
+- [x] CLI 支持重复 `-var name=value`。
+- [x] `-var` 优先级高于 default。
+- [x] 重复 `-var` 按出现顺序后者覆盖前者。
+- [x] 未声明 variable 通过 `-var` 传入时报错。
+- [x] string/number/bool 按目标 type 解析；复杂类型第一版可要求 JSON 字符串。
+- [x] sensitive variable 的 CLI value 不进入错误上下文和 debug log。
 
 测试：
 
-- [ ] string、number、bool、list、object 赋值成功。
-- [ ] `-var` 覆盖 default。
-- [ ] 类型不匹配报错并指向 variable name。
-- [ ] 重复 `-var` 后者覆盖前者。
-- [ ] 未声明 variable 报错。
-- [ ] sensitive CLI value 不出现在错误输出和 snapshot。
+- [x] string、number、bool、list、object 赋值成功。
+- [x] `-var` 覆盖 default。
+- [x] 类型不匹配报错并指向 variable name。
+- [x] 重复 `-var` 后者覆盖前者。
+- [x] 未声明 variable 报错。
+- [x] sensitive CLI value 不出现在错误输出和 snapshot。
 
 示例/文档：
 
-- [ ] 增加 `examples` 或 CLI smoke fixture，展示 `-var env=prod`。
-- [ ] 文档明确复杂值第一版的 CLI 编码规则。
+- [x] 增加 `examples` 或 CLI smoke fixture，展示 `-var env=prod`。
+- [x] 文档明确复杂值第一版的 CLI 编码规则。
 
 验收：
 
-- [ ] 用户可以用 `dbf validate/plan/apply -var env=prod` 参数化普通配置。
-- [ ] `make test` 通过。
+- [x] 用户可以用 `dbf validate/plan/apply -var env=prod` 参数化普通配置。
+- [x] `make test` 通过。
+
+实现记录：
+
+- `dbf validate`、`dbf plan`、`dbf apply` 现在都接受可重复的 `-var name=value`。
+  parser 会在默认值前应用这些外部值，同名变量以后出现的值为准。
+- CLI 字面值按声明的 variable type 解释：`string` 保留原始字符串，`number`/`bool`
+  使用 HCL 字面值解析，`list`/`map`/`object`/`tuple`/`set`/`any` 可使用 JSON
+  字符串，例如 `-var ports=[80,443]` 或 `-var labels={"tier":"frontend"}`。
+- 未声明变量会报错；sensitive variable 的非法 CLI value 会返回脱敏错误，不包含原始
+  value。
+- 新增 `internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl` 和 CLI smoke，覆盖
+  `-var environment=prod`、复杂值、重复覆盖、未声明变量和 sensitive 错误脱敏。
 
 ### Loop 4：var file、auto var file 和环境变量
 

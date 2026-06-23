@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/mofelee/debianform/internal/v2/ir"
 )
 
 func TestParseHostProfileNestedBlocksAndSourceLine(t *testing.T) {
@@ -389,6 +391,113 @@ host "server1" {
 			_, err := ParseFiles([]string{file})
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("ParseFiles error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseExternalVariableValues(t *testing.T) {
+	file := writeConfig(t, `
+variable "environment" {
+  type    = string
+  default = "dev"
+}
+
+variable "replicas" {
+  type    = number
+  default = 1
+}
+
+variable "enabled" {
+  type    = bool
+  default = false
+}
+
+variable "ports" {
+  type    = list(number)
+  default = []
+}
+
+variable "labels" {
+  type = object({
+    tier   = string
+    canary = optional(bool, false)
+  })
+  default = {
+    tier = "backend"
+  }
+}
+
+host "server1" {}
+`)
+
+	cfg, err := ParseFilesWithOptions([]string{file}, ParseOptions{VariableValues: []ExternalVariableValue{
+		{Name: "environment", Value: "prod", Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}},
+		{Name: "environment", Value: "staging", Source: ir.SourceRef{File: "cli", Line: 2, Path: "cli.var[1]"}},
+		{Name: "replicas", Value: "3", Source: ir.SourceRef{File: "cli", Line: 3, Path: "cli.var[2]"}},
+		{Name: "enabled", Value: "true", Source: ir.SourceRef{File: "cli", Line: 4, Path: "cli.var[3]"}},
+		{Name: "ports", Value: "[80,443]", Source: ir.SourceRef{File: "cli", Line: 5, Path: "cli.var[4]"}},
+		{Name: "labels", Value: `{"tier":"frontend"}`, Source: ir.SourceRef{File: "cli", Line: 6, Path: "cli.var[5]"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.VariableValues["environment"].String; got != "staging" {
+		t.Fatalf("environment = %q, want staging", got)
+	}
+	if got := cfg.VariableValues["replicas"].Number; got != "3" {
+		t.Fatalf("replicas = %q, want 3", got)
+	}
+	if !cfg.VariableValues["enabled"].Bool {
+		t.Fatalf("enabled = %#v", cfg.VariableValues["enabled"])
+	}
+	if got := len(cfg.VariableValues["ports"].List); got != 2 {
+		t.Fatalf("ports length = %d, want 2", got)
+	}
+	labels := cfg.VariableValues["labels"].Map
+	if labels["tier"].String != "frontend" {
+		t.Fatalf("labels = %#v", labels)
+	}
+	if labels["canary"].Kind != KindBool || labels["canary"].Bool {
+		t.Fatalf("labels canary = %#v", labels["canary"])
+	}
+}
+
+func TestParseRejectsInvalidExternalVariableValues(t *testing.T) {
+	tests := []struct {
+		name string
+		vars []ExternalVariableValue
+		want string
+	}{
+		{
+			name: "unknown",
+			vars: []ExternalVariableValue{{Name: "missing", Value: "value", Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}}},
+			want: `unknown variable "missing"`,
+		},
+		{
+			name: "type mismatch",
+			vars: []ExternalVariableValue{{Name: "replicas", Value: "many", Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}}},
+			want: `invalid value for variable "replicas"`,
+		},
+		{
+			name: "invalid complex JSON",
+			vars: []ExternalVariableValue{{Name: "labels", Value: `{"tier":"frontend"} trailing`, Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}}},
+			want: `invalid JSON value for variable "labels"`,
+		},
+		{
+			name: "sensitive value redacted",
+			vars: []ExternalVariableValue{{Name: "token_seed", Value: "not-a-real-cli-secret", Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}}},
+			want: `invalid value for sensitive variable "token_seed"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseFilesWithOptions([]string{"../testdata/fixtures/v2-variable-cli.dbf.hcl"}, ParseOptions{VariableValues: tt.vars})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ParseFiles error = %v, want %q", err, tt.want)
+			}
+			if err != nil && strings.Contains(err.Error(), "not-a-real-cli-secret") {
+				t.Fatalf("sensitive value leaked in error: %v", err)
 			}
 		})
 	}
