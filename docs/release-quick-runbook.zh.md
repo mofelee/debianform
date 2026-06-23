@@ -6,7 +6,9 @@
 ## 发布前
 
 1. 更新 `CHANGELOG.md`，确认当前 tag 的变更、兼容性和迁移说明完整。
-2. 确认本地在 `main` 且工作区干净：
+2. 按 [release notes template](release-notes-template.md) 准备 GitHub Release notes，
+   明确 breaking changes、known issues、verification matrix 和 migration notes。
+3. 确认本地在 `main` 且工作区干净：
 
    ```bash
    git switch main
@@ -14,7 +16,7 @@
    git status --short
    ```
 
-3. 运行基础检查：
+4. 运行基础检查：
 
    ```bash
    go vet ./...
@@ -22,7 +24,7 @@
    goreleaser check
    ```
 
-4. 触发 dry-run workflow，并确认通过：
+5. 触发 dry-run workflow，并确认通过：
 
    ```bash
    gh workflow run release-dry-run.yml --ref main

@@ -42,6 +42,9 @@ CLI 发布产物覆盖：
 - `checksums.txt`，包含所有 tarball 的 SHA256。
 - release notes，说明新增、修复、兼容性和迁移事项。
 
+release notes 必须按 [release notes template](release-notes-template.md)
+检查，固定包含 breaking changes、known issues、verification matrix 和 migration notes。
+
 `<tag>` 使用完整 git tag，例如 `v0.1.0-beta.1`。
 
 每个 tarball 包含：
@@ -119,20 +122,21 @@ make test-integration
 ## GitHub Release 流程
 
 1. 更新 `CHANGELOG.md`。
-2. 确认 `README.md` 和 `docs/` 已同步。
-3. 确认 CI 全绿。
-4. 创建 tag：
+2. 按 [release notes template](release-notes-template.md) 准备 GitHub Release notes。
+3. 确认 `README.md` 和 `docs/` 已同步。
+4. 确认 CI 全绿。
+5. 创建 tag：
 
    ```bash
    git tag -s v0.1.0-beta.1
    git push origin v0.1.0-beta.1
    ```
 
-5. Release workflow 构建四个平台 tarball。
-6. Release workflow 生成 `checksums.txt`。
-7. Release workflow 创建 GitHub Release。
-8. Release workflow 更新 Homebrew tap。
-9. 发布后用全新环境验证 curl 和 Homebrew 安装。
+6. Release workflow 构建四个平台 tarball。
+7. Release workflow 生成 `checksums.txt`。
+8. Release workflow 创建 GitHub Release。
+9. Release workflow 更新 Homebrew tap。
+10. 发布后用全新环境验证 curl 和 Homebrew 安装。
 
 如果暂时没有 signing key，可以用 annotated tag 代替 signed tag，但 stable 前必须切到 signed
 tag。

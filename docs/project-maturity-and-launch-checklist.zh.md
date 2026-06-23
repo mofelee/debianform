@@ -159,7 +159,7 @@
 - [x] 更完整的 operations/runbook 文档。
 - [x] 更完整的 quickstart 文档。
 - [x] 依赖漏洞扫描进入 CI。
-- [ ] release notes 模板，固定包含 breaking changes、known issues、verification matrix 和 migration notes。
+- [x] release notes 模板，固定包含 breaking changes、known issues、verification matrix 和 migration notes。
 - [ ] beta 用户反馈入口和 triage 流程。
 - [ ] 真实部署模板或小型案例。
 - [x] 对高风险资源的 `prevent_destroy` 使用建议。
@@ -324,3 +324,19 @@
 
 - [x] 支持矩阵现在把 DSL block、resource/domain 类型和当前 beta/preview/compat/design-only
       状态集中到一处，并从 README 与 release process 提供入口。
+
+### 2026-06-23 release notes 模板补充
+
+本次检查命令：
+
+- [x] 核对 `CHANGELOG.md`、release process、release quick runbook 和 release workflow 的
+      Verification Matrix 追加逻辑。
+- [x] 新增 `docs/release-notes-template.md`，固定包含 Summary、Compatibility、
+      Breaking Changes、Migration Notes、Known Issues、Support Matrix、Verification 和
+      Verification Matrix。
+- [x] release process、release quick runbook 和 README 均提供 release notes template 入口。
+
+结论：
+
+- [x] 发布前现在有固定 release notes 模板，避免遗漏 breaking changes、known issues、
+      verification matrix 和 migration notes。
