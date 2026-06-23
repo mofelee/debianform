@@ -5,6 +5,9 @@
 `dbf` 读取 v2 `.dbf.hcl` 配置文件，用于校验、预览、应用和检查 Debian 主机配置。
 当前 CLI 入口只面向 v2 配置格式。
 
+第一次使用建议先走 [quickstart](quickstart.zh.md)，它覆盖准备 root SSH 测试主机、
+写第一份配置、`validate`、在线 `plan`、`apply`、再次 `plan` no-op 和 `check`。
+
 ## 基本规则
 
 默认情况下，`dbf` 会读取当前目录中所有 `*.dbf.hcl` 文件，并按文件名排序后合并处理。

@@ -105,6 +105,7 @@ v2 领域块或 component。
 
 ## v2 设计文档
 
+- [quickstart](docs/quickstart.zh.md)
 - [v2 requirements](docs/v2-requirements.md)
 - [v2 IR requirements](docs/v2-ir-requirements.zh.md)
 - [v2 component input requirements](docs/v2-component-input-requirements.zh.md)
@@ -159,6 +160,9 @@ BBR v2 离线 plan 预览示例：
 ```bash
 dbf plan -f examples/v2-bbr.dbf.hcl --offline
 ```
+
+从第一台测试主机的 root SSH 准备、第一份配置、validate、在线 plan、apply、再次 plan
+no-op 到 check 的完整路径见 [quickstart](docs/quickstart.zh.md)。
 
 `-f file` 可以重复传入；传入一个或多个 `-f` 时只读取这些显式指定的文件，不传时读取当前目录所有
 `*.dbf.hcl` 并按文件名排序。

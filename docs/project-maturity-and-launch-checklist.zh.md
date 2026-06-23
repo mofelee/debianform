@@ -131,7 +131,7 @@
 - [x] [CLI 文档](cli.zh.md) 说明 `--host`、`--parallel` 和 `--lock-timeout`。
 - [x] [v2 state](v2-state.md) 说明 state path、lock path、ownership、lock 和 atomic write。
 - [x] [release quick runbook](release-quick-runbook.zh.md) 说明发布前、发布中、发布后和回滚流程。
-- [ ] 新增独立 quickstart，覆盖准备 SSH 用户、写第一份配置、validate、在线 plan、apply、check。
+- [x] 新增独立 quickstart，覆盖准备 SSH 用户、写第一份配置、validate、在线 plan、apply、check。
 - [ ] 新增 operations/runbook，覆盖 stale lock、apply 中途失败、state 与远端不一致、资源移除和恢复步骤。
 - [ ] 新增常见故障排查文档，使用真实错误信息和修复步骤。
 - [ ] 新增简明支持矩阵，把 DSL block、resource/domain 类型和当前稳定性放在一处。
@@ -157,7 +157,7 @@
 - [ ] Linux arm64 安装路径自动验证。
 - [ ] Linux Homebrew 路径自动验证或明确 best-effort 策略。
 - [ ] 更完整的 operations/runbook 文档。
-- [ ] 更完整的 quickstart 文档。
+- [x] 更完整的 quickstart 文档。
 - [x] 依赖漏洞扫描进入 CI。
 - [ ] release notes 模板，固定包含 breaking changes、known issues、verification matrix 和 migration notes。
 - [ ] beta 用户反馈入口和 triage 流程。
@@ -238,7 +238,7 @@
 - [x] [v2 state](v2-state.md) 文档存在。
 - [x] [v2 plan format](v2-plan-format.md) 文档存在。
 - [x] 发布流程、自动化计划和快速操作手册存在。
-- [ ] 面向新用户的一页 quickstart 还不够独立。
+- [x] 面向新用户的一页 quickstart 已独立成文。
 - [ ] 面向运维恢复的 runbook 还不够完整。
 - [ ] 面向 stable 的 compatibility policy 和 migration policy 还未成文。
 
@@ -287,6 +287,8 @@
 - [x] 本地代码质量、race 单测、build 和 integration layout 检查通过。
 - [x] 已新增集中式 secret redaction 回归矩阵，覆盖 text/json/html plan、CLI
       stdout/stderr、HostSpec、ResourceGraph desired、state 和 native provider preview/error。
+- [x] 已新增独立 quickstart，覆盖 root SSH 准备、第一份配置、validate、offline/online
+      plan、apply、no-op plan 和 check。
 - [x] 发布、安装和供应链自动化已从计划状态推进为仓库内可执行配置。
 - [x] 正式 public beta `v0.1.0-beta.2` 已按 release runbook 创建 tag，并确认 CI、GitHub Release、Homebrew tap 和 clean install 验证全部通过。
 - [ ] stable/GA 仍需要真实使用反馈、兼容性政策、state migration 策略和恢复手册。
