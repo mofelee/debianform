@@ -71,3 +71,6 @@ delete 和 destroy。
 
 state 使用临时文件写入并通过同目录 `mv` 原子替换。apply 每成功执行一个资源节点后
 立即写回 state，因此中途失败时 state 只包含已经成功的节点。
+
+state schema 兼容性、版本检测、自动迁移、备份和回滚边界见
+[compatibility policy](compatibility-policy.zh.md)。

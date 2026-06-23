@@ -30,7 +30,7 @@
 - [x] README 已明确 beta/public preview、支持范围、安装、升级、校验和示例边界。
 - [x] 正式 public beta tag `v0.1.0-beta.2` 已完成端到端发布确认。
 - [ ] 还缺真实低风险 Debian 13 主机上的小范围 beta 使用反馈。
-- [ ] 还缺 stable 所需的兼容性、迁移和长期支持承诺。
+- [ ] 还缺 stable 所需的长期支持承诺和多 release 验证。
 
 ## 发布定位检查
 
@@ -169,9 +169,9 @@
 - [ ] 连续多个 release 没有破坏性 DSL/state/plan JSON 变更。
 - [ ] 多个真实用户或多组真实主机稳定使用。
 - [ ] CI 和 libvirt integration tests 长期稳定，flaky 情况有记录和处理。
-- [ ] 明确 backward compatibility policy。
-- [ ] 明确 state schema migration policy。
-- [ ] 明确 plan JSON format compatibility policy。
+- [x] 明确 backward compatibility policy。
+- [x] 明确 state schema migration policy。
+- [x] 明确 plan JSON format compatibility policy。
 - [ ] release、安装、升级、回滚路径经过多个正式 release 验证。
 - [ ] 安全文档包含 root-only SSH 执行模型、权限边界、secret 处理和漏洞响应流程。
 - [x] 常见失败场景都有可执行恢复步骤。
@@ -197,7 +197,7 @@
 - [x] DAG 调度和多 host apply 并发控制已实现。
 - [x] plan 支持 text、JSON 和静态 HTML。
 - [x] domain 覆盖 kernel/sysctl、files/secrets/directories、users/groups、systemd/services、APT、nftables、component binary/archive/file/ca_certificate/source build。
-- [ ] stable 级别的兼容性和迁移策略尚未完成。
+- [x] stable 级别的兼容性和迁移策略已成文，仍需多个 release 验证执行效果。
 
 ### 测试覆盖
 
@@ -242,7 +242,7 @@
 - [x] 发布流程、自动化计划和快速操作手册存在。
 - [x] 面向新用户的一页 quickstart 已独立成文。
 - [x] 面向运维恢复的 runbook 已覆盖 stale lock、失败 apply、drift、资源移除和常见错误恢复。
-- [ ] 面向 stable 的 compatibility policy 和 migration policy 还未成文。
+- [x] 面向 stable 的 compatibility policy 和 migration policy 已成文。
 
 ## 建议发布决策
 
@@ -258,8 +258,8 @@
 不应发布 stable/GA 的原因：
 
 - [ ] 真实用户和真实主机验证不足。
-- [ ] state/schema migration policy 尚未完成。
-- [ ] backward compatibility policy 尚未完成。
+- [x] state/schema migration policy 已成文。
+- [x] backward compatibility policy 已成文。
 - [ ] 还没有连续多个正式 release 的稳定记录。
 
 已缓解的 stable 阻塞项：
@@ -296,7 +296,7 @@
       plan、apply、no-op plan 和 check。
 - [x] 发布、安装和供应链自动化已从计划状态推进为仓库内可执行配置。
 - [x] 正式 public beta `v0.1.0-beta.2` 已按 release runbook 创建 tag，并确认 CI、GitHub Release、Homebrew tap 和 clean install 验证全部通过。
-- [ ] stable/GA 仍需要真实使用反馈、兼容性政策和 state migration 策略。
+- [ ] stable/GA 仍需要真实使用反馈和多个 release 验证兼容性政策执行效果。
 
 ### 2026-06-23 operations runbook 补充
 
@@ -372,3 +372,17 @@
 
 - [x] public beta 现在有一个不依赖外网、不包含真实 secret、可 `validate` 和
       `plan --offline` 的真实部署模板。
+
+### 2026-06-23 兼容性和迁移政策补充
+
+本次检查命令：
+
+- [x] 核对 release process、release notes template、v2 state 和 v2 plan format 现有口径。
+- [x] 新增 `docs/compatibility-policy.zh.md`，覆盖 beta/stable 阶段、DSL/CLI
+      兼容性、state schema migration 和 plan JSON format compatibility。
+- [x] README、release process、v2 state、v2 plan format 和 support matrix 增加入口。
+
+结论：
+
+- [x] stable 前需要成文的 backward compatibility、state migration 和 plan JSON
+      compatibility policy 已经补齐；stable 仍需要多个 release 的执行记录和真实反馈。

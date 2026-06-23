@@ -6,7 +6,8 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
-- No changes yet.
+- Added a compatibility and migration policy covering CLI/DSL compatibility,
+  state schema migration rules, and plan JSON format compatibility.
 
 ## v0.1.0-beta.2
 

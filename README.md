@@ -102,6 +102,8 @@ gh attestation verify dbf_<tag>_linux_amd64.tar.gz --repo mofelee/debianform
 旧实验配置格式已废弃，不再作为 CLI 入口或兼容目标。v2 文件必须使用 `host`、
 `profile`、`component`、`locals` 等 v2 顶层块；旧式低阶 resource DSL 需要迁移为
 v2 领域块或 component。
+DSL、CLI、state schema 和 plan JSON 的 beta/stable 兼容规则见
+[compatibility policy](docs/compatibility-policy.zh.md)。
 
 ## v2 设计文档
 
@@ -113,6 +115,7 @@ v2 领域块或 component。
 - [v2 plan format](docs/v2-plan-format.md)
 - [v2 state](docs/v2-state.md)
 - [support matrix](docs/support-matrix.zh.md)
+- [compatibility policy](docs/compatibility-policy.zh.md)
 - [beta feedback and triage](docs/beta-feedback-triage.zh.md)
 - [v2 systemd service units](docs/v2-systemd-service-units.md)
 - [v2 implementation plan](docs/v2-implementation-plan.zh.md)

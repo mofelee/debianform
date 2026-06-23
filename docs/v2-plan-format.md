@@ -2,6 +2,8 @@
 
 本文档定义 v2 `dbf plan --format json` 的当前 alpha 格式。它也是终端树状 diff 和
 `dbf plan --html plan.html` 静态 preview 的输入模型。
+格式版本兼容性、破坏性变更规则和消费者建议见
+[compatibility policy](compatibility-policy.zh.md)。
 
 v2 plan format 的目标：
 

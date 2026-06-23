@@ -3,6 +3,8 @@
 本文档把 DebianForm 当前可承诺的 CLI 平台、目标主机、v2 DSL block、domain/resource 类型和
 验证覆盖放在一处。项目仍处于 public preview / beta 阶段；这里的“支持”表示当前仓库中存在实现、
 文档和自动化验证入口，不等同于 stable/GA 兼容性承诺。
+DSL、CLI、state schema 和 plan JSON 的具体兼容规则见
+[compatibility policy](compatibility-policy.zh.md)。
 
 ## 状态定义
 
@@ -158,9 +160,7 @@
 
 - 真实 beta 用户反馈仍在收集中；反馈入口和 triage 流程见
   [beta feedback and triage](beta-feedback-triage.zh.md)。
-- Stable/GA 级别 backward compatibility policy。
-- State schema migration policy。
-- Plan JSON format compatibility policy。
+- Stable/GA 级别兼容性政策已经成文；仍需多个 release 验证执行效果。
 - `.deb` 包和 apt repository 发布渠道。
 - sudo/become/非 root 管理连接。
 - 非 Debian 目标系统。

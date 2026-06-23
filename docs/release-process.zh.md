@@ -5,6 +5,8 @@ macOS 上用 `curl` 或 Homebrew 安装 `dbf`，并支持 `amd64` 和 `arm64`。
 
 自动化落地步骤见 [release automation plan](release-automation-plan.zh.md)。
 日常发布操作见 [release quick runbook](release-quick-runbook.zh.md)。
+DSL、CLI、state schema 和 plan JSON 的兼容性规则见
+[compatibility policy](compatibility-policy.zh.md)。
 
 ## 支持矩阵
 
@@ -33,6 +35,8 @@ CLI 发布产物覆盖：
 - tag 必须以 `v` 开头，并且必须来自 CI 全绿的 commit。
 - 破坏性 DSL、state 或 plan JSON 变更只能进入 minor 版本，并必须写入 release notes。
 - beta 阶段允许破坏性变更，但 release notes 必须明确迁移影响。
+  具体判断和 state/plan JSON 迁移要求以 [compatibility policy](compatibility-policy.zh.md)
+  为准。
 
 ## Release Artifacts
 
@@ -115,6 +119,8 @@ make test-integration
 - `LICENSE` 存在。
 - `CHANGELOG.md` 存在并包含当前版本条目。
 - README 包含安装、升级和支持矩阵入口。
+- compatibility policy 已检查破坏性 DSL/state/plan JSON 变更、state migration 和
+  plan JSON format version 影响。
 - GitHub Actions 在目标 commit 上全绿。
 - 至少一个真实或 libvirt Debian 13 flow 完成 `validate`、`apply`、再次 `plan`
   no-op 和 `check`。
@@ -369,7 +375,7 @@ P2：
 
 - apt repository。
 - 进入 `homebrew/core` 的可行性评估。
-- state/schema migration policy。
+- 持续执行 compatibility policy 中的 stable gate。
 
 发布自动化的具体 loop、验收命令和人工介入点见
 [release automation plan](release-automation-plan.zh.md)。
