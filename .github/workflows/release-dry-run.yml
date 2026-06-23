@@ -45,7 +45,17 @@ jobs:
             go.sum
 
       - name: Install GoReleaser
-        run: go install github.com/goreleaser/goreleaser/v2@v2.16.0
+        env:
+          GORELEASER_VERSION: 2.16.0
+        run: |
+          archive="goreleaser_Linux_x86_64.tar.gz"
+          base_url="https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}"
+          curl --fail --location --retry 3 --show-error --silent --output "${archive}" "${base_url}/${archive}"
+          curl --fail --location --retry 3 --show-error --silent --output checksums.txt "${base_url}/checksums.txt"
+          grep " ${archive}$" checksums.txt | sha256sum --check -
+          tar -xzf "${archive}" goreleaser
+          install -D -m 0755 goreleaser "${HOME}/.local/bin/goreleaser"
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
 
       - name: Run static analysis
         run: go vet ./...
