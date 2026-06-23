@@ -3,6 +3,7 @@ PACKAGE := ./cmd/dbf
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 DATADIR ?= $(PREFIX)/share/debianform
+GOVULNCHECK_VERSION ?= v1.4.0
 DESTDIR ?=
 INSTALL ?= install
 VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || echo dev)
@@ -15,7 +16,7 @@ LDFLAGS := -s -w \
 	-X $(VERSION_PACKAGE).Commit=$(COMMIT) \
 	-X $(VERSION_PACKAGE).Date=$(BUILD_DATE)
 
-.PHONY: build install test test-unit update-golden test-integration test-integration-case test-integration-layout test-integration-source-build clean
+.PHONY: build install test test-unit vulncheck update-golden test-integration test-integration-case test-integration-layout test-integration-source-build clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PACKAGE)
@@ -32,6 +33,9 @@ test:
 
 test-unit:
 	go test -race -count=1 ./...
+
+vulncheck:
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 update-golden:
 	UPDATE_GOLDEN=1 go test ./...

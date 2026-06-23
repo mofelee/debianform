@@ -16,6 +16,7 @@
 - [x] `go vet ./...`
 - [x] `go test ./...`
 - [x] `go test -race -count=1 ./...`
+- [x] `make vulncheck`
 - [x] `make build`
 - [x] `make test-integration-layout`
 - [x] GitHub Actions CI 等价完整 Debian 13 libvirt VM 矩阵：
@@ -112,8 +113,8 @@
 - [x] [v2 plan format](v2-plan-format.md) 说明 sensitive diff 不输出明文。
 - [x] README 说明远程 URL artifact 必须声明 64 位 sha256。
 - [x] WireGuard integration checks 覆盖 private key 不写入 state 明文。
-- [ ] 增加 `govulncheck` 或等价依赖漏洞扫描。
-- [ ] 增加 Dependabot/Renovate 或等价依赖更新策略。
+- [x] 增加 `govulncheck` 或等价依赖漏洞扫描。
+- [x] 增加 Dependabot/Renovate 或等价依赖更新策略。
 - [x] README 说明 root-only SSH 执行模型，不支持 sudo/become/非 root 管理连接。
 - [x] [CLI 文档](cli.zh.md) 说明 root-only SSH 执行模型。
 - [x] [v2 requirements](v2-requirements.md) 说明 root-only 权限边界。
@@ -157,7 +158,7 @@
 - [ ] Linux Homebrew 路径自动验证或明确 best-effort 策略。
 - [ ] 更完整的 operations/runbook 文档。
 - [ ] 更完整的 quickstart 文档。
-- [ ] 依赖漏洞扫描进入 CI。
+- [x] 依赖漏洞扫描进入 CI。
 - [ ] release notes 模板，固定包含 breaking changes、known issues、verification matrix 和 migration notes。
 - [ ] beta 用户反馈入口和 triage 流程。
 - [ ] 真实部署模板或小型案例。
@@ -269,6 +270,7 @@
 - [x] `go vet ./...`
 - [x] `go test ./...`
 - [x] `go test -race -count=1 ./...`
+- [x] `make vulncheck`
 - [x] `make build`
 - [x] `make test-integration-layout`
 - [x] GitHub Actions CI 等价完整 libvirt 矩阵：`28015644419`
