@@ -96,6 +96,39 @@
     ]
   },
   {
+    "fixture": "../../../examples/v2-docker-compose.dbf.hcl",
+    "hosts": [
+      {
+        "name": "compose1",
+        "body_keys": [
+          "docker"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-docker-daemon.dbf.hcl",
+    "hosts": [
+      {
+        "name": "docker-daemon1",
+        "body_keys": [
+          "docker"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/v2-docker-minimal.dbf.hcl",
+    "hosts": [
+      {
+        "name": "docker1",
+        "body_keys": [
+          "docker"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/v2-files-plan-preview.dbf.hcl",
     "hosts": [
       {

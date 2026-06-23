@@ -1144,6 +1144,124 @@ host "edge1" {
 	}
 }
 
+func TestParseDockerSourcePaths(t *testing.T) {
+	file := writeConfig(t, `
+host "docker1" {
+  docker {
+    enable = true
+
+    daemon {
+      settings = {
+        "log-driver" = "json-file"
+      }
+    }
+
+    compose "app" {
+      directory = "/opt/app"
+
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+
+      env_file "app" {
+        path    = "/opt/app/.env"
+        content = "TOKEN=example\n"
+      }
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	docker := cfg.Hosts["docker1"].Body.Map["docker"]
+	if docker.Map["enable"].Source.Path != "host.docker1.docker.enable" {
+		t.Fatalf("enable source path = %q", docker.Map["enable"].Source.Path)
+	}
+	daemon := docker.Map["daemon"]
+	if daemon.Map["settings"].Source.Path != "host.docker1.docker.daemon.settings" {
+		t.Fatalf("daemon settings source path = %q", daemon.Map["settings"].Source.Path)
+	}
+	compose := docker.Map["compose"].Map["app"]
+	if compose.Source.Path != `host.docker1.docker.compose["app"]` {
+		t.Fatalf("compose source path = %q", compose.Source.Path)
+	}
+	fileBlock := compose.Map["file"]
+	if fileBlock.Map["content"].Source.Path != `host.docker1.docker.compose["app"].file.content` {
+		t.Fatalf("compose file content source path = %q", fileBlock.Map["content"].Source.Path)
+	}
+	envFile := compose.Map["env_file"].Map["app"]
+	if envFile.Map["path"].Source.Path != `host.docker1.docker.compose["app"].env_file["app"].path` {
+		t.Fatalf("env file path source path = %q", envFile.Map["path"].Source.Path)
+	}
+}
+
+func TestParseDockerMinimalAndMultipleEnvFiles(t *testing.T) {
+	file := writeConfig(t, `
+host "docker1" {
+  docker {
+    enable = true
+
+    compose "app" {
+      directory = "/opt/app"
+
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+
+      env_file "app" {
+        path    = "/opt/app/.env"
+        content = "APP_ENV=prod\n"
+      }
+
+      env_file "secret" {
+        path    = "/opt/app/.env.secret"
+        content = "TOKEN=example\n"
+      }
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	docker := cfg.Hosts["docker1"].Body.Map["docker"]
+	if docker.Map["enable"].Kind != KindBool || !docker.Map["enable"].Bool {
+		t.Fatalf("docker enable = %#v, want true", docker.Map["enable"])
+	}
+	envFiles := docker.Map["compose"].Map["app"].Map["env_file"].Map
+	if len(envFiles) != 2 {
+		t.Fatalf("env files = %d, want 2", len(envFiles))
+	}
+}
+
+func TestParseRejectsDuplicateDockerCompose(t *testing.T) {
+	file := writeConfig(t, `
+host "docker1" {
+  docker {
+    compose "app" {
+      directory = "/opt/app"
+    }
+
+    compose "app" {
+      directory = "/opt/app2"
+    }
+  }
+}
+`)
+
+	_, err := ParseFiles([]string{file})
+	if err == nil || !strings.Contains(err.Error(), `duplicate host.docker1.docker.compose["app"]`) {
+		t.Fatalf("ParseFiles() error = %v, want duplicate compose label", err)
+	}
+}
+
 func TestParseRunnableV2ExamplesGolden(t *testing.T) {
 	summaries := []parsedExampleSummary{}
 	for _, fixture := range runnableV2ExampleFixtures() {
@@ -1173,6 +1291,9 @@ func runnableV2ExampleFixtures() []string {
 		"../../../examples/v2-component-binary.dbf.hcl",
 		"../../../examples/v2-component-inputs.dbf.hcl",
 		"../../../examples/v2-component-source-build.dbf.hcl",
+		"../../../examples/v2-docker-compose.dbf.hcl",
+		"../../../examples/v2-docker-daemon.dbf.hcl",
+		"../../../examples/v2-docker-minimal.dbf.hcl",
 		"../../../examples/v2-files-plan-preview.dbf.hcl",
 		"../../../examples/v2-mihomo.dbf.hcl",
 		"../../../examples/v2-nftables.dbf.hcl",

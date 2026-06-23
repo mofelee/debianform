@@ -958,6 +958,18 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext,
 				return nil, nil, Value{}, nil, err
 			}
 			values[block.Type] = value
+		case "docker":
+			if len(block.Labels) != 0 {
+				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: docker block must not have labels", file, block.TypeRange.Start.Line)
+			}
+			if _, exists := values["docker"]; exists {
+				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: duplicate %s.docker block", file, block.TypeRange.Start.Line, path)
+			}
+			value, err := parseDockerBlock(file, path+".docker", block, ctx)
+			if err != nil {
+				return nil, nil, Value{}, nil, err
+			}
+			values["docker"] = value
 		case "component":
 			if !allowComponents {
 				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: %s.component is host-only and cannot be declared in profile", file, block.TypeRange.Start.Line, path)
@@ -982,6 +994,174 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext,
 	}
 
 	return imports, components, MapValue(values, ir.SourceRef{File: file, Line: body.SrcRange.Start.Line, Path: path}), asserts, nil
+}
+
+func parseDockerBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	values := map[string]Value{}
+	allowed := attrSet("enable", "users")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "package", "service", "daemon":
+			if len(child.Labels) != 0 {
+				return Value{}, fmt.Errorf("%s:%d: %s.%s block must not have labels", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if _, exists := values[child.Type]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.%s block", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			object, err := parseDockerObjectBlock(file, path+"."+child.Type, child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values[child.Type] = object
+		case "compose":
+			if len(child.Labels) != 1 {
+				return Value{}, fmt.Errorf("%s:%d: %s.compose block requires exactly one label", file, child.TypeRange.Start.Line, path)
+			}
+			label := child.Labels[0]
+			objectPath := fmt.Sprintf("%s.compose[%s]", path, strconv.Quote(label))
+			object, err := parseDockerComposeBlock(file, objectPath, child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			collection, ok := values["compose"]
+			if !ok {
+				collection = MapValue(nil, ir.SourceRef{File: file, Line: child.TypeRange.Start.Line, Path: path + ".compose"})
+			}
+			if _, exists := collection.Map[label]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
+			}
+			collection.Map[label] = object
+			values["compose"] = collection
+		default:
+			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseDockerObjectBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	var allowed map[string]struct{}
+	switch block.Type {
+	case "package":
+		allowed = attrSet("source", "channel", "version", "remove_conflicts")
+	case "service":
+		allowed = attrSet("enable", "state")
+	case "daemon":
+		allowed = attrSet("settings")
+	default:
+		return Value{}, fmt.Errorf("%s:%d: unsupported block %s", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	values := map[string]Value{}
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseDockerComposeBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	values := map[string]Value{}
+	allowed := attrSet("enable", "state", "directory", "project", "pull", "recreate", "remove_orphans", "after", "wanted_by")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "file", "service":
+			if len(child.Labels) != 0 {
+				return Value{}, fmt.Errorf("%s:%d: %s.%s block must not have labels", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if _, exists := values[child.Type]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.%s block", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			object, err := parseDockerComposeObjectBlock(file, path+"."+child.Type, child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values[child.Type] = object
+		case "env_file":
+			if len(child.Labels) != 1 {
+				return Value{}, fmt.Errorf("%s:%d: %s.env_file block requires exactly one label", file, child.TypeRange.Start.Line, path)
+			}
+			label := child.Labels[0]
+			objectPath := fmt.Sprintf("%s.env_file[%s]", path, strconv.Quote(label))
+			object, err := parseDockerComposeObjectBlock(file, objectPath, child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			collection, ok := values["env_file"]
+			if !ok {
+				collection = MapValue(nil, ir.SourceRef{File: file, Line: child.TypeRange.Start.Line, Path: path + ".env_file"})
+			}
+			if _, exists := collection.Map[label]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
+			}
+			collection.Map[label] = object
+			values["env_file"] = collection
+		default:
+			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseDockerComposeObjectBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	var allowed map[string]struct{}
+	switch block.Type {
+	case "file", "env_file":
+		allowed = attrSet("path", "content", "source", "owner", "group", "mode")
+	case "service":
+		allowed = attrSet("enable", "name")
+	default:
+		return Value{}, fmt.Errorf("%s:%d: unsupported block %s", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	values := map[string]Value{}
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
 }
 
 func parseComponentRefs(file, path string, expr hcl.Expression) ([]ComponentInstance, error) {
@@ -1333,6 +1513,9 @@ func validateDomainBlockShape(file, path string, block *hclsyntax.Block) error {
 			values["networkd"] = struct{}{}
 			continue
 		}
+		if block.Type == "docker" {
+			return validateDockerBlockShape(file, path, block)
+		}
 		if _, ok := allowedBlocks[child.Type]; !ok {
 			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
 		}
@@ -1353,6 +1536,135 @@ func validateDomainBlockShape(file, path string, block *hclsyntax.Block) error {
 			return fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
 		}
 		collection[label] = struct{}{}
+	}
+	return nil
+}
+
+func validateDockerBlockShape(file, path string, block *hclsyntax.Block) error {
+	if len(block.Labels) != 0 {
+		return fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	allowed := attrSet("enable", "users")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	values := map[string]struct{}{}
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "package", "service", "daemon":
+			if len(child.Labels) != 0 {
+				return fmt.Errorf("%s:%d: %s.%s block must not have labels", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if _, exists := values[child.Type]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.%s block", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if err := validateDockerObjectBlockShape(file, path+"."+child.Type, child); err != nil {
+				return err
+			}
+			values[child.Type] = struct{}{}
+		case "compose":
+			if len(child.Labels) != 1 {
+				return fmt.Errorf("%s:%d: %s.compose block requires exactly one label", file, child.TypeRange.Start.Line, path)
+			}
+			label := child.Labels[0]
+			objectPath := fmt.Sprintf("%s.compose[%s]", path, strconv.Quote(label))
+			if _, exists := values[objectPath]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
+			}
+			if err := validateDockerComposeBlockShape(file, objectPath, child); err != nil {
+				return err
+			}
+			values[objectPath] = struct{}{}
+		default:
+			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return nil
+}
+
+func validateDockerObjectBlockShape(file, path string, block *hclsyntax.Block) error {
+	var allowed map[string]struct{}
+	switch block.Type {
+	case "package":
+		allowed = attrSet("source", "channel", "version", "remove_conflicts")
+	case "service":
+		allowed = attrSet("enable", "state")
+	case "daemon":
+		allowed = attrSet("settings")
+	default:
+		return fmt.Errorf("%s:%d: unsupported block %s", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	return nil
+}
+
+func validateDockerComposeBlockShape(file, path string, block *hclsyntax.Block) error {
+	allowed := attrSet("enable", "state", "directory", "project", "pull", "recreate", "remove_orphans", "after", "wanted_by")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	values := map[string]struct{}{}
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "file", "service":
+			if len(child.Labels) != 0 {
+				return fmt.Errorf("%s:%d: %s.%s block must not have labels", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if _, exists := values[child.Type]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.%s block", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if err := validateDockerComposeObjectBlockShape(file, path+"."+child.Type, child); err != nil {
+				return err
+			}
+			values[child.Type] = struct{}{}
+		case "env_file":
+			if len(child.Labels) != 1 {
+				return fmt.Errorf("%s:%d: %s.env_file block requires exactly one label", file, child.TypeRange.Start.Line, path)
+			}
+			label := child.Labels[0]
+			objectPath := fmt.Sprintf("%s.env_file[%s]", path, strconv.Quote(label))
+			if _, exists := values[objectPath]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
+			}
+			if err := validateDockerComposeObjectBlockShape(file, objectPath, child); err != nil {
+				return err
+			}
+			values[objectPath] = struct{}{}
+		default:
+			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return nil
+}
+
+func validateDockerComposeObjectBlockShape(file, path string, block *hclsyntax.Block) error {
+	var allowed map[string]struct{}
+	switch block.Type {
+	case "file", "env_file":
+		allowed = attrSet("path", "content", "source", "owner", "group", "mode")
+	case "service":
+		allowed = attrSet("enable", "name")
+	default:
+		return fmt.Errorf("%s:%d: unsupported block %s", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
 	}
 	return nil
 }

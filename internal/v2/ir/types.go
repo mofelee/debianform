@@ -29,6 +29,7 @@ type HostSpec struct {
 	Systemd     SystemdSpec             `json:"systemd"`
 	Services    ServiceSpec             `json:"services"`
 	Nftables    NftablesSpec            `json:"nftables"`
+	Docker      *DockerSpec             `json:"docker,omitempty"`
 	Components  []ComponentInstanceSpec `json:"components,omitempty"`
 }
 
@@ -335,6 +336,72 @@ type NftablesFileSpec struct {
 	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
 	Summary    ContentSummary `json:"summary,omitempty"`
 	Source     SourceRef      `json:"source,omitempty"`
+}
+
+type DockerSpec struct {
+	Enable   bool                         `json:"enable"`
+	Package  DockerPackageSpec            `json:"package"`
+	Service  DockerServiceSpec            `json:"service"`
+	Daemon   *DockerDaemonSpec            `json:"daemon,omitempty"`
+	Users    []string                     `json:"users,omitempty"`
+	Composes map[string]DockerComposeSpec `json:"compose,omitempty"`
+	Source   SourceRef                    `json:"source,omitempty"`
+}
+
+type DockerPackageSpec struct {
+	Source          string    `json:"source"`
+	Channel         string    `json:"channel,omitempty"`
+	Version         *string   `json:"version,omitempty"`
+	RemoveConflicts string    `json:"remove_conflicts"`
+	SourceRef       SourceRef `json:"source_ref,omitempty"`
+}
+
+type DockerServiceSpec struct {
+	Enable    bool      `json:"enable"`
+	State     string    `json:"state"`
+	Name      string    `json:"name"`
+	SourceRef SourceRef `json:"source_ref,omitempty"`
+}
+
+type DockerDaemonSpec struct {
+	Settings map[string]any `json:"settings"`
+	Source   SourceRef      `json:"source,omitempty"`
+	Summary  ContentSummary `json:"summary,omitempty"`
+}
+
+type DockerComposeSpec struct {
+	Name          string                           `json:"name"`
+	Enable        bool                             `json:"enable"`
+	State         string                           `json:"state"`
+	Directory     string                           `json:"directory"`
+	Project       string                           `json:"project"`
+	File          *DockerComposeFileSpec           `json:"file,omitempty"`
+	EnvFiles      map[string]DockerComposeFileSpec `json:"env_file,omitempty"`
+	Pull          string                           `json:"pull"`
+	Recreate      string                           `json:"recreate"`
+	RemoveOrphans bool                             `json:"remove_orphans"`
+	Service       DockerComposeServiceSpec         `json:"service"`
+	After         []string                         `json:"after,omitempty"`
+	WantedBy      []string                         `json:"wanted_by,omitempty"`
+	Source        SourceRef                        `json:"source,omitempty"`
+}
+
+type DockerComposeFileSpec struct {
+	Label      string         `json:"label,omitempty"`
+	Path       string         `json:"path"`
+	Content    string         `json:"content,omitempty"`
+	SourcePath string         `json:"source_path,omitempty"`
+	Owner      string         `json:"owner"`
+	Group      string         `json:"group"`
+	Mode       string         `json:"mode"`
+	Sensitive  bool           `json:"sensitive,omitempty"`
+	Summary    ContentSummary `json:"summary,omitempty"`
+	Source     SourceRef      `json:"source,omitempty"`
+}
+
+type DockerComposeServiceSpec struct {
+	Enable bool   `json:"enable"`
+	Name   string `json:"name"`
 }
 
 type ContentSummary struct {

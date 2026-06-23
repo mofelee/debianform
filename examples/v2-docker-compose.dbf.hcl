@@ -1,0 +1,36 @@
+# DebianForm v2 Docker Compose 示例。
+#
+# Compose 的原生 YAML 仍然由 compose.yaml 表达；DebianForm 管理 project 文件、
+# env 文件、校验、systemd unit 和 project 状态。
+
+host "compose1" {
+  docker {
+    enable = true
+
+    compose "app" {
+      state     = "running"
+      directory = "/opt/app"
+
+      file {
+        path = "/opt/app/compose.yaml"
+
+        content = <<-YAML
+          services:
+            web:
+              image: nginx:1.27-alpine
+              ports:
+                - "8080:80"
+        YAML
+      }
+
+      env_file "app" {
+        path    = "/opt/app/.env"
+        content = "NGINX_HOST=localhost\n"
+        mode    = "0600"
+      }
+
+      after     = ["docker.service", "network-online.target"]
+      wanted_by = ["multi-user.target"]
+    }
+  }
+}

@@ -22,10 +22,11 @@
 - [x] v2 已有 APT repository、APT signing key、package、file、directory、group、systemd unit、service 和 operation provider
 - [x] v2 已有 runtime facts discovery，可在线探测 `system.architecture` 和 `system.codename`
 - [x] v2 已有 fake runner / memory provider 测试基础
-- [ ] 尚未支持顶层 `docker` DSL
-- [ ] 尚未支持 Docker daemon JSON 高阶配置
-- [ ] 尚未支持 Docker Compose project 高阶对象
+- [x] 已支持顶层 `docker` DSL 的 validate / HostSpec 编译
+- [x] 已支持 Docker daemon JSON 高阶配置的 validate / HostSpec 编译
+- [x] 已支持 Docker Compose project 高阶对象的 validate / HostSpec 编译
 - [ ] 尚未支持 Compose project 状态漂移检测
+- [ ] 尚未支持 Docker ResourceGraph / plan / apply / check 展开
 
 ## 总体实现边界
 
@@ -79,50 +80,50 @@ MVP 不包含：
 
 代码：
 
-- [ ] parser 支持 host/profile 内的 `docker` block
-- [ ] parser 支持 `compose "<name>"` 和 `env_file "<name>"` labeled block
-- [ ] IR 增加 `DockerSpec`、`DockerPackageSpec`、`DockerServiceSpec`、`DockerDaemonSpec`
-- [ ] IR 增加 `DockerComposeSpec`、`DockerComposeFileSpec`、`DockerComposeEnvFileSpec`
-- [ ] merge 支持 `docker` block 在 profile 和 host 之间合并
-- [ ] merge 支持多个 `compose` project 按 label 合并
-- [ ] merge 支持多个 `env_file` 按 label 合并
-- [ ] 默认填充 `package.source = "official"`、`package.channel = "stable"`
-- [ ] 默认填充 `service.enable = true`、`service.state = "running"`
-- [ ] 默认填充 `compose.enable = true`、`compose.state = "running"`
-- [ ] 默认填充 `compose.project = <compose label>`
-- [ ] 默认填充 compose file owner/group/mode 为 `root/root/0644`
-- [ ] 默认填充 env file owner/group/mode 为 `root/root/0600`
-- [ ] `daemon.settings` 保留为 JSON-compatible map/list/scalar，并拒绝不能序列化为 JSON 的值
-- [ ] 校验 `package.source` 只能是 `official`、`debian`、`none`、`custom`
-- [ ] 校验 `package.remove_conflicts` 只能是 `auto`、`true`、`false`
-- [ ] 校验 service state 只能是 `running`、`stopped`
-- [ ] 校验 compose state 只能是 `running`、`stopped`、`absent`
-- [ ] 校验 compose `pull` 只能是 `never`、`missing`、`always`
-- [ ] 校验 compose `recreate` 只能是 `auto`、`always`、`never`
-- [ ] 校验 compose `directory` 在启用 compose project 时必填
-- [ ] 校验 compose `file.path` 和 `file.content/source` 语义
-- [ ] 校验 compose project label、project name、systemd service name 非空且稳定
+- [x] parser 支持 host/profile 内的 `docker` block
+- [x] parser 支持 `compose "<name>"` 和 `env_file "<name>"` labeled block
+- [x] IR 增加 `DockerSpec`、`DockerPackageSpec`、`DockerServiceSpec`、`DockerDaemonSpec`
+- [x] IR 增加 `DockerComposeSpec`、`DockerComposeFileSpec`、`DockerComposeEnvFileSpec`
+- [x] merge 支持 `docker` block 在 profile 和 host 之间合并
+- [x] merge 支持多个 `compose` project 按 label 合并
+- [x] merge 支持多个 `env_file` 按 label 合并
+- [x] 默认填充 `package.source = "official"`、`package.channel = "stable"`
+- [x] 默认填充 `service.enable = true`、`service.state = "running"`
+- [x] 默认填充 `compose.enable = true`、`compose.state = "running"`
+- [x] 默认填充 `compose.project = <compose label>`
+- [x] 默认填充 compose file owner/group/mode 为 `root/root/0644`
+- [x] 默认填充 env file owner/group/mode 为 `root/root/0600`
+- [x] `daemon.settings` 保留为 JSON-compatible map/list/scalar，并拒绝不能序列化为 JSON 的值
+- [x] 校验 `package.source` 只能是 `official`、`debian`、`none`、`custom`
+- [x] 校验 `package.remove_conflicts` 只能是 `auto`、`true`、`false`
+- [x] 校验 service state 只能是 `running`、`stopped`
+- [x] 校验 compose state 只能是 `running`、`stopped`、`absent`
+- [x] 校验 compose `pull` 只能是 `never`、`missing`、`always`
+- [x] 校验 compose `recreate` 只能是 `auto`、`always`、`never`
+- [x] 校验 compose `directory` 在启用 compose project 时必填
+- [x] 校验 compose `file.path` 和 `file.content/source` 语义
+- [x] 校验 compose project label、project name、systemd service name 非空且稳定
 
 测试：
 
-- [ ] parser 单测覆盖最小 `docker { enable = true }`
-- [ ] parser 单测覆盖 daemon nested map/list settings
-- [ ] parser 单测覆盖 compose file、inline YAML、多个 env_file
-- [ ] merge 单测覆盖 profile 默认 docker 配置被 host 覆盖
-- [ ] HostSpec golden 覆盖 `v2-docker-minimal`
-- [ ] HostSpec golden 覆盖 `v2-docker-daemon`
-- [ ] HostSpec golden 覆盖 `v2-docker-compose`
-- [ ] 负例覆盖非法 enum、重复 compose label、缺失 directory、非法 file content/source 组合
+- [x] parser 单测覆盖最小 `docker { enable = true }`
+- [x] parser 单测覆盖 daemon nested map/list settings
+- [x] parser 单测覆盖 compose file、inline YAML、多个 env_file
+- [x] merge 单测覆盖 profile 默认 docker 配置被 host 覆盖
+- [x] HostSpec golden 覆盖 `v2-docker-minimal`
+- [x] HostSpec golden 覆盖 `v2-docker-daemon`
+- [x] HostSpec golden 覆盖 `v2-docker-compose`
+- [x] 负例覆盖非法 enum、重复 compose label、缺失 directory、非法 file content/source 组合
 
 示例：
 
-- [ ] 新增 `examples/v2-docker-minimal.dbf.hcl`
-- [ ] 新增 `examples/v2-docker-daemon.dbf.hcl`
-- [ ] 新增 `examples/v2-docker-compose.dbf.hcl`
+- [x] 新增 `examples/v2-docker-minimal.dbf.hcl`
+- [x] 新增 `examples/v2-docker-daemon.dbf.hcl`
+- [x] 新增 `examples/v2-docker-compose.dbf.hcl`
 
 文档：
 
-- [ ] README 增加 Docker 最小语法预览，并标明当前 loop 只完成 validate
+- [x] README 增加 Docker 最小语法预览，并标明当前 loop 只完成 validate
 
 验收：
 

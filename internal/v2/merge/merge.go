@@ -3,6 +3,7 @@ package merge
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1585,6 +1586,16 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 			return spec, err
 		}
 		spec.Nftables = compiled
+	}
+
+	if docker, ok, err := mapField(raw, "docker"); err != nil {
+		return spec, err
+	} else if ok {
+		compiled, err := dockerSpec(docker)
+		if err != nil {
+			return spec, err
+		}
+		spec.Docker = compiled
 	}
 
 	return spec, nil
@@ -3562,6 +3573,411 @@ func nftablesFileSpec(label string, item parser.Value, defaultPath string) (ir.N
 	return file, nil
 }
 
+func dockerSpec(docker parser.Value) (*ir.DockerSpec, error) {
+	enable, ok, err := boolField(docker, "enable")
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		enable = false
+	}
+	users, err := stringListField(docker, "users")
+	if err != nil {
+		return nil, err
+	}
+	packageSpec, err := dockerPackageSpec(docker)
+	if err != nil {
+		return nil, err
+	}
+	serviceSpec, err := dockerServiceSpec(docker)
+	if err != nil {
+		return nil, err
+	}
+	daemon, err := dockerDaemonSpec(docker)
+	if err != nil {
+		return nil, err
+	}
+	composes, err := dockerComposeSpecs(docker)
+	if err != nil {
+		return nil, err
+	}
+	return &ir.DockerSpec{
+		Enable:   enable,
+		Package:  packageSpec,
+		Service:  serviceSpec,
+		Daemon:   daemon,
+		Users:    users,
+		Composes: composes,
+		Source:   docker.Source,
+	}, nil
+}
+
+func dockerPackageSpec(docker parser.Value) (ir.DockerPackageSpec, error) {
+	packageBlock, ok, err := mapField(docker, "package")
+	if err != nil {
+		return ir.DockerPackageSpec{}, err
+	}
+	sourceRef := docker.Source
+	source := "official"
+	channel := "stable"
+	removeConflicts := "auto"
+	var version *string
+	if ok {
+		sourceRef = packageBlock.Source
+		if value, hasValue, err := stringField(packageBlock, "source"); err != nil {
+			return ir.DockerPackageSpec{}, err
+		} else if hasValue {
+			source = value
+		}
+		if value, hasValue, err := stringField(packageBlock, "channel"); err != nil {
+			return ir.DockerPackageSpec{}, err
+		} else if hasValue {
+			channel = value
+		}
+		if value, hasValue, err := optionalStringField(packageBlock, "version"); err != nil {
+			return ir.DockerPackageSpec{}, err
+		} else if hasValue {
+			version = value
+		}
+		if value, hasValue, err := dockerRemoveConflictsField(packageBlock, "remove_conflicts"); err != nil {
+			return ir.DockerPackageSpec{}, err
+		} else if hasValue {
+			removeConflicts = value
+		}
+	}
+	if !stringIn(source, "official", "debian", "none", "custom") {
+		errSource := sourceRef
+		if ok {
+			errSource = packageBlock.Map["source"].Source
+		}
+		return ir.DockerPackageSpec{}, enumError(errSource, "official, debian, none, or custom")
+	}
+	if channel == "" {
+		return ir.DockerPackageSpec{}, fmt.Errorf("%s:%d:%s.channel: docker package channel must be non-empty", sourceRef.File, sourceRef.Line, sourceRef.Path)
+	}
+	return ir.DockerPackageSpec{
+		Source:          source,
+		Channel:         channel,
+		Version:         version,
+		RemoveConflicts: removeConflicts,
+		SourceRef:       sourceRef,
+	}, nil
+}
+
+func dockerServiceSpec(docker parser.Value) (ir.DockerServiceSpec, error) {
+	serviceBlock, ok, err := mapField(docker, "service")
+	if err != nil {
+		return ir.DockerServiceSpec{}, err
+	}
+	sourceRef := docker.Source
+	enable := true
+	state := "running"
+	if ok {
+		sourceRef = serviceBlock.Source
+		if value, hasValue, err := boolField(serviceBlock, "enable"); err != nil {
+			return ir.DockerServiceSpec{}, err
+		} else if hasValue {
+			enable = value
+		}
+		if value, hasValue, err := stringField(serviceBlock, "state"); err != nil {
+			return ir.DockerServiceSpec{}, err
+		} else if hasValue {
+			state = value
+		}
+	}
+	if !stringIn(state, "running", "stopped") {
+		errSource := sourceRef
+		if ok {
+			errSource = serviceBlock.Map["state"].Source
+		}
+		return ir.DockerServiceSpec{}, enumError(errSource, "running or stopped")
+	}
+	return ir.DockerServiceSpec{
+		Enable:    enable,
+		State:     state,
+		Name:      "docker.service",
+		SourceRef: sourceRef,
+	}, nil
+}
+
+func dockerDaemonSpec(docker parser.Value) (*ir.DockerDaemonSpec, error) {
+	daemon, ok, err := mapField(docker, "daemon")
+	if err != nil || !ok {
+		return nil, err
+	}
+	settingsValue, ok := daemon.Map["settings"]
+	if !ok {
+		settingsValue = parser.MapValue(nil, ir.SourceRef{File: daemon.Source.File, Line: daemon.Source.Line, Path: daemon.Source.Path + ".settings"})
+	}
+	if !settingsValue.IsMap() {
+		return nil, fmt.Errorf("%s:%d:%s: docker daemon settings must be a map", settingsValue.Source.File, settingsValue.Source.Line, settingsValue.Source.Path)
+	}
+	settings, err := jsonCompatibleAny(settingsValue)
+	if err != nil {
+		return nil, err
+	}
+	settingsMap, ok := settings.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s:%d:%s: docker daemon settings must be a map", settingsValue.Source.File, settingsValue.Source.Line, settingsValue.Source.Path)
+	}
+	summary, err := jsonContentSummary(settingsMap, daemon.Source)
+	if err != nil {
+		return nil, err
+	}
+	return &ir.DockerDaemonSpec{Settings: settingsMap, Source: daemon.Source, Summary: summary}, nil
+}
+
+func dockerComposeSpecs(docker parser.Value) (map[string]ir.DockerComposeSpec, error) {
+	objects, ok, err := objectCollection(docker, "compose")
+	if err != nil || !ok {
+		return map[string]ir.DockerComposeSpec{}, err
+	}
+	out := make(map[string]ir.DockerComposeSpec, len(objects))
+	for _, name := range sortedKeys(objects) {
+		item := objects[name]
+		if name == "" {
+			return nil, fmt.Errorf("%s:%d:%s: docker compose label must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		if err := validateDockerStableName("docker compose label", name, item.Source); err != nil {
+			return nil, err
+		}
+		compose, err := dockerComposeSpec(name, item)
+		if err != nil {
+			return nil, err
+		}
+		out[name] = compose
+	}
+	return out, nil
+}
+
+func dockerComposeSpec(name string, item parser.Value) (ir.DockerComposeSpec, error) {
+	enable, ok, err := boolField(item, "enable")
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	if !ok {
+		enable = true
+	}
+	state, err := stringFieldDefault(item, "state", "running")
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	if !stringIn(state, "running", "stopped", "absent") {
+		return ir.DockerComposeSpec{}, enumError(item.Map["state"].Source, "running, stopped, or absent")
+	}
+	directory, _, err := stringField(item, "directory")
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	if enable && (directory == "" || !filepath.IsAbs(directory)) {
+		return ir.DockerComposeSpec{}, fmt.Errorf("%s:%d:%s.directory: docker compose directory must be absolute and non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	project, err := stringFieldDefault(item, "project", name)
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	if project == "" {
+		return ir.DockerComposeSpec{}, fmt.Errorf("%s:%d:%s.project: docker compose project must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	projectSource := item.Source
+	if value, ok := item.Map["project"]; ok {
+		projectSource = value.Source
+	}
+	if err := validateDockerStableName("docker compose project", project, projectSource); err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	pull, err := stringFieldDefault(item, "pull", "missing")
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	if !stringIn(pull, "never", "missing", "always") {
+		return ir.DockerComposeSpec{}, enumError(item.Map["pull"].Source, "never, missing, or always")
+	}
+	recreate, err := stringFieldDefault(item, "recreate", "auto")
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	if !stringIn(recreate, "auto", "always", "never") {
+		return ir.DockerComposeSpec{}, enumError(item.Map["recreate"].Source, "auto, always, or never")
+	}
+	removeOrphans, ok, err := boolField(item, "remove_orphans")
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	if !ok {
+		removeOrphans = false
+	}
+	after, err := stringListField(item, "after")
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	if len(after) == 0 {
+		after = []string{"docker.service", "network-online.target"}
+	}
+	wantedBy, err := stringListField(item, "wanted_by")
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	if len(wantedBy) == 0 {
+		wantedBy = []string{"multi-user.target"}
+	}
+	composeFile, err := dockerComposeMainFileSpec(item)
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	envFiles, err := dockerComposeEnvFileSpecs(item)
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	if enable && composeFile == nil {
+		return ir.DockerComposeSpec{}, fmt.Errorf("%s:%d:%s.file: docker compose file block is required", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	service, err := dockerComposeServiceSpec(name, item)
+	if err != nil {
+		return ir.DockerComposeSpec{}, err
+	}
+	return ir.DockerComposeSpec{
+		Name:          name,
+		Enable:        enable,
+		State:         state,
+		Directory:     directory,
+		Project:       project,
+		File:          composeFile,
+		EnvFiles:      envFiles,
+		Pull:          pull,
+		Recreate:      recreate,
+		RemoveOrphans: removeOrphans,
+		Service:       service,
+		After:         after,
+		WantedBy:      wantedBy,
+		Source:        item.Source,
+	}, nil
+}
+
+func dockerComposeMainFileSpec(compose parser.Value) (*ir.DockerComposeFileSpec, error) {
+	fileBlock, ok, err := mapField(compose, "file")
+	if err != nil || !ok {
+		return nil, err
+	}
+	file, err := dockerComposeFileSpec("", fileBlock, "0644", false)
+	if err != nil {
+		return nil, err
+	}
+	return &file, nil
+}
+
+func dockerComposeEnvFileSpecs(compose parser.Value) (map[string]ir.DockerComposeFileSpec, error) {
+	objects, ok, err := objectCollection(compose, "env_file")
+	if err != nil || !ok {
+		return map[string]ir.DockerComposeFileSpec{}, err
+	}
+	out := make(map[string]ir.DockerComposeFileSpec, len(objects))
+	for _, label := range sortedKeys(objects) {
+		item := objects[label]
+		if label == "" {
+			return nil, fmt.Errorf("%s:%d:%s: docker compose env_file label must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		file, err := dockerComposeFileSpec(label, item, "0600", true)
+		if err != nil {
+			return nil, err
+		}
+		out[label] = file
+	}
+	return out, nil
+}
+
+func dockerComposeFileSpec(label string, item parser.Value, defaultMode string, defaultSensitive bool) (ir.DockerComposeFileSpec, error) {
+	path, ok, err := stringField(item, "path")
+	if err != nil {
+		return ir.DockerComposeFileSpec{}, err
+	}
+	if !ok || path == "" || !filepath.IsAbs(path) {
+		return ir.DockerComposeFileSpec{}, fmt.Errorf("%s:%d:%s.path: docker compose file path must be absolute and non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	content, hasContent, err := stringFieldAllowEphemeral(item, "content")
+	if err != nil {
+		return ir.DockerComposeFileSpec{}, err
+	}
+	sourcePath, hasSource, err := stringField(item, "source")
+	if err != nil {
+		return ir.DockerComposeFileSpec{}, err
+	}
+	if hasContent == hasSource {
+		return ir.DockerComposeFileSpec{}, fmt.Errorf("%s:%d:%s: docker compose file requires exactly one of content or source", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	owner, err := stringFieldDefault(item, "owner", "root")
+	if err != nil {
+		return ir.DockerComposeFileSpec{}, err
+	}
+	group, err := stringFieldDefault(item, "group", "root")
+	if err != nil {
+		return ir.DockerComposeFileSpec{}, err
+	}
+	mode, err := modeFieldDefault(item, "mode", defaultMode)
+	if err != nil {
+		return ir.DockerComposeFileSpec{}, err
+	}
+	sensitive := defaultSensitive
+	if hasContent && contentNeedsRedaction(item.Map["content"]) {
+		sensitive = true
+	}
+	out := ir.DockerComposeFileSpec{
+		Label:      label,
+		Path:       path,
+		Content:    content,
+		SourcePath: resolvePath(item.Source.File, sourcePath),
+		Owner:      owner,
+		Group:      group,
+		Mode:       mode,
+		Sensitive:  sensitive,
+		Source:     item.Source,
+	}
+	if hasContent {
+		out.Summary = contentSummary([]byte(content))
+	} else if hasSource {
+		summary, err := fileSummary(out.SourcePath, item.Source)
+		if err != nil {
+			return ir.DockerComposeFileSpec{}, err
+		}
+		out.Summary = summary
+	}
+	return out, nil
+}
+
+func dockerComposeServiceSpec(name string, compose parser.Value) (ir.DockerComposeServiceSpec, error) {
+	service, ok, err := mapField(compose, "service")
+	if err != nil {
+		return ir.DockerComposeServiceSpec{}, err
+	}
+	enable := true
+	unitName := "debianform-compose-" + name
+	if ok {
+		if value, hasValue, err := boolField(service, "enable"); err != nil {
+			return ir.DockerComposeServiceSpec{}, err
+		} else if hasValue {
+			enable = value
+		}
+		if value, hasValue, err := stringField(service, "name"); err != nil {
+			return ir.DockerComposeServiceSpec{}, err
+		} else if hasValue {
+			unitName = value
+		}
+	}
+	if unitName == "" {
+		return ir.DockerComposeServiceSpec{}, fmt.Errorf("%s:%d:%s.service.name: docker compose service name must be non-empty", compose.Source.File, compose.Source.Line, compose.Source.Path)
+	}
+	serviceSource := compose.Source
+	if ok {
+		if value, exists := service.Map["name"]; exists {
+			serviceSource = value.Source
+		}
+	}
+	if err := validateDockerStableName("docker compose service name", unitName, serviceSource); err != nil {
+		return ir.DockerComposeServiceSpec{}, err
+	}
+	return ir.DockerComposeServiceSpec{Enable: enable, Name: unitName}, nil
+}
+
 func validateHostSpec(spec ir.HostSpec) error {
 	files := map[string]ir.SourceRef{}
 	secrets := map[string]ir.SourceRef{}
@@ -3638,6 +4054,34 @@ func validateHostSpec(spec ir.HostSpec) error {
 			return err
 		}
 		files[item.Path] = item.Source
+	}
+	if spec.Docker != nil {
+		if spec.Docker.Daemon != nil {
+			daemonSource := spec.Docker.Daemon.Source
+			if previous, exists := files["/etc/docker/daemon.json"]; exists {
+				return fmt.Errorf("%s:%d:%s: docker daemon path %q conflicts with file declared at %s:%d:%s", daemonSource.File, daemonSource.Line, daemonSource.Path, "/etc/docker/daemon.json", previous.File, previous.Line, previous.Path)
+			}
+			if previous, exists := secrets["/etc/docker/daemon.json"]; exists {
+				return fmt.Errorf("%s:%d:%s: docker daemon path %q conflicts with secret declared at %s:%d:%s", daemonSource.File, daemonSource.Line, daemonSource.Path, "/etc/docker/daemon.json", previous.File, previous.Line, previous.Path)
+			}
+			files["/etc/docker/daemon.json"] = daemonSource
+		}
+		for _, name := range sortedKeys(spec.Docker.Composes) {
+			compose := spec.Docker.Composes[name]
+			if compose.File != nil {
+				if err := validateDockerComposePath("docker compose file", *compose.File, files, secrets); err != nil {
+					return err
+				}
+				files[compose.File.Path] = compose.File.Source
+			}
+			for _, label := range sortedKeys(compose.EnvFiles) {
+				envFile := compose.EnvFiles[label]
+				if err := validateDockerComposePath("docker compose env_file", envFile, files, secrets); err != nil {
+					return err
+				}
+				files[envFile.Path] = envFile.Source
+			}
+		}
 	}
 
 	for _, component := range spec.Components {
@@ -3774,6 +4218,16 @@ func validateNftablesPath(item *ir.NftablesFileSpec, files map[string]ir.SourceR
 	return nil
 }
 
+func validateDockerComposePath(kind string, item ir.DockerComposeFileSpec, files map[string]ir.SourceRef, secrets map[string]ir.SourceRef) error {
+	if previous, exists := files[item.Path]; exists {
+		return fmt.Errorf("%s:%d:%s: %s path %q conflicts with file declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, kind, item.Path, previous.File, previous.Line, previous.Path)
+	}
+	if previous, exists := secrets[item.Path]; exists {
+		return fmt.Errorf("%s:%d:%s: %s path %q conflicts with secret declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, kind, item.Path, previous.File, previous.Line, previous.Path)
+	}
+	return nil
+}
+
 func validateNetworkdSpecPaths(spec ir.NetworkdSpec, files map[string]ir.SourceRef, secrets map[string]ir.SourceRef) error {
 	seen := map[string]ir.SourceRef{}
 	for _, label := range sortedKeys(spec.NetDevs) {
@@ -3818,6 +4272,127 @@ func stringFieldDefault(root parser.Value, name string, fallback string) (string
 		return fallback, nil
 	}
 	return value, nil
+}
+
+func optionalStringField(root parser.Value, name string) (*string, bool, error) {
+	value, ok := root.Map[name]
+	if !ok {
+		return nil, false, nil
+	}
+	if err := rejectEphemeralValue(value); err != nil {
+		return nil, false, err
+	}
+	if value.Kind == parser.KindNull {
+		return nil, true, nil
+	}
+	str, ok := value.StringValue()
+	if !ok {
+		return nil, false, fmt.Errorf("%s:%d: %s must be a string or null", value.Source.File, value.Source.Line, value.Source.Path)
+	}
+	return &str, true, nil
+}
+
+func dockerRemoveConflictsField(root parser.Value, name string) (string, bool, error) {
+	value, ok := root.Map[name]
+	if !ok {
+		return "", false, nil
+	}
+	if err := rejectEphemeralValue(value); err != nil {
+		return "", false, err
+	}
+	switch value.Kind {
+	case parser.KindString:
+		if !stringIn(value.String, "auto", "true", "false") {
+			return "", false, enumError(value.Source, "auto, true, or false")
+		}
+		return value.String, true, nil
+	case parser.KindBool:
+		if value.Bool {
+			return "true", true, nil
+		}
+		return "false", true, nil
+	default:
+		return "", false, fmt.Errorf("%s:%d:%s: %s must be auto, true, or false", value.Source.File, value.Source.Line, value.Source.Path, name)
+	}
+}
+
+func jsonCompatibleAny(value parser.Value) (any, error) {
+	if value.ContainsSensitive() || value.ContainsEphemeral() {
+		return nil, fmt.Errorf("%s:%d:%s: docker daemon settings cannot contain sensitive or ephemeral values", value.Source.File, value.Source.Line, value.Source.Path)
+	}
+	switch value.Kind {
+	case parser.KindNull:
+		return nil, nil
+	case parser.KindString:
+		return value.String, nil
+	case parser.KindBool:
+		return value.Bool, nil
+	case parser.KindNumber:
+		return json.Number(value.Number), nil
+	case parser.KindList:
+		out := make([]any, 0, len(value.List))
+		for _, item := range value.List {
+			converted, err := jsonCompatibleAny(item)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, converted)
+		}
+		return out, nil
+	case parser.KindMap:
+		out := make(map[string]any, len(value.Map))
+		for _, key := range sortedKeys(value.Map) {
+			if key == "" {
+				item := value.Map[key]
+				return nil, fmt.Errorf("%s:%d:%s: docker daemon settings keys must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+			}
+			converted, err := jsonCompatibleAny(value.Map[key])
+			if err != nil {
+				return nil, err
+			}
+			out[key] = converted
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("%s:%d:%s: unsupported docker daemon settings value", value.Source.File, value.Source.Line, value.Source.Path)
+	}
+}
+
+func jsonContentSummary(value any, source ir.SourceRef) (ir.ContentSummary, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return ir.ContentSummary{}, fmt.Errorf("%s:%d:%s: json marshal failed: %w", source.File, source.Line, source.Path, err)
+	}
+	return contentSummary(data), nil
+}
+
+func validateDockerStableName(kind string, value string, source ir.SourceRef) error {
+	if value == "" {
+		return fmt.Errorf("%s:%d:%s: %s must be non-empty", source.File, source.Line, source.Path, kind)
+	}
+	for i, r := range value {
+		valid := r >= 'a' && r <= 'z' ||
+			r >= 'A' && r <= 'Z' ||
+			r >= '0' && r <= '9' ||
+			(i > 0 && (r == '_' || r == '.' || r == '@' || r == '%' || r == '+' || r == '-'))
+		if !valid {
+			return fmt.Errorf("%s:%d:%s: %s %q must use only letters, digits, _, ., @, %%, +, or - and must start with a letter or digit", source.File, source.Line, source.Path, kind, value)
+		}
+	}
+	return nil
+}
+
+func stringIn(value string, allowed ...string) bool {
+	for _, item := range allowed {
+		if value == item {
+			return true
+		}
+	}
+	return false
+}
+
+func enumError(source ir.SourceRef, allowed string) error {
+	return fmt.Errorf("%s:%d:%s: must be %s", source.File, source.Line, source.Path, allowed)
 }
 
 func ensureField(root parser.Value, fallback string) (string, error) {

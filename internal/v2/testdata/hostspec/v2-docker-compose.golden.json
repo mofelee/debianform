@@ -1,0 +1,163 @@
+{
+  "name": "compose1",
+  "source": {
+    "file": "../../../examples/v2-docker-compose.dbf.hcl",
+    "line": 6,
+    "path": "host.compose1"
+  },
+  "facts": {
+    "system": {}
+  },
+  "ssh": {
+    "host": "compose1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../../../examples/v2-docker-compose.dbf.hcl",
+      "line": 6,
+      "path": "host.compose1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/compose1.json",
+    "lock_path": "/var/lock/debianform/state/compose1.lock",
+    "source": {
+      "file": "../../../examples/v2-docker-compose.dbf.hcl",
+      "line": 6,
+      "path": "host.compose1"
+    }
+  },
+  "system": {
+    "hostname": "compose1",
+    "source": {
+      "file": "../../../examples/v2-docker-compose.dbf.hcl",
+      "line": 6,
+      "path": "host.compose1"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  },
+  "docker": {
+    "enable": true,
+    "package": {
+      "source": "official",
+      "channel": "stable",
+      "remove_conflicts": "auto",
+      "source_ref": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 7,
+        "path": "host.compose1.docker"
+      }
+    },
+    "service": {
+      "enable": true,
+      "state": "running",
+      "name": "docker.service",
+      "source_ref": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 7,
+        "path": "host.compose1.docker"
+      }
+    },
+    "compose": {
+      "app": {
+        "name": "app",
+        "enable": true,
+        "state": "running",
+        "directory": "/opt/app",
+        "project": "app",
+        "file": {
+          "path": "/opt/app/compose.yaml",
+          "content": "services:\n  web:\n    image: nginx:1.27-alpine\n    ports:\n      - \"8080:80\"\n",
+          "owner": "root",
+          "group": "root",
+          "mode": "0644",
+          "summary": {
+            "sha256": "d1f744f61ab84b59402583765d65b4d6b984fd44c128388ac3ea0a07ef123d0f",
+            "bytes": 75
+          },
+          "source": {
+            "file": "../../../examples/v2-docker-compose.dbf.hcl",
+            "line": 14,
+            "path": "host.compose1.docker.compose[\"app\"].file"
+          }
+        },
+        "env_file": {
+          "app": {
+            "label": "app",
+            "path": "/opt/app/.env",
+            "content": "NGINX_HOST=localhost\n",
+            "owner": "root",
+            "group": "root",
+            "mode": "0600",
+            "sensitive": true,
+            "summary": {
+              "sha256": "2772e1be6c9876ad31a974c279f21df38af3c5ccc1fde8b37f6992f6d8ab6440",
+              "bytes": 21
+            },
+            "source": {
+              "file": "../../../examples/v2-docker-compose.dbf.hcl",
+              "line": 26,
+              "path": "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
+            }
+          }
+        },
+        "pull": "missing",
+        "recreate": "auto",
+        "remove_orphans": false,
+        "service": {
+          "enable": true,
+          "name": "debianform-compose-app"
+        },
+        "after": [
+          "docker.service",
+          "network-online.target"
+        ],
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "source": {
+          "file": "../../../examples/v2-docker-compose.dbf.hcl",
+          "line": 10,
+          "path": "host.compose1.docker.compose[\"app\"]"
+        }
+      }
+    },
+    "source": {
+      "file": "../../../examples/v2-docker-compose.dbf.hcl",
+      "line": 7,
+      "path": "host.compose1.docker"
+    }
+  }
+}

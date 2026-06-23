@@ -130,6 +130,9 @@ v2 领域块或 component。
 - `examples/v2-bird2.dbf.hcl`
 - `examples/v2-component-binary.dbf.hcl`（真实 apply 前需替换为上游下载物真实 sha256）
 - `examples/v2-component-inputs.dbf.hcl`
+- `examples/v2-docker-compose.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
+- `examples/v2-docker-daemon.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
+- `examples/v2-docker-minimal.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
 - `examples/v2-files-plan-preview.dbf.hcl`
 - `examples/v2-mihomo.dbf.hcl`
 - `examples/v2-nftables.dbf.hcl`
@@ -247,6 +250,22 @@ component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
 不能和带 label 的 source 混用。
 远程 URL source 必须声明 64 位 sha256，plan 会生成 download 和 install 节点；
 `ca_certificate` 变化会额外触发 `update-ca-certificates` operation。
+
+Docker v2 DSL 当前已接入 validate 和 HostSpec 编译。最小语法会归一化为官方 Docker 源、
+默认 Docker packages 和 `docker.service` 默认值；ResourceGraph、plan、apply 和 check
+展开将在后续 loop 完成：
+
+```hcl
+host "docker1" {
+  docker {
+    enable = true
+  }
+}
+```
+
+```bash
+dbf validate -f examples/v2-docker-minimal.dbf.hcl
+```
 
 nftables 使用原生 ruleset/snippet 文件作为主路径，不提供通用 firewall 抽象。
 多个 nftables 文件变化时，同一 host 只执行一次 validate 和 activate：
