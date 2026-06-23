@@ -241,16 +241,22 @@ gh release view v0.0.0-test.1
 gh release download v0.0.0-test.1 --pattern 'checksums.txt' --dir /tmp/dbf-release-test
 ```
 
+已验证：`v0.0.0-test.1` 触发的 release workflow run `28011062473` 通过，GitHub Release
+包含四个平台 tarball 和 `checksums.txt`，并已成功下载 `checksums.txt` 到
+`/tmp/dbf-release-test`。
+
 测试 tag 验证完必须删除：
 
 ```bash
 gh release delete v0.0.0-test.1 --cleanup-tag
 ```
 
+已清理：测试 release 和远端测试 tag 已删除。
+
 需要你介入：
 
-- 确认是否允许用临时 test tag 验证真实 release workflow。
-- 如果不允许 test tag，则只能用 snapshot workflow 验证到发布前一步。
+- 已用临时 test tag 验证真实 release workflow，并在验证后删除。
+- 如果后续不允许 test tag，则只能用 snapshot workflow 验证到发布前一步。
 - 正式发布时由你手动创建 signed tag。
 
 ## Loop 6: 自动更新 Homebrew tap
