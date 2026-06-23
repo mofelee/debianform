@@ -118,7 +118,7 @@ func TestCompileProfileMergeResourceGraphGolden(t *testing.T) {
 		`host.merge1.packages.install["curl"]`,
 		`host.merge1.packages.install["vim"]`,
 		`host.merge1.packages.install["htop"]`,
-		`host.merge1.packages.install["sudo"]`,
+		`host.merge1.packages.install["git"]`,
 		`host.merge1.kernel.module["tcp_bbr"]`,
 	} {
 		if nodeFor(resourceGraph, want) == nil {

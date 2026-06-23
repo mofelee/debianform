@@ -258,7 +258,7 @@ component "users" {
 inputs = {
   accounts = {
     deploy = {
-      groups = ["sudo"]
+      groups = ["docker"]
       ssh_authorized_keys = [
         "ssh-ed25519 AAAA...",
       ]

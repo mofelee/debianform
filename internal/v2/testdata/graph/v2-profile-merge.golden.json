@@ -99,6 +99,27 @@
     },
     {
       "host": "merge1",
+      "address": "host.merge1.packages.install[\"git\"]",
+      "kind": "package",
+      "summary": "create package git",
+      "source": {
+        "file": "../../../examples/v2-profile-merge.dbf.hcl",
+        "line": 45,
+        "path": "host.merge1.packages.install[0]"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "git"
+      },
+      "provider_type": "package",
+      "provider_address": "package.merge1_git",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "git"
+      }
+    },
+    {
+      "host": "merge1",
       "address": "host.merge1.packages.install[\"htop\"]",
       "kind": "package",
       "summary": "create package htop",
@@ -116,27 +137,6 @@
       "provider_payload": {
         "ensure": "present",
         "name": "htop"
-      }
-    },
-    {
-      "host": "merge1",
-      "address": "host.merge1.packages.install[\"sudo\"]",
-      "kind": "package",
-      "summary": "create package sudo",
-      "source": {
-        "file": "../../../examples/v2-profile-merge.dbf.hcl",
-        "line": 45,
-        "path": "host.merge1.packages.install[0]"
-      },
-      "desired": {
-        "ensure": "present",
-        "name": "sudo"
-      },
-      "provider_type": "package",
-      "provider_address": "package.merge1_sudo",
-      "provider_payload": {
-        "ensure": "present",
-        "name": "sudo"
       }
     },
     {

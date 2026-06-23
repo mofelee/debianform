@@ -182,7 +182,7 @@ v2 主线领域范围：
 `networking`、`security` 可以放到后续阶段。`nftables` 是目标 DSL 的一等领域；
 当前第一版采用原生 nftables 文件管理，不发明通用 firewall 抽象。
 
-完整目标语法还可以包含 `environment`、`sudo`、`sshd`、`nftables`、`docker`
+完整目标语法还可以包含 `environment`、`sshd`、`nftables`、`docker`
 以及重复的 `assert` 块。它们在
 [examples/v2-fleet.dbf.hcl](../examples/v2-fleet.dbf.hcl)
 中用于检查组合后的 DSL 是否协调，不代表都属于第一阶段实现范围。
@@ -421,7 +421,10 @@ lock 也使用机器写入的 JSON：
 
 ## SSH
 
-`ssh` 描述如何连接目标主机。
+`ssh` 描述如何以 root 连接目标主机。DebianForm 的当前执行模型是 root-only：
+`plan`、`apply` 和 `check` 会直接写 `/etc`、`/usr/local`、systemd、APT、nftables、
+sysctl/module 配置和远端 state，不提供 sudo、become 或非 root 管理连接。这个边界是有意的：
+项目规模有限，优先保证 Debian 主路径可靠，而不是维护复杂的提权矩阵。
 
 ```hcl
 host "edge-1" {
@@ -438,9 +441,13 @@ host "edge-1" {
 
 - `ssh.host` 默认等于 host label。
 - `ssh.port` 可选。
-- `ssh.user` 可选，未配置时交给本地 SSH config 或 ssh 默认值。
+- `ssh.user` 可选；未配置时默认为 `root`。显式配置时只能是 `"root"`。
 - `ssh.identity_file` 可选。
-- 后续可以支持 `ssh.config_host`，用于直接引用本地 SSH config host。
+- 目标主机必须允许 root SSH key 登录。
+- 不支持 sudo 提权、sudoers 管理、`become` 或非 root 管理连接。
+- 服务进程仍可通过 systemd service 的 `user`/`group` 字段以低权限运行；这只影响被管理服务，
+  不影响 DebianForm 的管理连接。
+- 后续可以支持 `ssh.config_host`，用于直接引用本地 SSH config host，但连接用户仍必须是 root。
 
 ## Profile
 
@@ -1000,7 +1007,7 @@ users {
     uid   = 1500
     group = "deploy"
     groups = [
-      "sudo",
+      "docker",
     ]
     home  = "/home/deployer"
     shell = "/bin/bash"

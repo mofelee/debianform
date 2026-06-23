@@ -114,7 +114,9 @@
 - [x] WireGuard integration checks 覆盖 private key 不写入 state 明文。
 - [ ] 增加 `govulncheck` 或等价依赖漏洞扫描。
 - [ ] 增加 Dependabot/Renovate 或等价依赖更新策略。
-- [ ] 增加面向用户的 SSH 执行模型、sudo 权限和最小权限建议文档。
+- [x] README 说明 root-only SSH 执行模型，不支持 sudo/become/非 root 管理连接。
+- [x] [CLI 文档](cli.zh.md) 说明 root-only SSH 执行模型。
+- [x] [v2 requirements](v2-requirements.md) 说明 root-only 权限边界。
 - [ ] 增加覆盖 text/json/html plan、stdout/stderr、state 的集中式 secret redaction 回归矩阵。
 
 ### 用户文档
@@ -170,10 +172,10 @@
 - [ ] 明确 state schema migration policy。
 - [ ] 明确 plan JSON format compatibility policy。
 - [ ] release、安装、升级、回滚路径经过多个正式 release 验证。
-- [ ] 安全文档包含 SSH 执行模型、权限边界、secret 处理和漏洞响应流程。
+- [ ] 安全文档包含 root-only SSH 执行模型、权限边界、secret 处理和漏洞响应流程。
 - [ ] 常见失败场景都有可执行恢复步骤。
 - [ ] 更广泛的 Debian 版本或架构支持策略。
-- [ ] 最小 sudo 权限建议。
+- [ ] 常见故障排查覆盖 root SSH 不可用、权限不足和目标系统不受支持。
 - [ ] README 中承诺的能力都能被测试、示例或文档覆盖。
 
 ## 详细成熟度检查

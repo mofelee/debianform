@@ -26,6 +26,21 @@ v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源
 `dbf` CLI 安装在控制机或 CI runner 上，可以在 Linux 和 macOS 运行。公开发布产物覆盖
 Linux/macOS 的 amd64 和 arm64；被管理目标主机当前仍以 Debian 13 为最高优先级。
 
+## 权限模型
+
+DebianForm 管理目标主机时要求 SSH 连接使用 `root`。这是当前项目的明确边界：很多资源
+需要写 `/etc`、`/usr/local`、systemd、APT、nftables 和内核参数；如果支持非 root 用户、
+sudo、become 或细粒度最小权限，会显著增加实现和排障复杂度。项目规模有限，优先把主路径
+做可靠。
+
+因此：
+
+- `ssh.user` 只能省略或设为 `"root"`；省略时 DebianForm 仍按 root 连接。
+- 目标主机需要允许 root 通过 SSH key 登录。
+- DebianForm 不支持 sudo 提权、sudoers 管理或非 root 管理连接。
+- 服务进程仍然可以用 systemd 的 `user`/`group` 以低权限运行；这不改变管理连接必须是
+  root 的要求。
+
 ## 安装和升级
 
 推荐安装方式：
@@ -182,8 +197,8 @@ dbf validate -f examples/v2-bird2.dbf.hcl
 
 component 内可以读取 `target.system.codename` 等只读 host 视图，并展开为
 `host.<host>.components.<instance>...` 地址。
-这些 runtime facts 来自目标主机；需要完整 plan/apply 时，请使用可 SSH 连接的目标
-主机，或用支持的本地离线样例。
+这些 runtime facts 来自目标主机；需要完整 plan/apply 时，请使用 root SSH 可连接的
+目标主机，或用支持的本地离线样例。
 
 component input 是 component 的公开 API，支持 `description`、`default`、
 `nullable`、`sensitive`、`deprecated`、重复 `validation` block，以及
@@ -276,7 +291,7 @@ dbf apply -f examples/v2-bbr.dbf.hcl --auto-approve
 dbf check -f examples/v2-bbr.dbf.hcl
 ```
 
-上述命令需要示例中的 host 能通过 SSH 连接，并且远端为受支持的 Debian 系统。
+上述命令需要示例中的 host 能通过 root SSH 连接，并且远端为受支持的 Debian 系统。
 `check` 在存在 create、update、delete、destroy 或 operation 时返回非零。
 
 多 host 配置可以限制 host 级并发：

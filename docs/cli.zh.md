@@ -118,7 +118,9 @@ dbf plan -f examples/v2-bbr.dbf.hcl --format json --debug --offline
 
 注意事项：
 
-- 在线 `plan` 需要配置中的 host 可以通过 SSH 连接，并且远端是受支持的 Debian 系统。
+- 在线 `plan` 需要配置中的 host 可以通过 root SSH 连接，并且远端是受支持的 Debian 系统。
+  DebianForm 不支持 sudo、become 或非 root 管理连接；`ssh.user` 只能省略或设为
+  `"root"`。
 - `--offline` 不能解析依赖远端 runtime facts 的表达式，除非配置中已经声明了匹配的
   system facts。
 - `--html` 输出目录不存在时会自动创建。

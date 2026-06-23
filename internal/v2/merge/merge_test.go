@@ -216,6 +216,19 @@ host "server1" {
 	}
 }
 
+func TestCompileRejectsNonRootSSHUser(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+host "server1" {
+  ssh {
+    user = "debian"
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), `ssh.user must be "root" or omitted`) {
+		t.Fatalf("Compile error = %v, want non-root ssh.user rejection", err)
+	}
+}
+
 func TestCompileAPTRepository(t *testing.T) {
 	program := compileInline(t, `
 host "server1" {

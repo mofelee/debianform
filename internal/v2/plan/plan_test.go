@@ -312,7 +312,7 @@ func TestProfileMergePlanJSONGolden(t *testing.T) {
 
 	for _, want := range []string{
 		`host.merge1.packages.install["curl"]`,
-		`host.merge1.packages.install["sudo"]`,
+		`host.merge1.packages.install["git"]`,
 		`host.merge1.kernel.sysctl["net.ipv4.tcp_congestion_control"]`,
 	} {
 		if !hasChange(doc, want) {

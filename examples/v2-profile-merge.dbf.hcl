@@ -42,6 +42,6 @@ host "merge1" {
   }
 
   packages {
-    install = ["sudo"]
+    install = ["git"]
   }
 }

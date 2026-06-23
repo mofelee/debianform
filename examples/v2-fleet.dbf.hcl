@@ -9,6 +9,11 @@
 # `REPLACE_*`、示例域名和公钥都是待替换占位符；正式 validate 应拒绝它们。
 # secrets/ 下的文件只表示本地 secret 输入，不能提交到版本库。DebianForm 的
 # plan 和 state 只能记录其摘要，不能记录明文内容。
+#
+# 权限模型：
+# - 当前 DebianForm 只支持使用 root SSH 管理目标主机。
+# - 不支持 sudo/become/非 root 管理连接；旧的 sudo/sshd 设想不要作为当前实现目标。
+# - component 内的 systemd service 仍可声明低权限运行用户。
 
 locals {
   administrator_key = "ssh-ed25519 AAAA_REPLACE_ME"
@@ -28,7 +33,6 @@ profile "base" {
       "locales",
       "nftables",
       "openssh-server",
-      "sudo",
       "tzdata",
       "vim",
     ]
@@ -61,17 +65,11 @@ profile "base" {
       home   = "/home/deploy"
       shell  = "/bin/bash"
       group  = "deploy"
-      groups = ["sudo"]
 
       ssh_authorized_keys = [
         local.administrator_key,
       ]
     }
-  }
-
-  sudo {
-    enable              = true
-    passwordless_groups = ["sudo"]
   }
 
   sshd {
@@ -80,7 +78,7 @@ profile "base" {
 
     settings = {
       PasswordAuthentication = "no"
-      PermitRootLogin        = "no"
+      PermitRootLogin        = "prohibit-password"
       PubkeyAuthentication   = "yes"
     }
   }
@@ -381,8 +379,8 @@ host "server1" {
     ]
   }
 
-  # profile.base 中 deploy.groups = ["sudo"]；host 的列表默认追加并去重，
-  # 因此最终组列表是 ["sudo", "docker"]。
+  # profile.base 中定义 deploy 用户；host 的列表默认追加并去重，
+  # 因此最终附加组列表是 ["docker"]。
   users {
     user "deploy" {
       groups = ["docker"]

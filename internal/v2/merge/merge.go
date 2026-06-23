@@ -1391,6 +1391,9 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 		if value, ok, err := stringField(ssh, "user"); err != nil {
 			return spec, err
 		} else if ok {
+			if value != "" && value != "root" {
+				return spec, fmt.Errorf("%s:%d:%s.user: DebianForm manages target hosts as root; ssh.user must be \"root\" or omitted", ssh.Source.File, ssh.Source.Line, ssh.Source.Path)
+			}
 			spec.SSH.User = value
 		}
 		if value, ok, err := stringField(ssh, "identity_file"); err != nil {

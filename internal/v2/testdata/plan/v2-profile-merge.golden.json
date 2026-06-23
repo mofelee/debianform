@@ -203,6 +203,42 @@
       }
     },
     {
+      "address": "host.merge1.packages.install[\"git\"]",
+      "action": "create",
+      "summary": "create package git",
+      "source": {
+        "file": "../../../examples/v2-profile-merge.dbf.hcl",
+        "line": 45,
+        "path": "host.merge1.packages.install[0]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "git"
+          }
+        ]
+      }
+    },
+    {
       "address": "host.merge1.packages.install[\"htop\"]",
       "action": "create",
       "summary": "create package htop",
@@ -234,42 +270,6 @@
             "action": "create",
             "sensitive": false,
             "after": "htop"
-          }
-        ]
-      }
-    },
-    {
-      "address": "host.merge1.packages.install[\"sudo\"]",
-      "action": "create",
-      "summary": "create package sudo",
-      "source": {
-        "file": "../../../examples/v2-profile-merge.dbf.hcl",
-        "line": 45,
-        "path": "host.merge1.packages.install[0]"
-      },
-      "diff": {
-        "path": [],
-        "kind": "object",
-        "action": "create",
-        "sensitive": false,
-        "children": [
-          {
-            "path": [
-              "ensure"
-            ],
-            "kind": "scalar",
-            "action": "create",
-            "sensitive": false,
-            "after": "present"
-          },
-          {
-            "path": [
-              "name"
-            ],
-            "kind": "scalar",
-            "action": "create",
-            "sensitive": false,
-            "after": "sudo"
           }
         ]
       }
