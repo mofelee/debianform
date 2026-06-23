@@ -1,0 +1,89 @@
+{
+  "nodes": [
+    {
+      "host": "docker-none1",
+      "address": "host.docker-none1.docker.daemon.file[\"/etc/docker/daemon.json\"]",
+      "kind": "file",
+      "summary": "manage docker daemon configuration",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-none.dbf.hcl",
+        "line": 9,
+        "path": "host.docker-none1.docker.daemon"
+      },
+      "desired": {
+        "content": "{\n  \"log-driver\": \"json-file\"\n}\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/docker/daemon.json",
+        "summary": {
+          "sha256": "adf78cc3767613a0cb19c7af4fbd1f995a4e15c46e7036fea8e784a047c5ba75",
+          "bytes": 26
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.docker_none1__etc_docker_daemon_json",
+      "provider_payload": {
+        "content": "{\n  \"log-driver\": \"json-file\"\n}\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/docker/daemon.json",
+        "summary": {
+          "sha256": "adf78cc3767613a0cb19c7af4fbd1f995a4e15c46e7036fea8e784a047c5ba75",
+          "bytes": 26
+        }
+      }
+    },
+    {
+      "host": "docker-none1",
+      "address": "host.docker-none1.docker.service[\"docker\"]",
+      "kind": "service",
+      "summary": "manage docker service",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-none.dbf.hcl",
+        "line": 2,
+        "path": "host.docker-none1.docker"
+      },
+      "desired": {
+        "enabled": true,
+        "name": "docker",
+        "state": "running",
+        "unit": "docker.service"
+      },
+      "provider_type": "service",
+      "provider_address": "service.docker_none1_docker",
+      "provider_payload": {
+        "enabled": true,
+        "name": "docker",
+        "state": "running",
+        "unit": "docker.service"
+      },
+      "depends_on": [
+        "host.docker-none1.docker.daemon.file[\"/etc/docker/daemon.json\"]"
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.docker-none1.docker.daemon.restart",
+      "action": "run",
+      "summary": "restart docker service",
+      "depends_on": [
+        "host.docker-none1.docker.daemon.file[\"/etc/docker/daemon.json\"]",
+        "host.docker-none1.docker.service[\"docker\"]"
+      ],
+      "triggered_by": [
+        "host.docker-none1.docker.daemon.file[\"/etc/docker/daemon.json\"]"
+      ],
+      "command_preview": "systemctl restart docker.service",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-none.dbf.hcl",
+        "line": 9,
+        "path": "host.docker-none1.docker.daemon"
+      }
+    }
+  ]
+}

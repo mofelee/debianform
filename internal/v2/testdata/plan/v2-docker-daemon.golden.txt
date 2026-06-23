@@ -85,6 +85,18 @@ Plan:
     + name: "docker-compose-plugin"
     + repositories
       + repositories.0: "docker-official"
+  + host.docker-daemon1.docker.package_conflicts
+    remove docker conflict packages
+    source: ../../../examples/v2-docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
+    + ensure: "absent"
+    + packages
+      + packages.0: "docker.io"
+      + packages.1: "docker-doc"
+      + packages.2: "docker-compose"
+      + packages.3: "podman-docker"
+      + packages.4: "containerd"
+      + packages.5: "runc"
+    + remove_conflicts: "auto"
   + host.docker-daemon1.docker.service["docker"]
     manage docker service
     source: ../../../examples/v2-docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
@@ -101,4 +113,4 @@ Plan:
     triggered_by: host.docker-daemon1.docker.daemon.file["/etc/docker/daemon.json"]
     command: systemctl restart docker.service
 
-Summary: 9 create, 0 update, 0 delete, 0 no-op, 2 operations
+Summary: 10 create, 0 update, 0 delete, 0 no-op, 2 operations

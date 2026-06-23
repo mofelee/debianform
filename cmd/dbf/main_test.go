@@ -1017,6 +1017,9 @@ case "$input" in
     printf 'file\nroot\nroot\n644\n61246a32aa079ddf3d8a57d922a7fc311d82f23379bfe0bec65f7c685c141e97\n'
     exit 0
     ;;
+  *"dpkg-query"*"docker.io"*"podman-docker"*"runc"*)
+    exit 0
+    ;;
   *"dpkg-query"*"docker-ce"*|*"dpkg-query"*"docker-ce-cli"*|*"dpkg-query"*"containerd.io"*|*"dpkg-query"*"docker-buildx-plugin"*|*"dpkg-query"*"docker-compose-plugin"*)
     printf 'install ok installed\t1.0\n'
     exit 0
@@ -1065,6 +1068,9 @@ case "$input" in
     ;;
   *"/etc/apt/sources.list.d/docker_official.sources"*)
     printf 'file\nroot\nroot\n644\n61246a32aa079ddf3d8a57d922a7fc311d82f23379bfe0bec65f7c685c141e97\n'
+    exit 0
+    ;;
+  *"dpkg-query"*"docker.io"*"podman-docker"*"runc"*)
     exit 0
     ;;
   *"dpkg-query"*"docker-ce"*|*"dpkg-query"*"docker-ce-cli"*|*"dpkg-query"*"containerd.io"*|*"dpkg-query"*"docker-buildx-plugin"*|*"dpkg-query"*"docker-compose-plugin"*)

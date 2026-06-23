@@ -256,6 +256,14 @@ Docker v2 DSL MVP 已支持官方 Docker APT 源、默认 Docker packages、`doc
 enable/start、daemon JSON、Compose 文件写入、`docker compose config` 校验、Compose
 project `running`/`stopped`/`absent` 收敛、generated systemd unit/service，以及
 `docker.users` supplementary group membership。
+`docker.package.source` 默认是 `official`，会使用 Docker 官方 APT 源并安装
+`docker-ce`、`docker-ce-cli`、`containerd.io`、`docker-buildx-plugin` 和
+`docker-compose-plugin`。也可以设置为 `debian` 使用 Debian 仓库里的 `docker.io` 和
+`docker-compose-plugin`，设置为 `none` 或 `custom` 时 DebianForm 不生成 Docker
+repository/key/package 节点，但仍可管理 daemon、service 和 Compose project。
+官方源会检测 `docker.io`、`docker-doc`、`docker-compose`、`podman-docker`、
+`containerd`、`runc` 等冲突包；`remove_conflicts = "auto"` 或 `true` 会在安装官方包前移除，
+`remove_conflicts = "false"` 会在检测到冲突时停止 plan/apply 并提示用户。
 `daemon.settings` 会以稳定 JSON 写入 `/etc/docker/daemon.json`，文件变化后 MVP 统一触发
 `systemctl restart docker.service`。DebianForm 不解析、不重写 Compose schema。
 真实 apply/check 依赖目标主机可以访问 Docker 官方 APT 源和镜像 registry：

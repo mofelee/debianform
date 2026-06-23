@@ -533,6 +533,100 @@ func TestNativeProviderDockerPackageApplyScript(t *testing.T) {
 	}
 }
 
+func TestNativeProviderDockerPackageConflictsPlanNoopWhenAbsent(t *testing.T) {
+	node := dockerPackageConflictsNode("auto")
+	runner := &recordingRunner{outputs: []Result{{Stdout: ""}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionNoOp {
+		t.Fatalf("conflict plan action = %q, want no-op; observed=%#v", got.Action, got.Observed)
+	}
+	if len(runner.scripts) != 1 || !strings.Contains(runner.scripts[0], "dpkg-query") {
+		t.Fatalf("conflict detection script = %#v, want dpkg-query", runner.scripts)
+	}
+}
+
+func TestNativeProviderDockerPackageConflictsPlanAutoAndTrueDelete(t *testing.T) {
+	for _, tt := range []struct {
+		removeConflicts string
+		wantSummary     string
+	}{
+		{removeConflicts: "auto", wantSummary: "replace docker conflict packages docker.io, runc"},
+		{removeConflicts: "true", wantSummary: "remove docker conflict packages docker.io, runc"},
+	} {
+		t.Run(tt.removeConflicts, func(t *testing.T) {
+			node := dockerPackageConflictsNode(tt.removeConflicts)
+			runner := &recordingRunner{outputs: []Result{{Stdout: "docker.io\tinstall ok installed\nrunc\tinstall ok installed\n"}}}
+			provider := NewNativeProvider(runner)
+
+			got, err := provider.Plan(context.Background(), node, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Action != ActionDelete || got.Summary != tt.wantSummary {
+				t.Fatalf("conflict plan = %#v, want delete summary %q", got, tt.wantSummary)
+			}
+			installed := stringListMapValue(got.Observed, "installed")
+			if strings.Join(installed, ",") != "docker.io,runc" {
+				t.Fatalf("installed conflicts = %#v, want docker.io,runc", installed)
+			}
+		})
+	}
+}
+
+func TestNativeProviderDockerPackageConflictsApplyRemovesInstalledPackages(t *testing.T) {
+	node := dockerPackageConflictsNode("auto")
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+
+	observed, err := provider.Apply(context.Background(), Step{
+		Node:     node,
+		Action:   ActionDelete,
+		Observed: map[string]any{"installed": []string{"docker.io", "runc"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(stringListMapValue(observed, "removed"), ","); got != "docker.io,runc" {
+		t.Fatalf("removed conflicts = %q, want docker.io,runc", got)
+	}
+	if len(runner.scripts) != 1 {
+		t.Fatalf("scripts = %#v, want one removal script", runner.scripts)
+	}
+	for _, want := range []string{
+		"export DEBIAN_FRONTEND=noninteractive",
+		"'apt-get' 'remove' '-y' 'docker.io' 'runc'",
+	} {
+		if !strings.Contains(runner.scripts[0], want) {
+			t.Fatalf("conflict removal script missing %q:\n%s", want, runner.scripts[0])
+		}
+	}
+}
+
+func TestNativeProviderDockerPackageConflictsPlanFalseErrors(t *testing.T) {
+	node := dockerPackageConflictsNode("false")
+	runner := &recordingRunner{outputs: []Result{{Stdout: "docker.io\tinstall ok installed\n"}}}
+	provider := NewNativeProvider(runner)
+
+	_, err := provider.Plan(context.Background(), node, nil)
+	if err == nil || !strings.Contains(err.Error(), "docker conflict packages are installed: docker.io") || !strings.Contains(err.Error(), "remove_conflicts") {
+		t.Fatalf("conflict false error = %v", err)
+	}
+
+	_, err = provider.Apply(context.Background(), Step{
+		Node:     node,
+		Action:   ActionDelete,
+		Observed: map[string]any{"installed": []string{"docker.io"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "docker conflict packages are installed: docker.io") || !strings.Contains(err.Error(), "remove_conflicts") {
+		t.Fatalf("conflict false apply error = %v", err)
+	}
+}
+
 func TestNativeProviderComponentDownloadURL(t *testing.T) {
 	node := graph.Node{
 		Address: "host.server1.components.rclone.artifact.download[\"amd64\"]",
@@ -1214,6 +1308,19 @@ func userGroupMembershipNode(user, group string) graph.Node {
 			"group":  group,
 			"ensure": "present",
 			"note":   "user must log out and back in for docker group membership to affect existing sessions",
+		},
+	}
+}
+
+func dockerPackageConflictsNode(removeConflicts string) graph.Node {
+	return graph.Node{
+		Address: `host.docker1.docker.package_conflicts`,
+		Host:    "docker1",
+		Kind:    "docker_package_conflicts",
+		Desired: map[string]any{
+			"packages":         []string{"docker.io", "docker-doc", "docker-compose", "podman-docker", "containerd", "runc"},
+			"remove_conflicts": removeConflicts,
+			"ensure":           "absent",
 		},
 	}
 }

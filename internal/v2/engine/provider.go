@@ -49,6 +49,8 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2stat
 		return p.planDirectory(ctx, node, prior)
 	case "package":
 		return p.planPackage(ctx, node, prior)
+	case "docker_package_conflicts":
+		return p.planDockerPackageConflicts(ctx, node, prior)
 	case "kernel_module":
 		return p.planKernelModule(ctx, node, prior)
 	case "sysctl":
@@ -94,6 +96,8 @@ func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, e
 		return p.applyDirectory(ctx, step)
 	case "package":
 		return p.applyPackage(ctx, step)
+	case "docker_package_conflicts":
+		return p.applyDockerPackageConflicts(ctx, step)
 	case "kernel_module":
 		return p.applyKernelModule(ctx, step)
 	case "sysctl":
@@ -146,6 +150,8 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 		}
 		_, err := p.Runner.Run(ctx, host, "set -eu\nexport DEBIAN_FRONTEND=noninteractive\napt-get remove -y "+shellQuote(name)+"\n")
 		return err
+	case "docker_package_conflicts":
+		return nil
 	case "kernel_module":
 		name := stringMapValue(desired, "name")
 		if name == "" {
@@ -1107,6 +1113,84 @@ func (p NativeProvider) applyPackage(ctx context.Context, step Step) (map[string
 		return nil, err
 	}
 	return map[string]any{"installed": !ensureAbsent(step.Node), "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planDockerPackageConflicts(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	packages := stringListDesired(node, "packages")
+	installed, err := p.installedPackages(ctx, node.Host, packages)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := map[string]any{
+		"installed": installed,
+	}
+	if len(installed) == 0 {
+		return ProviderPlan{Action: ActionNoOp, Summary: "no docker conflict packages installed", Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	switch stringDesired(node, "remove_conflicts") {
+	case "false":
+		return ProviderPlan{}, fmt.Errorf("%s: docker conflict packages are installed: %s; set docker.package.remove_conflicts = true or auto to remove them", node.Address, strings.Join(installed, ", "))
+	case "true":
+		return ProviderPlan{Action: ActionDelete, Summary: "remove docker conflict packages " + strings.Join(installed, ", "), Observed: observed, Ownership: ownership(prior)}, nil
+	default:
+		return ProviderPlan{Action: ActionDelete, Summary: "replace docker conflict packages " + strings.Join(installed, ", "), Observed: observed, Ownership: ownership(prior)}, nil
+	}
+}
+
+func (p NativeProvider) applyDockerPackageConflicts(ctx context.Context, step Step) (map[string]any, error) {
+	installed := stringListMapValue(step.Observed, "installed")
+	if len(installed) == 0 {
+		var err error
+		installed, err = p.installedPackages(ctx, step.Node.Host, stringListDesired(step.Node, "packages"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(installed) == 0 {
+		return map[string]any{"installed": []string{}, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+	}
+	if stringDesired(step.Node, "remove_conflicts") == "false" {
+		return nil, fmt.Errorf("%s: docker conflict packages are installed: %s; set docker.package.remove_conflicts = true or auto to remove them", step.Node.Address, strings.Join(installed, ", "))
+	}
+	lines := []string{"set -eu", "export DEBIAN_FRONTEND=noninteractive"}
+	args := []string{"apt-get", "remove", "-y"}
+	args = append(args, installed...)
+	lines = append(lines, strings.Join(shellQuoteArgs(args), " "))
+	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"installed": []string{}, "removed": installed, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) installedPackages(ctx context.Context, host string, packages []string) ([]string, error) {
+	if len(packages) == 0 {
+		return nil, nil
+	}
+	args := []string{"dpkg-query", "-W", "-f=${binary:Package}\\t${Status}\\n"}
+	args = append(args, packages...)
+	result, err := p.Runner.Run(ctx, host, strings.Join(shellQuoteArgs(args), " ")+" 2>/dev/null || true\n")
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]struct{}{}
+	for _, line := range strings.Split(result.Stdout, "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) < 2 || !strings.Contains(fields[1], "install ok installed") {
+			continue
+		}
+		name := strings.TrimSpace(fields[0])
+		if name != "" {
+			seen[name] = struct{}{}
+		}
+	}
+	var installed []string
+	for _, name := range packages {
+		if _, ok := seen[name]; ok {
+			installed = append(installed, name)
+		}
+	}
+	return installed, nil
 }
 
 func (p NativeProvider) planKernelModule(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
@@ -2097,6 +2181,18 @@ func stringListDesired(node graph.Node, name string) []string {
 	if !ok || value == nil {
 		return nil
 	}
+	return stringListAnyValue(value)
+}
+
+func stringListMapValue(values map[string]any, name string) []string {
+	value, ok := values[name]
+	if !ok || value == nil {
+		return nil
+	}
+	return stringListAnyValue(value)
+}
+
+func stringListAnyValue(value any) []string {
 	switch v := value.(type) {
 	case []string:
 		return append([]string(nil), v...)

@@ -139,6 +139,7 @@
       },
       "depends_on": [
         "host.docker-daemon1.docker.apt.repository[\"docker-official\"]",
+        "host.docker-daemon1.docker.package_conflicts",
         "host.docker-daemon1.apt.cache_refresh"
       ]
     },
@@ -170,6 +171,7 @@
       },
       "depends_on": [
         "host.docker-daemon1.docker.apt.repository[\"docker-official\"]",
+        "host.docker-daemon1.docker.package_conflicts",
         "host.docker-daemon1.apt.cache_refresh"
       ]
     },
@@ -201,6 +203,7 @@
       },
       "depends_on": [
         "host.docker-daemon1.docker.apt.repository[\"docker-official\"]",
+        "host.docker-daemon1.docker.package_conflicts",
         "host.docker-daemon1.apt.cache_refresh"
       ]
     },
@@ -232,6 +235,7 @@
       },
       "depends_on": [
         "host.docker-daemon1.docker.apt.repository[\"docker-official\"]",
+        "host.docker-daemon1.docker.package_conflicts",
         "host.docker-daemon1.apt.cache_refresh"
       ]
     },
@@ -263,8 +267,46 @@
       },
       "depends_on": [
         "host.docker-daemon1.docker.apt.repository[\"docker-official\"]",
+        "host.docker-daemon1.docker.package_conflicts",
         "host.docker-daemon1.apt.cache_refresh"
       ]
+    },
+    {
+      "host": "docker-daemon1",
+      "address": "host.docker-daemon1.docker.package_conflicts",
+      "kind": "docker_package_conflicts",
+      "summary": "remove docker conflict packages",
+      "source": {
+        "file": "../../../examples/v2-docker-daemon.dbf.hcl",
+        "line": 12,
+        "path": "host.docker-daemon1.docker"
+      },
+      "desired": {
+        "ensure": "absent",
+        "packages": [
+          "docker.io",
+          "docker-doc",
+          "docker-compose",
+          "podman-docker",
+          "containerd",
+          "runc"
+        ],
+        "remove_conflicts": "auto"
+      },
+      "provider_type": "docker_package_conflicts",
+      "provider_address": "docker_package_conflicts.docker_daemon1_docker",
+      "provider_payload": {
+        "ensure": "absent",
+        "packages": [
+          "docker.io",
+          "docker-doc",
+          "docker-compose",
+          "podman-docker",
+          "containerd",
+          "runc"
+        ],
+        "remove_conflicts": "auto"
+      }
     },
     {
       "host": "docker-daemon1",

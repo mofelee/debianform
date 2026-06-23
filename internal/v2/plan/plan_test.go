@@ -104,8 +104,8 @@ func TestDockerMinimalPlanJSONGolden(t *testing.T) {
 	got := string(data) + "\n"
 	assertGolden(t, "../testdata/plan/v2-docker-minimal.golden.json", got)
 
-	if doc.Summary.Create != 8 {
-		t.Fatalf("create count = %d, want 8", doc.Summary.Create)
+	if doc.Summary.Create != 9 {
+		t.Fatalf("create count = %d, want 9", doc.Summary.Create)
 	}
 	if doc.Summary.Operations != 1 {
 		t.Fatalf("operations = %d, want 1", doc.Summary.Operations)
@@ -113,6 +113,7 @@ func TestDockerMinimalPlanJSONGolden(t *testing.T) {
 	for _, want := range []string{
 		`host.docker1.docker.apt.signing_key["docker-official"]`,
 		`host.docker1.docker.apt.repository["docker-official"]`,
+		`host.docker1.docker.package_conflicts`,
 		`host.docker1.docker.package["docker-ce"]`,
 		`host.docker1.docker.service["docker"]`,
 	} {
@@ -122,6 +123,66 @@ func TestDockerMinimalPlanJSONGolden(t *testing.T) {
 	}
 	if !hasOperation(doc, "host.docker1.apt.cache_refresh") {
 		t.Fatalf("docker apt cache refresh operation missing: %#v", doc.Operations)
+	}
+}
+
+func TestDockerPackageSourcesPlanJSONGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-docker-package-sources.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-docker-package-sources.dbf.hcl",
+		Host:        "docker-sources1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/v2-docker-package-sources.golden.json", got)
+
+	if doc.Summary.Create != 3 {
+		t.Fatalf("create count = %d, want 3", doc.Summary.Create)
+	}
+	if doc.Summary.Operations != 0 {
+		t.Fatalf("operations = %d, want 0", doc.Summary.Operations)
+	}
+	for _, want := range []string{
+		`host.docker-sources1.docker.package["docker.io"]`,
+		`host.docker-sources1.docker.package["docker-compose-plugin"]`,
+		`host.docker-sources1.docker.service["docker"]`,
+	} {
+		if !hasChange(doc, want) {
+			t.Fatalf("docker package sources plan missing change %q", want)
+		}
+	}
+	if hasChange(doc, `host.docker-sources1.docker.apt.repository["docker-official"]`) {
+		t.Fatalf("debian source plan generated docker official repository")
+	}
+}
+
+func TestDockerPackageSourcesPlanTextGolden(t *testing.T) {
+	doc := planFixture(t, "../../../examples/v2-docker-package-sources.dbf.hcl", Options{
+		CommandFile: "../../../examples/v2-docker-package-sources.dbf.hcl",
+		Host:        "docker-sources1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	assertGolden(t, "../testdata/plan/v2-docker-package-sources.golden.txt", text.String())
+	for _, want := range []string{
+		`host.docker-sources1.docker.package["docker.io"]`,
+		`host.docker-sources1.docker.package["docker-compose-plugin"]`,
+	} {
+		if !strings.Contains(text.String(), want) {
+			t.Fatalf("docker package sources text plan missing %q:\n%s", want, text.String())
+		}
+	}
+	if strings.Contains(text.String(), "docker-official") {
+		t.Fatalf("debian source text plan mentioned docker official repository:\n%s", text.String())
 	}
 }
 
@@ -160,8 +221,8 @@ func TestDockerDaemonPlanJSONGolden(t *testing.T) {
 	got := string(data) + "\n"
 	assertGolden(t, "../testdata/plan/v2-docker-daemon.golden.json", got)
 
-	if doc.Summary.Create != 9 {
-		t.Fatalf("create count = %d, want 9", doc.Summary.Create)
+	if doc.Summary.Create != 10 {
+		t.Fatalf("create count = %d, want 10", doc.Summary.Create)
 	}
 	if doc.Summary.Operations != 2 {
 		t.Fatalf("operations = %d, want 2", doc.Summary.Operations)
@@ -212,8 +273,8 @@ func TestDockerComposePlanJSONGolden(t *testing.T) {
 	got := string(data) + "\n"
 	assertGolden(t, "../testdata/plan/v2-docker-compose.golden.json", got)
 
-	if doc.Summary.Create != 14 {
-		t.Fatalf("create count = %d, want 14", doc.Summary.Create)
+	if doc.Summary.Create != 15 {
+		t.Fatalf("create count = %d, want 15", doc.Summary.Create)
 	}
 	if doc.Summary.Operations != 3 {
 		t.Fatalf("operations = %d, want 3", doc.Summary.Operations)
@@ -298,8 +359,8 @@ func TestDockerUsersPlanJSONGolden(t *testing.T) {
 	got := string(data) + "\n"
 	assertGolden(t, "../testdata/plan/v2-docker-users.golden.json", got)
 
-	if doc.Summary.Create != 12 {
-		t.Fatalf("create count = %d, want 12", doc.Summary.Create)
+	if doc.Summary.Create != 13 {
+		t.Fatalf("create count = %d, want 13", doc.Summary.Create)
 	}
 	if !hasChange(doc, `host.docker-users1.docker.user_group_membership["deploy:docker"]`) {
 		t.Fatalf("docker users membership change missing")
@@ -882,6 +943,7 @@ func testHostFacts() map[string]ir.HostFacts {
 		"compose1",
 		"docker-daemon1",
 		"docker1",
+		"docker-sources1",
 		"docker-users1",
 		"edge1",
 		"foundation1",

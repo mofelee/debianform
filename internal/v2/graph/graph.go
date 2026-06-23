@@ -1545,6 +1545,20 @@ var dockerOfficialPackages = []string{
 	"docker-compose-plugin",
 }
 
+var dockerDebianPackages = []string{
+	"docker.io",
+	"docker-compose-plugin",
+}
+
+var dockerConflictPackages = []string{
+	"docker.io",
+	"docker-doc",
+	"docker-compose",
+	"podman-docker",
+	"containerd",
+	"runc",
+}
+
 type dockerEngineGraph struct {
 	Nodes                    []Node
 	Operations               []Operation
@@ -1567,24 +1581,23 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 	if docker.Package.Version != nil {
 		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker package version pinning is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path)
 	}
-	if docker.Package.RemoveConflicts != "auto" {
-		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker conflict package removal is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path)
-	}
 
 	switch docker.Package.Source {
 	case "official":
 	case "none":
 		installPackages = false
-	case "debian", "custom":
-		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker package source %q is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Source)
+	case "custom":
+		installPackages = false
+	case "debian":
 	default:
-		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker package source %q is not implemented in this loop", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Source)
+		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker package source %q is not supported", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Source)
 	}
 
 	out := dockerEngineGraph{}
 	repositoryAddress := ""
 
-	if installPackages {
+	switch docker.Package.Source {
+	case "official":
 		if host.System.Architecture == "" {
 			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.system.architecture: host %q must declare system.architecture to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
 		}
@@ -1656,6 +1669,24 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 		})
 		out.RepositoryTriggers = append(out.RepositoryTriggers, keyAddress, repositoryAddress)
 
+		conflictAddress := fmt.Sprintf("host.%s.docker.package_conflicts", host.Name)
+		conflictDesired := map[string]any{
+			"packages":         append([]string(nil), dockerConflictPackages...),
+			"remove_conflicts": docker.Package.RemoveConflicts,
+			"ensure":           "absent",
+		}
+		out.Nodes = append(out.Nodes, Node{
+			Host:            host.Name,
+			Address:         conflictAddress,
+			Kind:            "docker_package_conflicts",
+			Summary:         "remove docker conflict packages",
+			Source:          docker.Package.SourceRef,
+			Desired:         conflictDesired,
+			ProviderType:    "docker_package_conflicts",
+			ProviderAddress: "docker_package_conflicts." + providerName(host.Name, "docker"),
+			ProviderPayload: conflictDesired,
+		})
+
 		for _, name := range dockerOfficialPackages {
 			address := fmt.Sprintf("host.%s.docker.package[%s]", host.Name, strconv.Quote(name))
 			desired := map[string]any{
@@ -1670,7 +1701,27 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 				Summary:         "install docker package " + name,
 				Source:          docker.Package.SourceRef,
 				Desired:         desired,
-				DependsOn:       []string{repositoryAddress},
+				DependsOn:       []string{repositoryAddress, conflictAddress},
+				ProviderType:    "package",
+				ProviderAddress: "package." + providerName(host.Name, "docker", name),
+				ProviderPayload: desired,
+			})
+			out.PackageAddresses = append(out.PackageAddresses, address)
+		}
+	case "debian":
+		for _, name := range dockerDebianPackages {
+			address := fmt.Sprintf("host.%s.docker.package[%s]", host.Name, strconv.Quote(name))
+			desired := map[string]any{
+				"name":   name,
+				"ensure": "present",
+			}
+			out.Nodes = append(out.Nodes, Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "package",
+				Summary:         "install docker package " + name,
+				Source:          docker.Package.SourceRef,
+				Desired:         desired,
 				ProviderType:    "package",
 				ProviderAddress: "package." + providerName(host.Name, "docker", name),
 				ProviderPayload: desired,

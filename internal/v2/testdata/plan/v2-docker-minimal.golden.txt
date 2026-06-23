@@ -62,6 +62,18 @@ Plan:
     + name: "docker-compose-plugin"
     + repositories
       + repositories.0: "docker-official"
+  + host.docker1.docker.package_conflicts
+    remove docker conflict packages
+    source: ../../../examples/v2-docker-minimal.dbf.hcl:12:host.docker1.docker
+    + ensure: "absent"
+    + packages
+      + packages.0: "docker.io"
+      + packages.1: "docker-doc"
+      + packages.2: "docker-compose"
+      + packages.3: "podman-docker"
+      + packages.4: "containerd"
+      + packages.5: "runc"
+    + remove_conflicts: "auto"
   + host.docker1.docker.service["docker"]
     manage docker service
     source: ../../../examples/v2-docker-minimal.dbf.hcl:12:host.docker1.docker
@@ -74,4 +86,4 @@ Plan:
     triggered_by: host.docker1.docker.apt.signing_key["docker-official"], host.docker1.docker.apt.repository["docker-official"]
     command: apt-get update
 
-Summary: 8 create, 0 update, 0 delete, 0 no-op, 1 operations
+Summary: 9 create, 0 update, 0 delete, 0 no-op, 1 operations

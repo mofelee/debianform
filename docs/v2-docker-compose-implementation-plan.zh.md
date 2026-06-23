@@ -556,40 +556,40 @@ make test
 
 代码：
 
-- [ ] `source = "debian"` 不生成 Docker 官方 repository
-- [ ] `source = "debian"` 默认安装 `docker.io` 和 `docker-compose-plugin`
-- [ ] `source = "none"` 不生成 repository 和 package 节点
-- [ ] `source = "none"` 仍允许 daemon、service、compose
-- [ ] `source = "custom"` 不生成 repository/key/package，要求用户自己声明依赖或接受无 package 依赖
-- [ ] 新增 conflict detection 节点或 provider plan 扩展
-- [ ] 检测冲突包：
+- [x] `source = "debian"` 不生成 Docker 官方 repository
+- [x] `source = "debian"` 默认安装 `docker.io` 和 `docker-compose-plugin`
+- [x] `source = "none"` 不生成 repository 和 package 节点
+- [x] `source = "none"` 仍允许 daemon、service、compose
+- [x] `source = "custom"` 不生成 repository/key/package，要求用户自己声明依赖或接受无 package 依赖
+- [x] 新增 conflict detection 节点或 provider plan 扩展
+- [x] 检测冲突包：
   - `docker.io`
   - `docker-doc`
   - `docker-compose`
   - `podman-docker`
   - `containerd`
   - `runc`
-- [ ] `remove_conflicts = "auto"` plan 显示将替换的包，apply 移除需要替换的冲突包
-- [ ] `remove_conflicts = true` 强制移除已安装冲突包
-- [ ] `remove_conflicts = false` 检测到冲突包时 plan/apply 失败并提示用户
-- [ ] 冲突包移除节点在官方 Docker packages 前执行
+- [x] `remove_conflicts = "auto"` plan 显示将替换的包，apply 移除需要替换的冲突包
+- [x] `remove_conflicts = true` 强制移除已安装冲突包
+- [x] `remove_conflicts = false` 检测到冲突包时 plan/apply 失败并提示用户
+- [x] 冲突包移除节点在官方 Docker packages 前执行
 
 测试：
 
-- [ ] HostSpec golden 覆盖 debian/none/custom source
-- [ ] ResourceGraph golden 覆盖 `source = "debian"`
-- [ ] ResourceGraph golden 覆盖 `source = "none"`
-- [ ] provider fake runner 测试冲突包检测
-- [ ] provider fake runner 测试冲突包移除
-- [ ] 负例覆盖 `remove_conflicts = false` 时存在冲突包
+- [x] HostSpec golden 覆盖 debian/none/custom source
+- [x] ResourceGraph golden 覆盖 `source = "debian"`
+- [x] ResourceGraph golden 覆盖 `source = "none"`
+- [x] provider fake runner 测试冲突包检测
+- [x] provider fake runner 测试冲突包移除
+- [x] 负例覆盖 `remove_conflicts = false` 时存在冲突包
 
 示例：
 
-- [ ] 新增 `examples/v2-docker-package-sources.dbf.hcl`
+- [x] 新增 `examples/v2-docker-package-sources.dbf.hcl`
 
 文档：
 
-- [ ] 文档补充 source 变体语义和冲突包策略
+- [x] 文档补充 source 变体语义和冲突包策略
 
 验收：
 

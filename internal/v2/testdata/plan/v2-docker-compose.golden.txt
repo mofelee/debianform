@@ -151,6 +151,18 @@ Plan:
     + name: "docker-compose-plugin"
     + repositories
       + repositories.0: "docker-official"
+  + host.compose1.docker.package_conflicts
+    remove docker conflict packages
+    source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
+    + ensure: "absent"
+    + packages
+      + packages.0: "docker.io"
+      + packages.1: "docker-doc"
+      + packages.2: "docker-compose"
+      + packages.3: "podman-docker"
+      + packages.4: "containerd"
+      + packages.5: "runc"
+    + remove_conflicts: "auto"
   + host.compose1.docker.service["docker"]
     manage docker service
     source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
@@ -171,4 +183,4 @@ Plan:
     triggered_by: host.compose1.docker.compose["app"].file, host.compose1.docker.compose["app"].env_file["app"]
     command: docker compose -p app -f /opt/app/compose.yaml config
 
-Summary: 14 create, 0 update, 0 delete, 0 no-op, 3 operations
+Summary: 15 create, 0 update, 0 delete, 0 no-op, 3 operations

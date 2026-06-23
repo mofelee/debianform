@@ -328,6 +328,7 @@
       },
       "depends_on": [
         "host.compose1.docker.apt.repository[\"docker-official\"]",
+        "host.compose1.docker.package_conflicts",
         "host.compose1.apt.cache_refresh"
       ]
     },
@@ -359,6 +360,7 @@
       },
       "depends_on": [
         "host.compose1.docker.apt.repository[\"docker-official\"]",
+        "host.compose1.docker.package_conflicts",
         "host.compose1.apt.cache_refresh"
       ]
     },
@@ -390,6 +392,7 @@
       },
       "depends_on": [
         "host.compose1.docker.apt.repository[\"docker-official\"]",
+        "host.compose1.docker.package_conflicts",
         "host.compose1.apt.cache_refresh"
       ]
     },
@@ -421,6 +424,7 @@
       },
       "depends_on": [
         "host.compose1.docker.apt.repository[\"docker-official\"]",
+        "host.compose1.docker.package_conflicts",
         "host.compose1.apt.cache_refresh"
       ]
     },
@@ -452,8 +456,46 @@
       },
       "depends_on": [
         "host.compose1.docker.apt.repository[\"docker-official\"]",
+        "host.compose1.docker.package_conflicts",
         "host.compose1.apt.cache_refresh"
       ]
+    },
+    {
+      "host": "compose1",
+      "address": "host.compose1.docker.package_conflicts",
+      "kind": "docker_package_conflicts",
+      "summary": "remove docker conflict packages",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      },
+      "desired": {
+        "ensure": "absent",
+        "packages": [
+          "docker.io",
+          "docker-doc",
+          "docker-compose",
+          "podman-docker",
+          "containerd",
+          "runc"
+        ],
+        "remove_conflicts": "auto"
+      },
+      "provider_type": "docker_package_conflicts",
+      "provider_address": "docker_package_conflicts.compose1_docker",
+      "provider_payload": {
+        "ensure": "absent",
+        "packages": [
+          "docker.io",
+          "docker-doc",
+          "docker-compose",
+          "podman-docker",
+          "containerd",
+          "runc"
+        ],
+        "remove_conflicts": "auto"
+      }
     },
     {
       "host": "compose1",

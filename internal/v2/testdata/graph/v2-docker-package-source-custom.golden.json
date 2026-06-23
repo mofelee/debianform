@@ -1,0 +1,249 @@
+{
+  "nodes": [
+    {
+      "host": "docker-custom1",
+      "address": "host.docker-custom1.docker.compose[\"app\"].directory",
+      "kind": "directory",
+      "summary": "create docker compose directory /opt/app",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-custom.dbf.hcl",
+        "line": 9,
+        "path": "host.docker-custom1.docker.compose[\"app\"]"
+      },
+      "desired": {
+        "ensure": "present",
+        "group": "root",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/opt/app"
+      },
+      "provider_type": "directory",
+      "provider_address": "directory.docker_custom1_docker_compose_app__opt_app",
+      "provider_payload": {
+        "ensure": "present",
+        "group": "root",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/opt/app"
+      }
+    },
+    {
+      "host": "docker-custom1",
+      "address": "host.docker-custom1.docker.compose[\"app\"].file",
+      "kind": "file",
+      "summary": "manage docker compose file",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-custom.dbf.hcl",
+        "line": 12,
+        "path": "host.docker-custom1.docker.compose[\"app\"].file"
+      },
+      "desired": {
+        "compose": "app",
+        "content": "services: {}\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/opt/app/compose.yaml",
+        "sensitive": false,
+        "summary": {
+          "sha256": "fa6ccea1ca4e3a031d9e99f25cc05db803aa9bac642c000ddab14f6d9da54b52",
+          "bytes": 13
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.docker_custom1__opt_app_compose_yaml",
+      "provider_payload": {
+        "compose": "app",
+        "content": "services: {}\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/opt/app/compose.yaml",
+        "sensitive": false,
+        "summary": {
+          "sha256": "fa6ccea1ca4e3a031d9e99f25cc05db803aa9bac642c000ddab14f6d9da54b52",
+          "bytes": 13
+        }
+      },
+      "depends_on": [
+        "host.docker-custom1.docker.compose[\"app\"].directory",
+        "host.docker-custom1.docker.service[\"docker\"]"
+      ]
+    },
+    {
+      "host": "docker-custom1",
+      "address": "host.docker-custom1.docker.compose[\"app\"].project",
+      "kind": "docker_compose_project",
+      "summary": "converge docker compose project app",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-custom.dbf.hcl",
+        "line": 9,
+        "path": "host.docker-custom1.docker.compose[\"app\"]"
+      },
+      "desired": {
+        "directory": "/opt/app",
+        "files": [
+          "/opt/app/compose.yaml"
+        ],
+        "name": "app",
+        "project": "app",
+        "pull": "missing",
+        "recreate": "auto",
+        "remove_orphans": false,
+        "state": "running"
+      },
+      "provider_type": "docker_compose_project",
+      "provider_address": "docker_compose_project.docker_custom1_app",
+      "provider_payload": {
+        "directory": "/opt/app",
+        "files": [
+          "/opt/app/compose.yaml"
+        ],
+        "name": "app",
+        "project": "app",
+        "pull": "missing",
+        "recreate": "auto",
+        "remove_orphans": false,
+        "state": "running"
+      },
+      "depends_on": [
+        "host.docker-custom1.docker.compose[\"app\"].validate",
+        "host.docker-custom1.docker.compose[\"app\"].service"
+      ]
+    },
+    {
+      "host": "docker-custom1",
+      "address": "host.docker-custom1.docker.compose[\"app\"].service",
+      "kind": "service",
+      "summary": "manage docker compose service debianform-compose-app",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-custom.dbf.hcl",
+        "line": 9,
+        "path": "host.docker-custom1.docker.compose[\"app\"]"
+      },
+      "desired": {
+        "enabled": true,
+        "name": "debianform-compose-app",
+        "state": "running",
+        "unit": "debianform-compose-app.service"
+      },
+      "provider_type": "service",
+      "provider_address": "service.docker_custom1_docker_compose_app",
+      "provider_payload": {
+        "enabled": true,
+        "name": "debianform-compose-app",
+        "state": "running",
+        "unit": "debianform-compose-app.service"
+      },
+      "depends_on": [
+        "host.docker-custom1.docker.compose[\"app\"].systemd_unit",
+        "host.docker-custom1.docker.compose[\"app\"].daemon_reload"
+      ]
+    },
+    {
+      "host": "docker-custom1",
+      "address": "host.docker-custom1.docker.compose[\"app\"].systemd_unit",
+      "kind": "systemd_unit",
+      "summary": "create docker compose systemd unit debianform-compose-app.service",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-custom.dbf.hcl",
+        "line": 9,
+        "path": "host.docker-custom1.docker.compose[\"app\"]"
+      },
+      "desired": {
+        "content": "[Unit]\nDescription=DebianForm Compose Project app\nRequires=docker.service\nAfter=docker.service network-online.target\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nWorkingDirectory=/opt/app\nExecStart=/usr/bin/docker compose -p app -f /opt/app/compose.yaml up -d\nExecStop=/usr/bin/docker compose -p app -f /opt/app/compose.yaml stop\nTimeoutStartSec=0\n\n[Install]\nWantedBy=multi-user.target\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "debianform-compose-app.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/debianform-compose-app.service",
+        "summary": {
+          "sha256": "6cd6cbb3f51b6cd295517fa585d8573a31c5d55879472513038c5329b490072a",
+          "bytes": 385
+        }
+      },
+      "provider_type": "systemd_unit",
+      "provider_address": "systemd_unit.docker_custom1_docker_compose_app_debianform_compose_app_service",
+      "provider_payload": {
+        "content": "[Unit]\nDescription=DebianForm Compose Project app\nRequires=docker.service\nAfter=docker.service network-online.target\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nWorkingDirectory=/opt/app\nExecStart=/usr/bin/docker compose -p app -f /opt/app/compose.yaml up -d\nExecStop=/usr/bin/docker compose -p app -f /opt/app/compose.yaml stop\nTimeoutStartSec=0\n\n[Install]\nWantedBy=multi-user.target\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "debianform-compose-app.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/debianform-compose-app.service",
+        "summary": {
+          "sha256": "6cd6cbb3f51b6cd295517fa585d8573a31c5d55879472513038c5329b490072a",
+          "bytes": 385
+        }
+      },
+      "depends_on": [
+        "host.docker-custom1.docker.compose[\"app\"].validate"
+      ]
+    },
+    {
+      "host": "docker-custom1",
+      "address": "host.docker-custom1.docker.service[\"docker\"]",
+      "kind": "service",
+      "summary": "manage docker service",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-custom.dbf.hcl",
+        "line": 2,
+        "path": "host.docker-custom1.docker"
+      },
+      "desired": {
+        "enabled": true,
+        "name": "docker",
+        "state": "running",
+        "unit": "docker.service"
+      },
+      "provider_type": "service",
+      "provider_address": "service.docker_custom1_docker",
+      "provider_payload": {
+        "enabled": true,
+        "name": "docker",
+        "state": "running",
+        "unit": "docker.service"
+      }
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.docker-custom1.docker.compose[\"app\"].daemon_reload",
+      "action": "run",
+      "summary": "reload systemd manager configuration",
+      "depends_on": [
+        "host.docker-custom1.docker.compose[\"app\"].systemd_unit"
+      ],
+      "triggered_by": [
+        "host.docker-custom1.docker.compose[\"app\"].systemd_unit"
+      ],
+      "command_preview": "systemctl daemon-reload",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-custom.dbf.hcl",
+        "line": 9,
+        "path": "host.docker-custom1.docker.compose[\"app\"]"
+      }
+    },
+    {
+      "address": "host.docker-custom1.docker.compose[\"app\"].validate",
+      "action": "run",
+      "summary": "validate docker compose project app",
+      "depends_on": [
+        "host.docker-custom1.docker.compose[\"app\"].file"
+      ],
+      "triggered_by": [
+        "host.docker-custom1.docker.compose[\"app\"].file"
+      ],
+      "command_preview": "docker compose -p app -f /opt/app/compose.yaml config",
+      "source": {
+        "file": "../testdata/fixtures/v2-docker-package-source-custom.dbf.hcl",
+        "line": 9,
+        "path": "host.docker-custom1.docker.compose[\"app\"]"
+      }
+    }
+  ]
+}

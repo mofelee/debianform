@@ -117,6 +117,7 @@ func TestCompileDockerMinimalResourceGraphGolden(t *testing.T) {
 	keyAddress := `host.docker1.docker.apt.signing_key["docker-official"]`
 	repositoryAddress := `host.docker1.docker.apt.repository["docker-official"]`
 	refreshAddress := `host.docker1.apt.cache_refresh`
+	conflictAddress := `host.docker1.docker.package_conflicts`
 	serviceAddress := `host.docker1.docker.service["docker"]`
 	packageAddresses := []string{
 		`host.docker1.docker.package["docker-ce"]`,
@@ -157,11 +158,18 @@ func TestCompileDockerMinimalResourceGraphGolden(t *testing.T) {
 	}
 	for _, packageAddress := range packageAddresses {
 		deps := dependsOnFor(resourceGraph, packageAddress)
-		for _, want := range []string{repositoryAddress, refreshAddress} {
+		for _, want := range []string{repositoryAddress, refreshAddress, conflictAddress} {
 			if !containsString(deps, want) {
 				t.Fatalf("%s deps = %#v, want %q", packageAddress, deps, want)
 			}
 		}
+	}
+	conflicts := nodeFor(resourceGraph, conflictAddress)
+	if conflicts == nil || conflicts.Kind != "docker_package_conflicts" {
+		t.Fatalf("docker conflict node = %#v", conflicts)
+	}
+	if conflicts.Desired["remove_conflicts"] != "auto" {
+		t.Fatalf("docker conflict desired = %#v, want remove_conflicts auto", conflicts.Desired)
 	}
 	serviceDeps := dependsOnFor(resourceGraph, serviceAddress)
 	for _, want := range packageAddresses {
@@ -175,7 +183,95 @@ func TestCompileDockerMinimalResourceGraphGolden(t *testing.T) {
 	assertBefore(t, order, repositoryAddress, refreshAddress)
 	for _, packageAddress := range packageAddresses {
 		assertBefore(t, order, refreshAddress, packageAddress)
+		assertBefore(t, order, conflictAddress, packageAddress)
 		assertBefore(t, order, packageAddress, serviceAddress)
+	}
+}
+
+func TestCompileDockerPackageSourcesResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/v2-docker-package-sources.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-docker-package-sources.golden.json", got)
+
+	for _, unexpected := range []string{
+		`host.docker-sources1.docker.apt.signing_key["docker-official"]`,
+		`host.docker-sources1.docker.apt.repository["docker-official"]`,
+		`host.docker-sources1.docker.package_conflicts`,
+		`host.docker-sources1.apt.cache_refresh`,
+	} {
+		if nodeFor(resourceGraph, unexpected) != nil || operationFor(resourceGraph, unexpected) != nil {
+			t.Fatalf("package source debian generated %s", unexpected)
+		}
+	}
+	for _, want := range []string{
+		`host.docker-sources1.docker.package["docker.io"]`,
+		`host.docker-sources1.docker.package["docker-compose-plugin"]`,
+	} {
+		if nodeFor(resourceGraph, want) == nil {
+			t.Fatalf("package source debian missing %s", want)
+		}
+		if !containsString(dependsOnFor(resourceGraph, `host.docker-sources1.docker.service["docker"]`), want) {
+			t.Fatalf("docker service deps = %#v, want %q", dependsOnFor(resourceGraph, `host.docker-sources1.docker.service["docker"]`), want)
+		}
+	}
+}
+
+func TestCompileDockerPackageSourceNoneResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/v2-docker-package-source-none.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-docker-package-source-none.golden.json", got)
+
+	for _, unexpected := range []string{
+		`host.docker-none1.docker.apt.repository["docker-official"]`,
+		`host.docker-none1.docker.package["docker-ce"]`,
+		`host.docker-none1.docker.package_conflicts`,
+	} {
+		if nodeFor(resourceGraph, unexpected) != nil {
+			t.Fatalf("package source none generated %s", unexpected)
+		}
+	}
+	if nodeFor(resourceGraph, `host.docker-none1.docker.daemon.file["/etc/docker/daemon.json"]`) == nil {
+		t.Fatalf("package source none did not generate daemon file")
+	}
+	if nodeFor(resourceGraph, `host.docker-none1.docker.service["docker"]`) == nil {
+		t.Fatalf("package source none did not generate docker service")
+	}
+}
+
+func TestCompileDockerPackageSourceCustomResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/v2-docker-package-source-custom.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/v2-docker-package-source-custom.golden.json", got)
+
+	for _, unexpected := range []string{
+		`host.docker-custom1.docker.apt.repository["docker-official"]`,
+		`host.docker-custom1.docker.package["docker-ce"]`,
+		`host.docker-custom1.docker.package_conflicts`,
+	} {
+		if nodeFor(resourceGraph, unexpected) != nil {
+			t.Fatalf("package source custom generated %s", unexpected)
+		}
+	}
+	if nodeFor(resourceGraph, `host.docker-custom1.docker.service["docker"]`) == nil {
+		t.Fatalf("package source custom did not generate docker service")
+	}
+	if nodeFor(resourceGraph, `host.docker-custom1.docker.compose["app"].project`) == nil {
+		t.Fatalf("package source custom did not generate compose project")
 	}
 }
 
@@ -550,8 +646,8 @@ host "server1" {
 	}
 }
 
-func TestCompileDockerPackageSourceDebianNotImplemented(t *testing.T) {
-	err := compileGraphInlineError(t, `
+func TestCompileDockerPackageSourceDebianUsesDebianPackages(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
 host "server1" {
   system {
     architecture = "amd64"
@@ -567,8 +663,27 @@ host "server1" {
   }
 }
 `)
-	if err == nil || !strings.Contains(err.Error(), `docker package source "debian" is not implemented in this loop`) {
-		t.Fatalf("graph compile error = %v, want docker source not implemented", err)
+
+	for _, unexpected := range []string{
+		`host.server1.docker.apt.signing_key["docker-official"]`,
+		`host.server1.docker.apt.repository["docker-official"]`,
+		`host.server1.docker.package_conflicts`,
+		`host.server1.apt.cache_refresh`,
+	} {
+		if nodeFor(resourceGraph, unexpected) != nil || operationFor(resourceGraph, unexpected) != nil {
+			t.Fatalf("package source debian generated %s", unexpected)
+		}
+	}
+	for _, want := range []string{
+		`host.server1.docker.package["docker.io"]`,
+		`host.server1.docker.package["docker-compose-plugin"]`,
+	} {
+		if nodeFor(resourceGraph, want) == nil {
+			t.Fatalf("package source debian missing %s", want)
+		}
+		if !containsString(dependsOnFor(resourceGraph, `host.server1.docker.service["docker"]`), want) {
+			t.Fatalf("docker service deps = %#v, want %q", dependsOnFor(resourceGraph, `host.server1.docker.service["docker"]`), want)
+		}
 	}
 }
 
@@ -605,6 +720,53 @@ host "server1" {
 	}
 	if nodeFor(resourceGraph, `host.server1.docker.service["docker"]`) == nil {
 		t.Fatalf("package source none did not generate docker service")
+	}
+}
+
+func TestCompileDockerPackageSourceCustomSkipsManagedPackages(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "server1" {
+  docker {
+    enable = true
+
+    package {
+      source = "custom"
+    }
+
+    compose "app" {
+      directory = "/opt/app"
+
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+    }
+  }
+}
+`)
+
+	for _, unexpected := range []string{
+		`host.server1.docker.apt.signing_key["docker-official"]`,
+		`host.server1.docker.apt.repository["docker-official"]`,
+		`host.server1.docker.package_conflicts`,
+		`host.server1.docker.package["docker-ce"]`,
+		`host.server1.docker.package["docker.io"]`,
+		`host.server1.apt.cache_refresh`,
+	} {
+		if nodeFor(resourceGraph, unexpected) != nil || operationFor(resourceGraph, unexpected) != nil {
+			t.Fatalf("package source custom generated %s", unexpected)
+		}
+	}
+	service := nodeFor(resourceGraph, `host.server1.docker.service["docker"]`)
+	if service == nil {
+		t.Fatal("package source custom did not generate docker service")
+	}
+	if deps := service.DependsOn; len(deps) != 0 {
+		t.Fatalf("package source custom docker service deps = %#v, want no managed package deps", deps)
+	}
+	projectDeps := dependsOnFor(resourceGraph, `host.server1.docker.compose["app"].project`)
+	if containsString(projectDeps, `host.server1.docker.service["docker"]`) {
+		t.Fatalf("source custom compose project deps = %#v, want no docker service dependency", projectDeps)
 	}
 }
 

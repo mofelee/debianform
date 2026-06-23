@@ -3106,6 +3106,9 @@ func TestCompileDockerHostSpecGoldens(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/v2-docker-minimal.dbf.hcl", "../testdata/hostspec/v2-docker-minimal.golden.json")
 	assertHostSpecGolden(t, "../../../examples/v2-docker-daemon.dbf.hcl", "../testdata/hostspec/v2-docker-daemon.golden.json")
 	assertHostSpecGolden(t, "../../../examples/v2-docker-compose.dbf.hcl", "../testdata/hostspec/v2-docker-compose.golden.json")
+	assertHostSpecGolden(t, "../../../examples/v2-docker-package-sources.dbf.hcl", "../testdata/hostspec/v2-docker-package-sources.golden.json")
+	assertHostSpecGolden(t, "../testdata/fixtures/v2-docker-package-source-none.dbf.hcl", "../testdata/hostspec/v2-docker-package-source-none.golden.json")
+	assertHostSpecGolden(t, "../testdata/fixtures/v2-docker-package-source-custom.dbf.hcl", "../testdata/hostspec/v2-docker-package-source-custom.golden.json")
 	assertHostSpecGolden(t, "../../../examples/v2-docker-users.dbf.hcl", "../testdata/hostspec/v2-docker-users.golden.json")
 }
 
