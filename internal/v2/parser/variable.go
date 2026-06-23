@@ -27,6 +27,9 @@ func NormalizeVariableValue(variable Variable, value Value) (Value, error) {
 	if variable.Sensitive {
 		normalized.Sensitive = true
 	}
+	if variable.Ephemeral {
+		normalized.Ephemeral = true
+	}
 	return normalized, nil
 }
 

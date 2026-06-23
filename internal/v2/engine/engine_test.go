@@ -116,6 +116,7 @@ func TestApplyStateDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 		{name: "sensitive file content", fixture: "../../../examples/v2-files-plan-preview.dbf.hcl", host: "preview1"},
 		{name: "sensitive component input", fixture: "../../../examples/v2-component-inputs.dbf.hcl", host: "input1"},
 		{name: "sensitive service environment", fixture: "../testdata/fixtures/v2-sensitive-service-environment.dbf.hcl", host: "server1"},
+		{name: "ephemeral variable content", fixture: "../testdata/fixtures/v2-ephemeral-variable-content.dbf.hcl", host: "ephemeral1"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			program, resourceGraph := fixtureProgramAndGraph(t, tt.fixture)

@@ -39,9 +39,11 @@ type Value struct {
 	Source    ir.SourceRef
 	Modifier  Modifier
 	Sensitive bool
+	Ephemeral bool
 }
 
 const SensitiveMark = "debianform:sensitive"
+const EphemeralMark = "debianform:ephemeral"
 
 func NullValue(source ir.SourceRef) Value {
 	return Value{Kind: KindNull, Source: source}
@@ -81,6 +83,27 @@ func (v Value) ContainsSensitive() bool {
 	case KindMap:
 		for _, item := range v.Map {
 			if item.ContainsSensitive() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (v Value) ContainsEphemeral() bool {
+	if v.Ephemeral {
+		return true
+	}
+	switch v.Kind {
+	case KindList:
+		for _, item := range v.List {
+			if item.ContainsEphemeral() {
+				return true
+			}
+		}
+	case KindMap:
+		for _, item := range v.Map {
+			if item.ContainsEphemeral() {
 				return true
 			}
 		}
@@ -170,6 +193,9 @@ func (v Value) ToCty() (cty.Value, error) {
 	}
 	if v.Sensitive {
 		converted = converted.Mark(SensitiveMark)
+	}
+	if v.Ephemeral {
+		converted = converted.Mark(EphemeralMark)
 	}
 	return converted, nil
 }

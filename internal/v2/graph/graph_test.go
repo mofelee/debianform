@@ -267,6 +267,7 @@ func TestResourceGraphDesiredDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 		{name: "sensitive component input", fixture: "../../../examples/v2-component-inputs.dbf.hcl"},
 		{name: "sensitive service environment", fixture: "../testdata/fixtures/v2-sensitive-service-environment.dbf.hcl"},
 		{name: "sensitive variable content", fixture: "../testdata/fixtures/v2-sensitive-variable-files.dbf.hcl"},
+		{name: "ephemeral variable content", fixture: "../testdata/fixtures/v2-ephemeral-variable-content.dbf.hcl"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			resourceGraph := compileGraphFixture(t, tt.fixture)

@@ -252,6 +252,29 @@ func TestSensitiveVariablePlanDoesNotLeak(t *testing.T) {
 	}
 }
 
+func TestEphemeralVariablePlanDoesNotLeak(t *testing.T) {
+	doc := planFixture(t, "../testdata/fixtures/v2-ephemeral-variable-content.dbf.hcl", Options{
+		CommandFile: "../testdata/fixtures/v2-ephemeral-variable-content.dbf.hcl",
+		Host:        "ephemeral1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "ephemeral variable plan JSON", string(data))
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	rendered := text.String()
+	testassert.NoSecretLeak(t, "ephemeral variable plan text", rendered)
+	if !strings.Contains(rendered, "<sensitive sha256=") {
+		t.Fatalf("plan text does not show redacted summary:\n%s", rendered)
+	}
+}
+
 func TestVariableDefaultsPlanOffline(t *testing.T) {
 	doc := planFixture(t, "../testdata/fixtures/v2-variable-defaults.dbf.hcl", Options{
 		CommandFile: "../testdata/fixtures/v2-variable-defaults.dbf.hcl",

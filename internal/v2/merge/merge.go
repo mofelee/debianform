@@ -1749,6 +1749,9 @@ func stringField(root parser.Value, name string) (string, bool, error) {
 	if !ok {
 		return "", false, nil
 	}
+	if err := rejectEphemeralValue(value); err != nil {
+		return "", false, err
+	}
 	str, ok := value.StringValue()
 	if !ok {
 		return "", false, fmt.Errorf("%s:%d: %s must be a string", value.Source.File, value.Source.Line, value.Source.Path)
@@ -1760,6 +1763,9 @@ func intField(root parser.Value, name string) (int, bool, error) {
 	value, ok := root.Map[name]
 	if !ok {
 		return 0, false, nil
+	}
+	if err := rejectEphemeralValue(value); err != nil {
+		return 0, false, err
 	}
 	str, ok := value.StringValue()
 	if !ok {
@@ -1777,6 +1783,9 @@ func boolField(root parser.Value, name string) (bool, bool, error) {
 	if !ok {
 		return false, false, nil
 	}
+	if err := rejectEphemeralValue(value); err != nil {
+		return false, false, err
+	}
 	if value.Kind != parser.KindBool {
 		return false, false, fmt.Errorf("%s:%d:%s: must be a boolean", value.Source.File, value.Source.Line, value.Source.Path)
 	}
@@ -1787,6 +1796,9 @@ func listField(root parser.Value, name string) (parser.Value, bool, error) {
 	value, ok := root.Map[name]
 	if !ok {
 		return parser.Value{}, false, nil
+	}
+	if err := rejectEphemeralValue(value); err != nil {
+		return parser.Value{}, false, err
 	}
 	if !value.IsList() {
 		return parser.Value{}, false, fmt.Errorf("%s:%d: %s must be a list", value.Source.File, value.Source.Line, value.Source.Path)
@@ -1803,6 +1815,25 @@ func objectCollection(root parser.Value, field string) (map[string]parser.Value,
 		return nil, false, fmt.Errorf("%s:%d:%s: must be a map", collection.Source.File, collection.Source.Line, collection.Source.Path)
 	}
 	return collection.Map, true, nil
+}
+
+func stringFieldAllowEphemeral(root parser.Value, name string) (string, bool, error) {
+	value, ok := root.Map[name]
+	if !ok {
+		return "", false, nil
+	}
+	str, ok := value.StringValue()
+	if !ok {
+		return "", false, fmt.Errorf("%s:%d: %s must be a string", value.Source.File, value.Source.Line, value.Source.Path)
+	}
+	return str, true, nil
+}
+
+func rejectEphemeralValue(value parser.Value) error {
+	if !value.ContainsEphemeral() {
+		return nil
+	}
+	return fmt.Errorf("%s:%d:%s: ephemeral value is not allowed in this field", value.Source.File, value.Source.Line, value.Source.Path)
 }
 
 func moduleSpecs(kernel parser.Value) ([]ir.KernelModuleSpec, error) {
@@ -2050,7 +2081,7 @@ func aptSourceFileSpecs(apt parser.Value) (map[string]ir.APTSourceFileSpec, erro
 		if err != nil {
 			return nil, err
 		}
-		content, hasContent, err := stringField(item, "content")
+		content, hasContent, err := stringFieldAllowEphemeral(item, "content")
 		if err != nil {
 			return nil, err
 		}
@@ -2120,7 +2151,7 @@ func aptSigningKeySpec(repoName string, repo parser.Value, ensure string) (*ir.A
 	if err != nil {
 		return nil, err
 	}
-	content, hasContent, err := stringField(signingKey, "content")
+	content, hasContent, err := stringFieldAllowEphemeral(signingKey, "content")
 	if err != nil {
 		return nil, err
 	}
@@ -2207,7 +2238,7 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 		if err != nil {
 			return nil, err
 		}
-		content, hasContent, err := stringField(item, "content")
+		content, hasContent, err := stringFieldAllowEphemeral(item, "content")
 		if err != nil {
 			return nil, err
 		}
@@ -2237,7 +2268,7 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 		if !ok {
 			sensitive = false
 		}
-		if hasContent && item.Map["content"].ContainsSensitive() {
+		if hasContent && contentNeedsRedaction(item.Map["content"]) {
 			sensitive = true
 		}
 		lifecycle, err := lifecycleSpec(item)
@@ -2878,7 +2909,7 @@ func systemdUnitSpec(name string, item parser.Value) (ir.SystemdUnit, error) {
 	if err != nil {
 		return ir.SystemdUnit{}, err
 	}
-	content, hasContent, err := stringField(item, "content")
+	content, hasContent, err := stringFieldAllowEphemeral(item, "content")
 	if err != nil {
 		return ir.SystemdUnit{}, err
 	}
@@ -2889,7 +2920,7 @@ func systemdUnitSpec(name string, item parser.Value) (ir.SystemdUnit, error) {
 	if ensure == "present" && hasContent == hasSource {
 		return ir.SystemdUnit{}, fmt.Errorf("%s:%d:%s: systemd.unit requires exactly one of content or source when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
 	}
-	sensitive := hasContent && item.Map["content"].ContainsSensitive()
+	sensitive := hasContent && contentNeedsRedaction(item.Map["content"])
 	owner, err := stringFieldDefault(item, "owner", "root")
 	if err != nil {
 		return ir.SystemdUnit{}, err
@@ -2937,7 +2968,7 @@ func systemdServiceUnitSpec(name string, item parser.Value) (ir.SystemdUnit, err
 	if err != nil {
 		return ir.SystemdUnit{}, err
 	}
-	content, hasContent, err := stringField(item, "content")
+	content, hasContent, err := stringFieldAllowEphemeral(item, "content")
 	if err != nil {
 		return ir.SystemdUnit{}, err
 	}
@@ -2946,7 +2977,7 @@ func systemdServiceUnitSpec(name string, item parser.Value) (ir.SystemdUnit, err
 		return ir.SystemdUnit{}, err
 	}
 	hasRawUnit := hasContent || hasSource
-	rawContentSensitive := hasContent && item.Map["content"].ContainsSensitive()
+	rawContentSensitive := hasContent && contentNeedsRedaction(item.Map["content"])
 	hasStructuredFields := systemdServiceUnitHasStructuredFields(item)
 	if hasRawUnit {
 		if ensure == "present" && hasContent == hasSource {
@@ -3023,11 +3054,15 @@ func systemdServiceUnitStructuredSensitive(item parser.Value) bool {
 		"environment", "restart", "restart_delay", "wants", "after",
 		"wanted_by", "stdout", "stderr",
 	} {
-		if value, ok := item.Map[name]; ok && value.ContainsSensitive() {
+		if value, ok := item.Map[name]; ok && contentNeedsRedaction(value) {
 			return true
 		}
 	}
 	return false
+}
+
+func contentNeedsRedaction(value parser.Value) bool {
+	return value.ContainsSensitive() || value.ContainsEphemeral()
 }
 
 func renderSystemdServiceUnit(unitName string, item parser.Value) (string, error) {
@@ -3212,6 +3247,9 @@ func systemdRunCommandField(root parser.Value, name string) (string, bool, error
 	if !ok {
 		return "", false, nil
 	}
+	if err := rejectEphemeralValue(value); err != nil {
+		return "", false, err
+	}
 	if str, ok := value.StringValue(); ok {
 		if strings.TrimSpace(str) == "" {
 			return "", false, fmt.Errorf("%s:%d:%s: must be a non-empty string or list of strings", value.Source.File, value.Source.Line, value.Source.Path)
@@ -3255,6 +3293,9 @@ func optionalStringListField(root parser.Value, name string) ([]string, bool, er
 func stringMapField(root parser.Value, name string) (map[string]string, error) {
 	value, ok, err := mapField(root, name)
 	if err != nil || !ok {
+		return nil, err
+	}
+	if err := rejectEphemeralValue(value); err != nil {
 		return nil, err
 	}
 	out := make(map[string]string, len(value.Map))
@@ -3412,7 +3453,7 @@ func nftablesFileSpec(label string, item parser.Value, defaultPath string) (ir.N
 	if err != nil {
 		return ir.NftablesFileSpec{}, err
 	}
-	content, hasContent, err := stringField(item, "content")
+	content, hasContent, err := stringFieldAllowEphemeral(item, "content")
 	if err != nil {
 		return ir.NftablesFileSpec{}, err
 	}

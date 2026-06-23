@@ -71,6 +71,9 @@ func evalValue(expr hcl.Expression, ctx EvalContext, source ir.SourceRef) (Value
 			if diags.HasErrors() {
 				return Value{}, fmt.Errorf("%s:%d: map key: %s", source.File, pair.Key.Range().Start.Line, diags.Error())
 			}
+			if containsMark(keyValue, EphemeralMark) {
+				return Value{}, fmt.Errorf("%s:%d: map key cannot use ephemeral values", source.File, pair.Key.Range().Start.Line)
+			}
 			keyValue, err = convert.Convert(keyValue, cty.String)
 			if err != nil {
 				return Value{}, fmt.Errorf("%s:%d: map key must be a string: %w", source.File, pair.Key.Range().Start.Line, err)
@@ -148,7 +151,10 @@ func jsonencodeFunction() function.Function {
 		},
 		Type: function.StaticReturnType(cty.String),
 		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
-			sensitive := args[0].ContainsMarked()
+			if err := rejectEphemeralCollectionKeys(args[0]); err != nil {
+				return cty.NilVal, err
+			}
+			redacted := args[0].ContainsMarked()
 			value, err := ctyJSONValue(args[0])
 			if err != nil {
 				return cty.NilVal, err
@@ -158,12 +164,30 @@ func jsonencodeFunction() function.Function {
 				return cty.NilVal, err
 			}
 			out := cty.StringVal(string(data))
-			if sensitive {
+			if redacted {
 				out = out.Mark(SensitiveMark)
+			}
+			if containsMark(args[0], EphemeralMark) {
+				out = out.Mark(EphemeralMark)
 			}
 			return out, nil
 		},
 	})
+}
+
+func rejectEphemeralCollectionKeys(value cty.Value) error {
+	if !value.HasMark(EphemeralMark) {
+		return nil
+	}
+	ty := value.Type()
+	switch {
+	case ty.IsObjectType() || ty.IsMapType():
+		return fmt.Errorf("map key cannot use ephemeral values")
+	case ty.IsSetType():
+		return fmt.Errorf("set element cannot use ephemeral values")
+	default:
+		return nil
+	}
 }
 
 func ctyJSONValue(value cty.Value) (any, error) {
@@ -212,7 +236,11 @@ func ctyJSONValue(value cty.Value) (any, error) {
 }
 
 func ctyToValue(value cty.Value, source ir.SourceRef) (Value, error) {
+	if err := rejectEphemeralCollectionKeys(value); err != nil {
+		return Value{}, fmt.Errorf("%s:%d:%s: %w", source.File, source.Line, source.Path, err)
+	}
 	sensitive := value.ContainsMarked()
+	ephemeral := containsMark(value, EphemeralMark)
 	value, _ = value.UnmarkDeep()
 	if !value.IsKnown() {
 		return Value{}, fmt.Errorf("%s:%d: unknown values are not supported", source.File, source.Line)
@@ -220,17 +248,18 @@ func ctyToValue(value cty.Value, source ir.SourceRef) (Value, error) {
 	if value.IsNull() {
 		out := NullValue(source)
 		out.Sensitive = sensitive
+		out.Ephemeral = ephemeral
 		return out, nil
 	}
 
 	ty := value.Type()
 	switch {
 	case ty.Equals(cty.String):
-		return Value{Kind: KindString, String: value.AsString(), Source: source, Sensitive: sensitive}, nil
+		return Value{Kind: KindString, String: value.AsString(), Source: source, Sensitive: sensitive, Ephemeral: ephemeral}, nil
 	case ty.Equals(cty.Bool):
-		return Value{Kind: KindBool, Bool: value.True(), Source: source, Sensitive: sensitive}, nil
+		return Value{Kind: KindBool, Bool: value.True(), Source: source, Sensitive: sensitive, Ephemeral: ephemeral}, nil
 	case ty.Equals(cty.Number):
-		return Value{Kind: KindNumber, Number: value.AsBigFloat().Text('g', -1), Source: source, Sensitive: sensitive}, nil
+		return Value{Kind: KindNumber, Number: value.AsBigFloat().Text('g', -1), Source: source, Sensitive: sensitive, Ephemeral: ephemeral}, nil
 	case ty.IsTupleType() || ty.IsListType() || ty.IsSetType():
 		out := []Value{}
 		it := value.ElementIterator()
@@ -246,7 +275,7 @@ func ctyToValue(value cty.Value, source ir.SourceRef) (Value, error) {
 			out = append(out, converted)
 			i++
 		}
-		return Value{Kind: KindList, List: out, Source: source, Sensitive: sensitive}, nil
+		return Value{Kind: KindList, List: out, Source: source, Sensitive: sensitive, Ephemeral: ephemeral}, nil
 	case ty.IsObjectType() || ty.IsMapType():
 		out := map[string]Value{}
 		it := value.ElementIterator()
@@ -262,10 +291,20 @@ func ctyToValue(value cty.Value, source ir.SourceRef) (Value, error) {
 		}
 		converted := MapValue(out, source)
 		converted.Sensitive = sensitive
+		converted.Ephemeral = ephemeral
 		return converted, nil
 	default:
 		return Value{}, fmt.Errorf("%s:%d: unsupported value type %s", source.File, source.Line, ty.FriendlyName())
 	}
+}
+
+func containsMark(value cty.Value, mark string) bool {
+	if value.HasMark(mark) {
+		return true
+	}
+	_, marks := value.UnmarkDeep()
+	_, ok := marks[mark]
+	return ok
 }
 
 func fileFunction(moduleDir string) function.Function {
@@ -351,6 +390,7 @@ func tosetFunction() function.Function {
 		},
 		Type: function.StaticReturnType(cty.Set(cty.String)),
 		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
+			raw := args[0]
 			value, _ := args[0].UnmarkDeep()
 			if !value.IsKnown() {
 				return cty.NilVal, fmt.Errorf("toset() argument must be known")
@@ -362,6 +402,9 @@ func tosetFunction() function.Function {
 			ty := value.Type()
 			if !ty.IsTupleType() && !ty.IsListType() && !ty.IsSetType() {
 				return cty.NilVal, fmt.Errorf("toset() argument must be a list, tuple, or set of strings")
+			}
+			if containsMark(raw, EphemeralMark) {
+				return cty.NilVal, fmt.Errorf("set element cannot use ephemeral values")
 			}
 
 			seen := map[string]struct{}{}

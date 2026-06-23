@@ -1083,33 +1083,53 @@ stdin 或 secret backend。
 
 代码：
 
-- [ ] Value 增加 `Ephemeral` mark，并在表达式求值中传播。
-- [ ] HostSpec JSON、ResourceGraph JSON、plan JSON、state JSON 和 golden debug 输出禁止
+- [x] Value 增加 `Ephemeral` mark，并在表达式求值中传播。
+- [x] HostSpec JSON、ResourceGraph JSON、plan JSON、state JSON 和 golden debug 输出禁止
       包含 ephemeral 明文。
-- [ ] ephemeral 值只能进入明确支持 runtime-only/write-only 的字段。
-- [ ] resource label、path、owner、group、mode、ensure、lifecycle、map/set key、
+- [x] ephemeral 值只能进入明确支持 runtime-only/write-only 的字段。
+- [x] resource label、path、owner、group、mode、ensure、lifecycle、map/set key、
       depends_on 等结构性字段禁止 ephemeral。
-- [ ] 编译错误必须指向产生 ephemeral 值的引用位置和目标字段。
+- [x] 编译错误必须指向产生 ephemeral 值的引用位置和目标字段。
 
 测试：
 
-- [ ] ephemeral variable 用于 `files.file.content` 可以通过到本轮定义的 runtime-only
+- [x] ephemeral variable 用于 `files.file.content` 可以通过到本轮定义的 runtime-only
       边界。
-- [ ] ephemeral variable 用于 `files.file.path` 报错。
-- [ ] ephemeral variable 用于 map key/set key 报错。
-- [ ] ephemeral variable 用于 depends_on/lifecycle 报错。
-- [ ] HostSpec/ResourceGraph/plan/state/golden 中不包含 ephemeral 明文。
+- [x] ephemeral variable 用于 `files.file.path` 报错。
+- [x] ephemeral variable 用于 map key/set key 报错。
+- [x] ephemeral variable 用于 depends_on/lifecycle 报错。
+- [x] HostSpec/ResourceGraph/plan/state/golden 中不包含 ephemeral 明文。
 
 示例/文档：
 
-- [ ] 增加 ephemeral content 的最小 fixture。
-- [ ] 文档列出第一版允许和禁止 ephemeral 的字段。
+- [x] 增加 ephemeral content 的最小 fixture。
+- [x] 文档列出第一版允许和禁止 ephemeral 的字段。
 
 验收：
 
-- [ ] ephemeral 的编译产物安全边界成立。
-- [ ] 不支持 ephemeral 的字段全部 fail closed。
-- [ ] `make test` 通过。
+- [x] ephemeral 的编译产物安全边界成立。
+- [x] 不支持 ephemeral 的字段全部 fail closed。
+- [x] `make test` 通过。
+
+实现记录：
+
+- `parser.Value` 增加 `Ephemeral` 标记，声明了 `ephemeral = true` 的 variable 会在归一化后
+  携带该标记进入 evaluator；cty 转换、模板、`jsonencode` 和集合转换会继续传播该标记。
+- 第一版只允许 ephemeral 值进入内容类字段：`files.file.content`、
+  `systemd.unit.content`、`systemd.service_unit.content`、`apt.source_file.content`、
+  `apt.repository.signing_key.content` 和 `nftables` content。进入这些字段后，本轮先复用
+  sensitive redaction 边界，序列化的 HostSpec、ResourceGraph、plan 和 state 不包含明文；
+  provider write-only payload 与 persisted desired 的完全分离留给 Loop 9。
+- 普通 scalar/list 读取路径默认拒绝 ephemeral，因此 path/source、owner、group、mode、
+  ensure、package list、lifecycle、structured systemd fields 等结构性字段 fail closed。map
+  key 在表达式求值时拒绝；
+  `toset()` 和 cty set 转回 DebianForm value 时拒绝 ephemeral set element。
+- 当前 DSL 还没有用户可用的 `depends_on` 字段；如果用户写入会在 parser shape validation
+  阶段作为 unsupported attribute 报错。后续真正引入 `depends_on` 时仍必须复用本轮的
+  structural-field 禁止规则。
+- 新增 `internal/v2/testdata/fixtures/v2-ephemeral-variable-content.dbf.hcl`，覆盖直接
+  file content 和 `jsonencode` content；HostSpec、ResourceGraph、plan text/JSON 和 apply
+  state no-leak 基线均包含 ephemeral fixture。
 
 ### Loop 9：write-only provider payload 和版本触发
 

@@ -275,6 +275,7 @@ func TestCompileHostSpecJSONDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 		{name: "sensitive component input", fixture: "../../../examples/v2-component-inputs.dbf.hcl"},
 		{name: "sensitive service environment", fixture: "../testdata/fixtures/v2-sensitive-service-environment.dbf.hcl"},
 		{name: "sensitive variable content", fixture: "../testdata/fixtures/v2-sensitive-variable-files.dbf.hcl"},
+		{name: "ephemeral variable content", fixture: "../testdata/fixtures/v2-ephemeral-variable-content.dbf.hcl"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg, err := parser.ParseFiles([]string{tt.fixture})
@@ -1932,6 +1933,214 @@ func TestCompileSensitiveVariablePropagatesToResources(t *testing.T) {
 	}
 	if strings.Contains(string(data), "not-a-real-variable-secret") {
 		t.Fatalf("Program JSON leaked variable secret: %s", data)
+	}
+}
+
+func TestCompileEphemeralVariableAllowedForFileContent(t *testing.T) {
+	cfg, err := parser.ParseFiles([]string{"../testdata/fixtures/v2-ephemeral-variable-content.dbf.hcl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := program.Hosts[0]
+	for _, path := range []string{
+		"/etc/debianform/runtime-token.txt",
+		"/etc/debianform/runtime-token.json",
+	} {
+		file := host.Files.Files[path]
+		if !file.Sensitive {
+			t.Fatalf("%s sensitive = false", path)
+		}
+		if !strings.Contains(file.Content, testassert.EphemeralVariableValue) {
+			t.Fatalf("%s in-memory content missing ephemeral value: %q", path, file.Content)
+		}
+	}
+	data, err := json.Marshal(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "ephemeral HostSpec JSON", string(data))
+}
+
+func TestCompileRejectsEphemeralVariableInStructuralFields(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "file owner",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/runtime-token.txt" {
+      content = "ok"
+      owner   = var.runtime_token
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "file source",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/runtime-token.txt" {
+      source = var.runtime_token
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "path attribute",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  nftables {
+    file "runtime" {
+      path    = var.runtime_token
+      content = "flush ruleset\n"
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "package list",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  packages {
+    install = [var.runtime_token]
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "lifecycle",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/runtime-token.txt" {
+      content = "ok"
+      lifecycle {
+        prevent_destroy = var.runtime_token
+      }
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "structured systemd run",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  systemd {
+    service_unit "runtime" {
+      run = var.runtime_token
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "structured systemd environment",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  systemd {
+    service_unit "runtime" {
+      run = "/bin/true"
+      environment = {
+        TOKEN = var.runtime_token
+      }
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "depends_on",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/runtime-token.txt" {
+      content    = "ok"
+      depends_on = [var.runtime_token]
+    }
+  }
+}
+`,
+			want: "unsupported attribute",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+			if err != nil && strings.Contains(err.Error(), testassert.EphemeralVariableValue) {
+				t.Fatalf("ephemeral value leaked in error: %v", err)
+			}
+		})
 	}
 }
 

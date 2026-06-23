@@ -12,6 +12,7 @@ const (
 	SensitiveServiceEnvironment  = "not-a-real-service-token"
 	SensitiveVariableDefault     = "not-a-real-variable-secret"
 	SensitiveVariableCLIValue    = "not-a-real-cli-variable-secret"
+	EphemeralVariableValue       = "not-a-real-ephemeral-token"
 )
 
 func NoSecretLeak(t *testing.T, label, text string, allowed ...string) {

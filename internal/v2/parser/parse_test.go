@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/mofelee/debianform/internal/v2/ir"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func TestParseHostProfileNestedBlocksAndSourceLine(t *testing.T) {
@@ -579,6 +580,70 @@ host "server1" {}
 	}
 	if got := cfg.VariableValues["environment"].String; got != "cli" {
 		t.Fatalf("environment = %q, want cli", got)
+	}
+}
+
+func TestEvalRejectsEphemeralMapKey(t *testing.T) {
+	file := writeConfig(t, `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/runtime-token.txt" {
+      content = jsonencode({
+        (var.runtime_token) = "value"
+      })
+    }
+  }
+}
+`)
+	_, err := ParseFiles([]string{file})
+	if err == nil || !strings.Contains(err.Error(), "map key cannot use ephemeral values") {
+		t.Fatalf("ParseFiles error = %v, want ephemeral map key", err)
+	}
+}
+
+func TestEvalRejectsEphemeralSetElement(t *testing.T) {
+	file := writeConfig(t, `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/runtime-token.txt" {
+      content = jsonencode(toset([var.runtime_token]))
+    }
+  }
+}
+`)
+	_, err := ParseFiles([]string{file})
+	if err == nil || !strings.Contains(err.Error(), "set element cannot use ephemeral values") {
+		t.Fatalf("ParseFiles error = %v, want ephemeral set element", err)
+	}
+}
+
+func TestValueToCtyPreservesEphemeralMark(t *testing.T) {
+	value := Value{Kind: KindString, String: "secret", Ephemeral: true}
+	converted, err := value.ToCty()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !converted.HasMark(EphemeralMark) {
+		t.Fatalf("converted value missing ephemeral mark: %#v", converted)
+	}
+	roundTripped, err := ctyToValue(cty.StringVal("secret").Mark(EphemeralMark), ir.SourceRef{File: "test", Line: 1, Path: "value"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !roundTripped.Ephemeral || !roundTripped.Sensitive {
+		t.Fatalf("round-tripped value marks = sensitive:%v ephemeral:%v", roundTripped.Sensitive, roundTripped.Ephemeral)
 	}
 }
 
