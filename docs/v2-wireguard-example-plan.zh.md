@@ -7,6 +7,9 @@
 ## 目标
 
 - 示例使用 `systemd.networkd` DSL 生成原生 networkd 配置。
+- 示例通过结构化 component input 暴露 `interface.route_table`，默认值为
+  `"off"`；这会生成 `RouteTable=off`，禁止 networkd 根据 peer `AllowedIPs`
+  自动写入系统路由表，路由由用户显式管理。
 - WireGuard private key 通过 `secrets.file` 写入 `/etc/wireguard/private.key`。
 - private key 文件使用 `root:systemd-network 0640`，因为 Debian 上
   `systemd-networkd.service` 以 `systemd-network` 用户运行。

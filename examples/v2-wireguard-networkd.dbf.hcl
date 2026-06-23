@@ -5,28 +5,38 @@
 
 component "wireguard_networkd" {
   input "private_key_source" {
-    type      = string
-    sensitive = true
+    type        = string
+    description = "Local path to the WireGuard private key source."
+    sensitive   = true
   }
 
-  input "address" {
-    type = string
+  input "interface" {
+    type = object({
+      name        = optional(string, "wg0")
+      address     = string
+      listen_port = optional(number, 51820)
+      route_table = optional(string, "off")
+    })
+
+    description = "WireGuard interface settings. route_table = \"off\" stops networkd from adding routes for AllowedIPs."
+    nullable    = false
   }
 
-  input "listen_port" {
-    type = number
-  }
+  input "peer" {
+    type = object({
+      public_key           = string
+      allowed_ips          = list(string)
+      endpoint             = string
+      persistent_keepalive = optional(number, 25)
+    })
 
-  input "peer_public_key" {
-    type = string
-  }
+    description = "WireGuard peer settings."
+    nullable    = false
 
-  input "peer_allowed_ip" {
-    type = string
-  }
-
-  input "peer_endpoint" {
-    type = string
+    validation {
+      condition     = length(input.peer.allowed_ips) > 0
+      error_message = "peer.allowed_ips must contain at least one CIDR."
+    }
   }
 
   directories {
@@ -52,31 +62,31 @@ component "wireguard_networkd" {
 
       netdev "10-wg0" {
         netdev = {
-          Name = "wg0"
+          Name = input.interface.name
           Kind = "wireguard"
         }
 
         wireguard = {
-          ListenPort     = input.listen_port
+          ListenPort     = input.interface.listen_port
           PrivateKeyFile = "/etc/wireguard/private.key"
-          RouteTable     = "off"
+          RouteTable     = input.interface.route_table
         }
 
         wireguard_peer "peer" {
-          PublicKey           = input.peer_public_key
-          AllowedIPs          = [input.peer_allowed_ip]
-          Endpoint            = input.peer_endpoint
-          PersistentKeepalive = 25
+          PublicKey           = input.peer.public_key
+          AllowedIPs          = input.peer.allowed_ips
+          Endpoint            = input.peer.endpoint
+          PersistentKeepalive = input.peer.persistent_keepalive
         }
       }
 
       network "20-wg0" {
         match = {
-          Name = "wg0"
+          Name = input.interface.name
         }
 
         network = {
-          Address = [input.address]
+          Address = [input.interface.address]
         }
       }
     }
@@ -94,11 +104,15 @@ host "wg-a" {
 
     inputs = {
       private_key_source = "secrets/wg-a.key"
-      address            = "10.80.0.1/30"
-      listen_port        = 51820
-      peer_public_key    = "<wg-b-public-key>"
-      peer_allowed_ip    = "10.80.0.2/32"
-      peer_endpoint      = "wg-b.example.net:51820"
+      interface = {
+        address     = "10.80.0.1/30"
+        route_table = "off"
+      }
+      peer = {
+        public_key  = "<wg-b-public-key>"
+        allowed_ips = ["10.80.0.2/32"]
+        endpoint    = "wg-b.example.net:51820"
+      }
     }
   }
 }
@@ -114,11 +128,15 @@ host "wg-b" {
 
     inputs = {
       private_key_source = "secrets/wg-b.key"
-      address            = "10.80.0.2/30"
-      listen_port        = 51820
-      peer_public_key    = "<wg-a-public-key>"
-      peer_allowed_ip    = "10.80.0.1/32"
-      peer_endpoint      = "wg-a.example.net:51820"
+      interface = {
+        address     = "10.80.0.2/30"
+        route_table = "off"
+      }
+      peer = {
+        public_key  = "<wg-a-public-key>"
+        allowed_ips = ["10.80.0.1/32"]
+        endpoint    = "wg-a.example.net:51820"
+      }
     }
   }
 }

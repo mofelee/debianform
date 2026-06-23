@@ -2001,6 +2001,109 @@ Address=10.80.0.1/30
 	}
 }
 
+func TestCompileWireGuardComponentUsesStructuredInputsForRouteTable(t *testing.T) {
+	program := compileInline(t, `
+component "wireguard_networkd" {
+  input "private_key_source" {
+    type      = string
+    sensitive = true
+  }
+
+  input "interface" {
+    type = object({
+      name        = optional(string, "wg0")
+      address     = string
+      listen_port = optional(number, 51820)
+      route_table = optional(string, "off")
+    })
+
+    nullable = false
+  }
+
+  input "peer" {
+    type = object({
+      public_key           = string
+      allowed_ips          = list(string)
+      endpoint             = string
+      persistent_keepalive = optional(number, 25)
+    })
+
+    nullable = false
+
+    validation {
+      condition     = length(input.peer.allowed_ips) > 0
+      error_message = "peer.allowed_ips must contain at least one CIDR."
+    }
+  }
+
+  systemd {
+    networkd {
+      netdev "10-wg0" {
+        netdev = {
+          Name = input.interface.name
+          Kind = "wireguard"
+        }
+
+        wireguard = {
+          ListenPort     = input.interface.listen_port
+          PrivateKeyFile = "/etc/wireguard/private.key"
+          RouteTable     = input.interface.route_table
+        }
+
+        wireguard_peer "peer" {
+          PublicKey           = input.peer.public_key
+          AllowedIPs          = input.peer.allowed_ips
+          Endpoint            = input.peer.endpoint
+          PersistentKeepalive = input.peer.persistent_keepalive
+        }
+      }
+
+      network "20-wg0" {
+        match = {
+          Name = input.interface.name
+        }
+
+        network = {
+          Address = [input.interface.address]
+        }
+      }
+    }
+  }
+}
+
+host "server1" {
+  component "wireguard" {
+    source = component.wireguard_networkd
+
+    inputs = {
+      private_key_source = "secrets/server1.key"
+      interface = {
+        address = "10.80.0.1/30"
+      }
+      peer = {
+        public_key  = "peer-public-key"
+        allowed_ips = ["10.80.0.2/32"]
+        endpoint    = "server2.example.net:51820"
+      }
+    }
+  }
+}
+`)
+
+	component := program.Hosts[0].Components[0]
+	inputs := component.InputValues
+	if got := inputs["interface"].(map[string]any)["route_table"]; got != "off" {
+		t.Fatalf("interface.route_table input = %#v, want off", got)
+	}
+	netdev := component.Systemd.Networkd.NetDevs["10-wg0"]
+	if got := firstSectionValue(netdev.WireGuard, "RouteTable"); got != "off" {
+		t.Fatalf("RouteTable section value = %q, want off", got)
+	}
+	if !strings.Contains(netdev.Content, "RouteTable=off\n") {
+		t.Fatalf("netdev content does not disable networkd route table writes:\n%s", netdev.Content)
+	}
+}
+
 func TestCompileRejectsInlineWireGuardPrivateKey(t *testing.T) {
 	_, err := parseOrCompileInline(t, `
 host "server1" {
