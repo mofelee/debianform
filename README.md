@@ -15,7 +15,39 @@ v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源
 ## 支持优先级
 
 - 最高优先级目标系统：Debian 13。
-- 优先支持架构：amd64。
+- 目标主机优先支持架构：amd64。
+
+`dbf` CLI 安装在控制机或 CI runner 上，可以在 Linux 和 macOS 运行。公开发布产物覆盖
+Linux/macOS 的 amd64 和 arm64；被管理目标主机当前仍以 Debian 13 为最高优先级。
+
+## 安装和升级
+
+推荐安装方式：
+
+```bash
+brew install mofelee/debianform/dbf
+```
+
+或：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mofelee/debianform/main/scripts/install.sh | sh
+```
+
+安装后检查：
+
+```bash
+dbf version
+```
+
+升级：
+
+```bash
+brew update && brew upgrade dbf
+```
+
+curl 安装的用户重新运行安装脚本即可升级；需要回滚时使用安装脚本的 `--version` 参数安装
+旧版本。
 
 ## 兼容性
 
@@ -32,6 +64,7 @@ v2 领域块或 component。
 - [v2 state](docs/v2-state.md)
 - [v2 systemd service units](docs/v2-systemd-service-units.md)
 - [v2 implementation plan](docs/v2-implementation-plan.zh.md)
+- [release process](docs/release-process.zh.md)
 
 ## v2 示例
 
