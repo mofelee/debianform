@@ -166,6 +166,11 @@ func parseObjectAttributeType(name string, expr hcl.Expression, ctx EvalContext,
 		attr := ComponentObjectAttrSpec{Type: spec, Optional: true}
 		if len(call.Args) == 2 {
 			defaultSource := defaultSourceForExpr(call.Args[1], sourcePath+".default")
+			if ctx.RestrictVariableDefaultReferences {
+				if err := validateVariableDefaultReferences(call.Args[1], defaultSource); err != nil {
+					return ComponentObjectAttrSpec{}, err
+				}
+			}
 			value, err := evalValue(call.Args[1], ctx, defaultSource)
 			if err != nil {
 				return ComponentObjectAttrSpec{}, fmt.Errorf("object attribute %q optional default: %w", name, err)

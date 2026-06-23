@@ -116,6 +116,26 @@ func TestValidateAcceptsUnreferencedVariableDeclarations(t *testing.T) {
 	}
 }
 
+func TestValidateAndPlanAcceptVariableDefaults(t *testing.T) {
+	validateOutput := captureStdout(t, func() {
+		if err := run([]string{"validate", "-f", "../../internal/v2/testdata/fixtures/v2-variable-defaults.dbf.hcl"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(validateOutput, "v2 configuration is valid: 1 host(s)") {
+		t.Fatalf("validate output = %q", validateOutput)
+	}
+
+	planOutput := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", "../../internal/v2/testdata/fixtures/v2-variable-defaults.dbf.hcl", "--offline"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(planOutput, "hello from variable default") {
+		t.Fatalf("plan output = %q", planOutput)
+	}
+}
+
 func TestValidateAndPlanPrintDeprecatedInputWarnings(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")

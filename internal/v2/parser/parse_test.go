@@ -281,6 +281,119 @@ variable "environment" {
 	}
 }
 
+func TestParseVariableDefaultReferences(t *testing.T) {
+	file := writeConfig(t, `
+locals {
+  default_message = "hello"
+}
+
+variable "message" {
+  type    = string
+  default = local.default_message
+}
+
+host "server1" {
+  files {
+    file "/etc/message" {
+      content = var.message
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.VariableValues["message"].String; got != "hello" {
+		t.Fatalf("var.message = %q, want hello", got)
+	}
+	content := cfg.Hosts["server1"].Body.Map["files"].Map["file"].Map["/etc/message"].Map["content"]
+	if content.String != "hello" {
+		t.Fatalf("file content = %#v", content)
+	}
+}
+
+func TestParseRejectsInvalidVariableDefaultsAndReferences(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "required variable",
+			hcl: `
+variable "message" {
+  type = string
+}
+
+host "server1" {}
+`,
+			want: `variable "message" is required`,
+		},
+		{
+			name: "default reads var",
+			hcl: `
+variable "message" {
+  type    = string
+  default = var.other
+}
+
+host "server1" {}
+`,
+			want: "variable default cannot reference var",
+		},
+		{
+			name: "default reads path",
+			hcl: `
+variable "message" {
+  type    = string
+  default = path.module
+}
+
+host "server1" {}
+`,
+			want: "variable default cannot reference path",
+		},
+		{
+			name: "optional default reads path",
+			hcl: `
+variable "message" {
+  type = object({
+    value = optional(string, path.module)
+  })
+  default = {}
+}
+
+host "server1" {}
+`,
+			want: "variable default cannot reference path",
+		},
+		{
+			name: "unknown variable reference",
+			hcl: `
+host "server1" {
+  files {
+    file "/etc/message" {
+      content = var.message
+    }
+  }
+}
+`,
+			want: "Unsupported attribute",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := writeConfig(t, tt.hcl)
+			_, err := ParseFiles([]string{file})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ParseFiles error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseLabeledObjectBlockSourcePath(t *testing.T) {
 	file := writeConfig(t, `
 host "web1" {

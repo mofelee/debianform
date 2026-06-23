@@ -679,32 +679,44 @@ input 语义，但仍不处理 CLI 覆盖。
 
 代码：
 
-- [ ] evaluator 增加只读 `var` namespace。
-- [ ] variable final value 先由 default 生成；无 default 且无外部值时报错。
-- [ ] 只允许引用已声明 variable。
-- [ ] variable default 不得引用 `var`、`input`、`target`、`path` 或 runtime facts。
-- [ ] host/profile/component 展开时使用同一份归一化后的 variable value。
-- [ ] 错误信息指向 variable 声明或引用处的 source path。
+- [x] evaluator 增加只读 `var` namespace。
+- [x] variable final value 先由 default 生成；无 default 且无外部值时报错。
+- [x] 只允许引用已声明 variable。
+- [x] variable default 不得引用 `var`、`input`、`target`、`path` 或 runtime facts。
+- [x] host/profile/component 展开时使用同一份归一化后的 variable value。
+- [x] 错误信息指向 variable 声明或引用处的 source path。
 
 测试：
 
-- [ ] `files.file.content = var.message` 可以生成预期 HostSpec。
-- [ ] `system.hostname = var.hostname` 可以生效。
-- [ ] component body 可以读取 `var.<name>`。
-- [ ] 引用不存在的 variable 报错。
-- [ ] required variable 未赋值报错。
-- [ ] default 依赖 runtime facts、`input` 或其他 `var` 报错。
+- [x] `files.file.content = var.message` 可以生成预期 HostSpec。
+- [x] `system.hostname = var.hostname` 可以生效。
+- [x] component body 可以读取 `var.<name>`。
+- [x] 引用不存在的 variable 报错。
+- [x] required variable 未赋值报错。
+- [x] default 依赖 runtime facts、`input` 或其他 `var` 报错。
 
 示例/文档：
 
-- [ ] 增加一个只靠 default 参数化普通文件内容或 hostname 的 fixture。
-- [ ] 文档说明 DebianForm variable 是 program API，不是 component input 的替代品。
+- [x] 增加一个只靠 default 参数化普通文件内容或 hostname 的 fixture。
+- [x] 文档说明 DebianForm variable 是 program API，不是 component input 的替代品。
 
 验收：
 
-- [ ] 只靠 default 的普通 variable 可用于 host/profile/component 展开。
-- [ ] `dbf validate`、`dbf plan --offline` 对新增 fixture 成功。
-- [ ] `make test` 通过。
+- [x] 只靠 default 的普通 variable 可用于 host/profile/component 展开。
+- [x] `dbf validate`、`dbf plan --offline` 对新增 fixture 成功。
+- [x] `make test` 通过。
+
+Loop 2 实现记录：
+
+- parser 现在先解析 `locals` 和顶层 `variable` 声明，再解析 host/profile/component；最终
+  variable default 被归一化后作为只读 `var` namespace 注入普通表达式求值。
+- 本轮没有外部赋值来源；没有 `default` 的 variable 在 parse 阶段报 required error。
+- variable default 只允许读取 `local.*` 和常量表达式；读取 `var`、`path`、`input`、
+  `target` 等 namespace 会报 source path 清晰的错误。
+- 新增 `internal/v2/testdata/fixtures/v2-variable-defaults.dbf.hcl`，覆盖 host、profile 和
+  component body 同时读取同一份 `var.<name>` default。
+- 本轮仍不执行 variable validation，也不把 `sensitive` 传播进表达式结果；这些留给后续
+  validation 和 sensitive propagation loops。
 
 ### Loop 3：CLI `-var` 字面值
 

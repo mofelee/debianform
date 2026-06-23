@@ -46,7 +46,7 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 	if err != nil {
 		return nil, err
 	}
-	variables, err := variableSpecs(cfg.Variables)
+	variables, err := variableSpecs(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -110,22 +110,18 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 	return program, nil
 }
 
-func variableSpecs(variables map[string]parser.Variable) (map[string]ir.VariableSpec, error) {
-	if len(variables) == 0 {
+func variableSpecs(cfg *parser.Config) (map[string]ir.VariableSpec, error) {
+	if len(cfg.Variables) == 0 {
 		return nil, nil
 	}
-	out := make(map[string]ir.VariableSpec, len(variables))
-	for _, name := range sortedKeys(variables) {
-		variable := variables[name]
+	out := make(map[string]ir.VariableSpec, len(cfg.Variables))
+	for _, name := range sortedKeys(cfg.Variables) {
+		variable := cfg.Variables[name]
 		if err := validateVariableDefinition(variable); err != nil {
 			return nil, err
 		}
 		var defaultValue any
-		if variable.Default != nil {
-			normalized, err := normalizeVariable(variable, *variable.Default)
-			if err != nil {
-				return nil, err
-			}
+		if normalized, ok := cfg.VariableValues[name]; ok {
 			defaultValue = parserValueToAny(normalized)
 		}
 		out[name] = ir.VariableSpec{
@@ -280,6 +276,26 @@ func componentInputTypeSpecToIR(spec parser.ComponentInputTypeSpec) ir.Component
 	return out
 }
 
+func (c *compiler) evalVariables(extra map[string]cty.Value) (map[string]cty.Value, error) {
+	varValues := make(map[string]cty.Value, len(c.cfg.VariableValues))
+	for name, value := range c.cfg.VariableValues {
+		converted, err := value.ToCty()
+		if err != nil {
+			return nil, fmt.Errorf("var.%s: %w", name, err)
+		}
+		varValues[name] = converted
+	}
+	varNamespace := cty.EmptyObjectVal
+	if len(varValues) > 0 {
+		varNamespace = cty.ObjectVal(varValues)
+	}
+	out := map[string]cty.Value{"var": varNamespace}
+	for key, value := range extra {
+		out[key] = value
+	}
+	return out, nil
+}
+
 func (c *compiler) resolveProfile(name string, stack []string) (resolvedProfile, error) {
 	if cached, ok := c.profileCache[name]; ok {
 		return cached, nil
@@ -352,13 +368,17 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 			}
 			inputVars[name] = converted
 		}
+		variables, err := c.evalVariables(map[string]cty.Value{
+			"target": targetValue,
+			"input":  objectOrEmpty(inputVars),
+		})
+		if err != nil {
+			return nil, err
+		}
 		raw, err := parser.ParseComponentBody(template, parser.EvalContext{
 			ModuleDir: template.ModuleDir,
 			Locals:    c.cfg.Locals,
-			Variables: map[string]cty.Value{
-				"target": targetValue,
-				"input":  objectOrEmpty(inputVars),
-			},
+			Variables: variables,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
@@ -415,13 +435,17 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 		if err != nil {
 			return err
 		}
+		variables, err := c.evalVariables(map[string]cty.Value{
+			"target": targetValue,
+			"input":  objectOrEmpty(inputVars),
+		})
+		if err != nil {
+			return err
+		}
 		raw, err := parser.ParseComponentBody(template, parser.EvalContext{
 			ModuleDir: template.ModuleDir,
 			Locals:    c.cfg.Locals,
-			Variables: map[string]cty.Value{
-				"target": targetValue,
-				"input":  objectOrEmpty(inputVars),
-			},
+			Variables: variables,
 		})
 		if err != nil {
 			if isRuntimeUnknownError(err) {
@@ -618,20 +642,7 @@ func normalizeComponentInput(input parser.ComponentInput, value parser.Value) (p
 }
 
 func normalizeVariable(variable parser.Variable, value parser.Value) (parser.Value, error) {
-	if value.Kind == parser.KindNull && !variable.Nullable {
-		return parser.Value{}, fmt.Errorf("%s:%d:%s: variable %q must not be null", value.Source.File, value.Source.Line, value.Source.Path, variable.Name)
-	}
-	normalized, err := normalizeComponentInputValue(variable.Name, variable.TypeSpec, value, "")
-	if err != nil {
-		return parser.Value{}, variableTypeError(variable.Name, err)
-	}
-	return normalized, nil
-}
-
-func variableTypeError(name string, err error) error {
-	text := err.Error()
-	text = strings.ReplaceAll(text, fmt.Sprintf("component input %q", name), fmt.Sprintf("variable %q", name))
-	return fmt.Errorf("%s", text)
+	return parser.NormalizeVariableValue(variable, value)
 }
 
 func normalizeComponentInputValue(inputName string, spec parser.ComponentInputTypeSpec, value parser.Value, path string) (parser.Value, error) {

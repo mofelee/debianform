@@ -226,6 +226,26 @@ func TestSensitiveServiceEnvironmentPlanDoesNotLeak(t *testing.T) {
 	}
 }
 
+func TestVariableDefaultsPlanOffline(t *testing.T) {
+	doc := planFixture(t, "../testdata/fixtures/v2-variable-defaults.dbf.hcl", Options{
+		CommandFile: "../testdata/fixtures/v2-variable-defaults.dbf.hcl",
+		Host:        "vars1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	if !hasChange(doc, `host.vars1.files.file["/etc/debianform/message.txt"]`) {
+		t.Fatalf("plan missing variable-backed file change: %#v", doc.Changes)
+	}
+	data, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "hello from variable default") {
+		t.Fatalf("plan JSON missing variable default content:\n%s", data)
+	}
+}
+
 func TestProfileMergePlanJSONGolden(t *testing.T) {
 	doc := planFixture(t, "../../../examples/v2-profile-merge.dbf.hcl", Options{
 		CommandFile: "../../../examples/v2-profile-merge.dbf.hcl",

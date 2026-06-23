@@ -15,9 +15,10 @@ import (
 )
 
 type EvalContext struct {
-	ModuleDir string
-	Locals    map[string]Value
-	Variables map[string]cty.Value
+	ModuleDir                         string
+	Locals                            map[string]Value
+	Variables                         map[string]cty.Value
+	RestrictVariableDefaultReferences bool
 }
 
 func evalValue(expr hcl.Expression, ctx EvalContext, source ir.SourceRef) (Value, error) {

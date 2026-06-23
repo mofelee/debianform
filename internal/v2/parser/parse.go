@@ -10,15 +10,17 @@ import (
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/mofelee/debianform/internal/v2/ir"
+	"github.com/zclconf/go-cty/cty"
 )
 
 type Config struct {
-	Files      []string
-	Locals     map[string]Value
-	Variables  map[string]Variable
-	Profiles   map[string]Profile
-	Hosts      map[string]Host
-	Components map[string]Component
+	Files          []string
+	Locals         map[string]Value
+	Variables      map[string]Variable
+	VariableValues map[string]Value
+	Profiles       map[string]Profile
+	Hosts          map[string]Host
+	Components     map[string]Component
 }
 
 type Profile struct {
@@ -146,12 +148,13 @@ type Assert struct {
 
 func ParseFiles(files []string) (*Config, error) {
 	cfg := &Config{
-		Files:      append([]string(nil), files...),
-		Locals:     map[string]Value{},
-		Variables:  map[string]Variable{},
-		Profiles:   map[string]Profile{},
-		Hosts:      map[string]Host{},
-		Components: map[string]Component{},
+		Files:          append([]string(nil), files...),
+		Locals:         map[string]Value{},
+		Variables:      map[string]Variable{},
+		VariableValues: map[string]Value{},
+		Profiles:       map[string]Profile{},
+		Hosts:          map[string]Host{},
+		Components:     map[string]Component{},
 	}
 
 	type parsedFile struct {
@@ -177,6 +180,15 @@ func ParseFiles(files []string) (*Config, error) {
 		if err := parseLocals(cfg, file.file, file.body); err != nil {
 			return nil, err
 		}
+	}
+
+	for _, file := range parsed {
+		if err := parseVariables(cfg, file.file, file.body); err != nil {
+			return nil, err
+		}
+	}
+	if err := resolveVariableValues(cfg); err != nil {
+		return nil, err
 	}
 
 	for _, file := range parsed {
@@ -220,21 +232,90 @@ func parseLocals(cfg *Config, file string, body *hclsyntax.Body) error {
 	return nil
 }
 
-func parseTopLevel(cfg *Config, file string, body *hclsyntax.Body) error {
+func parseVariables(cfg *Config, file string, body *hclsyntax.Body) error {
 	ctx := EvalContext{ModuleDir: filepath.Dir(file), Locals: cfg.Locals}
 	for _, block := range body.Blocks {
-		switch block.Type {
-		case "locals":
+		if block.Type != "variable" {
 			continue
-		case "variable":
-			variable, err := parseVariable(file, block, ctx)
-			if err != nil {
-				return err
-			}
-			if previous, exists := cfg.Variables[variable.Name]; exists {
-				return fmt.Errorf("%s:%d: duplicate variable %q; first defined at %s:%d", file, variable.Source.Line, variable.Name, previous.Source.File, previous.Source.Line)
-			}
-			cfg.Variables[variable.Name] = variable
+		}
+		variable, err := parseVariable(file, block, ctx)
+		if err != nil {
+			return err
+		}
+		if previous, exists := cfg.Variables[variable.Name]; exists {
+			return fmt.Errorf("%s:%d: duplicate variable %q; first defined at %s:%d", file, variable.Source.Line, variable.Name, previous.Source.File, previous.Source.Line)
+		}
+		cfg.Variables[variable.Name] = variable
+	}
+	return nil
+}
+
+func resolveVariableValues(cfg *Config) error {
+	values := make(map[string]Value, len(cfg.Variables))
+	for _, name := range sortedVariableNames(cfg.Variables) {
+		variable := cfg.Variables[name]
+		if variable.Default == nil {
+			return fmt.Errorf("%s:%d:%s: variable %q is required", variable.Source.File, variable.Source.Line, variable.Source.Path, variable.Name)
+		}
+		normalized, err := NormalizeVariableValue(variable, *variable.Default)
+		if err != nil {
+			return err
+		}
+		values[name] = normalized
+	}
+	cfg.VariableValues = values
+	return nil
+}
+
+func evalContextForProgram(cfg *Config, moduleDir string) (EvalContext, error) {
+	varValues := make(map[string]cty.Value, len(cfg.VariableValues))
+	for _, name := range sortedVariableValueNames(cfg.VariableValues) {
+		converted, err := cfg.VariableValues[name].ToCty()
+		if err != nil {
+			return EvalContext{}, fmt.Errorf("var.%s: %w", name, err)
+		}
+		varValues[name] = converted
+	}
+	varNamespace := cty.EmptyObjectVal
+	if len(varValues) > 0 {
+		varNamespace = cty.ObjectVal(varValues)
+	}
+	return EvalContext{
+		ModuleDir: moduleDir,
+		Locals:    cfg.Locals,
+		Variables: map[string]cty.Value{
+			"var": varNamespace,
+		},
+	}, nil
+}
+
+func sortedVariableNames(values map[string]Variable) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedVariableValueNames(values map[string]Value) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func parseTopLevel(cfg *Config, file string, body *hclsyntax.Body) error {
+	ctx, err := evalContextForProgram(cfg, filepath.Dir(file))
+	if err != nil {
+		return err
+	}
+	for _, block := range body.Blocks {
+		switch block.Type {
+		case "locals", "variable":
+			continue
 		case "profile":
 			profile, err := parseProfile(file, block, ctx)
 			if err != nil {
@@ -291,7 +372,9 @@ func parseVariable(file string, block *hclsyntax.Block, ctx EvalContext) (Variab
 	if !ok {
 		return Variable{}, fmt.Errorf("%s:%d: %s.type is required", file, block.TypeRange.Start.Line, path)
 	}
-	typeSpec, typeName, err := parseComponentInputType(typeAttr.Expr, ctx, path+".type")
+	typeCtx := ctx
+	typeCtx.RestrictVariableDefaultReferences = true
+	typeSpec, typeName, err := parseComponentInputType(typeAttr.Expr, typeCtx, path+".type")
 	if err != nil {
 		return Variable{}, fmt.Errorf("%s:%d: %s.type: %w", file, typeAttr.NameRange.Start.Line, path, err)
 	}
@@ -330,6 +413,9 @@ func parseVariable(file string, block *hclsyntax.Block, ctx EvalContext) (Variab
 	}
 	if defaultAttr, ok := block.Body.Attributes["default"]; ok {
 		defaultSource := ir.SourceRef{File: file, Line: defaultAttr.NameRange.Start.Line, Path: path + ".default"}
+		if err := validateVariableDefaultReferences(defaultAttr.Expr, defaultSource); err != nil {
+			return Variable{}, err
+		}
 		value, err := evalValue(defaultAttr.Expr, ctx, defaultSource)
 		if err != nil {
 			return Variable{}, fmt.Errorf("%s:%d: %s.default: %w", file, defaultSource.Line, path, err)
@@ -372,6 +458,23 @@ func parseVariable(file string, block *hclsyntax.Block, ctx EvalContext) (Variab
 		variable.Validations = append(variable.Validations, validation)
 	}
 	return variable, nil
+}
+
+func validateVariableDefaultReferences(expr hcl.Expression, source ir.SourceRef) error {
+	for _, traversal := range expr.Variables() {
+		if len(traversal) == 0 {
+			continue
+		}
+		root, ok := traversal[0].(hcl.TraverseRoot)
+		if !ok {
+			continue
+		}
+		if root.Name == "local" {
+			continue
+		}
+		return fmt.Errorf("%s:%d:%s: variable default cannot reference %s", source.File, source.Line, source.Path, root.Name)
+	}
+	return nil
 }
 
 func parseBoolVariableAttribute(file, variablePath, name string, attr *hclsyntax.Attribute, ctx EvalContext) (bool, error) {

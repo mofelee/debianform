@@ -399,6 +399,37 @@ host "server1" {}
 	}
 }
 
+func TestCompileVariableDefaultsIntoHostAndComponent(t *testing.T) {
+	cfg, err := parser.ParseFiles([]string{"../testdata/fixtures/v2-variable-defaults.dbf.hcl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := CompileWithOptions(cfg, CompileOptions{HostFacts: testHostFacts()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(program.Hosts) != 1 {
+		t.Fatalf("hosts = %d, want 1", len(program.Hosts))
+	}
+	host := program.Hosts[0]
+	if host.System.Hostname != "vars1" {
+		t.Fatalf("hostname = %q, want vars1", host.System.Hostname)
+	}
+	file := host.Files.Files["/etc/debianform/message.txt"]
+	if file.Content != "hello from variable default" {
+		t.Fatalf("file content = %q", file.Content)
+	}
+	profileFile := host.Files.Files["/etc/debianform/profile-message.txt"]
+	if profileFile.Content != "hello from variable default" {
+		t.Fatalf("profile file content = %q", profileFile.Content)
+	}
+	unit := host.Components[0].Systemd.Units["message.service"]
+	if !strings.Contains(unit.Content, "Description=Variable backed service") ||
+		!strings.Contains(unit.Content, "ExecStart=/bin/echo \"hello from variable default\"") {
+		t.Fatalf("unit content did not include variable defaults:\n%s", unit.Content)
+	}
+}
+
 func TestCompileNftablesDefaults(t *testing.T) {
 	program := compileInline(t, `
 host "edge1" {
