@@ -36,9 +36,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for command in cloud-localds curl go qemu-img sha512sum ssh ssh-keygen sudo virsh; do
+for command in curl go python3 sha512sum ssh ssh-keygen virsh; do
   require_command "$command"
 done
+if [[ -z "${DBF_LIBVIRT_URI:-${VIRSH_DEFAULT_CONNECT_URI:-${LIBVIRT_DEFAULT_URI:-}}}" ]]; then
+  require_command cloud-localds
+  require_command qemu-img
+  require_command sudo
+fi
 
 if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
   printf 'libvirt integration tests require Linux x86_64\n' >&2

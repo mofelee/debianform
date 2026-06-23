@@ -5,6 +5,8 @@
 当前实现状态：Compose systemd unit 先使用固定模板，生成 `Type=oneshot`、
 `RemainAfterExit=yes`、`ExecStart=docker compose ... up -d` 和 `ExecStop=docker compose ... stop`。
 MVP 暂不支持为 Compose unit 自定义 `Type`、`Restart`、`User`、`Group` 或额外 `Exec*` 行。
+真实 apply/check 依赖目标主机可访问 Docker 官方 APT 源、Docker GPG key URL 和 Compose
+project 使用的镜像 registry；离线 plan 不会下载或安装 Docker。
 
 ## 1. 背景
 

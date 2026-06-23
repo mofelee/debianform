@@ -42,3 +42,7 @@ Useful environment variables:
 | `DBF_INTEGRATION_ARTIFACT_DIR` | Directory for failure diagnostics. |
 | `DBF_INTEGRATION_IMAGE_CACHE` | Cache directory for the Debian cloud image. |
 | `DBF_INTEGRATION_DISABLE_KVM=1` | Force QEMU software emulation. |
+| `DBF_LIBVIRT_URI` / `LIBVIRT_DEFAULT_URI` | Libvirt URI. Single-host cases support remote `qemu+ssh://...` by creating VM disk/seed files on the hypervisor. |
+| `DBF_INTEGRATION_HYPERVISOR` | SSH host for the remote libvirt filesystem when it cannot be inferred from the URI. |
+| `DBF_INTEGRATION_POOL` | Libvirt storage pool used for remote single-host VM assets, default `vm`. |
+| `DBF_INTEGRATION_REMOTE_BASE_IMAGE` | Hypervisor-side Debian base image path for remote single-host cases. |

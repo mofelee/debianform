@@ -31,6 +31,7 @@
 - [x] 已支持 Compose directory / compose file / env file / config validate ResourceGraph 闭环
 - [x] 已支持 Compose project 状态 ResourceGraph 展开和状态漂移检测
 - [x] 已支持 Compose systemd ResourceGraph / apply / check 闭环
+- [x] 已新增 Docker / daemon / Compose libvirt 集成 case 和 drift 钩子
 - [ ] 尚未支持 users ResourceGraph 展开
 - [ ] 尚未支持 users apply / check 闭环
 
@@ -450,45 +451,50 @@ make test
 
 代码/测试：
 
-- [ ] 新增 libvirt case `docker-engine`
-- [ ] 新增 libvirt case `docker-daemon`
-- [ ] 新增 libvirt case `docker-compose`
-- [ ] `docker-engine` 验证官方 repository 存在
-- [ ] `docker-engine` 验证官方 packages 已安装
-- [ ] `docker-engine` 验证 `docker.service` enabled/running
-- [ ] `docker-daemon` 验证 `/etc/docker/daemon.json` 内容和权限
-- [ ] `docker-compose` 使用最小 nginx 或 hello-world Compose project
-- [ ] `docker-compose` 验证 `docker compose config` 已执行
-- [ ] `docker-compose` 验证 Compose project running
-- [ ] `docker-compose` 验证 generated systemd unit 内容
-- [ ] `docker-compose` 验证 systemd service enabled/running
-- [ ] drift case：手动修改 daemon JSON 后 `dbf check` 非零
-- [ ] drift case：手动修改 compose.yaml 后 `dbf check` 非零
-- [ ] drift case：手动 stop compose project 后 `dbf check` 非零
-- [ ] drift case：手动 disable generated systemd unit 后 `dbf check` 非零
+- [x] 新增 libvirt case `docker-engine`
+- [x] 新增 libvirt case `docker-daemon`
+- [x] 新增 libvirt case `docker-compose`
+- [x] `docker-engine` 验证官方 repository 存在
+- [x] `docker-engine` 验证官方 packages 已安装
+- [x] `docker-engine` 验证 `docker.service` enabled/running
+- [x] `docker-daemon` 验证 `/etc/docker/daemon.json` 内容和权限
+- [x] `docker-compose` 使用最小 busybox Compose project
+- [x] `docker-compose` 验证 `docker compose config` 已执行
+- [x] `docker-compose` 验证 Compose project running
+- [x] `docker-compose` 验证 generated systemd unit 内容
+- [x] `docker-compose` 验证 systemd service enabled/running
+- [x] drift case：手动修改 daemon JSON 后 `dbf check` 非零
+- [x] drift case：手动修改 compose.yaml 后 `dbf check` 非零
+- [x] drift case：手动 stop compose project 后 `dbf check` 非零
+- [x] drift case：手动 disable generated systemd unit 后 `dbf check` 非零
 
 文档：
 
-- [ ] README 标记 Docker / Compose MVP 可用范围
-- [ ] 新增 Docker MVP 使用示例和限制
-- [ ] 文档明确真实安装依赖 Docker 官方源可访问
+- [x] README 标记 Docker / Compose MVP 可用范围
+- [x] 新增 Docker MVP 使用示例和限制
+- [x] 文档明确真实安装依赖 Docker 官方源可访问
 
 验收：
 
 ```bash
 make test
-test/integration/libvirt/run-case.sh docker-engine
-test/integration/libvirt/run-case.sh docker-daemon
-test/integration/libvirt/run-case.sh docker-compose
+make test-integration-layout
+make test-integration-case CASE=docker-engine
+make test-integration-case CASE=docker-daemon
+make test-integration-case CASE=docker-compose
 ```
 
 MVP 完成判定：
 
-- [ ] `docker { enable = true }` 在线 apply 后 check 为 no-op
-- [ ] daemon settings 变更能 plan 出 file diff 和 restart
-- [ ] Compose file 变更能 plan 出 file diff、validate 和 project converge
-- [ ] Compose project stopped drift 能被 check 检出
-- [ ] `make test` 和上述 libvirt cases 通过
+- [x] `docker { enable = true }` 在线 apply 后 check 为 no-op
+- [x] daemon settings 变更能 plan 出 file diff 和 restart
+- [x] Compose file 变更能 plan 出 file diff、validate 和 project converge
+- [x] Compose project stopped drift 能被 check 检出
+- [x] `make test` 和上述 libvirt cases 通过
+
+备注：full libvirt case 需要 runner 能在当前 libvirt URI 上创建 Debian 13 VM。单主机
+runner 已支持远程 `qemu+ssh://...`，会把 VM disk/seed 放到 hypervisor 可见的 storage
+pool 路径；两主机 WireGuard runner 仍按本地 libvirt 路径执行。
 
 ## Loop 9: Docker users 和 docker group membership
 

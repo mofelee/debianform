@@ -251,12 +251,12 @@ component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
 远程 URL source 必须声明 64 位 sha256，plan 会生成 download 和 install 节点；
 `ca_certificate` 变化会额外触发 `update-ca-certificates` operation。
 
-Docker v2 DSL 当前已接入 validate 和 HostSpec 编译。最小语法已经可以展开为官方 Docker
-APT 源、默认 Docker packages 和 `docker.service`，并可通过现有 provider apply/check。
+Docker v2 DSL MVP 已支持官方 Docker APT 源、默认 Docker packages、`docker.service`
+enable/start、daemon JSON、Compose 文件写入、`docker compose config` 校验、Compose
+project `running`/`stopped`/`absent` 收敛，以及 generated systemd unit/service。
 `daemon.settings` 会以稳定 JSON 写入 `/etc/docker/daemon.json`，文件变化后 MVP 统一触发
-`systemctl restart docker.service`。
-Compose 当前支持工作目录、`compose.yaml`、`.env` 文件写入和 `docker compose config`
-校验；DebianForm 不解析、不重写 Compose schema，应用状态收敛和 systemd unit 会在后续 loop 完成：
+`systemctl restart docker.service`。DebianForm 不解析、不重写 Compose schema。
+真实 apply/check 依赖目标主机可以访问 Docker 官方 APT 源和镜像 registry：
 
 ```hcl
 host "docker1" {
@@ -316,6 +316,7 @@ host "compose1" {
     enable = true
 
     compose "app" {
+      state     = "running"
       directory = "/opt/app"
 
       file {
@@ -330,7 +331,11 @@ host "compose1" {
       env_file "app" {
         path    = "/opt/app/.env"
         content = "TOKEN=not-a-real-preview-secret\n"
+        mode    = "0600"
       }
+
+      after     = ["docker.service", "network-online.target"]
+      wanted_by = ["multi-user.target"]
     }
   }
 }
@@ -488,6 +493,9 @@ make test-integration-layout
 make test-integration-case CASE=apt-source
 make test-integration-case CASE=bbr
 make test-integration-case CASE=files
+make test-integration-case CASE=docker-engine
+make test-integration-case CASE=docker-daemon
+make test-integration-case CASE=docker-compose
 make test-integration-case CASE=nftables
 make test-integration-case CASE=shadowsocks-rust
 make test-integration-case CASE=systemd-service-unit

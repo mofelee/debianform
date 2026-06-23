@@ -1112,6 +1112,18 @@ func TestSSHRunnerExpandsHomeIdentityFile(t *testing.T) {
 	t.Fatalf("ssh args %q do not contain expanded identity file %q", strings.Join(args, " "), want)
 }
 
+func TestSSHRunnerUsesConfiguredSSHConfig(t *testing.T) {
+	t.Setenv("DBF_SSH_CONFIG", "/tmp/debianform-ssh-config")
+	runner := NewSSHRunner(map[string]Host{
+		"server1": {Address: "server1"},
+	})
+
+	args := runner.SSHArgs("server1")
+	if len(args) < 2 || args[0] != "-F" || args[1] != "/tmp/debianform-ssh-config" {
+		t.Fatalf("ssh args = %#v, want -F DBF_SSH_CONFIG prefix", args)
+	}
+}
+
 func dockerComposeProjectNode(state string) graph.Node {
 	return graph.Node{
 		Address: `host.compose1.docker.compose["app"].project`,

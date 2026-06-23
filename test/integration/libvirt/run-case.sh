@@ -15,6 +15,13 @@ DBF_HOME="$CASE_WORK/home"
 SSH_KEY="$CASE_WORK/id_ed25519"
 VM_DISK="$CASE_WORK/vm.qcow2"
 SEED_IMAGE="$CASE_WORK/seed.img"
+CONSOLE_LOG="$CASE_WORK/console.log"
+DOMAIN_XML="$CASE_WORK/domain.xml"
+LIBVIRT_URI="${DBF_LIBVIRT_URI:-${VIRSH_DEFAULT_CONNECT_URI:-${LIBVIRT_DEFAULT_URI:-}}}"
+REMOTE_HYPERVISOR=""
+REMOTE_TMP_DIR=""
+REMOTE_POOL="${DBF_INTEGRATION_POOL:-vm}"
+REMOTE_BASE_IMAGE="${DBF_INTEGRATION_REMOTE_BASE_IMAGE:-}"
 
 RUN_SUFFIX="${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 SAFE_CASE_NAME="$(tr -c 'a-zA-Z0-9' '-' <<<"$CASE_NAME" | sed 's/-*$//')"
@@ -43,7 +50,109 @@ fail() {
 }
 
 virsh_system() {
-  sudo virsh --connect qemu:///system "$@"
+  if [[ -n "$LIBVIRT_URI" ]]; then
+    virsh --connect "$LIBVIRT_URI" "$@"
+  else
+    sudo virsh --connect qemu:///system "$@"
+  fi
+}
+
+infer_remote_hypervisor() {
+  case "$LIBVIRT_URI" in
+    qemu+ssh://*|qemu+libssh://*|qemu+libssh2://*)
+      local rest="${LIBVIRT_URI#*://}"
+      printf '%s\n' "${rest%%/*}"
+      ;;
+  esac
+}
+
+is_remote_libvirt() {
+  [[ -n "$REMOTE_HYPERVISOR" ]]
+}
+
+remote_exec() {
+  if is_remote_libvirt; then
+    ssh "$REMOTE_HYPERVISOR" "$@"
+  else
+    "$@"
+  fi
+}
+
+remote_write_file() {
+  local path=$1
+  if is_remote_libvirt; then
+    ssh "$REMOTE_HYPERVISOR" "cat > '$path'"
+  else
+    cat >"$path"
+  fi
+}
+
+remote_read_file() {
+  local path=$1
+  if is_remote_libvirt; then
+    ssh "$REMOTE_HYPERVISOR" "cat '$path'"
+  else
+    cat "$path"
+  fi
+}
+
+pool_path() {
+  virsh_system pool-dumpxml "$REMOTE_POOL" | python3 -c '
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.fromstring(sys.stdin.read())
+target = root.find("target")
+path = target.findtext("path") if target is not None else None
+if not path:
+    raise SystemExit("pool target path not found")
+print(path)
+'
+}
+
+emulator_path() {
+  if [[ -n "${DBF_INTEGRATION_EMULATOR:-}" ]]; then
+    printf '%s\n' "$DBF_INTEGRATION_EMULATOR"
+    return
+  fi
+  if remote_exec command -v qemu-system-x86_64 >/dev/null 2>&1; then
+    remote_exec command -v qemu-system-x86_64
+    return
+  fi
+  printf '/usr/bin/qemu-system-x86_64\n'
+}
+
+prepare_vm_paths() {
+  if ! is_remote_libvirt; then
+    return
+  fi
+
+  local pool_dir
+  pool_dir="$(pool_path)"
+  VM_DISK="$pool_dir/$VM_NAME.qcow2"
+  SEED_IMAGE="$pool_dir/$VM_NAME-seed.img"
+  CONSOLE_LOG="$pool_dir/$VM_NAME-console.log"
+  DOMAIN_XML="$CASE_WORK/domain.xml"
+  REMOTE_TMP_DIR="$pool_dir/.dbf-v2-$VM_NAME"
+  if [[ -z "$REMOTE_BASE_IMAGE" ]]; then
+    REMOTE_BASE_IMAGE="$pool_dir/$(basename "$BASE_IMAGE")"
+  fi
+
+  log "remote libvirt URI: $LIBVIRT_URI"
+  log "remote hypervisor: $REMOTE_HYPERVISOR"
+  log "remote storage pool: $REMOTE_POOL ($pool_dir)"
+  remote_exec mkdir -p "$REMOTE_TMP_DIR"
+  if ! remote_exec test -f "$REMOTE_BASE_IMAGE"; then
+    log "copying verified Debian base image to $REMOTE_HYPERVISOR:$REMOTE_BASE_IMAGE"
+    scp -q "$BASE_IMAGE" "$REMOTE_HYPERVISOR:$REMOTE_BASE_IMAGE"
+    remote_exec chmod 0644 "$REMOTE_BASE_IMAGE"
+  fi
+}
+
+cleanup_vm_files() {
+  if is_remote_libvirt; then
+    remote_exec rm -rf "$VM_DISK" "$SEED_IMAGE" "$CONSOLE_LOG" "$REMOTE_TMP_DIR" >/dev/null 2>&1 || true
+  fi
 }
 
 ssh_vm() {
@@ -55,7 +164,7 @@ ssh_vm() {
 }
 
 dbf() {
-  HOME="$DBF_HOME" "$DBF_BIN" "$@"
+  HOME="$DBF_HOME" DBF_SSH_CONFIG="$DBF_HOME/.ssh/config" "$DBF_BIN" "$@"
 }
 
 run_remote() {
@@ -81,9 +190,15 @@ collect_diagnostics() {
   virsh_system net-list --all >"$ARTIFACT_DIR/virsh-net-list.txt" 2>&1 || true
   virsh_system dumpxml "$VM_NAME" >"$ARTIFACT_DIR/domain.xml" 2>&1 || true
   virsh_system domifaddr "$VM_NAME" --source lease >"$ARTIFACT_DIR/domifaddr.txt" 2>&1 || true
-  sudo journalctl -u libvirtd --no-pager -n 300 >"$ARTIFACT_DIR/libvirtd.log" 2>&1 || true
-  sudo sh -c "cat /var/log/libvirt/qemu/$VM_NAME.log" >"$ARTIFACT_DIR/qemu.log" 2>&1 || true
-  sudo sh -c "cat '$CASE_WORK/console.log'" >"$ARTIFACT_DIR/console.log" 2>&1 || true
+  if is_remote_libvirt; then
+    ssh "$REMOTE_HYPERVISOR" "journalctl -u libvirtd --no-pager -n 300" >"$ARTIFACT_DIR/libvirtd.log" 2>&1 || true
+    ssh "$REMOTE_HYPERVISOR" "cat /var/log/libvirt/qemu/$VM_NAME.log" >"$ARTIFACT_DIR/qemu.log" 2>&1 || true
+    remote_read_file "$CONSOLE_LOG" >"$ARTIFACT_DIR/console.log" 2>&1 || true
+  else
+    sudo journalctl -u libvirtd --no-pager -n 300 >"$ARTIFACT_DIR/libvirtd.log" 2>&1 || true
+    sudo sh -c "cat /var/log/libvirt/qemu/$VM_NAME.log" >"$ARTIFACT_DIR/qemu.log" 2>&1 || true
+    sudo sh -c "cat '$CONSOLE_LOG'" >"$ARTIFACT_DIR/console.log" 2>&1 || true
+  fi
   cp -a "$LOG_DIR" "$ARTIFACT_DIR/logs" 2>/dev/null || true
   cp -a "$CASE_DIR" "$ARTIFACT_DIR/scenario" 2>/dev/null || true
 }
@@ -107,6 +222,7 @@ cleanup() {
     virsh_system net-destroy "$NETWORK_NAME" >/dev/null 2>&1 || true
     virsh_system net-undefine "$NETWORK_NAME" >/dev/null 2>&1 || true
   fi
+  cleanup_vm_files
 
   exit "$status"
 }
@@ -150,7 +266,12 @@ mkdir -p "$CASE_WORK" "$CASE_DIR" "$LOG_DIR" "$DBF_HOME/.ssh"
 cp -a "$CASE_SOURCE/." "$CASE_DIR/"
 chmod 0700 "$DBF_HOME" "$DBF_HOME/.ssh"
 
-if [[ "${DBF_INTEGRATION_DISABLE_KVM:-0}" != "1" && -r /dev/kvm && -w /dev/kvm ]]; then
+REMOTE_HYPERVISOR="${DBF_INTEGRATION_HYPERVISOR:-$(infer_remote_hypervisor)}"
+prepare_vm_paths
+
+if [[ "${DBF_INTEGRATION_DISABLE_KVM:-0}" != "1" ]] &&
+  remote_exec test -r /dev/kvm &&
+  remote_exec test -w /dev/kvm; then
   VIRT_TYPE="kvm"
 fi
 
@@ -159,7 +280,16 @@ cp "$SSH_KEY" "$CASE_DIR/id_ed25519"
 chmod 0600 "$CASE_DIR/id_ed25519"
 PUBLIC_KEY="$(cat "$SSH_KEY.pub")"
 
-cat >"$CASE_WORK/user-data" <<EOF
+USER_DATA="$CASE_WORK/user-data"
+META_DATA="$CASE_WORK/meta-data"
+NETWORK_CONFIG="$CASE_WORK/network-config"
+if is_remote_libvirt; then
+  USER_DATA="$REMOTE_TMP_DIR/user-data"
+  META_DATA="$REMOTE_TMP_DIR/meta-data"
+  NETWORK_CONFIG="$REMOTE_TMP_DIR/network-config"
+fi
+
+remote_write_file "$USER_DATA" <<EOF
 #cloud-config
 disable_root: false
 ssh_pwauth: false
@@ -172,12 +302,12 @@ runcmd:
   - [sh, -c, "touch /run/debianform-cloud-init-ready"]
 EOF
 
-cat >"$CASE_WORK/meta-data" <<EOF
+remote_write_file "$META_DATA" <<EOF
 instance-id: $VM_NAME
 local-hostname: debianform-ci
 EOF
 
-cat >"$CASE_WORK/network-config" <<EOF
+remote_write_file "$NETWORK_CONFIG" <<EOF
 version: 2
 ethernets:
   primary:
@@ -186,22 +316,28 @@ ethernets:
     dhcp4: true
 EOF
 
-cloud-localds \
-  --network-config="$CASE_WORK/network-config" \
+remote_exec cloud-localds \
+  --network-config="$NETWORK_CONFIG" \
   "$SEED_IMAGE" \
-  "$CASE_WORK/user-data" \
-  "$CASE_WORK/meta-data"
-qemu-img create -q -f qcow2 -F qcow2 -b "$BASE_IMAGE" "$VM_DISK" 12G
-chmod 0755 "$CASE_WORK"
-chmod 0644 "$SEED_IMAGE"
-chmod 0666 "$VM_DISK"
+  "$USER_DATA" \
+  "$META_DATA"
+remote_exec qemu-img create -q -f qcow2 -F qcow2 -b "${REMOTE_BASE_IMAGE:-$BASE_IMAGE}" "$VM_DISK" 12G
+if is_remote_libvirt; then
+  remote_exec chmod 0644 "$SEED_IMAGE"
+  remote_exec chmod 0666 "$VM_DISK"
+else
+  chmod 0755 "$CASE_WORK"
+  chmod 0644 "$SEED_IMAGE"
+  chmod 0666 "$VM_DISK"
+fi
 
 CPU_XML=""
 if [[ "$VIRT_TYPE" == "kvm" ]]; then
   CPU_XML="<cpu mode='host-passthrough' check='none'/>"
 fi
+EMULATOR_PATH="$(emulator_path)"
 
-cat >"$CASE_WORK/domain.xml" <<EOF
+cat >"$DOMAIN_XML" <<EOF
 <domain type='$VIRT_TYPE'>
   <name>$VM_NAME</name>
   <memory unit='MiB'>1024</memory>
@@ -224,7 +360,7 @@ cat >"$CASE_WORK/domain.xml" <<EOF
   <on_reboot>restart</on_reboot>
   <on_crash>destroy</on_crash>
   <devices>
-    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <emulator>$EMULATOR_PATH</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2' discard='unmap'/>
       <source file='$VM_DISK'/>
@@ -242,7 +378,7 @@ cat >"$CASE_WORK/domain.xml" <<EOF
       <model type='virtio'/>
     </interface>
     <serial type='pty'>
-      <log file='$CASE_WORK/console.log' append='off'/>
+      <log file='$CONSOLE_LOG' append='off'/>
       <target port='0'/>
     </serial>
     <console type='pty'>
@@ -254,7 +390,7 @@ EOF
 
 log "starting fresh Debian VM using $VIRT_TYPE"
 dbf_integration_start_network "$CASE_WORK/network.xml"
-virsh_system define "$CASE_WORK/domain.xml" >/dev/null
+virsh_system define "$DOMAIN_XML" >/dev/null
 VM_DEFINED=1
 virsh_system start "$VM_NAME" >/dev/null
 VM_STARTED=1
@@ -267,6 +403,7 @@ Host cihost
   HostName $VM_IP
   User root
   IdentityFile $SSH_KEY
+$(if is_remote_libvirt; then printf '  ProxyCommand ssh -W %%h:%%p %s\n' "$REMOTE_HYPERVISOR"; fi)
   StrictHostKeyChecking no
   UserKnownHostsFile /dev/null
 EOF
@@ -276,8 +413,12 @@ wait_for_ssh
 ssh_vm "cloud-init status --wait >/dev/null && test -e /run/debianform-cloud-init-ready"
 ssh_vm ". /etc/os-release && test \"\$ID\" = debian && test \"\$VERSION_ID\" = 13"
 
+DBF_CONFIG_HOST="$VM_IP"
+if is_remote_libvirt; then
+  DBF_CONFIG_HOST="cihost"
+fi
 while IFS= read -r config; do
-  sed -i "s/__DBF_VM_IP__/$VM_IP/g" "$config"
+  sed -i "s/__DBF_VM_IP__/$DBF_CONFIG_HOST/g" "$config"
 done < <(find "$CASE_DIR" -maxdepth 1 -type f -name '[0-9]*.dbf.hcl')
 
 declare -a CONFIGS=()

@@ -104,6 +104,9 @@ func (r *SSHRunner) SSHArgs(host string) []string {
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-l", user,
 	}
+	if config := os.Getenv("DBF_SSH_CONFIG"); config != "" {
+		args = append([]string{"-F", config}, args...)
+	}
 	if resolved.Port != 0 && resolved.Port != 22 {
 		args = append(args, "-p", strconv.Itoa(resolved.Port))
 	}
