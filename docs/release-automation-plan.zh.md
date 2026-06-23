@@ -56,22 +56,22 @@ rg -n "license" docs/release-process.zh.md README.md
 
 代码/文件：
 
-- [ ] 新增 `.goreleaser.yaml`。
-- [ ] 配置 `builds` 覆盖：
+- [x] 新增 `.goreleaser.yaml`。
+- [x] 配置 `builds` 覆盖：
   - `linux/amd64`
   - `linux/arm64`
   - `darwin/amd64`
   - `darwin/arm64`
-- [ ] 配置 ldflags 注入 `Version`、`Commit`、`Date`。
-- [ ] 配置 archives，tarball 包含：
+- [x] 配置 ldflags 注入 `Version`、`Commit`、`Date`。
+- [x] 配置 archives，tarball 包含：
   - `dbf`
   - `README.md`
   - `docs/`
   - `examples/`
   - `LICENSE`
   - `CHANGELOG.md`
-- [ ] 配置 checksum 文件名为 `checksums.txt`。
-- [ ] 保持 tarball 命名与 `docs/release-process.zh.md` 一致：
+- [x] 配置 checksum 文件名为 `checksums.txt`。
+- [x] 保持 tarball 命名与 `docs/release-process.zh.md` 一致：
   - `dbf_<tag>_linux_amd64.tar.gz`
   - `dbf_<tag>_linux_arm64.tar.gz`
   - `dbf_<tag>_darwin_amd64.tar.gz`
@@ -89,7 +89,7 @@ tar -tzf dist/dbf_*_linux_amd64.tar.gz | rg 'README.md|docs/|examples/|LICENSE|C
 
 需要你介入：
 
-- 如果当前环境没有 GoReleaser，需要允许安装或在 CI 中验证。
+- 当前环境已临时安装 GoReleaser v2.16.0 到 `/tmp/debianform-tools/goreleaser` 并用于本地验收。
 
 ## Loop 2: release dry-run CI
 

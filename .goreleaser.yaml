@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: dbf
+
+builds:
+  - id: dbf
+    main: ./cmd/dbf
+    binary: dbf
+    env:
+      - CGO_ENABLED=0
+    targets:
+      - linux_amd64
+      - linux_arm64
+      - darwin_amd64
+      - darwin_arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/mofelee/debianform/internal/version.Version={{ .Tag }}
+      - -X github.com/mofelee/debianform/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/mofelee/debianform/internal/version.Date={{ .Date }}
+
+archives:
+  - id: tarballs
+    ids:
+      - dbf
+    formats:
+      - tar.gz
+    name_template: "dbf_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md
+      - docs/*
+      - examples/*
+
+checksum:
+  name_template: checksums.txt
