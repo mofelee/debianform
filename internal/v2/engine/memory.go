@@ -110,14 +110,20 @@ func (p *MemoryProvider) Apply(ctx context.Context, step Step) (map[string]any, 
 		"desired_digest": v2state.DesiredDigest(step.Node.Desired),
 	}
 	if step.Node.Kind == "docker_compose_project" {
-		observed["state"] = stringMapValue(step.Node.Desired, "state")
-		observed["services"] = map[string]any{"total": 1, "running": 1, "stopped": 0}
+		state := stringMapValue(step.Node.Desired, "state")
+		observed["state"] = state
+		observed["project"] = stringMapValue(step.Node.Desired, "project")
+		observed["services"] = map[string]any{"total": 1, "running": 1, "stopped": 0, "expected": []string{"web"}, "actual": []string{"web"}}
+		observed["containers"] = map[string]any{"total": 1}
+		observed["orphan_count"] = 0
+		observed["orphan_services"] = []string{}
 		if observed["state"] == "stopped" {
-			observed["services"] = map[string]any{"total": 1, "running": 0, "stopped": 1}
+			observed["services"] = map[string]any{"total": 1, "running": 0, "stopped": 1, "expected": []string{"web"}, "actual": []string{"web"}}
 		}
 		if observed["state"] == "absent" {
 			observed["exists"] = false
-			observed["services"] = map[string]any{"total": 0, "running": 0, "stopped": 0}
+			observed["services"] = map[string]any{"total": 0, "running": 0, "stopped": 0, "expected": []string{"web"}, "actual": []string{}}
+			observed["containers"] = map[string]any{"total": 0}
 		}
 	}
 	p.Observed[step.Address] = Observed{

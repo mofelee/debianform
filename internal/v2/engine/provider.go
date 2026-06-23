@@ -1614,6 +1614,7 @@ func (p NativeProvider) planDockerComposeProject(ctx context.Context, node graph
 	want := stringDesired(node, "state")
 	actual, _ := observed["state"].(string)
 	project := stringDesired(node, "project")
+	orphanCount := intMapValue(observed, "orphan_count")
 	if want == "absent" {
 		if actual == "absent" {
 			return absentInSyncPlan(prior, "already absent docker compose project "+project, observed), nil
@@ -1621,18 +1622,30 @@ func (p NativeProvider) planDockerComposeProject(ctx context.Context, node graph
 		return ProviderPlan{Action: ActionDelete, Summary: "remove docker compose project " + project, Observed: observed, Ownership: ownership(prior)}, nil
 	}
 	if actual != want {
-		return ProviderPlan{Action: ActionUpdate, Summary: "converge docker compose project " + project + " to " + want, Observed: observed, Ownership: ownership(prior)}, nil
+		return ProviderPlan{Action: ActionUpdate, Summary: dockerComposeDriftSummary(project, want, actual, orphanCount), Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if orphanCount > 0 {
+		return ProviderPlan{Action: ActionUpdate, Summary: dockerComposeOrphanSummary(project, orphanCount, boolDesired(node, "remove_orphans")), Observed: observed, Ownership: ownership(prior)}, nil
 	}
 	desiredDigest := v2state.DesiredDigest(node.Desired)
 	if prior != nil && prior.DesiredDigest != "" && prior.DesiredDigest != desiredDigest {
 		observed = cloneMap(observed)
 		observed["desired_digest"] = prior.DesiredDigest
+		if oldProject := stringMapValue(prior.Desired, "project"); oldProject != "" && oldProject != project {
+			return ProviderPlan{Action: ActionUpdate, Summary: "replace docker compose project " + oldProject + " with " + project, Observed: observed, Ownership: ownership(prior)}, nil
+		}
 		return ProviderPlan{Action: ActionUpdate, Summary: "update docker compose project " + project, Observed: observed, Ownership: ownership(prior)}, nil
 	}
 	return inSyncPlan(node, prior, "no changes for docker compose project "+project, observed), nil
 }
 
 func (p NativeProvider) applyDockerComposeProject(ctx context.Context, step Step) (map[string]any, error) {
+	if oldProject := dockerComposePriorProject(step); oldProject != "" && oldProject != stringDesired(step.Node, "project") {
+		command := dockerComposeProjectCommandForProject(step.Node, oldProject, "down")
+		if _, err := p.Runner.Run(ctx, step.Node.Host, command); err != nil {
+			return nil, err
+		}
+	}
 	command, err := dockerComposeProjectCommand(step.Node)
 	if err != nil {
 		return nil, err
@@ -1650,11 +1663,23 @@ func (p NativeProvider) applyDockerComposeProject(ctx context.Context, step Step
 }
 
 func (p NativeProvider) readDockerComposeProject(ctx context.Context, node graph.Node) (map[string]any, error) {
-	result, err := p.Runner.Run(ctx, node.Host, dockerComposeProjectPSCommand(node))
+	expectedServices := []string{}
+	servicesResult, err := p.Runner.Run(ctx, node.Host, dockerComposeProjectServicesCommand(node))
 	if err != nil {
 		return nil, err
 	}
-	return summarizeDockerComposePS(result.Stdout), nil
+	expectedServices = dockerComposeConfigServices(servicesResult.Stdout)
+	psResult, err := p.Runner.Run(ctx, node.Host, dockerComposeProjectPSCommand(node))
+	if err != nil {
+		return nil, err
+	}
+	return summarizeDockerComposePS(psResult.Stdout, expectedServices), nil
+}
+
+func dockerComposeProjectServicesCommand(node graph.Node) string {
+	args := dockerComposeBaseArgs(node)
+	args = append(args, "config", "--services")
+	return strings.Join(shellQuoteArgs(args), " ") + " 2>/dev/null || true\n"
 }
 
 func dockerComposeProjectPSCommand(node graph.Node) string {
@@ -1684,6 +1709,15 @@ func dockerComposeProjectCommand(node graph.Node) (string, error) {
 		return "", fmt.Errorf("%s unsupported docker compose state %q", node.Address, stringDesired(node, "state"))
 	}
 	return strings.Join(shellQuoteArgs(args), " ") + "\n", nil
+}
+
+func dockerComposeProjectCommandForProject(node graph.Node, project string, command ...string) string {
+	args := []string{"docker", "compose", "-p", project}
+	for _, file := range stringListDesired(node, "files") {
+		args = append(args, "-f", file)
+	}
+	args = append(args, command...)
+	return strings.Join(shellQuoteArgs(args), " ") + "\n"
 }
 
 func dockerComposeBaseArgs(node graph.Node) []string {
@@ -1724,16 +1758,20 @@ func shellQuoteArgs(args []string) []string {
 	return out
 }
 
-func summarizeDockerComposePS(stdout string) map[string]any {
+func summarizeDockerComposePS(stdout string, expectedServices []string) map[string]any {
 	total := 0
 	running := 0
 	stopped := 0
-	for _, state := range dockerComposePSStates(stdout) {
+	actualServices := []string{}
+	for _, container := range dockerComposePSContainers(stdout) {
 		total++
-		if strings.EqualFold(state, "running") {
+		if strings.EqualFold(container.State, "running") {
 			running++
 		} else {
 			stopped++
+		}
+		if container.Service != "" {
+			actualServices = append(actualServices, container.Service)
 		}
 	}
 	state := "absent"
@@ -1742,29 +1780,41 @@ func summarizeDockerComposePS(stdout string) map[string]any {
 	} else if total > 0 {
 		state = "stopped"
 	}
+	orphanServices := dockerComposeOrphanServices(actualServices, expectedServices)
 	return map[string]any{
 		"exists":   total > 0,
 		"state":    state,
-		"services": map[string]any{"total": total, "running": running, "stopped": stopped},
+		"services": map[string]any{"total": total, "running": running, "stopped": stopped, "expected": expectedServices, "actual": dedupeStringValues(actualServices)},
+		"containers": map[string]any{
+			"total": total,
+		},
+		"orphan_count":    len(orphanServices),
+		"orphan_services": orphanServices,
 	}
 }
 
-func dockerComposePSStates(stdout string) []string {
+type dockerComposeContainer struct {
+	Service string
+	State   string
+	Name    string
+}
+
+func dockerComposePSContainers(stdout string) []dockerComposeContainer {
 	text := strings.TrimSpace(stdout)
 	if text == "" || text == "[]" {
 		return nil
 	}
 	var array []map[string]any
 	if err := json.Unmarshal([]byte(text), &array); err == nil {
-		states := make([]string, 0, len(array))
+		containers := make([]dockerComposeContainer, 0, len(array))
 		for _, item := range array {
-			if state := dockerComposePSState(item); state != "" {
-				states = append(states, state)
+			if container := dockerComposePSContainer(item); container.State != "" {
+				containers = append(containers, container)
 			}
 		}
-		return states
+		return containers
 	}
-	var states []string
+	var containers []dockerComposeContainer
 	lines := strings.Split(text, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -1773,21 +1823,109 @@ func dockerComposePSStates(stdout string) []string {
 		}
 		var item map[string]any
 		if err := json.Unmarshal([]byte(line), &item); err == nil {
-			if state := dockerComposePSState(item); state != "" {
-				states = append(states, state)
+			if container := dockerComposePSContainer(item); container.State != "" {
+				containers = append(containers, container)
 			}
 		}
 	}
-	return states
+	return containers
 }
 
-func dockerComposePSState(item map[string]any) string {
+func dockerComposePSContainer(item map[string]any) dockerComposeContainer {
+	container := dockerComposeContainer{}
 	for _, key := range []string{"State", "state"} {
 		if state, ok := item[key].(string); ok {
-			return state
+			container.State = state
+			break
 		}
 	}
-	return ""
+	for _, key := range []string{"Service", "service"} {
+		if service, ok := item[key].(string); ok {
+			container.Service = service
+			break
+		}
+	}
+	for _, key := range []string{"Name", "name"} {
+		if name, ok := item[key].(string); ok {
+			container.Name = name
+			break
+		}
+	}
+	return container
+}
+
+func dockerComposeConfigServices(stdout string) []string {
+	var services []string
+	for _, line := range strings.Split(stdout, "\n") {
+		service := strings.TrimSpace(line)
+		if service == "" {
+			continue
+		}
+		services = append(services, service)
+	}
+	return dedupeStringValues(services)
+}
+
+func dockerComposeOrphanServices(actual, expected []string) []string {
+	if len(actual) == 0 || len(expected) == 0 {
+		return nil
+	}
+	expectedSet := map[string]struct{}{}
+	for _, service := range expected {
+		expectedSet[service] = struct{}{}
+	}
+	var out []string
+	for _, service := range dedupeStringValues(actual) {
+		if _, ok := expectedSet[service]; !ok {
+			out = append(out, service)
+		}
+	}
+	return out
+}
+
+func dockerComposePriorProject(step Step) string {
+	if step.Prior == nil {
+		return ""
+	}
+	return stringMapValue(step.Prior.Desired, "project")
+}
+
+func dockerComposeDriftSummary(project, want, actual string, orphanCount int) string {
+	summary := "converge docker compose project " + project + " from " + actual + " to " + want
+	if orphanCount > 0 {
+		summary += " and inspect " + pluralize(orphanCount, "orphan service")
+	}
+	return summary
+}
+
+func dockerComposeOrphanSummary(project string, orphanCount int, removeOrphans bool) string {
+	if removeOrphans {
+		return "remove " + pluralize(orphanCount, "orphan service") + " from docker compose project " + project
+	}
+	return "docker compose project " + project + " has " + pluralize(orphanCount, "orphan service") + "; set remove_orphans = true to clean them"
+}
+
+func pluralize(count int, singular string) string {
+	if count == 1 {
+		return "1 " + singular
+	}
+	return fmt.Sprintf("%d %ss", count, singular)
+}
+
+func dedupeStringValues(values []string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func (p NativeProvider) removePath(ctx context.Context, host, path string, daemonReload bool) error {
@@ -2156,6 +2294,22 @@ func stringMapValue(values map[string]any, name string) string {
 func boolMapValue(values map[string]any, name string) bool {
 	value, _ := values[name].(bool)
 	return value
+}
+
+func intMapValue(values map[string]any, name string) int {
+	switch value := values[name].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	case json.Number:
+		n, _ := value.Int64()
+		return int(n)
+	default:
+		return 0
+	}
 }
 
 func aptSourceOnDestroy(desired map[string]any) string {

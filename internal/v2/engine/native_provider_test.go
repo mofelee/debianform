@@ -1068,7 +1068,7 @@ func TestNativeProviderDockerComposeProjectPlanStates(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runner := &recordingRunner{outputs: []Result{{Stdout: tt.stdout}}}
+			runner := &recordingRunner{outputs: []Result{{Stdout: "web\n"}, {Stdout: tt.stdout}}}
 			provider := NewNativeProvider(runner)
 			node := dockerComposeProjectNode(tt.state)
 
@@ -1083,8 +1083,42 @@ func TestNativeProviderDockerComposeProjectPlanStates(t *testing.T) {
 	}
 }
 
+func TestNativeProviderDockerComposeProjectPlanOrphans(t *testing.T) {
+	runner := &recordingRunner{outputs: []Result{
+		{Stdout: "web\n"},
+		{Stdout: `[{"Name":"web-1","Service":"web","State":"running"},{"Name":"worker-1","Service":"worker","State":"running"}]`},
+	}}
+	provider := NewNativeProvider(runner)
+	node := dockerComposeProjectNode("running")
+
+	got, err := provider.Plan(context.Background(), node, &v2state.Resource{Ownership: "managed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionUpdate || !strings.Contains(got.Summary, "orphan service") || !strings.Contains(got.Summary, "remove_orphans = true") {
+		t.Fatalf("orphan plan = %#v, want update with orphan hint", got)
+	}
+	if got.Observed["orphan_count"] != 1 {
+		t.Fatalf("orphan observed = %#v, want count 1", got.Observed)
+	}
+
+	node.Desired["remove_orphans"] = true
+	runner = &recordingRunner{outputs: []Result{
+		{Stdout: "web\n"},
+		{Stdout: `[{"Name":"web-1","Service":"web","State":"running"},{"Name":"worker-1","Service":"worker","State":"running"}]`},
+	}}
+	provider = NewNativeProvider(runner)
+	got, err = provider.Plan(context.Background(), node, &v2state.Resource{Ownership: "managed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionUpdate || !strings.Contains(got.Summary, "remove 1 orphan service") {
+		t.Fatalf("remove orphan plan = %#v, want cleanup update", got)
+	}
+}
+
 func TestNativeProviderDockerComposeProjectPlanDesiredChangeUpdates(t *testing.T) {
-	runner := &recordingRunner{outputs: []Result{{Stdout: `[{"Name":"web","State":"running"}]`}}}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "web\n"}, {Stdout: `[{"Name":"web","Service":"web","State":"running"}]`}}}
 	provider := NewNativeProvider(runner)
 	node := dockerComposeProjectNode("running")
 	priorDesired := cloneMap(node.Desired)
@@ -1101,15 +1135,33 @@ func TestNativeProviderDockerComposeProjectPlanDesiredChangeUpdates(t *testing.T
 	}
 }
 
+func TestNativeProviderDockerComposeProjectPlanProjectRename(t *testing.T) {
+	runner := &recordingRunner{outputs: []Result{{Stdout: "web\n"}, {Stdout: `[{"Name":"web","Service":"web","State":"running"}]`}}}
+	provider := NewNativeProvider(runner)
+	node := dockerComposeProjectNode("running")
+	node.Desired["project"] = "newapp"
+	priorDesired := cloneMap(node.Desired)
+	priorDesired["project"] = "app"
+	prior := &v2state.Resource{Ownership: "managed", Desired: priorDesired, DesiredDigest: v2state.DesiredDigest(priorDesired)}
+
+	got, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionUpdate || got.Summary != "replace docker compose project app with newapp" {
+		t.Fatalf("project rename plan = %#v, want replace summary", got)
+	}
+}
+
 func TestNativeProviderDockerComposeProjectApplyRunningCommand(t *testing.T) {
-	runner := &recordingRunner{outputs: []Result{{Stdout: `[{"Name":"web","State":"running"}]`}}}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "web\n"}, {Stdout: `[{"Name":"web","Service":"web","State":"running"}]`}}}
 	provider := NewNativeProvider(runner)
 	node := dockerComposeProjectNode("running")
 
 	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionUpdate}); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.scripts) < 2 {
+	if len(runner.scripts) < 3 {
 		t.Fatalf("scripts = %#v, want apply and read", runner.scripts)
 	}
 	applied := runner.scripts[0]
@@ -1123,6 +1175,29 @@ func TestNativeProviderDockerComposeProjectApplyRunningCommand(t *testing.T) {
 	}
 }
 
+func TestNativeProviderDockerComposeProjectApplyProjectRenameRunsDownFirst(t *testing.T) {
+	runner := &recordingRunner{outputs: []Result{{Stdout: "web\n"}, {Stdout: `[{"Name":"web","Service":"web","State":"running"}]`}}}
+	provider := NewNativeProvider(runner)
+	node := dockerComposeProjectNode("running")
+	node.Desired["project"] = "newapp"
+	priorDesired := cloneMap(node.Desired)
+	priorDesired["project"] = "app"
+	prior := &v2state.Resource{Desired: priorDesired}
+
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionUpdate, Prior: prior}); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) < 4 {
+		t.Fatalf("scripts = %#v, want old down, new up, services, ps", runner.scripts)
+	}
+	if !strings.Contains(runner.scripts[0], "'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'down'") {
+		t.Fatalf("first script = %q, want old project down", runner.scripts[0])
+	}
+	if !strings.Contains(runner.scripts[1], "'docker' 'compose' '-p' 'newapp' '-f' '/opt/app/compose.yaml' 'up' '-d'") {
+		t.Fatalf("second script = %q, want new project up", runner.scripts[1])
+	}
+}
+
 func TestNativeProviderDockerComposeProjectApplyStoppedAndAbsentCommands(t *testing.T) {
 	tests := []struct {
 		state string
@@ -1133,7 +1208,7 @@ func TestNativeProviderDockerComposeProjectApplyStoppedAndAbsentCommands(t *test
 	}
 	for _, tt := range tests {
 		t.Run(tt.state, func(t *testing.T) {
-			runner := &recordingRunner{outputs: []Result{{Stdout: "[]"}}}
+			runner := &recordingRunner{outputs: []Result{{Stdout: ""}, {Stdout: "[]"}}}
 			provider := NewNativeProvider(runner)
 			node := dockerComposeProjectNode(tt.state)
 
@@ -1148,7 +1223,7 @@ func TestNativeProviderDockerComposeProjectApplyStoppedAndAbsentCommands(t *test
 }
 
 func TestNativeProviderDockerComposeProjectApplyFlags(t *testing.T) {
-	runner := &recordingRunner{outputs: []Result{{Stdout: `[{"Name":"web","State":"running"}]`}}}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "web\n"}, {Stdout: `[{"Name":"web","Service":"web","State":"running"}]`}}}
 	provider := NewNativeProvider(runner)
 	node := dockerComposeProjectNode("running")
 	node.Desired["pull"] = "always"

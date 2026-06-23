@@ -1,0 +1,189 @@
+Plan:
+  + host.compose1.docker.apt.repository["docker-official"]
+    create file docker-official
+    source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
+    + content
+      @@ -1,0 +1,6 @@
+      + Types: deb
+      + URIs: https://download.docker.com/linux/debian
+      + Suites: trixie
+      + Components: stable
+      + Architectures: amd64
+      + Signed-By: /etc/apt/keyrings/docker.asc
+    + ensure: "present"
+    + group: "root"
+    + mode: "0644"
+    + name: "docker-official"
+    + owner: "root"
+    + path: "/etc/apt/sources.list.d/docker_official.sources"
+  + host.compose1.docker.apt.signing_key["docker-official"]
+    create apt_signing_key docker-official
+    source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
+    + ensure: "present"
+    + group: "root"
+    + mode: "0644"
+    + name: "docker-official"
+    + owner: "root"
+    + path: "/etc/apt/keyrings/docker.asc"
+    + sha256: "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
+    + url: "https://download.docker.com/linux/debian/gpg"
+  + host.compose1.docker.compose["app"].directory
+    create directory /opt/app
+    source: ../../../examples/v2-docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"]
+    + ensure: "present"
+    + group: "root"
+    + mode: "0755"
+    + owner: "root"
+    + path: "/opt/app"
+  + host.compose1.docker.compose["app"].env_file["app"]
+    create file /opt/app/.env
+    source: ../../../examples/v2-docker-compose.dbf.hcl:32:host.compose1.docker.compose["app"].env_file["app"]
+    + compose: "app"
+    + content: <sensitive sha256=13960174065f5092768d3f5b11c1acad09272142febb757484b9709779b52588, 32 bytes>
+    + ensure: "present"
+    + group: "root"
+    + mode: "0600"
+    + owner: "root"
+    + path: "/opt/app/.env"
+    + sensitive: true
+  + host.compose1.docker.compose["app"].file
+    create file /opt/app/compose.yaml
+    source: ../../../examples/v2-docker-compose.dbf.hcl:20:host.compose1.docker.compose["app"].file
+    + compose: "app"
+    + content
+      @@ -1,0 +1,5 @@
+      + services:
+      +   web:
+      +     image: nginx:1.27-alpine
+      +     ports:
+      +       - "8080:80"
+    + ensure: "present"
+    + group: "root"
+    + mode: "0644"
+    + owner: "root"
+    + path: "/opt/app/compose.yaml"
+    + sensitive: false
+    + summary
+      + summary.bytes: 75
+      + summary.sha256: "d1f744f61ab84b59402583765d65b4d6b984fd44c128388ac3ea0a07ef123d0f"
+  ~ host.compose1.docker.compose["app"].project
+    update docker_compose_project app
+    source: ../../../examples/v2-docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"]
+    - containers
+      - containers.total: 2
+    - desired_digest: "drifted"
+    + directory: "/opt/app"
+    + env_files
+      + env_files.0: "/opt/app/.env"
+    - exists: true
+    + files
+      + files.0: "/opt/app/compose.yaml"
+    + name: "app"
+    - orphan_count: 1
+    - orphan_services
+      - orphan_services.0: "worker"
+    + project: "app"
+    + pull: "missing"
+    + recreate: "auto"
+    + remove_orphans: false
+    - services
+      - services.actual
+        - services.actual.0: "web"
+        - services.actual.1: "worker"
+      - services.expected
+        - services.expected.0: "web"
+      - services.running: 2
+      - services.stopped: 0
+      - services.total: 2
+  + host.compose1.docker.compose["app"].service
+    create service debianform-compose-app
+    source: ../../../examples/v2-docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"]
+    + enabled: true
+    + name: "debianform-compose-app"
+    + state: "running"
+    + unit: "debianform-compose-app.service"
+  + host.compose1.docker.compose["app"].systemd_unit
+    create systemd_unit debianform-compose-app.service
+    source: ../../../examples/v2-docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"]
+    + content
+      @@ -1,0 +1,15 @@
+      + [Unit]
+      + Description=DebianForm Compose Project app
+      + Requires=docker.service
+      + After=docker.service network-online.target
+      +
+      + [Service]
+      + Type=oneshot
+      + RemainAfterExit=yes
+      + WorkingDirectory=/opt/app
+      + ExecStart=/usr/bin/docker compose -p app -f /opt/app/compose.yaml up -d
+      + ExecStop=/usr/bin/docker compose -p app -f /opt/app/compose.yaml stop
+      + TimeoutStartSec=0
+      +
+      + [Install]
+      + WantedBy=multi-user.target
+    + ensure: "present"
+    + group: "root"
+    + mode: "0644"
+    + name: "debianform-compose-app.service"
+    + owner: "root"
+    + path: "/etc/systemd/system/debianform-compose-app.service"
+    + summary
+      + summary.bytes: 385
+      + summary.sha256: "6cd6cbb3f51b6cd295517fa585d8573a31c5d55879472513038c5329b490072a"
+  + host.compose1.docker.package["containerd.io"]
+    create package containerd.io
+    source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
+    + ensure: "present"
+    + name: "containerd.io"
+    + repositories
+      + repositories.0: "docker-official"
+  + host.compose1.docker.package["docker-buildx-plugin"]
+    create package docker-buildx-plugin
+    source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
+    + ensure: "present"
+    + name: "docker-buildx-plugin"
+    + repositories
+      + repositories.0: "docker-official"
+  + host.compose1.docker.package["docker-ce"]
+    create package docker-ce
+    source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
+    + ensure: "present"
+    + name: "docker-ce"
+    + repositories
+      + repositories.0: "docker-official"
+  + host.compose1.docker.package["docker-ce-cli"]
+    create package docker-ce-cli
+    source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
+    + ensure: "present"
+    + name: "docker-ce-cli"
+    + repositories
+      + repositories.0: "docker-official"
+  + host.compose1.docker.package["docker-compose-plugin"]
+    create package docker-compose-plugin
+    source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
+    + ensure: "present"
+    + name: "docker-compose-plugin"
+    + repositories
+      + repositories.0: "docker-official"
+  + host.compose1.docker.service["docker"]
+    create service docker
+    source: ../../../examples/v2-docker-compose.dbf.hcl:13:host.compose1.docker
+    + enabled: true
+    + name: "docker"
+    + state: "running"
+    + unit: "docker.service"
+  ! host.compose1.apt.cache_refresh
+    refresh apt package cache
+    triggered_by: host.compose1.docker.apt.signing_key["docker-official"], host.compose1.docker.apt.repository["docker-official"]
+    command: apt-get update
+  ! host.compose1.docker.compose["app"].daemon_reload
+    reload systemd manager configuration
+    triggered_by: host.compose1.docker.compose["app"].systemd_unit
+    command: systemctl daemon-reload
+  ! host.compose1.docker.compose["app"].validate
+    validate docker compose project app
+    triggered_by: host.compose1.docker.compose["app"].file, host.compose1.docker.compose["app"].env_file["app"]
+    command: docker compose -p app -f /opt/app/compose.yaml config
+
+Summary: 13 create, 1 update, 0 delete, 1 no-op, 3 operations

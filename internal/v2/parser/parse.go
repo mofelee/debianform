@@ -1100,10 +1100,10 @@ func parseDockerComposeBlock(file, path string, block *hclsyntax.Block, ctx Eval
 		switch child.Type {
 		case "file", "service":
 			if len(child.Labels) != 0 {
-				return Value{}, fmt.Errorf("%s:%d: %s.%s block must not have labels", file, child.TypeRange.Start.Line, path, child.Type)
+				return Value{}, fmt.Errorf("%s:%d: %s.%s block must not have labels; multiple compose file blocks are not supported yet", file, child.TypeRange.Start.Line, path, child.Type)
 			}
 			if _, exists := values[child.Type]; exists {
-				return Value{}, fmt.Errorf("%s:%d: duplicate %s.%s block", file, child.TypeRange.Start.Line, path, child.Type)
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.%s block; multiple compose file blocks are not supported yet", file, child.TypeRange.Start.Line, path, child.Type)
 			}
 			object, err := parseDockerComposeObjectBlock(file, path+"."+child.Type, child, ctx)
 			if err != nil {
@@ -1619,10 +1619,10 @@ func validateDockerComposeBlockShape(file, path string, block *hclsyntax.Block) 
 		switch child.Type {
 		case "file", "service":
 			if len(child.Labels) != 0 {
-				return fmt.Errorf("%s:%d: %s.%s block must not have labels", file, child.TypeRange.Start.Line, path, child.Type)
+				return fmt.Errorf("%s:%d: %s.%s block must not have labels; multiple compose file blocks are not supported yet", file, child.TypeRange.Start.Line, path, child.Type)
 			}
 			if _, exists := values[child.Type]; exists {
-				return fmt.Errorf("%s:%d: duplicate %s.%s block", file, child.TypeRange.Start.Line, path, child.Type)
+				return fmt.Errorf("%s:%d: duplicate %s.%s block; multiple compose file blocks are not supported yet", file, child.TypeRange.Start.Line, path, child.Type)
 			}
 			if err := validateDockerComposeObjectBlockShape(file, path+"."+child.Type, child); err != nil {
 				return err

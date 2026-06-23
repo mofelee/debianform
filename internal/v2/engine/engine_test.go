@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/mofelee/debianform/internal/v2/ir"
 	"github.com/mofelee/debianform/internal/v2/merge"
 	"github.com/mofelee/debianform/internal/v2/parser"
+	v2plan "github.com/mofelee/debianform/internal/v2/plan"
 	v2state "github.com/mofelee/debianform/internal/v2/state"
 	"github.com/mofelee/debianform/internal/v2/testassert"
 )
@@ -594,6 +596,46 @@ func TestDockerComposeMemoryCheckDetectsStoppedProjectDrift(t *testing.T) {
 	}
 }
 
+func TestDockerComposeDriftPlanTextShowsProjectStateAndOrphans(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-compose.dbf.hcl")
+	provider := NewMemoryProvider()
+	provider.Observed[`host.compose1.docker.compose["app"].project`] = Observed{Exists: true, DesiredDigest: "drifted", Values: map[string]any{
+		"exists": true,
+		"state":  "running",
+		"services": map[string]any{
+			"total":    2,
+			"running":  2,
+			"stopped":  0,
+			"expected": []string{"web"},
+			"actual":   []string{"web", "worker"},
+		},
+		"containers":      map[string]any{"total": 2},
+		"orphan_count":    1,
+		"orphan_services": []string{"worker"},
+	}}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	plan, err := engine.Plan(context.Background(), program, resourceGraph, Options{Host: "compose1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := plan.Document(v2plan.Options{CommandFile: "../../../examples/v2-docker-compose.dbf.hcl", Host: "compose1"})
+	var text bytes.Buffer
+	v2plan.PrintText(&text, doc)
+	got := text.String()
+	assertGolden(t, "../testdata/plan/v2-docker-compose-project-drift.golden.txt", got)
+	for _, want := range []string{
+		"orphan_count: 1",
+		`"worker"`,
+		`services.actual`,
+		`services.expected`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("compose drift text missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestDockerEngineMemoryCheckDetectsPackageAndServiceDrift(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-minimal.dbf.hcl")
 	provider := NewMemoryProvider()
@@ -882,6 +924,27 @@ func hasStepAction(plan Plan, address string, action string) bool {
 		}
 	}
 	return false
+}
+
+func assertGolden(t *testing.T, golden string, got string) {
+	t.Helper()
+
+	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		if err := os.MkdirAll(filepath.Dir(golden), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(golden, []byte(got), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(golden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(want) {
+		t.Fatalf("golden mismatch\n--- got ---\n%s\n--- want ---\n%s", got, string(want))
+	}
 }
 
 func writeEngineConfig(t *testing.T, content string) string {

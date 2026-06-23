@@ -1294,6 +1294,53 @@ host "docker1" {
 	}
 }
 
+func TestParseRejectsMultipleDockerComposeFilesWithExplicitMessage(t *testing.T) {
+	file := writeConfig(t, `
+host "docker1" {
+  docker {
+    compose "app" {
+      directory = "/opt/app"
+
+      file {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+
+      file {
+        path    = "/opt/app/compose.override.yaml"
+        content = "services: {}\n"
+      }
+    }
+  }
+}
+`)
+
+	_, err := ParseFiles([]string{file})
+	if err == nil || !strings.Contains(err.Error(), "multiple compose file blocks are not supported yet") {
+		t.Fatalf("ParseFiles() error = %v, want explicit multi-file rejection", err)
+	}
+
+	file = writeConfig(t, `
+host "docker1" {
+  docker {
+    compose "app" {
+      directory = "/opt/app"
+
+      file "base" {
+        path    = "/opt/app/compose.yaml"
+        content = "services: {}\n"
+      }
+    }
+  }
+}
+`)
+
+	_, err = ParseFiles([]string{file})
+	if err == nil || !strings.Contains(err.Error(), "multiple compose file blocks are not supported yet") {
+		t.Fatalf("ParseFiles() error = %v, want explicit labeled file rejection", err)
+	}
+}
+
 func TestParseRunnableV2ExamplesGolden(t *testing.T) {
 	summaries := []parsedExampleSummary{}
 	for _, fixture := range runnableV2ExampleFixtures() {

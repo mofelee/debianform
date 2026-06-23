@@ -350,6 +350,12 @@ host "docker-users1" {
 dbf plan -f examples/v2-docker-users.dbf.hcl --offline
 ```
 
+Compose MVP 当前只支持一个无 label 的 `file {}` block；多个 compose file 会被明确拒绝。
+在线 plan/check 会读取 `docker compose config --services` 和 `docker compose ps --format json`，
+记录 project state、service/container 摘要，并在实际 service 不属于声明配置时报告 orphan
+drift。`remove_orphans = true` 会在 `up`/`down` 时传递 `--remove-orphans`。当 `project` 名称变化时，
+apply 会先对旧 project 执行 `docker compose down`，再收敛新 project。
+
 ```hcl
 host "compose1" {
   system {

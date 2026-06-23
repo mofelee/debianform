@@ -612,24 +612,24 @@ make test
 
 代码：
 
-- [ ] 支持多个 `file` block 或明确拒绝并给出后续版本错误
-- [ ] Compose provider observed 记录 project service/container 摘要
-- [ ] check 输出 orphan container 诊断
-- [ ] `remove_orphans = true` 时 apply 清理 orphan
-- [ ] project name 变化时 plan 显示旧 project down、新 project up 的影响
-- [ ] state 中保存 compose file/env file desired digest 和 project desired digest
-- [ ] plan 中显示 Compose project state drift，而不是只显示底层命令
+- [x] 支持多个 `file` block 或明确拒绝并给出后续版本错误
+- [x] Compose provider observed 记录 project service/container 摘要
+- [x] check 输出 orphan container 诊断
+- [x] `remove_orphans = true` 时 apply 清理 orphan
+- [x] project name 变化时 plan 显示旧 project down、新 project up 的影响
+- [x] state 中保存 compose file/env file desired digest 和 project desired digest
+- [x] plan 中显示 Compose project state drift，而不是只显示底层命令
 
 测试：
 
-- [ ] provider fake runner 覆盖 orphan container
-- [ ] provider fake runner 覆盖 project rename
-- [ ] plan golden 覆盖 project state drift 输出
-- [ ] check 返回码测试覆盖 orphan drift
+- [x] provider fake runner 覆盖 orphan container
+- [x] provider fake runner 覆盖 project rename
+- [x] plan golden 覆盖 project state drift 输出
+- [x] check 返回码测试覆盖 orphan drift
 
 文档：
 
-- [ ] 文档补充 Compose drift 检测范围和限制
+- [x] 文档补充 Compose drift 检测范围和限制
 
 验收：
 
