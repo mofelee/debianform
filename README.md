@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo.png" alt="DebianForm logo" width="160">
+  <img src="./logo.png" alt="DebianForm logo" width="320">
 </p>
 
 # DebianForm
