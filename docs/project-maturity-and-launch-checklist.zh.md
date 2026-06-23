@@ -153,7 +153,7 @@
 ## P1：公开 beta 后尽快补齐
 
 - [ ] `.deb` 包。
-- [ ] apt repository 可行性评估或计划。
+- [x] apt repository 可行性评估或计划。
 - [ ] Linux arm64 安装路径自动验证。
 - [ ] Linux Homebrew 路径自动验证或明确 best-effort 策略。
 - [x] 更完整的 operations/runbook 文档。
@@ -239,6 +239,7 @@
 - [x] [v2 plan format](v2-plan-format.md) 文档存在。
 - [x] [support matrix](support-matrix.zh.md) 文档存在。
 - [x] [security model](security-model.zh.md) 文档存在。
+- [x] [apt repository feasibility](apt-repository-feasibility.zh.md) 文档存在。
 - [x] [beta feedback and triage](beta-feedback-triage.zh.md) 文档存在。
 - [x] 发布流程、自动化计划和快速操作手册存在。
 - [x] 面向新用户的一页 quickstart 已独立成文。
@@ -401,3 +402,17 @@
 
 - [x] stable 前要求的安全文档已经补齐；真实漏洞响应能力仍需要通过后续 release 和
       advisory 实战验证。
+
+### 2026-06-23 APT repository 可行性评估
+
+本次检查命令：
+
+- [x] 核对 release process、release automation plan、GoReleaser 配置和 install script。
+- [x] 新增 `docs/apt-repository-feasibility.zh.md`，明确 `.deb` 和 APT repository 的
+      用户价值、风险、签名密钥、推荐布局和分阶段实施 loop。
+- [x] README、release process 和 support matrix 增加入口。
+
+结论：
+
+- [x] apt repository 可行性评估和计划已经补齐；`.deb` 包和 repository 发布渠道仍未实现，
+      需要后续独立 loop。

@@ -123,6 +123,7 @@ DSL、CLI、state schema 和 plan JSON 的 beta/stable 兼容规则见
 - [operations runbook](docs/operations-runbook.zh.md)
 - [release process](docs/release-process.zh.md)
 - [release notes template](docs/release-notes-template.md)
+- [apt repository feasibility](docs/apt-repository-feasibility.zh.md)
 - [release automation plan](docs/release-automation-plan.zh.md)
 - [release quick runbook](docs/release-quick-runbook.zh.md)
 

@@ -163,7 +163,8 @@ root-only SSH、权限边界、secret 处理和漏洞响应见
 - 真实 beta 用户反馈仍在收集中；反馈入口和 triage 流程见
   [beta feedback and triage](beta-feedback-triage.zh.md)。
 - Stable/GA 级别兼容性政策已经成文；仍需多个 release 验证执行效果。
-- `.deb` 包和 apt repository 发布渠道。
+- `.deb` 包和 apt repository 发布渠道尚未实现；可行性评估见
+  [apt repository feasibility](apt-repository-feasibility.zh.md)。
 - sudo/become/非 root 管理连接。
 - 非 Debian 目标系统。
 - 完整私有 registry 生命周期管理。

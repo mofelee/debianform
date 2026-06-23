@@ -373,7 +373,8 @@ P1：
 
 P2：
 
-- apt repository。
+- apt repository。可行性和实施 loop 见
+  [apt repository feasibility](apt-repository-feasibility.zh.md)。
 - 进入 `homebrew/core` 的可行性评估。
 - 持续执行 compatibility policy 中的 stable gate。
 

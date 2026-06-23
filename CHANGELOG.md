@@ -10,6 +10,7 @@ This project follows semantic versioning after the public beta line begins.
   state schema migration rules, and plan JSON format compatibility.
 - Added a security model document covering root-only SSH, permission boundaries,
   secret handling, state/lock behavior, and vulnerability response.
+- Added a `.deb` and APT repository feasibility plan.
 
 ## v0.1.0-beta.2
 
