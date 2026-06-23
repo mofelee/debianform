@@ -176,13 +176,13 @@ sh scripts/install.sh --dry-run --version v0.1.0-beta.1 --os darwin --arch arm64
 
 代码/文件：
 
-- [ ] 创建仓库 `mofelee/homebrew-debianform`。
-- [ ] 新增 `Formula/dbf.rb`。
-- [ ] formula 使用 GitHub Release 四个平台预编译 tarball。
-- [ ] formula 安装：
+- [x] 创建仓库 `mofelee/homebrew-debianform`。
+- [x] 新增 `Formula/dbf.rb`。
+- [x] formula 使用 GitHub Release 四个平台预编译 tarball。
+- [x] formula 安装：
   - `bin.install "dbf"`
   - `pkgshare.install "README.md", "docs", "examples"`
-- [ ] formula test 执行 `dbf version`。
+- [x] formula test 执行 `dbf version`。
 
 验收：
 
@@ -194,11 +194,16 @@ brew test mofelee/debianform/dbf
 dbf version
 ```
 
+已推送初始 tap commit `6c0b64f` 到 `mofelee/homebrew-debianform`。当前公式指向测试 release
+`v0.0.0-homebrew-test.1`；已下载 Linux amd64 tarball、校验 sha256，并确认 tarball 包含
+`dbf`、`README.md`、`docs/` 和 `examples/`。当前执行环境没有 `brew`，因此
+`brew audit/install/test` 仍需在有 Homebrew 的环境执行。
+
 需要你介入：
 
-- 创建 `mofelee/homebrew-debianform` 仓库。
-- 给我或 CI 一个可以推送该 tap 仓库的 token。
-- 确认 tap 仓库命名。按 Homebrew 规则，`mofelee/homebrew-debianform` 对应
+- 已创建 `mofelee/homebrew-debianform` 仓库，并已授予当前账号写权限。
+- CI 自动更新仍需要 `HOMEBREW_TAP_GITHUB_TOKEN` secret。
+- tap 仓库命名已按 Homebrew 规则确认：`mofelee/homebrew-debianform` 对应
   `brew tap mofelee/debianform`。
 
 ## Loop 5: tag 触发 GitHub Release
