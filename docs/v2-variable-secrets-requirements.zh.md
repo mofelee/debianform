@@ -500,308 +500,671 @@ files {
 
 ## 实施 Loop
 
-实现应按小闭环推进。每个 loop 都应能独立提交、独立测试，并保持现有示例和集成测试
-继续通过。除非某个 loop 明确要求，否则不要在同一轮同时修改 parser、CLI、state、runner
-和 provider 安全边界。
+以下 loop 把本文档拆成可合并闭环，格式对齐 `docs/v2-implementation-plan.zh.md`。每个
+loop 都应能独立提交、独立测试，并保持现有示例和集成测试继续通过。
 
-每个 loop 的完成标准：
+状态约定：
 
-- 新增或更新单元测试。
-- golden fixture 只更新本 loop 直接影响的内容。
-- `go test ./...` 通过，或明确记录暂时无法运行的原因。
-- 文档中的语法示例至少有一个对应测试或 fixture。
-- 敏感数据 loop 必须增加“不泄露明文”的负向断言。
+- [x] 已完成
+- [ ] 未完成
+
+总体原则：
+
+- [ ] 每个 loop 都必须形成代码、测试、示例或 fixture、文档和验收输入的闭环。
+- [ ] parser、CLI、HostSpec、ResourceGraph、plan/state、provider 和 runner 的边界变更
+      应分轮推进；除非本轮目标明确要求，不在同一轮同时改多个安全边界。
+- [ ] golden fixture 只更新本 loop 直接影响的内容。
+- [ ] 文档中的新增语法至少有一个对应测试、fixture 或 CLI smoke。
+- [ ] 涉及 sensitive、ephemeral、write-only 或 runner payload 的 loop 必须增加“不泄露
+      明文”的负向断言。
+- [ ] `make test` 必须通过；如果某类集成测试暂时无法运行，需要在实现记录中说明原因。
+
+### 当前基线
+
+- [x] v2 已有 `secrets.file`，并要求 plan/state 不写 secret 明文。
+- [x] component input 已支持 `sensitive` 标记和派生 file/unit content 脱敏。
+- [x] plan/state 已有 sensitive content 摘要或 redaction 机制。
+- [ ] 顶层 `variable` 尚未实现。
+- [ ] 外部赋值来源、`ephemeral`、write-only provider payload 和 redacted runner channel
+      尚未完整打通。
 
 ### Loop 0：现状基线和回归护栏
 
-目标：在动 variable 前，先固定当前 secret/sensitive 行为，避免后续重构退化。
+目标：在动 variable 前，先固定当前 secret/sensitive 行为，避免后续 parser、IR 或
+provider 重构让已有安全边界退化。
 
-改动范围：
+范围：
 
-- 不新增语法。
-- 补充现有 `secrets.file`、`files.file sensitive = true`、component sensitive input 的
-  plan/state/HostSpec 泄漏测试。
-- 明确当前允许泄露的元数据，例如非 state HostSpec 中的 `source_path`，并用 TODO 标注。
+- `secrets.file`
+- `files.file sensitive = true`
+- component sensitive input 派生的 file、systemd unit 和 service environment
+- HostSpec JSON、plan text/JSON、state JSON 和普通日志的泄漏断言
 
-测试点：
+暂不做：
 
-- `secrets.file` 明文不进入 state 和 plan。
-- sensitive component input 派生的 file/unit content 不进入 HostSpec JSON、plan、state。
-- 普通非 sensitive file 仍有 text diff。
+- 顶层 `variable`
+- CLI `-var`/`-var-file`
+- `ephemeral`
+- write-only provider payload
+- runner API 改造
 
-完成标准：
+代码：
 
-- 当前行为被测试覆盖，但不改变用户语法。
+- [ ] 整理现有 sensitive/secret 测试 fixture，形成后续 loop 可复用的泄漏断言 helper。
+- [ ] 明确当前允许出现的非 secret 元数据，例如非 state 调试输出里的 `source_path`。
+- [ ] 对当前不能立刻收口的元数据泄漏点加 TODO，并写清楚后续 loop 负责关闭。
+
+测试：
+
+- [ ] `secrets.file` 明文不进入 state 和 plan。
+- [ ] `files.file sensitive = true` 明文不进入 HostSpec JSON、plan 和 state。
+- [ ] sensitive component input 派生的 file/unit content 不进入 HostSpec JSON、plan 和
+      state。
+- [ ] 普通 non-sensitive file 仍保留可读 text diff。
+
+示例/文档：
+
+- [ ] 保持现有示例语法不变。
+- [ ] 在本文档记录当前 baseline 和已知 TODO，不新增用户可见语法。
+
+验收：
+
+- [ ] 不改变用户语法和 plan/state 格式。
+- [ ] `make test` 通过。
 
 ### Loop 1：解析顶层 variable 声明
 
-目标：先让 parser 认识 `variable` block，但不接入外部赋值，也不允许 `var.name` 引用。
+目标：让 parser 和 IR 认识顶层 `variable` block，但不接入外部赋值，也不允许
+`var.<name>` 引用。
 
-改动范围：
+范围：
 
-- IR 增加 `Program.Variables map[string]VariableSpec` 或等价结构。
-- Parser 支持顶层 `variable "name" { ... }`。
-- 支持字段：`type`、`default`、`description`、`nullable`、`sensitive`、`ephemeral`、
-  `const`、`deprecated`、`validation`。
-- 复用 component input 的 type parser 和 validation block parser。
+- 顶层 `variable "name" { ... }`
+- `type`
+- `default`
+- `description`
+- `nullable`
+- `sensitive`
+- `ephemeral`
+- `const`
+- `deprecated`
+- `validation` metadata
 
-测试点：
+暂不做：
 
-- 解析 primitive、list(object)、optional attribute。
-- 重复 variable label 报错。
-- 未知字段报错。
-- `default` 按类型归一化。
+- `var.<name>` 表达式求值
+- CLI/env/var file 赋值
+- validation 执行
+- `const` early-eval 行为
+- sensitive/ephemeral 传播
 
-完成标准：
+代码：
 
-- `dbf validate` 可以接受只声明 variable 但未引用的配置。
-- 现有 component input 行为不变。
+- [ ] IR 增加 `Program.Variables map[string]VariableSpec` 或等价结构。
+- [ ] parser 支持顶层 `variable` block，且必须有且只有一个 label。
+- [ ] variable label 在同一 program 内必须唯一。
+- [ ] 复用 component input 的 type parser、type normalization 和 validation block parser。
+- [ ] `default` 按 type constraint 做归一化，但只保存 metadata，不注入表达式上下文。
+- [ ] HostSpec debug 输出可展示 non-sensitive variable metadata；sensitive default 必须
+      redacted。
+
+测试：
+
+- [ ] parser 单测覆盖 primitive、`list(object(...))`、`map(...)`、`set(...)`、
+      `tuple(...)` 和 optional object attribute。
+- [ ] parser 负例覆盖重复 label、错误 label 数量、未知字段、错误 type expression。
+- [ ] default 归一化测试覆盖 object optional default、nullable 和类型不匹配。
+- [ ] sensitive default 的 JSON/debug 输出不包含明文。
+
+示例/文档：
+
+- [ ] 增加一个只声明 variable 的最小 fixture。
+- [ ] 文档注明本轮只接受声明，不允许引用。
+
+验收：
+
+- [ ] `dbf validate` 可以接受只声明 variable 但未引用的配置。
+- [ ] 现有 component input 行为和 golden 不变化。
+- [ ] `make test` 通过。
 
 ### Loop 2：变量求值上下文和 `var.<name>`
 
-目标：让配置可以引用 variable default，不处理 CLI 覆盖。
+目标：让 host/profile/component 配置可以引用 variable default，打通最小 program-level
+input 语义，但仍不处理 CLI 覆盖。
 
-改动范围：
+范围：
 
-- Evaluator 增加 `var` namespace。
-- 只允许引用已声明 variable。
-- 无 default 且无外部值时报错。
-- default 值不得引用 `var`、`input`、`target` 或 runtime facts。
+- `var.<name>` namespace
+- required variable 检查
+- variable default 求值
+- default 的 source location 和错误路径
+- ordinary non-sensitive variable 在 HostSpec/ResourceGraph 中的稳定输出
 
-测试点：
+暂不做：
 
-- `files.file.content = var.message` 可以生成预期 HostSpec。
-- `system.hostname = var.hostname` 可以生效。
-- 引用不存在的 variable 报错。
-- required variable 未赋值报错。
-- default 依赖 runtime facts 报错。
+- CLI/env/var file 外部赋值
+- variable validation 执行
+- `@path`/`@-`
+- sensitive 自动 taint
+- ephemeral 持久化限制
 
-完成标准：
+代码：
 
-- 只靠 default 的普通 variable 可用于 host/profile/component 展开。
+- [ ] evaluator 增加只读 `var` namespace。
+- [ ] variable final value 先由 default 生成；无 default 且无外部值时报错。
+- [ ] 只允许引用已声明 variable。
+- [ ] variable default 不得引用 `var`、`input`、`target`、`path` 或 runtime facts。
+- [ ] host/profile/component 展开时使用同一份归一化后的 variable value。
+- [ ] 错误信息指向 variable 声明或引用处的 source path。
+
+测试：
+
+- [ ] `files.file.content = var.message` 可以生成预期 HostSpec。
+- [ ] `system.hostname = var.hostname` 可以生效。
+- [ ] component body 可以读取 `var.<name>`。
+- [ ] 引用不存在的 variable 报错。
+- [ ] required variable 未赋值报错。
+- [ ] default 依赖 runtime facts、`input` 或其他 `var` 报错。
+
+示例/文档：
+
+- [ ] 增加一个只靠 default 参数化普通文件内容或 hostname 的 fixture。
+- [ ] 文档说明 DebianForm variable 是 program API，不是 component input 的替代品。
+
+验收：
+
+- [ ] 只靠 default 的普通 variable 可用于 host/profile/component 展开。
+- [ ] `dbf validate`、`dbf plan --offline` 对新增 fixture 成功。
+- [ ] `make test` 通过。
 
 ### Loop 3：CLI `-var` 字面值
 
-目标：实现最小外部赋值，不涉及文件读取或 secret。
+目标：实现最小外部赋值入口，让用户可以从命令行覆盖普通配置参数；本轮不读取文件、
+stdin 或 secret backend。
 
-改动范围：
+范围：
 
-- CLI 支持重复 `-var name=value`。
-- 按 variable type 解析 value；复杂类型可先要求 JSON 字符串。
-- CLI `-var` 优先级高于 default。
-- 未声明 variable 通过 `-var` 传入时报错。
+- `dbf validate -var name=value`
+- `dbf plan -var name=value`
+- `dbf apply -var name=value`
+- repeated `-var`
+- CLI value 按 variable type conversion
 
-测试点：
+暂不做：
 
-- string/number/bool/list/object 赋值。
-- `-var` 覆盖 default。
-- 类型不匹配报错。
-- 重复 `-var` 后者覆盖前者，或按最终决定的规则报错；规则必须写进测试。
+- `-var-file`
+- 自动 var file
+- 环境变量
+- `@path`/`@-`
+- prompt
+- `env:`/`cmd:` secret source
 
-完成标准：
+代码：
 
-- 用户可以用 `dbf validate/plan/apply -var env=prod` 参数化普通配置。
+- [ ] CLI 支持重复 `-var name=value`。
+- [ ] `-var` 优先级高于 default。
+- [ ] 重复 `-var` 按出现顺序后者覆盖前者。
+- [ ] 未声明 variable 通过 `-var` 传入时报错。
+- [ ] string/number/bool 按目标 type 解析；复杂类型第一版可要求 JSON 字符串。
+- [ ] sensitive variable 的 CLI value 不进入错误上下文和 debug log。
 
-### Loop 4：var file 和环境变量
+测试：
 
-目标：让 variable 成为可用的通用配置输入，而不是只能靠 CLI 字符串。
+- [ ] string、number、bool、list、object 赋值成功。
+- [ ] `-var` 覆盖 default。
+- [ ] 类型不匹配报错并指向 variable name。
+- [ ] 重复 `-var` 后者覆盖前者。
+- [ ] 未声明 variable 报错。
+- [ ] sensitive CLI value 不出现在错误输出和 snapshot。
 
-改动范围：
+示例/文档：
 
-- 支持 `-var-file path`。
-- 支持 HCL 风格 `.dbfvars`：顶层 `name = value`。
-- 可选支持 JSON var file。
-- 支持环境变量前缀，例如 `DBF_VAR_name`。
-- 实现优先级：`-var` > `-var-file` > auto/default var files > env > default。
+- [ ] 增加 `examples` 或 CLI smoke fixture，展示 `-var env=prod`。
+- [ ] 文档明确复杂值第一版的 CLI 编码规则。
 
-测试点：
+验收：
 
-- var file 中 string/list/object 正确解析。
-- 多个 `-var-file` 后者覆盖前者。
-- env 低于 var file 和 CLI。
-- var file 未声明变量报错。
-- env 未声明变量忽略。
+- [ ] 用户可以用 `dbf validate/plan/apply -var env=prod` 参数化普通配置。
+- [ ] `make test` 通过。
 
-完成标准：
+### Loop 4：var file、auto var file 和环境变量
 
-- 普通部署参数可以完全从 var file/env 注入。
+目标：让 variable 成为可用的通用配置输入，而不是只能依赖命令行字符串。
 
-### Loop 5：validation、nullable、deprecated、inspect
+范围：
 
-目标：把 variable 做成稳定接口，而不是裸 map。
+- `-var-file path`
+- HCL 风格 `.dbfvars`
+- JSON var file
+- `*.auto.dbfvars`
+- `debianform.dbfvars`
+- `DBF_VAR_<name>`
+- 赋值优先级
 
-改动范围：
+暂不做：
 
-- variable `validation` 在最终赋值后执行。
-- `nullable = false` 禁止 null。
-- `deprecated` 在变量被显式赋值时 warning；只用 default 不 warning。
-- 增加 `dbf variable inspect` 或扩展现有 inspect 命令，输出变量名、类型、默认值、
-  sensitive、ephemeral、description、deprecated。
+- `@path`/`@-`
+- prompt
+- `env:`/`cmd:` source
+- workspace 或远端 variable set
+- secret backend 集成
 
-测试点：
+代码：
 
-- validation 失败定位到 variable source path。
-- nullable false 拦截 null。
-- deprecated 显式赋值产生 warning。
-- sensitive default 在 inspect 中显示 `<sensitive>`。
+- [ ] CLI 支持重复 `-var-file path`。
+- [ ] 支持 HCL 风格 var file：顶层 `name = value`。
+- [ ] 支持 JSON var file，至少覆盖对象顶层 key/value。
+- [ ] 自动加载 `*.auto.dbfvars`、`*.auto.dbfvars.json`、`debianform.dbfvars` 和
+      `debianform.dbfvars.json`。
+- [ ] 支持环境变量 `DBF_VAR_<name>`。
+- [ ] 固定优先级：`-var` > `-var-file` > auto/default var files > env > default。
+- [ ] CLI/var-file 传入未声明变量时报错；env 未声明变量忽略。
 
-完成标准：
+测试：
 
-- variable 可以作为公开配置接口被文档化和检查。
+- [ ] var file 中 string/list/object 正确解析。
+- [ ] 多个 `-var-file` 后者覆盖前者。
+- [ ] auto var file 按文件名字典序加载。
+- [ ] env 低于 var file 和 CLI。
+- [ ] var file 未声明变量报错。
+- [ ] env 未声明变量忽略。
+- [ ] sensitive value 不进入错误输出、HostSpec、plan 或 state 明文。
+
+示例/文档：
+
+- [ ] 增加 `prod.dbfvars` 或等价 fixture。
+- [ ] 文档写清楚优先级和未声明变量处理规则。
+
+验收：
+
+- [ ] 普通部署参数可以完全从 var file/env 注入。
+- [ ] `dbf validate/plan/apply` 对 CLI、var file 和 env 的行为一致。
+- [ ] `make test` 通过。
+
+### Loop 5：validation、nullable、deprecated 和 inspect
+
+目标：把 variable 做成稳定公开接口，而不是裸 map；用户可以校验、文档化和检查 program
+需要哪些外部输入。
+
+范围：
+
+- variable `validation`
+- `nullable = false`
+- `deprecated`
+- warning 聚合
+- `dbf variable inspect` 或等价 inspect 命令
+
+暂不做：
+
+- `ephemeral`
+- write-only
+- `const` early-eval
+- secret source 读取
+- external secret backend
+
+代码：
+
+- [ ] variable `validation` 在最终赋值和 type conversion 后执行。
+- [ ] validation 复用 component input 的纯函数集合和错误定位机制。
+- [ ] `nullable = false` 禁止最终值为 null。
+- [ ] `deprecated` 只在变量被显式赋值时 warning；只使用 default 不 warning。
+- [ ] warning 聚合方式与 validate/plan/apply 现有 warning 输出保持一致。
+- [ ] 增加 `dbf variable inspect -f <file>`，输出 name、type、default、nullable、
+      sensitive、ephemeral、description 和 deprecated。
+- [ ] inspect 对 sensitive default 显示 `<sensitive>`。
+
+测试：
+
+- [ ] validation 成功和失败。
+- [ ] validation condition 非 bool 报错。
+- [ ] validation 不能读取 `target`、`input`、`path` 或未允许的 namespace。
+- [ ] nullable false 拦截 null。
+- [ ] deprecated 显式赋值产生 warning，default 不产生 warning。
+- [ ] inspect golden 覆盖复杂类型、default redaction 和 deprecated message。
+
+示例/文档：
+
+- [ ] 示例 variable 增加 environment validation。
+- [ ] README 或本文档增加 `dbf variable inspect` 输出样例。
+
+验收：
+
+- [ ] variable 可以作为公开配置接口被文档化和检查。
+- [ ] validation failure 指向 variable source path。
+- [ ] `make test` 通过。
 
 ### Loop 6：sensitive 传播到资源内容
 
-目标：先完成 Terraform-like `sensitive` 的展示语义和 taint 传播，但仍不承诺不落盘。
+目标：补齐 variable source 到表达式结果和资源 payload 的 sensitive taint 传播。`sensitive`
+在本轮仍只表示展示和 state 脱敏，不表示不落盘。
 
-改动范围：
+范围：
 
-- Value 已有 `Sensitive` 时，补齐 variable source 到表达式结果的传播。
-- `files.file.content` 引用 sensitive 值时自动设置 file sensitive。
-- `systemd.unit.content` 和 structured service unit environment 引用 sensitive 值时自动
-  设置 unit sensitive。
-- CLI/inspect/错误上下文不得打印 sensitive 明文。
+- variable value 的 sensitive mark
+- 表达式结果 sensitive 聚合
+- `files.file.content`
+- `systemd.unit.content`
+- structured service unit environment
+- CLI、inspect、错误上下文和 debug 输出 redaction
 
-测试点：
+暂不做：
 
-- sensitive variable 写入 file 后，plan/state/HostSpec 不出现明文。
-- sensitive variable 经 `jsonencode`、模板字符串、map/list 传播后仍 sensitive。
-- 用户显式 `sensitive = false` 不能覆盖传播结果。
-- 普通 non-sensitive variable 仍显示 text diff。
+- `ephemeral`
+- write-only provider payload
+- `@path`/`@-`
+- runner 通道改造
+- 低熵 secret digest 策略调整
 
-完成标准：
+代码：
 
-- `sensitive` 可安全用于脱敏，但文档和 warning 仍说明它不是 ephemeral。
+- [ ] variable 注入 evaluator 时携带 `Sensitive` mark。
+- [ ] `jsonencode`、模板字符串、map/list/object 等表达式结果聚合 sensitive mark。
+- [ ] `files.file.content` 引用 sensitive 值时自动设置 file sensitive。
+- [ ] `systemd.unit.content` 和 service environment 引用 sensitive 值时自动设置 unit 或
+      environment sensitive。
+- [ ] 用户显式 `sensitive = false` 不能覆盖表达式传播出来的 sensitive mark。
+- [ ] CLI/inspect/错误上下文不得打印 sensitive 明文。
 
-### Loop 7：`@path`、`@-` 和 prompt/stdin 输入
+测试：
 
-目标：让 secret 能运行时注入，不要求长期存在配置旁的 `secrets/` 文件。
+- [ ] sensitive variable 写入 file 后，plan/state/HostSpec 不出现明文。
+- [ ] sensitive variable 经 `jsonencode`、模板字符串、map/list/object 传播后仍 sensitive。
+- [ ] 用户显式 `sensitive = false` 不能覆盖传播结果。
+- [ ] 普通 non-sensitive variable 仍显示 text diff。
+- [ ] 错误输出和 warning 中不包含 sensitive 明文。
 
-改动范围：
+示例/文档：
 
-- CLI `-var name=@path` 读取文件内容作为 value。
-- CLI `-var name=@-` 从 stdin 读取。
-- 可选支持 `-var name=env:ENV_NAME`。
-- 对 sensitive variable，读取路径和值都不得进入 HostSpec/graph/plan/state。
+- [ ] 增加 sensitive variable 派生 file 的 fixture。
+- [ ] 文档明确 `sensitive` 不是 `ephemeral`，目标机文件仍会写入磁盘或 tmpfs。
 
-测试点：
+验收：
 
-- `@path` 内容进入目标 file content。
-- `@-` 可以从测试 stdin 注入。
-- 缺失文件报错但不打印部分 secret。
-- plan/state 不包含注入的 secret 明文或本地路径。
+- [ ] `sensitive` 可安全用于脱敏和摘要展示。
+- [ ] 本轮不引入“不持久化”语义。
+- [ ] `make test` 通过。
 
-完成标准：
+### Loop 7：`@path`、`@-` 和运行时输入
 
-- 用户可以用 `variable + files.file` 替代简单 `secrets.file` 来源。
+目标：让 secret 可以从运行时来源注入，不要求长期存在于配置目录旁的 `secrets/` 文件。
+
+范围：
+
+- `-var name=@path`
+- `-var name=@-`
+- 可选 `-var name=env:ENV_NAME`
+- stdin/prompt 输入路径
+- sensitive source path redaction
+
+暂不做：
+
+- `cmd:` source
+- SOPS/age/Vault 等 secret backend
+- `ephemeral`
+- write-only provider payload
+- runner 通道改造
+
+代码：
+
+- [ ] CLI `-var name=@path` 读取本地文件内容作为 value。
+- [ ] CLI `-var name=@-` 从 stdin 读取。
+- [ ] 可选支持 `-var name=env:ENV_NAME`，从指定环境变量读取 value。
+- [ ] 对 sensitive variable，读取路径和值都不得进入 HostSpec、ResourceGraph、plan、
+      state、debug log 或错误输出。
+- [ ] 缺失文件、权限错误和 stdin 读取错误不能回显部分 secret。
+
+测试：
+
+- [ ] `@path` 内容进入目标 file content。
+- [ ] `@-` 可以从测试 stdin 注入。
+- [ ] `env:ENV_NAME` 行为若实现，覆盖存在、缺失和空值。
+- [ ] 缺失文件报错但不打印路径之外的敏感内容；sensitive source path 按规则 redacted。
+- [ ] plan/state 不包含注入的 secret 明文或本地 secret 路径。
+
+示例/文档：
+
+- [ ] 增加 `variable + files.file + -var secret=@path` fixture 或 CLI smoke。
+- [ ] 文档说明 `@path` 是输入来源，不是目标资源 source path。
+
+验收：
+
+- [ ] 用户可以用 `variable + files.file` 替代简单 `secrets.file` 来源。
+- [ ] `make test` 通过。
 
 ### Loop 8：ephemeral 值传播和结构性字段限制
 
-目标：实现“不落盘”的值级语义，但还不要求 provider write-only 完成。
+目标：实现“不进入持久化产物”的值级语义，并在编译阶段阻止 ephemeral 值影响资源结构。
 
-改动范围：
+范围：
 
-- Value 增加 `Ephemeral` 传播。
-- HostSpec/ResourceGraph/plan/state 序列化禁止包含 ephemeral 明文。
-- 对不支持 ephemeral 的字段报错。
-- 结构性字段禁止 ephemeral：resource label、path、owner、group、mode、ensure、
-  lifecycle、map/set key、depends_on 等。
+- variable value 的 `Ephemeral` mark
+- 表达式结果 ephemeral 聚合
+- HostSpec/ResourceGraph/plan/state 序列化边界
+- ephemeral 可用字段白名单
+- 结构性字段限制
 
-测试点：
+暂不做：
 
-- ephemeral variable 用于 `files.file.content` 可以通过。
-- ephemeral variable 用于 `files.file.path` 报错。
-- ephemeral variable 用于 map key/set key 报错。
-- HostSpec/graph/plan/state 中不包含 ephemeral 明文。
+- provider write-only payload 完整改造
+- runner redaction 改造
+- `secrets.file` 迁移
+- secret backend 集成
 
-完成标准：
+代码：
 
-- ephemeral 的安全边界在编译产物层成立。
+- [ ] Value 增加 `Ephemeral` mark，并在表达式求值中传播。
+- [ ] HostSpec JSON、ResourceGraph JSON、plan JSON、state JSON 和 golden debug 输出禁止
+      包含 ephemeral 明文。
+- [ ] ephemeral 值只能进入明确支持 runtime-only/write-only 的字段。
+- [ ] resource label、path、owner、group、mode、ensure、lifecycle、map/set key、
+      depends_on 等结构性字段禁止 ephemeral。
+- [ ] 编译错误必须指向产生 ephemeral 值的引用位置和目标字段。
 
-### Loop 9：write-only provider payload
+测试：
 
-目标：把 ephemeral content 从 desired/state 中拿掉，只在 apply 时进入 provider。
+- [ ] ephemeral variable 用于 `files.file.content` 可以通过到本轮定义的 runtime-only
+      边界。
+- [ ] ephemeral variable 用于 `files.file.path` 报错。
+- [ ] ephemeral variable 用于 map key/set key 报错。
+- [ ] ephemeral variable 用于 depends_on/lifecycle 报错。
+- [ ] HostSpec/ResourceGraph/plan/state/golden 中不包含 ephemeral 明文。
 
-改动范围：
+示例/文档：
 
-- ResourceGraph 明确区分 persisted desired 和 provider apply payload。
-- `files.file.content` 支持 write-only payload。
-- plan 用 `content_version` 或同类字段判断更新。
-- provider apply 可以拿到 write-only 内容，但 provider plan/state/observed 不能返回明文。
+- [ ] 增加 ephemeral content 的最小 fixture。
+- [ ] 文档列出第一版允许和禁止 ephemeral 的字段。
 
-测试点：
+验收：
 
-- write-only content 不进入 `Node.Desired`。
-- apply 能把 write-only content 写到目标文件。
-- state 不包含 write-only content。
-- 缺少 `content_version` 时按规则报错或保守 update；规则必须固定。
-- `content_version` 变化触发 update。
+- [ ] ephemeral 的编译产物安全边界成立。
+- [ ] 不支持 ephemeral 的字段全部 fail closed。
+- [ ] `make test` 通过。
 
-完成标准：
+### Loop 9：write-only provider payload 和版本触发
 
-- `variable sensitive+ephemeral + files.file.content + content_version` 成为推荐 secret 写法。
+目标：把 ephemeral content 从 desired/state/diff 中拿掉，只在 apply 时进入 provider，并用
+非敏感版本字段触发更新。
+
+范围：
+
+- ResourceGraph persisted desired 和 provider apply payload 分离
+- `files.file.content` write-only payload
+- `content_version` 或同类非敏感触发字段
+- provider plan/state/observed redaction
+- no-op/drift 语义
+
+暂不做：
+
+- runner command/log 通道改造
+- `secrets.file` 语法糖迁移
+- 多 provider 的通用 write-only 注册表
+
+代码：
+
+- [ ] ResourceGraph 明确区分 persisted desired、plan-visible desired 和 provider apply
+      payload。
+- [ ] `files.file.content` 支持 write-only payload。
+- [ ] provider apply 可以拿到 write-only 内容。
+- [ ] provider plan、observed、state 和 plan JSON 不能返回 write-only 明文。
+- [ ] plan 用 `content_version` 或同类字段判断更新。
+- [ ] 固定缺少 `content_version` 时的规则：报错或保守显示 update，不能伪装成精确
+      no-op。
+
+测试：
+
+- [ ] write-only content 不进入 `Node.Desired`。
+- [ ] apply 能把 write-only content 写到目标文件。
+- [ ] state 不包含 write-only content。
+- [ ] observed/provider plan 不返回 write-only 明文。
+- [ ] 缺少 `content_version` 时行为符合固定规则。
+- [ ] `content_version` 变化触发 update，不变时按本轮规则 no-op 或保守提示。
+
+示例/文档：
+
+- [ ] 增加 `variable sensitive+ephemeral + files.file.content + content_version` fixture。
+- [ ] 文档说明为什么低熵 secret 推荐使用显式版本而不是长期保存 digest。
+
+验收：
+
+- [ ] 推荐 secret 写法具备可解释的 plan/apply 行为。
+- [ ] plan/state/provider 边界不泄露 write-only 明文。
+- [ ] `make test` 通过。
 
 ### Loop 10：redacted runner 通道
 
-目标：关闭 SSH command/log 侧泄露。
+目标：关闭 SSH command preview、stdout/stderr、错误包装和临时文件侧的 secret 泄露风险。
 
-改动范围：
+范围：
 
-- Runner API 支持 redacted payload 或 stdin/scp/sftp 写入。
-- command preview 不包含 secret。
-- stdout/stderr 和错误包装不回显 secret。
-- apply 临时文件使用严格权限，并在失败路径尽量清理。
+- runner API
+- command preview
+- stdin/scp/sftp 或受控临时文件写入
+- stdout/stderr redaction
+- provider error wrapping
+- 临时文件权限和清理
 
-测试点：
+暂不做：
 
-- fake runner 记录的 command preview 不含 secret。
-- provider error 不含 secret。
-- 文件写入仍成功。
-- systemd unit reload 等后续 operation 不受影响。
+- 新 secret backend
+- `secrets.file` deprecation
+- 跨 host secret 分发
 
-完成标准：
+代码：
 
-- write-only secret 在执行通道中也满足“不进入日志和 preview”。
+- [ ] runner API 支持 redacted payload 或专门的 secret payload 类型。
+- [ ] 文件写入优先使用不会把 secret 拼进 shell command 的通道，例如 stdin、sftp/scp 或
+      严格权限临时文件。
+- [ ] command preview 不包含 secret。
+- [ ] stdout/stderr 和错误包装不回显 secret。
+- [ ] apply 临时文件使用严格权限，并在成功和失败路径尽量清理。
+- [ ] systemd reload、nftables validate/activate 等后续 operation 继续使用原依赖顺序。
+
+测试：
+
+- [ ] fake runner 记录的 command preview 不含 secret。
+- [ ] provider error 不含 secret。
+- [ ] stdout/stderr redaction 覆盖成功和失败路径。
+- [ ] 文件写入仍成功。
+- [ ] systemd unit reload 等后续 operation 不受影响。
+
+示例/文档：
+
+- [ ] 文档补充 runner 层 redaction 边界。
+- [ ] 如有调试输出示例，确认只展示 redacted preview。
+
+验收：
+
+- [ ] write-only secret 在执行通道中也满足“不进入日志和 preview”。
+- [ ] `make test` 通过；相关集成测试记录是否覆盖真实 SSH runner。
 
 ### Loop 11：`secrets.file` 语法糖化
 
-目标：把旧 `secrets.file` 迁移到新 file/sensitive 管线，减少两套实现。
+目标：把旧 `secrets.file` 迁移到新 file/sensitive/write-only 管线，减少两套实现，同时不
+破坏现有 state address。
 
-改动范围：
+范围：
 
-- `secrets.file` 内部编译为敏感 file 资源或共用相同 helper。
-- 保持原 resource address，避免立即破坏 state。
-- 新示例优先使用 `variable + files.file`。
-- 文档标记 `secrets.file` 为兼容层。
+- `secrets.file`
+- `files.file`
+- resource address 兼容
+- 路径冲突检测
+- state migration 或兼容读取
 
-测试点：
+暂不做：
 
-- 旧 `secrets.file` 示例 plan/state 与旧行为兼容。
-- `secrets.file` 和 `files.file` 路径冲突仍报错。
-- state address 不意外变化。
+- 默认输出 deprecation warning
+- 删除 `secrets.file`
+- 新 secret backend
 
-完成标准：
+代码：
 
-- 新旧 secret 文件路径共用同一安全逻辑。
+- [ ] `secrets.file` 内部编译为敏感 file 资源，或与 `files.file` 共用同一 helper。
+- [ ] 保持原 resource address，避免立即破坏 state。
+- [ ] `secrets.file` 和 `files.file` 写同一路径仍报错。
+- [ ] 新示例优先使用 `variable + files.file`。
+- [ ] 文档标记 `secrets.file` 为兼容层。
 
-### Loop 12：废弃评估
+测试：
 
-目标：在用户迁移路径稳定后再决定是否废弃 `secrets.file`。
+- [ ] 旧 `secrets.file` 示例 plan/state 与旧行为兼容。
+- [ ] `secrets.file` 和 `files.file` 路径冲突仍报错。
+- [ ] state address 不意外变化。
+- [ ] `secrets.file` 复用新 sensitive/write-only 泄漏断言。
 
-改动范围：
+示例/文档：
 
-- 给 `secrets.file` 增加可控 deprecation warning。
-- 示例、README、docs 改为推荐 `variable + files.file`。
-- 保留关闭 warning 的兼容开关，或至少保留一个 minor 周期。
+- [ ] README 和本文档展示新写法，同时保留旧写法兼容说明。
+- [ ] 示例中新增推荐写法，不立即删除旧 fixture。
 
-测试点：
+验收：
 
-- 使用 `secrets.file` 输出 warning。
-- warning 不改变退出码。
-- 现有集成测试仍可运行。
+- [ ] 新旧 secret 文件路径共用同一安全逻辑。
+- [ ] 现有 state 和示例不被破坏。
+- [ ] `make test` 通过。
 
-完成标准：
+### Loop 12：`secrets.file` 废弃评估和用户收口
 
-- `secrets.file` 可以作为兼容层继续存在，删除动作另行决策。
+目标：在迁移路径稳定后，再决定是否给 `secrets.file` 增加 deprecation warning；删除动作
+不属于本轮默认目标。
+
+范围：
+
+- deprecation warning
+- warning 兼容开关或迁移周期
+- README/docs/examples 收口
+- release note 或迁移说明
+
+暂不做：
+
+- 删除 `secrets.file`
+- 强制迁移现有 state
+- 默认禁用旧语法
+
+代码：
+
+- [ ] 给 `secrets.file` 增加可控 deprecation warning。
+- [ ] warning 不改变退出码。
+- [ ] 如需要，提供关闭 warning 的兼容开关，或至少保留一个 minor 周期。
+- [ ] 示例、README、docs 改为推荐 `variable + files.file`。
+
+测试：
+
+- [ ] 使用 `secrets.file` 输出 warning。
+- [ ] warning 不改变 validate/plan/apply 退出码。
+- [ ] 兼容开关如实现，需要覆盖开启和关闭。
+- [ ] 现有集成测试仍可运行。
+
+示例/文档：
+
+- [ ] README 默认展示新写法。
+- [ ] 迁移说明写清楚 `source` 到 `-var @path` 的迁移方式。
+- [ ] 本文档更新 `secrets.file` 的最终定位。
+
+验收：
+
+- [ ] `secrets.file` 可以作为兼容层继续存在。
+- [ ] 删除旧语法需要另行决策和单独 loop。
+- [ ] `make test` 通过。
 
 ## 推荐实现顺序
 
