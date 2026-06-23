@@ -458,6 +458,9 @@ func providerNode(node graph.Node) graph.Node {
 	if len(node.ProviderPayload) == 0 {
 		return node
 	}
+	if fileContentWriteOnly(node) {
+		return node
+	}
 	out := node
 	out.Desired = node.ProviderPayload
 	return out

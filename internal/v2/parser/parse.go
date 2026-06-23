@@ -1983,7 +1983,7 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 	case "packages.package":
 		return attrSet("repositories")
 	case "files.file":
-		return attrSet("content", "source", "owner", "group", "mode", "ensure", "sensitive")
+		return attrSet("content", "content_version", "source", "owner", "group", "mode", "ensure", "sensitive")
 	case "secrets.file":
 		return attrSet("source", "owner", "group", "mode", "ensure")
 	case "directories.directory":

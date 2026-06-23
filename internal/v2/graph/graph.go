@@ -3,6 +3,7 @@ package graph
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -29,6 +30,20 @@ type Node struct {
 	ProviderAddress string            `json:"provider_address,omitempty"`
 	ProviderPayload map[string]any    `json:"provider_payload,omitempty"`
 	DependsOn       []string          `json:"depends_on,omitempty"`
+}
+
+func (n Node) MarshalJSON() ([]byte, error) {
+	type nodeJSON Node
+	out := nodeJSON(n)
+	if nodeContentWriteOnly(n) {
+		out.ProviderPayload = nil
+	}
+	return json.Marshal(out)
+}
+
+func nodeContentWriteOnly(n Node) bool {
+	value, _ := n.Desired["content_write_only"].(bool)
+	return value
 }
 
 type Operation struct {
@@ -812,12 +827,20 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			"mode":      item.Mode,
 			"ensure":    item.Ensure,
 			"sensitive": item.Sensitive,
-			"summary":   item.Summary,
+		}
+		if !item.ContentWriteOnly {
+			desired["summary"] = item.Summary
+		}
+		if item.ContentWriteOnly {
+			desired["content_write_only"] = true
+		}
+		if item.ContentVersion != "" {
+			desired["content_version"] = item.ContentVersion
 		}
 		if item.Content != "" && !item.Sensitive {
 			desired["content"] = item.Content
 		}
-		if item.Content != "" && item.Sensitive {
+		if item.Content != "" && item.Sensitive && !item.ContentWriteOnly {
 			desired["content_sha256"] = item.Summary.SHA256
 			desired["content_bytes"] = item.Summary.Bytes
 		}
@@ -858,12 +881,20 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				"mode":      item.Mode,
 				"ensure":    item.Ensure,
 				"sensitive": item.Sensitive,
-				"summary":   item.Summary,
+			}
+			if !item.ContentWriteOnly {
+				desired["summary"] = item.Summary
+			}
+			if item.ContentWriteOnly {
+				desired["content_write_only"] = true
+			}
+			if item.ContentVersion != "" {
+				desired["content_version"] = item.ContentVersion
 			}
 			if item.Content != "" && !item.Sensitive {
 				desired["content"] = item.Content
 			}
-			if item.Content != "" && item.Sensitive {
+			if item.Content != "" && item.Sensitive && !item.ContentWriteOnly {
 				desired["content_sha256"] = item.Summary.SHA256
 				desired["content_bytes"] = item.Summary.Bytes
 			}

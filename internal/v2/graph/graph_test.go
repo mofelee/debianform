@@ -284,6 +284,38 @@ func TestResourceGraphDesiredDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 	}
 }
 
+func TestWriteOnlyFileContentStaysOutOfDesired(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/v2-ephemeral-variable-content.dbf.hcl")
+	node := nodeFor(resourceGraph, `host.ephemeral1.files.file["/etc/debianform/runtime-token.txt"]`)
+	if node == nil {
+		t.Fatal("write-only file node missing")
+	}
+	for _, key := range []string{"content", "content_sha256", "content_bytes", "summary"} {
+		if _, ok := node.Desired[key]; ok {
+			t.Fatalf("desired contains %s: %#v", key, node.Desired)
+		}
+	}
+	if node.Desired["content_version"] != "v1" {
+		t.Fatalf("content_version = %#v, want v1", node.Desired["content_version"])
+	}
+	if node.Desired["content_write_only"] != true {
+		t.Fatalf("content_write_only = %#v, want true", node.Desired["content_write_only"])
+	}
+	if node.ProviderPayload["content"] != testassert.EphemeralVariableValue {
+		t.Fatalf("provider payload content = %#v, want ephemeral value", node.ProviderPayload["content"])
+	}
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	testassert.NoSecretLeak(t, "write-only ResourceGraph JSON", text)
+	if strings.Contains(text, "provider_payload") {
+		t.Fatalf("ResourceGraph JSON exposed provider_payload:\n%s", text)
+	}
+}
+
 func TestCompileVariableDefaultsResourceGraph(t *testing.T) {
 	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/v2-variable-defaults.dbf.hcl")
 

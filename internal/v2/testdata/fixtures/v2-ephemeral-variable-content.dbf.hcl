@@ -13,7 +13,8 @@ variable "content_version" {
 host "ephemeral1" {
   files {
     file "/etc/debianform/runtime-token.txt" {
-      content = var.runtime_token
+      content         = var.runtime_token
+      content_version = var.content_version
     }
 
     file "/etc/debianform/runtime-token.json" {
@@ -21,6 +22,7 @@ host "ephemeral1" {
         token   = var.runtime_token
         version = var.content_version
       })
+      content_version = var.content_version
     }
   }
 }

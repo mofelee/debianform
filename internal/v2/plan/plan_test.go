@@ -270,8 +270,8 @@ func TestEphemeralVariablePlanDoesNotLeak(t *testing.T) {
 	PrintText(&text, doc)
 	rendered := text.String()
 	testassert.NoSecretLeak(t, "ephemeral variable plan text", rendered)
-	if !strings.Contains(rendered, "<sensitive sha256=") {
-		t.Fatalf("plan text does not show redacted summary:\n%s", rendered)
+	if !strings.Contains(rendered, `+ content_version: "v1"`) || !strings.Contains(rendered, "+ content: <sensitive changed>") {
+		t.Fatalf("plan text does not show write-only redaction and version:\n%s", rendered)
 	}
 }
 

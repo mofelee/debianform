@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,6 +57,57 @@ func TestNativeProviderAbsentMissingDoesNotAdopt(t *testing.T) {
 	}
 	if got.Action != ActionDelete {
 		t.Fatalf("missing absent file with prior action = %q, want delete to clear state", got.Action)
+	}
+}
+
+func TestNativeProviderWriteOnlyFileUsesVersionForPlan(t *testing.T) {
+	node := writeOnlyFileNode("v1")
+	prior := &v2state.Resource{
+		DesiredDigest: v2state.DesiredDigest(node.Desired),
+		Ownership:     "managed",
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "file\nroot\nroot\n600\nremote-sha\n"}}}
+	provider := NewNativeProvider(runner)
+	got, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionNoOp {
+		t.Fatalf("matching write-only version action = %q, want no-op", got.Action)
+	}
+	if strings.Contains(anyMapText(got.Observed), "not-a-real-ephemeral-token") {
+		t.Fatalf("provider plan observed leaked write-only content: %#v", got.Observed)
+	}
+	if _, ok := got.Observed["sha256"]; ok {
+		t.Fatalf("provider plan observed retained sha256 for write-only file: %#v", got.Observed)
+	}
+
+	next := writeOnlyFileNode("v2")
+	runner = &recordingRunner{outputs: []Result{{Stdout: "file\nroot\nroot\n600\nremote-sha\n"}}}
+	provider = NewNativeProvider(runner)
+	got, err = provider.Plan(context.Background(), next, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionUpdate {
+		t.Fatalf("changed write-only version action = %q, want update", got.Action)
+	}
+}
+
+func TestNativeProviderWriteOnlyFileApplyUsesProviderPayload(t *testing.T) {
+	node := writeOnlyFileNode("v1")
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+	observed, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(anyMapText(observed), "not-a-real-ephemeral-token") {
+		t.Fatalf("observed leaked write-only content: %#v", observed)
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte("not-a-real-ephemeral-token"))
+	if len(runner.scripts) == 0 || !strings.Contains(runner.scripts[0], encoded) {
+		t.Fatalf("apply script did not receive write-only payload:\n%s", strings.Join(runner.scripts, "\n---\n"))
 	}
 }
 
@@ -605,4 +657,34 @@ func TestSSHRunnerExpandsHomeIdentityFile(t *testing.T) {
 		}
 	}
 	t.Fatalf("ssh args %q do not contain expanded identity file %q", strings.Join(args, " "), want)
+}
+
+func writeOnlyFileNode(version string) graph.Node {
+	desired := map[string]any{
+		"path":               "/etc/app/token",
+		"owner":              "root",
+		"group":              "root",
+		"mode":               "0600",
+		"ensure":             "present",
+		"sensitive":          true,
+		"content_write_only": true,
+		"content_version":    version,
+	}
+	payload := cloneMap(desired)
+	payload["content"] = "not-a-real-ephemeral-token"
+	return graph.Node{
+		Address:         "host.server1.files.file[\"/etc/app/token\"]",
+		Host:            "server1",
+		Kind:            "file",
+		Desired:         desired,
+		ProviderPayload: payload,
+	}
+}
+
+func anyMapText(values map[string]any) string {
+	parts := make([]string, 0, len(values))
+	for key, value := range values {
+		parts = append(parts, key+"="+fmt.Sprint(value))
+	}
+	return strings.Join(parts, "\n")
 }

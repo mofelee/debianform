@@ -217,6 +217,20 @@ func (p NativeProvider) planFileLike(ctx context.Context, node graph.Node, prior
 	if !current.Exists {
 		return ProviderPlan{Action: ActionCreate, Summary: "write file " + path, Observed: observed, Ownership: ownership(prior)}, nil
 	}
+	if fileContentWriteOnly(node) {
+		delete(observed, "sha256")
+		desiredDigest := v2state.DesiredDigest(node.Desired)
+		if current.IsDir ||
+			current.Owner != stringDesired(node, "owner") ||
+			current.Group != stringDesired(node, "group") ||
+			normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+			return ProviderPlan{Action: ActionUpdate, Summary: "update file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		if prior == nil || prior.DesiredDigest != desiredDigest {
+			return ProviderPlan{Action: ActionUpdate, Summary: "update file " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return inSyncPlan(node, prior, "no changes for file "+path, observed), nil
+	}
 	if current.IsDir ||
 		current.SHA256 != wantSHA ||
 		current.Owner != stringDesired(node, "owner") ||
@@ -1671,10 +1685,11 @@ func (p NativeProvider) readUser(ctx context.Context, host, name string) (userSt
 }
 
 func desiredContent(node graph.Node) ([]byte, error) {
-	if content, ok := node.Desired["content"].(string); ok {
+	payload := providerDesired(node)
+	if content, ok := payload["content"].(string); ok {
 		return []byte(content), nil
 	}
-	if source, ok := node.Desired["source_path"].(string); ok && source != "" {
+	if source, ok := payload["source_path"].(string); ok && source != "" {
 		return os.ReadFile(source)
 	}
 	return nil, fmt.Errorf("%s requires content or source_path", node.Address)
@@ -1684,11 +1699,26 @@ func desiredContentSHA(node graph.Node) (string, error) {
 	if sha := stringDesired(node, "content_sha256"); sha != "" {
 		return strings.ToLower(sha), nil
 	}
+	if fileContentWriteOnly(node) {
+		return "", nil
+	}
 	content, err := desiredContent(node)
 	if err != nil {
 		return "", err
 	}
 	return sha256Hex(content), nil
+}
+
+func fileContentWriteOnly(node graph.Node) bool {
+	value, _ := node.Desired["content_write_only"].(bool)
+	return value
+}
+
+func providerDesired(node graph.Node) map[string]any {
+	if len(node.ProviderPayload) > 0 {
+		return node.ProviderPayload
+	}
+	return node.Desired
 }
 
 func desiredSigningKeySHA(node graph.Node) (string, error) {

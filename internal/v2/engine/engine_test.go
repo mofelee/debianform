@@ -154,6 +154,46 @@ func TestApplyStateDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 	}
 }
 
+func TestApplyWriteOnlyFilePersistsVersionAndPassesPayload(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../testdata/fixtures/v2-ephemeral-variable-content.dbf.hcl")
+	backend := NewMemoryBackend()
+	provider := &recordingPayloadProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{
+		Backend:  backend,
+		Provider: provider,
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	}
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{Host: "ephemeral1"}); err != nil {
+		t.Fatal(err)
+	}
+	address := `host.ephemeral1.files.file["/etc/debianform/runtime-token.txt"]`
+	payload := provider.Payloads[address]
+	if payload["content"] != testassert.EphemeralVariableValue {
+		t.Fatalf("provider payload content = %#v, want ephemeral value", payload["content"])
+	}
+	host := program.Hosts[0]
+	st, err := backend.Read(context.Background(), host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := st.Resources[address]
+	if resource.Desired["content_version"] != "v1" {
+		t.Fatalf("state content_version = %#v, want v1", resource.Desired["content_version"])
+	}
+	for _, key := range []string{"content", "content_sha256", "content_bytes", "summary"} {
+		if _, ok := resource.Desired[key]; ok {
+			t.Fatalf("state desired contains %s: %#v", key, resource.Desired)
+		}
+	}
+	data, err := v2state.Encode(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "write-only apply state", string(data))
+}
+
 func TestApplyPersistsOnlySuccessfulStepsOnFailure(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-bbr.dbf.hcl")
 	backend := NewMemoryBackend()
@@ -578,6 +618,19 @@ type planErrorProvider struct {
 
 func (p planErrorProvider) Plan(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
 	return ProviderPlan{}, fmt.Errorf("injected observed read failure")
+}
+
+type recordingPayloadProvider struct {
+	*MemoryProvider
+	Payloads map[string]map[string]any
+}
+
+func (p *recordingPayloadProvider) Apply(ctx context.Context, step Step) (map[string]any, error) {
+	if p.Payloads == nil {
+		p.Payloads = map[string]map[string]any{}
+	}
+	p.Payloads[step.Address] = cloneMap(step.Node.ProviderPayload)
+	return p.MemoryProvider.Apply(ctx, step)
 }
 
 type concurrencyProvider struct {

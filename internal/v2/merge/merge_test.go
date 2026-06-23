@@ -1965,6 +1965,61 @@ func TestCompileEphemeralVariableAllowedForFileContent(t *testing.T) {
 	testassert.NoSecretLeak(t, "ephemeral HostSpec JSON", string(data))
 }
 
+func TestCompileRejectsEphemeralFileContentWithoutVersion(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/runtime-token.txt" {
+      content = var.runtime_token
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "requires content_version") {
+		t.Fatalf("error = %v, want missing content_version", err)
+	}
+	if err != nil && strings.Contains(err.Error(), testassert.EphemeralVariableValue) {
+		t.Fatalf("ephemeral value leaked in error: %v", err)
+	}
+}
+
+func TestCompileRejectsSensitiveFileContentVersion(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+variable "runtime_token_version" {
+  type      = string
+  sensitive = true
+  default   = "v1"
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/runtime-token.txt" {
+      content         = var.runtime_token
+      content_version = var.runtime_token_version
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "content_version must not be sensitive") {
+		t.Fatalf("error = %v, want sensitive content_version rejection", err)
+	}
+	if err != nil && strings.Contains(err.Error(), testassert.EphemeralVariableValue) {
+		t.Fatalf("ephemeral value leaked in error: %v", err)
+	}
+}
+
 func TestCompileRejectsEphemeralVariableInStructuralFields(t *testing.T) {
 	tests := []struct {
 		name string

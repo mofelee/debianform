@@ -1152,34 +1152,51 @@ stdin 或 secret backend。
 
 代码：
 
-- [ ] ResourceGraph 明确区分 persisted desired、plan-visible desired 和 provider apply
+- [x] ResourceGraph 明确区分 persisted desired、plan-visible desired 和 provider apply
       payload。
-- [ ] `files.file.content` 支持 write-only payload。
-- [ ] provider apply 可以拿到 write-only 内容。
-- [ ] provider plan、observed、state 和 plan JSON 不能返回 write-only 明文。
-- [ ] plan 用 `content_version` 或同类字段判断更新。
-- [ ] 固定缺少 `content_version` 时的规则：报错或保守显示 update，不能伪装成精确
+- [x] `files.file.content` 支持 write-only payload。
+- [x] provider apply 可以拿到 write-only 内容。
+- [x] provider plan、observed、state 和 plan JSON 不能返回 write-only 明文。
+- [x] plan 用 `content_version` 或同类字段判断更新。
+- [x] 固定缺少 `content_version` 时的规则：报错或保守显示 update，不能伪装成精确
       no-op。
 
 测试：
 
-- [ ] write-only content 不进入 `Node.Desired`。
-- [ ] apply 能把 write-only content 写到目标文件。
-- [ ] state 不包含 write-only content。
-- [ ] observed/provider plan 不返回 write-only 明文。
-- [ ] 缺少 `content_version` 时行为符合固定规则。
-- [ ] `content_version` 变化触发 update，不变时按本轮规则 no-op 或保守提示。
+- [x] write-only content 不进入 `Node.Desired`。
+- [x] apply 能把 write-only content 写到目标文件。
+- [x] state 不包含 write-only content。
+- [x] observed/provider plan 不返回 write-only 明文。
+- [x] 缺少 `content_version` 时行为符合固定规则。
+- [x] `content_version` 变化触发 update，不变时按本轮规则 no-op 或保守提示。
 
 示例/文档：
 
-- [ ] 增加 `variable sensitive+ephemeral + files.file.content + content_version` fixture。
-- [ ] 文档说明为什么低熵 secret 推荐使用显式版本而不是长期保存 digest。
+- [x] 增加 `variable sensitive+ephemeral + files.file.content + content_version` fixture。
+- [x] 文档说明为什么低熵 secret 推荐使用显式版本而不是长期保存 digest。
 
 验收：
 
-- [ ] 推荐 secret 写法具备可解释的 plan/apply 行为。
-- [ ] plan/state/provider 边界不泄露 write-only 明文。
-- [ ] `make test` 通过。
+- [x] 推荐 secret 写法具备可解释的 plan/apply 行为。
+- [x] plan/state/provider 边界不泄露 write-only 明文。
+- [x] `make test` 通过。
+
+实现记录：
+
+- `files.file` 新增 `content_version` 字段。只要 `content` 来自 ephemeral 值，就会被标记为
+  write-only；此时缺少 `content_version` 会在 compile 阶段报错，而不是在 plan 中伪装
+  no-op。
+- ResourceGraph 的 file node 将 write-only content 只放入内存中的 `ProviderPayload`；
+  `Node.Desired`、graph JSON、plan JSON/text 和 state 只包含 path/owner/group/mode/ensure、
+  `content_write_only = true`、`content_version` 等非敏感触发字段，不包含 content、summary
+  或 content digest。
+- engine 对 write-only file apply 保留 plan-visible desired 用于 state/digest，同时让
+  provider 通过 `ProviderPayload` 读取内容。provider plan 对 write-only file 删除 observed
+  sha256，并用 `content_version` 参与的 desired digest 判断 no-op/update。
+- `internal/v2/testdata/fixtures/v2-ephemeral-variable-content.dbf.hcl` 已更新为推荐写法：
+  `sensitive+ephemeral` variable + `files.file.content` + `content_version`。
+- 本轮仍未改造 runner command/log 通道；native provider 当前仍会把内容编码进执行脚本，
+  该泄露面属于 Loop 10 的 redacted runner 通道。
 
 ### Loop 10：redacted runner 通道
 

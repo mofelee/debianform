@@ -157,17 +157,19 @@ type FileSpec struct {
 }
 
 type ManagedFile struct {
-	Path       string         `json:"path"`
-	Content    string         `json:"content,omitempty"`
-	SourcePath string         `json:"source_path,omitempty"`
-	Owner      string         `json:"owner"`
-	Group      string         `json:"group"`
-	Mode       string         `json:"mode"`
-	Sensitive  bool           `json:"sensitive,omitempty"`
-	Ensure     string         `json:"ensure"`
-	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
-	Summary    ContentSummary `json:"summary,omitempty"`
-	Source     SourceRef      `json:"source,omitempty"`
+	Path             string         `json:"path"`
+	Content          string         `json:"content,omitempty"`
+	ContentVersion   string         `json:"content_version,omitempty"`
+	ContentWriteOnly bool           `json:"content_write_only,omitempty"`
+	SourcePath       string         `json:"source_path,omitempty"`
+	Owner            string         `json:"owner"`
+	Group            string         `json:"group"`
+	Mode             string         `json:"mode"`
+	Sensitive        bool           `json:"sensitive,omitempty"`
+	Ensure           string         `json:"ensure"`
+	Lifecycle        *LifecycleSpec `json:"lifecycle,omitempty"`
+	Summary          ContentSummary `json:"summary,omitempty"`
+	Source           SourceRef      `json:"source,omitempty"`
 }
 
 type SecretSpec struct {

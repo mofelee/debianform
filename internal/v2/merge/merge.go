@@ -2242,12 +2242,24 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 		if err != nil {
 			return nil, err
 		}
+		contentVersion, hasContentVersion, err := stringField(item, "content_version")
+		if err != nil {
+			return nil, err
+		}
+		if hasContentVersion && item.Map["content_version"].ContainsSensitive() {
+			value := item.Map["content_version"]
+			return nil, fmt.Errorf("%s:%d:%s: content_version must not be sensitive", value.Source.File, value.Source.Line, value.Source.Path)
+		}
 		sourcePath, hasSource, err := stringField(item, "source")
 		if err != nil {
 			return nil, err
 		}
 		if ensure == "present" && hasContent == hasSource {
 			return nil, fmt.Errorf("%s:%d:%s: files.file requires exactly one of content or source when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		contentWriteOnly := hasContent && item.Map["content"].ContainsEphemeral()
+		if contentWriteOnly && (!hasContentVersion || contentVersion == "") {
+			return nil, fmt.Errorf("%s:%d:%s.content_version: files.file with ephemeral content requires content_version", item.Source.File, item.Source.Line, item.Source.Path)
 		}
 		owner, err := stringFieldDefault(item, "owner", "root")
 		if err != nil {
@@ -2276,16 +2288,18 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 			return nil, err
 		}
 		managed := ir.ManagedFile{
-			Path:       path,
-			Content:    content,
-			SourcePath: resolvePath(item.Source.File, sourcePath),
-			Owner:      owner,
-			Group:      group,
-			Mode:       mode,
-			Sensitive:  sensitive,
-			Ensure:     ensure,
-			Lifecycle:  lifecycle,
-			Source:     item.Source,
+			Path:             path,
+			Content:          content,
+			ContentVersion:   contentVersion,
+			ContentWriteOnly: contentWriteOnly,
+			SourcePath:       resolvePath(item.Source.File, sourcePath),
+			Owner:            owner,
+			Group:            group,
+			Mode:             mode,
+			Sensitive:        sensitive,
+			Ensure:           ensure,
+			Lifecycle:        lifecycle,
+			Source:           item.Source,
 		}
 		if hasContent {
 			managed.Summary = contentSummary([]byte(content))
