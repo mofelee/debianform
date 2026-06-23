@@ -18,15 +18,16 @@
 - [x] `go test -race -count=1 ./...`
 - [x] `make build`
 - [x] `make test-integration-layout`
-- [ ] `make test-integration` 完整 Debian 13 libvirt VM 矩阵，本次检查未重新运行。
-- [ ] 正式发布 tag 对应 commit 的 GitHub Actions 全绿，本次检查未创建正式发布 tag。
+- [x] GitHub Actions CI 等价完整 Debian 13 libvirt VM 矩阵：
+  `28015644419`，覆盖 9 个 case。
+- [x] 正式发布 tag `v0.1.0-beta.2` 对应 commit 的 GitHub Actions 全绿。
 
 当前判断：
 
 - [x] 核心 v2 闭环已经完整：validate、plan、apply、check、state、lock、observed drift 和 SSH 执行路径都存在。
 - [x] 发布工程化已经基本完成：GoReleaser、GitHub Release、checksum、curl installer、Homebrew tap 自动更新、post-release verification、cosign keyless、SBOM 和 provenance 都已经有仓库配置或文档记录。
 - [x] README 已明确 beta/public preview、支持范围、安装、升级、校验和示例边界。
-- [ ] 还缺一次正式 public beta tag 的端到端发布确认。
+- [x] 正式 public beta tag `v0.1.0-beta.2` 已完成端到端发布确认。
 - [ ] 还缺真实低风险 Debian 13 主机上的小范围 beta 使用反馈。
 - [ ] 还缺 stable 所需的兼容性、迁移、恢复和长期支持承诺。
 
@@ -40,7 +41,7 @@
 - [x] README 明确 `dbf` CLI 发布产物覆盖 Linux/macOS 的 amd64 和 arm64。
 - [x] README 区分可运行示例和 design-only fixture。
 - [x] README 提醒真实 apply 前需要先运行 plan，并需要 SSH 可达的受支持 Debian 主机。
-- [ ] release notes 为正式 public beta tag 明确写出 beta 风险、兼容性限制和迁移影响。
+- [x] release notes 为正式 public beta tag 明确写出 beta 风险、兼容性限制和迁移影响。
 - [ ] stable/GA 文案在 README、release notes、安装文档中均未被误用。
 
 ## P0：公开 beta 上线前必须完成
@@ -53,7 +54,7 @@
 - [x] v2 可运行示例已在 README 中列出。
 - [x] `examples/v2-fleet.dbf.hcl` 已标记为 design-only fixture。
 - [x] 可运行示例有 validate 测试覆盖。
-- [ ] 为正式 public beta release notes 增加一份简短的「已支持 / 暂不支持」矩阵。
+- [x] 为正式 public beta release notes 增加一份简短的「已支持 / 暂不支持」矩阵。
 
 ### CI 和测试闸门
 
@@ -66,8 +67,8 @@
 - [x] CI 包含 Debian 13 libvirt integration job。
 - [x] libvirt cases 覆盖 `apt-source`、`bbr`、`component-inputs`、`files`、`nftables`、`shadowsocks-rust`、`source-build`、`systemd-service-unit` 和 `wireguard`。
 - [x] `wireguard` case 覆盖双 host runner。
-- [ ] 正式发布前确认 release tag 对应 commit 的 CI 全绿。
-- [ ] 正式发布前至少完成一次完整 `make test-integration` 或等价 CI libvirt 矩阵。
+- [x] 正式发布前确认 release tag 对应 commit 的 CI 全绿。
+- [x] 正式发布前至少完成一次完整 `make test-integration` 或等价 CI libvirt 矩阵。
 
 ### 发布产物和安装
 
@@ -95,10 +96,10 @@
 - [x] Linux arm64 artifact build 已覆盖。
 - [ ] Linux arm64 curl installer 在真实 arm64 runner 或机器上验证。
 - [ ] Linux Homebrew install/test/upgrade 在有 Homebrew 的 Linux runner 或机器上验证。
-- [ ] 正式 public beta tag 创建并通过 release workflow。
-- [ ] 正式 GitHub Release assets 和 verification matrix 人工抽查通过。
-- [ ] 正式 Homebrew formula 指向 public beta tag，而不是测试 tag。
-- [ ] `CHANGELOG.md` 为正式 public beta tag 写入真实变更，而不是占位说明。
+- [x] 正式 public beta tag `v0.1.0-beta.2` 创建并通过 release workflow。
+- [x] 正式 GitHub Release assets 和 verification matrix 人工抽查通过。
+- [x] 正式 Homebrew formula 指向 public beta tag，而不是测试 tag。
+- [x] `CHANGELOG.md` 为正式 public beta tag 写入真实变更，而不是占位说明。
 
 ### 安全和信任
 
@@ -139,7 +140,7 @@
 - [x] integration cases 包含 drift 检查脚本。
 - [x] integration cases 包含删除、forget 或 restore 行为验证。
 - [x] release automation plan 记录过 test tag 的端到端 release workflow 验证。
-- [ ] 正式 beta tag 发布后，在干净环境验证 `dbf version`、`dbf validate`、`dbf plan --offline`。
+- [x] 正式 beta tag 发布后，在干净环境验证 `dbf version`、`dbf validate`、`dbf plan --offline`。
 - [ ] 正式 beta tag 发布后，在至少一台低风险 Debian 13 主机上验证在线 `plan`、`apply`、再次 `plan` no-op 和 `check`。
 - [ ] 正式 beta tag 发布后，人工制造 drift 并确认 `check` 非零退出且输出可理解。
 - [ ] 正式 beta tag 发布后，验证失败 apply 不记录未成功资源。
@@ -223,7 +224,7 @@
 - [x] Homebrew tap 自动更新脚本和 workflow step。
 - [x] post-release verification summary 写入 release notes。
 - [x] checksum、cosign keyless、SBOM、provenance。
-- [ ] 正式 public beta release 尚需按 runbook 执行并确认。
+- [x] 正式 public beta release 已按 runbook 执行并确认。
 - [ ] `.deb` 和 apt repository 尚未实现。
 
 ### 文档成熟度
@@ -245,9 +246,9 @@
 - [x] 核心功能闭环已经具备。
 - [x] 本地 Go 检查和构建通过。
 - [x] release automation 已经具备端到端能力。
-- [ ] 正式 tag 前完整 CI 全绿。
-- [ ] 正式 tag 前完成或接受完整 libvirt 矩阵的验证结果。
-- [ ] release notes 明确 beta 风险和支持边界。
+- [x] 正式 tag 前完整 CI 全绿。
+- [x] 正式 tag 前完成或接受完整 libvirt 矩阵的验证结果。
+- [x] release notes 明确 beta 风险和支持边界。
 
 不应发布 stable/GA 的原因：
 
@@ -268,12 +269,17 @@
 - [x] `go test -race -count=1 ./...`
 - [x] `make build`
 - [x] `make test-integration-layout`
-- [ ] `make test-integration`
+- [x] GitHub Actions CI 等价完整 libvirt 矩阵：`28015644419`
+- [x] GitHub Actions release dry-run：`28015644510`
+- [x] GitHub Actions release workflow：`28015905534`
+- [x] `cosign verify-blob ... checksums.txt`
+- [x] `gh attestation verify dbf_v0.1.0-beta.2_linux_amd64.tar.gz --repo mofelee/debianform`
+- [x] `scripts/install.sh --version v0.1.0-beta.2 --prefix /tmp/dbf-install-check-v0.1.0-beta.2 --os linux --arch amd64 --force`
 
 结论：
 
 - [x] 项目成熟度从「beta 初期」提升到「public beta 可上线候选」。
 - [x] 本地代码质量、race 单测、build 和 integration layout 检查通过。
 - [x] 发布、安装和供应链自动化已从计划状态推进为仓库内可执行配置。
-- [ ] 正式 public beta 仍需要按 release runbook 创建 tag，并确认 CI、GitHub Release、Homebrew tap 和 clean install 验证全部通过。
+- [x] 正式 public beta `v0.1.0-beta.2` 已按 release runbook 创建 tag，并确认 CI、GitHub Release、Homebrew tap 和 clean install 验证全部通过。
 - [ ] stable/GA 仍需要真实使用反馈、兼容性政策、state migration 策略和恢复手册。
