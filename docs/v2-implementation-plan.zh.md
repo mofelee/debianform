@@ -888,6 +888,7 @@ input 和派生内容不会泄漏到 HostSpec、plan、state 或日志。
 - [x] `dbf component inspect -f examples/v2-component-inputs.dbf.hcl reverse_proxy` 输出完整 input API
 - [x] `dbf validate -f examples/v2-component-inputs.dbf.hcl` 成功且 warning 行为符合预期
 - [x] `make test` 成功
-- [ ] `make test-integration-case CASE=component-inputs` 成功
-  - 2026-06-23：已通过 `make test-integration-layout`；full VM case 在本环境需要下载 Debian
-    cloud image 并创建 libvirt VM，提权审核拒绝，未执行。
+- [x] `component-inputs` Debian 13 amd64 VM flow 成功
+  - 2026-06-23：在 disposable VM `dbf-test-component-inputs` 上执行 `validate`、
+    `apply --auto-approve`、`check` 和 `1.check.sh`/`2.check.sh`；CI 失败点为 state
+    address 匹配未使用 JSON escaped quote，已修正。

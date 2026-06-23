@@ -14,6 +14,7 @@ Run one case:
 ```bash
 make test-integration-case CASE=apt-source
 make test-integration-case CASE=bbr
+make test-integration-case CASE=component-inputs
 make test-integration-case CASE=files
 make test-integration-case CASE=nftables
 make test-integration-case CASE=shadowsocks-rust
