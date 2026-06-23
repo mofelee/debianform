@@ -3,6 +3,8 @@
 本文档规定 DebianForm 的公开发布、安装和升级流程。目标是让用户可以在 Linux 和
 macOS 上用 `curl` 或 Homebrew 安装 `dbf`，并支持 `amd64` 和 `arm64`。
 
+自动化落地步骤见 [release automation plan](release-automation-plan.zh.md)。
+
 ## 支持矩阵
 
 DebianForm 的 CLI 可以运行在控制机或 CI runner 上，通过 SSH 管理目标 Debian 主机。
@@ -360,3 +362,6 @@ P2：
 - apt repository。
 - 进入 `homebrew/core` 的可行性评估。
 - state/schema migration policy。
+
+发布自动化的具体 loop、验收命令和人工介入点见
+[release automation plan](release-automation-plan.zh.md)。
