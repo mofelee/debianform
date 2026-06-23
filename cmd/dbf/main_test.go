@@ -996,6 +996,56 @@ host "docker1" {
 	}
 }
 
+func TestCheckDockerServiceDriftReturnsError(t *testing.T) {
+	fakeBin := t.TempDir()
+	sshPath := filepath.Join(fakeBin, "ssh")
+	script := `#!/bin/sh
+input="$(cat)"
+case "$input" in
+  *"printf 'hostname=%s\n'"*)
+    printf 'hostname=docker1\narchitecture=amd64\ncodename=trixie\n'
+    exit 0
+    ;;
+  *"/var/lib/debianform/state/docker1.json"*)
+    exit 0
+    ;;
+  *"/etc/apt/keyrings/docker.asc"*)
+    printf 'file\nroot\nroot\n644\n1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570\n'
+    exit 0
+    ;;
+  *"/etc/apt/sources.list.d/docker_official.sources"*)
+    printf 'file\nroot\nroot\n644\n61246a32aa079ddf3d8a57d922a7fc311d82f23379bfe0bec65f7c685c141e97\n'
+    exit 0
+    ;;
+  *"dpkg-query"*"docker-ce"*|*"dpkg-query"*"docker-ce-cli"*|*"dpkg-query"*"containerd.io"*|*"dpkg-query"*"docker-buildx-plugin"*|*"dpkg-query"*"docker-compose-plugin"*)
+    printf 'install ok installed\t1.0\n'
+    exit 0
+    ;;
+  *"systemctl is-enabled 'docker.service'"*)
+    printf 'enabled=disabled\nactive=inactive\n'
+    exit 0
+    ;;
+esac
+printf 'unexpected fake ssh input:\n%s\n' "$input" >&2
+exit 1
+`
+	if err := os.WriteFile(sshPath, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	output := captureStdout(t, func() {
+		err := run([]string{"check", "-f", "../../examples/v2-docker-minimal.dbf.hcl"})
+		if err == nil || !strings.Contains(err.Error(), "remote state does not match v2 configuration") {
+			t.Fatalf("docker check error = %v, want drift failure", err)
+		}
+	})
+	if !strings.Contains(output, `host.docker1.docker.service["docker"]`) ||
+		!strings.Contains(output, "enable start service docker.service") {
+		t.Fatalf("docker check output missing service drift:\n%s", output)
+	}
+}
+
 func TestParallelFlagIsApplyOnlyAndPositive(t *testing.T) {
 	err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "2"})
 	if err == nil || !strings.Contains(err.Error(), "--parallel is only supported for v2 apply") {

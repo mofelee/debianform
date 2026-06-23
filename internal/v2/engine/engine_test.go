@@ -353,6 +353,110 @@ func TestBBRMemoryApplyIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestDockerEngineMemoryApplyIsIdempotentAndPersistsHighLevelState(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-minimal.dbf.hcl")
+	backend := NewMemoryBackend()
+	provider := NewMemoryProvider()
+	engine := Engine{
+		Backend:  backend,
+		Provider: provider,
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	}
+
+	plan, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Summary.Create != 8 || plan.Summary.Operations != 1 {
+		t.Fatalf("docker apply summary = %#v, want 8 creates and 1 operation", plan.Summary)
+	}
+	if len(provider.Operations) != 1 || provider.Operations[0] != "host.docker1.apt.cache_refresh" {
+		t.Fatalf("docker operations = %#v, want apt cache refresh", provider.Operations)
+	}
+
+	st, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []struct {
+		address         string
+		kind            string
+		providerType    string
+		providerAddress string
+	}{
+		{
+			address:         `host.docker1.docker.apt.signing_key["docker-official"]`,
+			kind:            "apt_signing_key",
+			providerType:    "apt_signing_key",
+			providerAddress: "apt_signing_key.docker1_docker_official",
+		},
+		{
+			address:         `host.docker1.docker.apt.repository["docker-official"]`,
+			kind:            "file",
+			providerType:    "file",
+			providerAddress: "file.docker1__etc_apt_sources_list_d_docker_official_sources",
+		},
+		{
+			address:         `host.docker1.docker.package["docker-ce"]`,
+			kind:            "package",
+			providerType:    "package",
+			providerAddress: "package.docker1_docker_docker_ce",
+		},
+		{
+			address:         `host.docker1.docker.service["docker"]`,
+			kind:            "service",
+			providerType:    "service",
+			providerAddress: "service.docker1_docker",
+		},
+	} {
+		resource, ok := st.Resources[want.address]
+		if !ok {
+			t.Fatalf("docker state missing %s; resources=%#v", want.address, st.Resources)
+		}
+		if resource.Kind != want.kind || resource.ProviderType != want.providerType || resource.ProviderAddress != want.providerAddress {
+			t.Fatalf("state resource %s kind/provider = %s/%s/%s, want %s/%s/%s", want.address, resource.Kind, resource.ProviderType, resource.ProviderAddress, want.kind, want.providerType, want.providerAddress)
+		}
+		if resource.Ownership != "managed" {
+			t.Fatalf("state resource %s ownership = %q, want managed", want.address, resource.Ownership)
+		}
+	}
+
+	next, err := engine.Plan(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(next.Steps) != 0 || next.Summary.Create != 0 || next.Summary.Update != 0 || next.Summary.Delete != 0 || next.Summary.Operations != 0 {
+		t.Fatalf("second docker plan should be no-op, got steps=%#v summary=%#v", next.Steps, next.Summary)
+	}
+}
+
+func TestDockerEngineMemoryCheckDetectsPackageAndServiceDrift(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-minimal.dbf.hcl")
+	provider := NewMemoryProvider()
+	provider.Observed[`host.docker1.docker.package["docker-ce"]`] = Observed{Exists: false}
+	provider.Observed[`host.docker1.docker.service["docker"]`] = Observed{Exists: true, DesiredDigest: "drifted", Values: map[string]any{
+		"enabled": false,
+		"active":  false,
+	}}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	plan, err := engine.Plan(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasStepAction(plan, `host.docker1.docker.package["docker-ce"]`, ActionCreate) {
+		t.Fatalf("docker drift plan missing package create step: %#v", plan.Steps)
+	}
+	if !hasStepAction(plan, `host.docker1.docker.service["docker"]`, ActionUpdate) {
+		t.Fatalf("docker drift plan missing service update step: %#v", plan.Steps)
+	}
+	if len(plan.Steps) == 0 {
+		t.Fatalf("docker drift plan has no steps; check would incorrectly pass")
+	}
+}
+
 func TestPlanPropagatesObservedReadFailure(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-bbr.dbf.hcl")
 	engine := Engine{
@@ -603,6 +707,15 @@ func fileNode(host, path string, deps []string) graph.Node {
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasStepAction(plan Plan, address string, action string) bool {
+	for _, step := range plan.Steps {
+		if step.Address == address && step.Action == action {
 			return true
 		}
 	}

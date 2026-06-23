@@ -26,9 +26,10 @@
 - [x] 已支持 Docker daemon JSON 高阶配置的 validate / HostSpec 编译
 - [x] 已支持 Docker Compose project 高阶对象的 validate / HostSpec 编译
 - [x] 已支持 `docker.enable` 官方源 ResourceGraph / offline plan 展开
+- [x] 已支持 Docker Engine apply / check 复用现有 provider 闭环
 - [ ] 尚未支持 Compose project 状态漂移检测
 - [ ] 尚未支持 Docker daemon / users / Compose ResourceGraph 展开
-- [ ] 尚未支持 Docker apply / check 闭环
+- [ ] 尚未支持 Docker daemon / users / Compose apply / check 闭环
 
 ## 总体实现边界
 
@@ -203,29 +204,29 @@ make test
 
 代码：
 
-- [ ] 确认 Docker official signing key 节点能走现有 `apt_signing_key` provider
-- [ ] 确认 Docker repository 节点能走现有 file / APT source provider
-- [ ] 确认 Docker package 节点能走现有 package provider
-- [ ] 确认 `docker.service` 能走现有 service provider
-- [ ] 如果高阶 Docker 地址影响 state，补齐 state ownership / provider address 测试
-- [ ] apply 后 state 记录 Docker 高阶地址和低阶 provider address
-- [ ] check 能检测 package 缺失、service disabled、service stopped
+- [x] 确认 Docker official signing key 节点能走现有 `apt_signing_key` provider
+- [x] 确认 Docker repository 节点能走现有 file / APT source provider
+- [x] 确认 Docker package 节点能走现有 package provider
+- [x] 确认 `docker.service` 能走现有 service provider
+- [x] 如果高阶 Docker 地址影响 state，补齐 state ownership / provider address 测试
+- [x] apply 后 state 记录 Docker 高阶地址和低阶 provider address
+- [x] check 能检测 package 缺失、service disabled、service stopped
 
 测试：
 
-- [ ] NativeProvider fake runner 测试 Docker signing key apply 脚本
-- [ ] NativeProvider fake runner 测试 Docker packages apply 命令
-- [ ] NativeProvider fake runner 测试 Docker service enable/start 命令
-- [ ] Engine fake apply 后立即 plan 为 no-op
-- [ ] check 返回码测试覆盖 Docker service drift
+- [x] NativeProvider fake runner 测试 Docker signing key apply 脚本
+- [x] NativeProvider fake runner 测试 Docker packages apply 命令
+- [x] NativeProvider fake runner 测试 Docker service enable/start 命令
+- [x] Engine fake apply 后立即 plan 为 no-op
+- [x] check 返回码测试覆盖 Docker service drift
 
 示例：
 
-- [ ] `examples/v2-docker-minimal.dbf.hcl` 进入 fake runner apply 测试
+- [x] `examples/v2-docker-minimal.dbf.hcl` 进入 fake runner apply 测试
 
 文档：
 
-- [ ] README 标明 Docker Engine 已可 apply/check
+- [x] README 标明 Docker Engine 已可 apply/check
 
 验收：
 

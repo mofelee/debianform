@@ -233,6 +233,88 @@ func TestNativeProviderAPTSigningKeyURL(t *testing.T) {
 	}
 }
 
+func TestNativeProviderDockerSigningKeyApplyScript(t *testing.T) {
+	node := graph.Node{
+		Address: `host.docker1.docker.apt.signing_key["docker-official"]`,
+		Host:    "docker1",
+		Kind:    "apt_signing_key",
+		Desired: map[string]any{
+			"path":   "/etc/apt/keyrings/docker.asc",
+			"url":    "https://download.docker.com/linux/debian/gpg",
+			"sha256": "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570",
+			"owner":  "root",
+			"group":  "root",
+			"mode":   "0644",
+			"ensure": "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "missing\n"}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing docker signing key action = %q, want create", got.Action)
+	}
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[len(runner.scripts)-1]
+	for _, want := range []string{
+		"curl -fsSL 'https://download.docker.com/linux/debian/gpg' -o '/etc/apt/keyrings/docker.asc.dbf-tmp'",
+		"printf '%s  %s\\n' '1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570' '/etc/apt/keyrings/docker.asc.dbf-tmp' | sha256sum --check --status",
+		"install -o 'root' -g 'root' -m '0644' '/etc/apt/keyrings/docker.asc.dbf-tmp' '/etc/apt/keyrings/docker.asc'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("docker signing key script missing %q:\n%s", want, applied)
+		}
+	}
+}
+
+func TestNativeProviderDockerRepositoryApplyScript(t *testing.T) {
+	content := "Types: deb\nURIs: https://download.docker.com/linux/debian\nSuites: trixie\nComponents: stable\nArchitectures: amd64\nSigned-By: /etc/apt/keyrings/docker.asc\n"
+	node := graph.Node{
+		Address: `host.docker1.docker.apt.repository["docker-official"]`,
+		Host:    "docker1",
+		Kind:    "file",
+		Desired: map[string]any{
+			"path":    "/etc/apt/sources.list.d/docker_official.sources",
+			"content": content,
+			"owner":   "root",
+			"group":   "root",
+			"mode":    "0644",
+			"ensure":  "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "missing\n"}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing docker repository action = %q, want create", got.Action)
+	}
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.inputs) == 0 || runner.inputs[0] != content {
+		t.Fatalf("docker repository apply input = %#v, want repository content", runner.inputs)
+	}
+	applied := runner.scripts[len(runner.scripts)-1]
+	for _, want := range []string{
+		"install -o 'root' -g 'root' -m '0644' \"$tmp\" \"$dest\"",
+		"dest='/etc/apt/sources.list.d/docker_official.sources'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("docker repository script missing %q:\n%s", want, applied)
+		}
+	}
+}
+
 func TestNativeProviderAPTSourceFilePreservesOriginalAndRestores(t *testing.T) {
 	oldContent := "deb http://deb.debian.org/debian trixie main\n"
 	newContent := "deb https://mirrors.aliyun.com/debian/ trixie main\n"
@@ -370,6 +452,42 @@ func TestNativeProviderPackageInstallRefreshesMissingAPTCache(t *testing.T) {
 	}
 	if strings.Index(applied, "apt-get update") > strings.Index(applied, "apt-get install -y 'nftables'") {
 		t.Fatalf("package install should refresh apt cache before install:\n%s", applied)
+	}
+}
+
+func TestNativeProviderDockerPackageApplyScript(t *testing.T) {
+	node := graph.Node{
+		Address: `host.docker1.docker.package["docker-ce"]`,
+		Host:    "docker1",
+		Kind:    "package",
+		Desired: map[string]any{
+			"name":         "docker-ce",
+			"ensure":       "present",
+			"repositories": []string{"docker-official"},
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: ""}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing docker package action = %q, want create", got.Action)
+	}
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[len(runner.scripts)-1]
+	for _, want := range []string{
+		"apt-cache policy 'docker-ce'",
+		"apt-get update",
+		"apt-get install -y 'docker-ce'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("docker package script missing %q:\n%s", want, applied)
+		}
 	}
 }
 
@@ -726,6 +844,42 @@ func TestNativeProviderComponentArchiveInstall(t *testing.T) {
 	} {
 		if !strings.Contains(applied, want) {
 			t.Fatalf("component archive apply script missing %q:\n%s", want, applied)
+		}
+	}
+}
+
+func TestNativeProviderDockerServiceApplyScript(t *testing.T) {
+	node := graph.Node{
+		Address: `host.docker1.docker.service["docker"]`,
+		Host:    "docker1",
+		Kind:    "service",
+		Desired: map[string]any{
+			"name":    "docker",
+			"unit":    "docker.service",
+			"enabled": true,
+			"state":   "running",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "enabled=disabled\nactive=inactive\n"}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionUpdate || !strings.Contains(got.Summary, "enable start service docker.service") {
+		t.Fatalf("docker service drift plan = %#v, want enable/start update", got)
+	}
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionUpdate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[len(runner.scripts)-1]
+	for _, want := range []string{
+		"systemctl enable 'docker.service'",
+		"systemctl start 'docker.service'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("docker service script missing %q:\n%s", want, applied)
 		}
 	}
 }

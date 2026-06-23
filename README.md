@@ -132,7 +132,7 @@ v2 领域块或 component。
 - `examples/v2-component-inputs.dbf.hcl`
 - `examples/v2-docker-compose.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
 - `examples/v2-docker-daemon.dbf.hcl`（当前支持 validate / HostSpec，plan/apply 展开在后续 loop）
-- `examples/v2-docker-minimal.dbf.hcl`（当前支持 validate、HostSpec 和 offline plan）
+- `examples/v2-docker-minimal.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
 - `examples/v2-files-plan-preview.dbf.hcl`
 - `examples/v2-mihomo.dbf.hcl`
 - `examples/v2-nftables.dbf.hcl`
@@ -252,8 +252,8 @@ component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
 `ca_certificate` 变化会额外触发 `update-ca-certificates` operation。
 
 Docker v2 DSL 当前已接入 validate 和 HostSpec 编译。最小语法已经可以展开为官方 Docker
-APT 源、默认 Docker packages 和 `docker.service` 的 offline plan；daemon、users、Compose、
-apply 和 check 会在后续 loop 完成：
+APT 源、默认 Docker packages 和 `docker.service`，并可通过现有 provider apply/check；
+daemon、users、Compose 会在后续 loop 完成：
 
 ```hcl
 host "docker1" {
@@ -271,6 +271,8 @@ host "docker1" {
 ```bash
 dbf validate -f examples/v2-docker-minimal.dbf.hcl
 dbf plan -f examples/v2-docker-minimal.dbf.hcl --offline
+dbf apply -f examples/v2-docker-minimal.dbf.hcl --auto-approve
+dbf check -f examples/v2-docker-minimal.dbf.hcl
 ```
 
 nftables 使用原生 ruleset/snippet 文件作为主路径，不提供通用 firewall 抽象。
