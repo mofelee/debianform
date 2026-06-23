@@ -1,0 +1,40 @@
+{
+  "variables": [
+    {
+      "name": "environment",
+      "type": "string",
+      "default": "prod",
+      "nullable": false,
+      "sensitive": false,
+      "ephemeral": false,
+      "deprecated": "Use deployment_environment instead.",
+      "description": "Deployment environment."
+    },
+    {
+      "name": "labels",
+      "type": "object({canary=optional(bool,false),tier=string})",
+      "default": {
+        "canary": false,
+        "tier": "backend"
+      },
+      "nullable": true,
+      "sensitive": false,
+      "ephemeral": false
+    },
+    {
+      "name": "runtime_value",
+      "type": "string",
+      "nullable": true,
+      "sensitive": false,
+      "ephemeral": true
+    },
+    {
+      "name": "token",
+      "type": "string",
+      "default": "<sensitive>",
+      "nullable": true,
+      "sensitive": true,
+      "ephemeral": false
+    }
+  ]
+}

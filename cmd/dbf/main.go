@@ -44,6 +44,8 @@ func run(args []string) error {
 		return runFmt(args[1:])
 	case "component":
 		return runComponent(args[1:])
+	case "variable":
+		return runVariable(args[1:])
 	case "validate", "plan", "apply", "check":
 		return runConfigCommand(cmd, args[1:])
 	case "help", "-h", "--help":
@@ -52,6 +54,94 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q", cmd)
 	}
+}
+
+func runVariable(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("variable subcommand is required")
+	}
+	switch args[0] {
+	case "inspect":
+		return runVariableInspect(args[1:])
+	default:
+		return fmt.Errorf("unknown variable subcommand %q", args[0])
+	}
+}
+
+func runVariableInspect(args []string) error {
+	fs := flag.NewFlagSet("variable inspect", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	file := fs.String("f", "", "configuration file")
+	var cliVars repeatedFlag
+	var cliVarFiles repeatedFlag
+	fs.Var(&cliVars, "var", "set a variable value as name=value")
+	fs.Var(&cliVarFiles, "var-file", "load variable values from a .dbfvars or .dbfvars.json file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if len(fs.Args()) != 0 {
+		return fmt.Errorf("variable inspect does not accept positional arguments")
+	}
+	files, err := configFiles(*file)
+	if err != nil {
+		return err
+	}
+	variableValues, err := collectExternalVariableValues(files, cliVarFiles, cliVars)
+	if err != nil {
+		return err
+	}
+	cfg, err := v2parser.ParseFilesWithOptions(files, v2parser.ParseOptions{
+		VariableValues:        variableValues,
+		AllowMissingVariables: true,
+		SkipTopLevel:          true,
+	})
+	if err != nil {
+		return err
+	}
+	var warnings []v2ir.Warning
+	program, err := compileV2Program(cfg, "", v2merge.CompileOptions{SkipComponents: true, Warnings: &warnings})
+	if err != nil {
+		return err
+	}
+	printWarnings(warnings)
+	variables := make([]variableInspectVariable, 0, len(program.Variables))
+	for _, name := range sortedVariableSpecNames(program.Variables) {
+		variable := program.Variables[name]
+		defaultValue := variable.Default
+		if variable.Sensitive && defaultValue != nil {
+			defaultValue = "<sensitive>"
+		}
+		variables = append(variables, variableInspectVariable{
+			Name:        variable.Name,
+			Type:        variable.Type,
+			Default:     defaultValue,
+			Nullable:    variable.Nullable,
+			Sensitive:   variable.Sensitive,
+			Ephemeral:   variable.Ephemeral,
+			Deprecated:  variable.Deprecated,
+			Description: variable.Description,
+		})
+	}
+	out := variableInspectOutput{Variables: variables}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	return enc.Encode(out)
+}
+
+type variableInspectOutput struct {
+	Variables []variableInspectVariable `json:"variables"`
+}
+
+type variableInspectVariable struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Default     any    `json:"default,omitempty"`
+	Nullable    bool   `json:"nullable"`
+	Sensitive   bool   `json:"sensitive"`
+	Ephemeral   bool   `json:"ephemeral"`
+	Deprecated  string `json:"deprecated,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 func runComponent(args []string) error {
@@ -522,6 +612,15 @@ func sortedComponentInputNames(inputs map[string]v2ir.ComponentInputSpec) []stri
 	return names
 }
 
+func sortedVariableSpecNames(variables map[string]v2ir.VariableSpec) []string {
+	names := make([]string, 0, len(variables))
+	for name := range variables {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 func loadV2Program(files []string, host string, opts v2merge.CompileOptions) (*v2ir.Program, error) {
 	cfg, err := v2parser.ParseFiles(files)
 	if err != nil {
@@ -623,6 +722,8 @@ Usage:
   dbf plan     [-f file] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug]
   dbf apply    [-f file] [-var name=value] [-var-file path] [--host name] [--parallel n] [--auto-approve]
   dbf check    [-f file] [-var name=value] [-var-file path] [--host name]
+  dbf variable inspect [-f file] [-var name=value] [-var-file path]
+  dbf component inspect [-f file] name
   dbf fmt      [-f file]
   dbf version
 

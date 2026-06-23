@@ -1620,6 +1620,171 @@ host "explicit1" {
 	}
 }
 
+func TestCompileVariableValidations(t *testing.T) {
+	program := compileInline(t, `
+variable "environment" {
+  type    = string
+  default = "prod"
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be dev, staging, or prod."
+  }
+}
+
+host "server1" {}
+`)
+	if got := program.Variables["environment"].Default; got != "prod" {
+		t.Fatalf("environment default = %#v", got)
+	}
+}
+
+func TestCompileRejectsInvalidVariableValidations(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "validation failure",
+			hcl: `
+variable "environment" {
+  type    = string
+  default = "qa"
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be dev, staging, or prod."
+  }
+}
+
+host "server1" {}
+`,
+			want: `validation failed for variable "environment": environment must be dev, staging, or prod.`,
+		},
+		{
+			name: "condition non bool",
+			hcl: `
+variable "environment" {
+  type    = string
+  default = "prod"
+  validation {
+    condition     = var.environment
+    error_message = "bad"
+  }
+}
+
+host "server1" {}
+`,
+			want: `variable validation condition must evaluate to a boolean`,
+		},
+		{
+			name: "other variable",
+			hcl: `
+variable "other" {
+  type    = string
+  default = "x"
+}
+
+variable "environment" {
+  type    = string
+  default = "prod"
+  validation {
+    condition     = var.other == "x"
+    error_message = "bad"
+  }
+}
+
+host "server1" {}
+`,
+			want: `variable validation can only read var.environment`,
+		},
+		{
+			name: "path reference",
+			hcl: `
+variable "environment" {
+  type    = string
+  default = "prod"
+  validation {
+    condition     = path.module != ""
+    error_message = "bad"
+  }
+}
+
+host "server1" {}
+`,
+			want: `variable validation can only read var.environment`,
+		},
+		{
+			name: "target reference",
+			hcl: `
+variable "environment" {
+  type    = string
+  default = "prod"
+  validation {
+    condition     = target.system.codename == "trixie"
+    error_message = "bad"
+  }
+}
+
+host "server1" {}
+`,
+			want: `variable validation can only read var.environment`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompileDeprecatedVariableWarnings(t *testing.T) {
+	cfg := parseInlineWithOptions(t, `
+variable "environment" {
+  type       = string
+  default    = "prod"
+  deprecated = "Use deployment_environment instead."
+}
+
+host "server1" {}
+`, parser.ParseOptions{VariableValues: []parser.ExternalVariableValue{
+		{Name: "environment", Value: "staging", Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}},
+	}})
+	warnings := []ir.Warning{}
+	if _, err := CompileWithOptions(cfg, CompileOptions{Warnings: &warnings}); err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %#v, want 1", warnings)
+	}
+	if !strings.Contains(warnings[0].Message, `variable "environment" is deprecated`) {
+		t.Fatalf("warning = %#v", warnings[0])
+	}
+	if warnings[0].Source.Path != "cli.var[0]" {
+		t.Fatalf("warning source = %#v", warnings[0].Source)
+	}
+
+	defaultOnly := parseInline(t, `
+variable "environment" {
+  type       = string
+  default    = "prod"
+  deprecated = "Use deployment_environment instead."
+}
+
+host "server1" {}
+`)
+	warnings = []ir.Warning{}
+	if _, err := CompileWithOptions(defaultOnly, CompileOptions{Warnings: &warnings}); err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("default-only warnings = %#v, want none", warnings)
+	}
+}
+
 func TestCompileSensitiveComponentInputPropagatesToFileContent(t *testing.T) {
 	program := compileInline(t, `
 component "app" {
@@ -2603,12 +2768,18 @@ func compileInline(t *testing.T, content string) *ir.Program {
 func parseInline(t *testing.T, content string) *parser.Config {
 	t.Helper()
 
+	return parseInlineWithOptions(t, content, parser.ParseOptions{})
+}
+
+func parseInlineWithOptions(t *testing.T, content string, opts parser.ParseOptions) *parser.Config {
+	t.Helper()
+
 	dir := t.TempDir()
 	file := filepath.Join(dir, "main.dbf.hcl")
 	if err := os.WriteFile(file, []byte(strings.TrimPrefix(content, "\n")), 0644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := parser.ParseFiles([]string{file})
+	cfg, err := parser.ParseFilesWithOptions([]string{file}, opts)
 	if err != nil {
 		t.Fatal(err)
 	}

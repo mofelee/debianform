@@ -46,6 +46,9 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 	if err != nil {
 		return nil, err
 	}
+	if err := compiler.validateVariableValues(); err != nil {
+		return nil, err
+	}
 	variables, err := variableSpecs(cfg)
 	if err != nil {
 		return nil, err
@@ -122,6 +125,12 @@ func variableSpecs(cfg *parser.Config) (map[string]ir.VariableSpec, error) {
 		}
 		var defaultValue any
 		if normalized, ok := cfg.VariableValues[name]; ok {
+			defaultValue = parserValueToAny(normalized)
+		} else if variable.Default != nil {
+			normalized, err := normalizeVariable(variable, *variable.Default)
+			if err != nil {
+				return nil, err
+			}
 			defaultValue = parserValueToAny(normalized)
 		}
 		out[name] = ir.VariableSpec{
@@ -537,6 +546,26 @@ func (c *compiler) warningSink() *[]ir.Warning {
 	return c.warnings
 }
 
+func (c *compiler) validateVariableValues() error {
+	for _, name := range sortedKeys(c.cfg.Variables) {
+		variable := c.cfg.Variables[name]
+		value, ok := c.cfg.VariableValues[name]
+		if !ok {
+			continue
+		}
+		if err := evaluateVariableValidations(variable, value); err != nil {
+			return err
+		}
+		if variable.Deprecated != "" && c.cfg.ExplicitVariableValues[name] && c.warnings != nil {
+			*c.warnings = append(*c.warnings, ir.Warning{
+				Source:  value.Source,
+				Message: fmt.Sprintf("variable %q is deprecated: %s", name, variable.Deprecated),
+			})
+		}
+	}
+	return nil
+}
+
 func componentInputValues(template parser.Component, instance parser.ComponentInstance, warnings *[]ir.Warning) (map[string]parser.Value, map[string]any, error) {
 	values := map[string]parser.Value{}
 	jsonValues := map[string]any{}
@@ -598,7 +627,11 @@ func validateComponentInputDefinition(input parser.ComponentInput) error {
 
 func validateVariableDefinition(variable parser.Variable) error {
 	if variable.Default != nil {
-		if _, err := normalizeVariable(variable, *variable.Default); err != nil {
+		normalized, err := normalizeVariable(variable, *variable.Default)
+		if err != nil {
+			return err
+		}
+		if err := evaluateVariableValidations(variable, normalized); err != nil {
 			return err
 		}
 	}

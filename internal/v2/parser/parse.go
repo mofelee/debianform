@@ -14,13 +14,14 @@ import (
 )
 
 type Config struct {
-	Files          []string
-	Locals         map[string]Value
-	Variables      map[string]Variable
-	VariableValues map[string]Value
-	Profiles       map[string]Profile
-	Hosts          map[string]Host
-	Components     map[string]Component
+	Files                  []string
+	Locals                 map[string]Value
+	Variables              map[string]Variable
+	VariableValues         map[string]Value
+	ExplicitVariableValues map[string]bool
+	Profiles               map[string]Profile
+	Hosts                  map[string]Host
+	Components             map[string]Component
 }
 
 type Profile struct {
@@ -147,7 +148,9 @@ type Assert struct {
 }
 
 type ParseOptions struct {
-	VariableValues []ExternalVariableValue
+	VariableValues        []ExternalVariableValue
+	AllowMissingVariables bool
+	SkipTopLevel          bool
 }
 
 type ExternalVariableValue struct {
@@ -164,13 +167,14 @@ func ParseFiles(files []string) (*Config, error) {
 
 func ParseFilesWithOptions(files []string, opts ParseOptions) (*Config, error) {
 	cfg := &Config{
-		Files:          append([]string(nil), files...),
-		Locals:         map[string]Value{},
-		Variables:      map[string]Variable{},
-		VariableValues: map[string]Value{},
-		Profiles:       map[string]Profile{},
-		Hosts:          map[string]Host{},
-		Components:     map[string]Component{},
+		Files:                  append([]string(nil), files...),
+		Locals:                 map[string]Value{},
+		Variables:              map[string]Variable{},
+		VariableValues:         map[string]Value{},
+		ExplicitVariableValues: map[string]bool{},
+		Profiles:               map[string]Profile{},
+		Hosts:                  map[string]Host{},
+		Components:             map[string]Component{},
 	}
 
 	type parsedFile struct {
@@ -203,8 +207,11 @@ func ParseFilesWithOptions(files []string, opts ParseOptions) (*Config, error) {
 			return nil, err
 		}
 	}
-	if err := resolveVariableValues(cfg, opts.VariableValues); err != nil {
+	if err := resolveVariableValues(cfg, opts.VariableValues, opts.AllowMissingVariables); err != nil {
 		return nil, err
+	}
+	if opts.SkipTopLevel {
+		return cfg, nil
 	}
 
 	for _, file := range parsed {
@@ -266,7 +273,7 @@ func parseVariables(cfg *Config, file string, body *hclsyntax.Body) error {
 	return nil
 }
 
-func resolveVariableValues(cfg *Config, external []ExternalVariableValue) error {
+func resolveVariableValues(cfg *Config, external []ExternalVariableValue, allowMissing bool) error {
 	values := make(map[string]Value, len(cfg.Variables))
 	explicit := map[string]Value{}
 	for i, item := range external {
@@ -296,6 +303,7 @@ func resolveVariableValues(cfg *Config, external []ExternalVariableValue) error 
 			return err
 		}
 		explicit[item.Name] = normalized
+		cfg.ExplicitVariableValues[item.Name] = true
 	}
 	for _, name := range sortedVariableNames(cfg.Variables) {
 		variable := cfg.Variables[name]
@@ -304,6 +312,9 @@ func resolveVariableValues(cfg *Config, external []ExternalVariableValue) error 
 			continue
 		}
 		if variable.Default == nil {
+			if allowMissing {
+				continue
+			}
 			return fmt.Errorf("%s:%d:%s: variable %q is required", variable.Source.File, variable.Source.Line, variable.Source.Path, variable.Name)
 		}
 		normalized, err := NormalizeVariableValue(variable, *variable.Default)

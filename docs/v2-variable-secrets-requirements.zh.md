@@ -870,34 +870,71 @@ stdin 或 secret backend。
 
 代码：
 
-- [ ] variable `validation` 在最终赋值和 type conversion 后执行。
-- [ ] validation 复用 component input 的纯函数集合和错误定位机制。
-- [ ] `nullable = false` 禁止最终值为 null。
-- [ ] `deprecated` 只在变量被显式赋值时 warning；只使用 default 不 warning。
-- [ ] warning 聚合方式与 validate/plan/apply 现有 warning 输出保持一致。
-- [ ] 增加 `dbf variable inspect -f <file>`，输出 name、type、default、nullable、
+- [x] variable `validation` 在最终赋值和 type conversion 后执行。
+- [x] validation 复用 component input 的纯函数集合和错误定位机制。
+- [x] `nullable = false` 禁止最终值为 null。
+- [x] `deprecated` 只在变量被显式赋值时 warning；只使用 default 不 warning。
+- [x] warning 聚合方式与 validate/plan/apply 现有 warning 输出保持一致。
+- [x] 增加 `dbf variable inspect -f <file>`，输出 name、type、default、nullable、
       sensitive、ephemeral、description 和 deprecated。
-- [ ] inspect 对 sensitive default 显示 `<sensitive>`。
+- [x] inspect 对 sensitive default 显示 `<sensitive>`。
 
 测试：
 
-- [ ] validation 成功和失败。
-- [ ] validation condition 非 bool 报错。
-- [ ] validation 不能读取 `target`、`input`、`path` 或未允许的 namespace。
-- [ ] nullable false 拦截 null。
-- [ ] deprecated 显式赋值产生 warning，default 不产生 warning。
-- [ ] inspect golden 覆盖复杂类型、default redaction 和 deprecated message。
+- [x] validation 成功和失败。
+- [x] validation condition 非 bool 报错。
+- [x] validation 不能读取 `target`、`input`、`path` 或未允许的 namespace。
+- [x] nullable false 拦截 null。
+- [x] deprecated 显式赋值产生 warning，default 不产生 warning。
+- [x] inspect golden 覆盖复杂类型、default redaction 和 deprecated message。
 
 示例/文档：
 
-- [ ] 示例 variable 增加 environment validation。
-- [ ] README 或本文档增加 `dbf variable inspect` 输出样例。
+- [x] 示例 variable 增加 environment validation。
+- [x] README 或本文档增加 `dbf variable inspect` 输出样例。
 
 验收：
 
-- [ ] variable 可以作为公开配置接口被文档化和检查。
-- [ ] validation failure 指向 variable source path。
-- [ ] `make test` 通过。
+- [x] variable 可以作为公开配置接口被文档化和检查。
+- [x] validation failure 指向 variable source path。
+- [x] `make test` 通过。
+
+实现记录：
+
+- variable validation 在最终赋值、类型归一化和 optional/default 填充之后执行，使用与
+  component input validation 相同的纯函数集合。
+- validation 条件只能读取当前变量的 `var.<name>`；读取 `target`、`input`、`path` 或其他
+  variable 会报错，失败错误指向 `variable["name"].validation[i]`。
+- `nullable = false` 会拦截最终值为 `null` 的 default、CLI、var file 或 env 赋值。
+- `deprecated` 只在变量被外部显式赋值时产生 warning，沿用 validate/plan/apply 的
+  warning 输出格式；只使用 default 不 warning。
+- 新增 `dbf variable inspect -f <file>`，可配合 `-var`/`-var-file` 查看最终变量接口。
+  示例输出：
+
+```json
+{
+  "variables": [
+    {
+      "name": "environment",
+      "type": "string",
+      "default": "prod",
+      "nullable": false,
+      "sensitive": false,
+      "ephemeral": false,
+      "deprecated": "Use deployment_environment instead.",
+      "description": "Deployment environment."
+    },
+    {
+      "name": "token",
+      "type": "string",
+      "default": "<sensitive>",
+      "nullable": true,
+      "sensitive": true,
+      "ephemeral": false
+    }
+  ]
+}
+```
 
 ### Loop 6：sensitive 传播到资源内容
 

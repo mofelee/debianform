@@ -485,6 +485,11 @@ func TestParseRejectsInvalidExternalVariableValues(t *testing.T) {
 			want: `invalid JSON value for variable "labels"`,
 		},
 		{
+			name: "nullable false",
+			vars: []ExternalVariableValue{{Name: "required_any", Value: "null", Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}}},
+			want: `variable "required_any" must not be null`,
+		},
+		{
 			name: "sensitive value redacted",
 			vars: []ExternalVariableValue{{Name: "token_seed", Value: "not-a-real-cli-secret", Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}}},
 			want: `invalid value for sensitive variable "token_seed"`,

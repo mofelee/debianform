@@ -197,6 +197,65 @@ func TestCLIVariableErrors(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsVariableValidationFailure(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(config, []byte(`
+variable "environment" {
+  type    = string
+  default = "prod"
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be dev, staging, or prod."
+  }
+}
+
+host "server1" {}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := run([]string{"validate", "-f", config, "-var", "environment=qa"})
+	if err == nil || !strings.Contains(err.Error(), `validation failed for variable "environment"`) {
+		t.Fatalf("validate variable validation error = %v, want validation failure", err)
+	}
+}
+
+func TestValidatePrintsDeprecatedVariableWarningsOnlyForExplicitValues(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(config, []byte(`
+variable "environment" {
+  type       = string
+  default    = "prod"
+  deprecated = "Use deployment_environment instead."
+}
+
+host "server1" {}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, defaultStderr := captureOutput(t, func() {
+		if err := run([]string{"validate", "-f", config}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if strings.Contains(defaultStderr, "deprecated") {
+		t.Fatalf("default-only validate stderr = %q, want no deprecated warning", defaultStderr)
+	}
+
+	_, explicitStderr := captureOutput(t, func() {
+		if err := run([]string{"validate", "-f", config, "-var", "environment=staging"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(explicitStderr, `variable "environment" is deprecated`) {
+		t.Fatalf("explicit validate stderr = %q, want deprecated warning", explicitStderr)
+	}
+}
+
 func TestPlanAcceptsVarFilesAutoVarFilesAndEnv(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")
@@ -480,6 +539,57 @@ host "server1" {}
 	if err == nil || !strings.Contains(err.Error(), "unknown component.missing") {
 		t.Fatalf("inspect unknown error = %v", err)
 	}
+}
+
+func TestVariableInspect(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "main.dbf.hcl")
+	if err := os.WriteFile(config, []byte(`
+variable "environment" {
+  type        = string
+  description = "Deployment environment."
+  default     = "prod"
+  nullable    = false
+  deprecated  = "Use deployment_environment instead."
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be valid"
+  }
+}
+
+variable "labels" {
+  type = object({
+    tier   = string
+    canary = optional(bool, false)
+  })
+  default = {
+    tier = "backend"
+  }
+}
+
+variable "token" {
+  type      = string
+  default   = "secret-token"
+  sensitive = true
+}
+
+variable "runtime_value" {
+  type      = string
+  ephemeral = true
+}
+
+host "server1" {}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"variable", "inspect", "-f", config}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	assertGolden(t, filepath.Join("testdata", "variable-inspect.golden.json"), output)
 }
 
 func TestPlanV2BBRText(t *testing.T) {

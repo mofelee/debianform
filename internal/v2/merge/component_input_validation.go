@@ -51,6 +51,42 @@ func evaluateComponentInputValidations(input parser.ComponentInput, value parser
 	return nil
 }
 
+func evaluateVariableValidations(variable parser.Variable, value parser.Value) error {
+	if len(variable.Validations) == 0 {
+		return nil
+	}
+	converted, err := value.ToCty()
+	if err != nil {
+		return fmt.Errorf("%s:%d:%s: variable %q: %w", value.Source.File, value.Source.Line, value.Source.Path, variable.Name, err)
+	}
+	converted, _ = converted.UnmarkDeep()
+	ctx := &hcl.EvalContext{
+		Variables: map[string]cty.Value{
+			"var": cty.ObjectVal(map[string]cty.Value{
+				variable.Name: converted,
+			}),
+		},
+		Functions: componentInputValidationFunctions(),
+	}
+	for i, validation := range variable.Validations {
+		if err := validateVariableValidationReferences(variable, validation); err != nil {
+			return err
+		}
+		result, diags := validation.Condition.Value(ctx)
+		if diags.HasErrors() {
+			return fmt.Errorf("%s:%d:%s: variable validation condition: %s", validation.ConditionSource.File, validation.ConditionSource.Line, validation.ConditionSource.Path, diags.Error())
+		}
+		result, _ = result.UnmarkDeep()
+		if !result.IsKnown() || result.IsNull() || !result.Type().Equals(cty.Bool) {
+			return fmt.Errorf("%s:%d:%s: variable validation condition must evaluate to a boolean", validation.ConditionSource.File, validation.ConditionSource.Line, validation.ConditionSource.Path)
+		}
+		if !result.True() {
+			return fmt.Errorf("%s:%d:%s: validation failed for variable %q: %s", validation.Source.File, validation.Source.Line, fmt.Sprintf("%s.validation[%d]", variable.Source.Path, i), variable.Name, validation.Message)
+		}
+	}
+	return nil
+}
+
 func validateComponentInputValidationReferences(input parser.ComponentInput, validation parser.ComponentInputValidation) error {
 	for _, traversal := range validation.Condition.Variables() {
 		if len(traversal) == 0 {
@@ -69,6 +105,29 @@ func validateComponentInputValidationReferences(input parser.ComponentInput, val
 		attr, ok := traversal[1].(hcl.TraverseAttr)
 		if !ok || attr.Name != input.Name {
 			return fmt.Errorf("%s:%d:%s: input validation can only read input.%s", validation.ConditionSource.File, validation.ConditionSource.Line, validation.ConditionSource.Path, input.Name)
+		}
+	}
+	return nil
+}
+
+func validateVariableValidationReferences(variable parser.Variable, validation parser.VariableValidation) error {
+	for _, traversal := range validation.Condition.Variables() {
+		if len(traversal) == 0 {
+			continue
+		}
+		root, ok := traversal[0].(hcl.TraverseRoot)
+		if !ok {
+			continue
+		}
+		if root.Name != "var" {
+			return fmt.Errorf("%s:%d:%s: variable validation can only read var.%s", validation.ConditionSource.File, validation.ConditionSource.Line, validation.ConditionSource.Path, variable.Name)
+		}
+		if len(traversal) < 2 {
+			return fmt.Errorf("%s:%d:%s: variable validation can only read var.%s", validation.ConditionSource.File, validation.ConditionSource.Line, validation.ConditionSource.Path, variable.Name)
+		}
+		attr, ok := traversal[1].(hcl.TraverseAttr)
+		if !ok || attr.Name != variable.Name {
+			return fmt.Errorf("%s:%d:%s: variable validation can only read var.%s", validation.ConditionSource.File, validation.ConditionSource.Line, validation.ConditionSource.Path, variable.Name)
 		}
 	}
 	return nil

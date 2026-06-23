@@ -29,6 +29,18 @@ variable "labels" {
   }
 }
 
+variable "required_message" {
+  type     = string
+  nullable = false
+  default  = "hello"
+}
+
+variable "required_any" {
+  type     = any
+  nullable = false
+  default  = "hello"
+}
+
 variable "token_seed" {
   type      = number
   sensitive = true
