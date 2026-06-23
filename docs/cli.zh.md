@@ -8,10 +8,11 @@
 ## 基本规则
 
 默认情况下，`dbf` 会读取当前目录中所有 `*.dbf.hcl` 文件，并按文件名排序后合并处理。
-如果只想读取一个文件，使用 `-f`：
+如果只想读取一个或多个明确指定的文件，使用可重复的 `-f file`：
 
 ```bash
 dbf validate -f examples/v2-bbr.dbf.hcl
+dbf validate -f base.dbf.hcl -f app.dbf.hcl
 ```
 
 命令失败时会向 stderr 输出 `dbf: ...` 错误信息，并返回非零退出码。配置中的
@@ -20,12 +21,12 @@ deprecated component input 会输出 warning，但 warning 本身不会改变退
 ## 命令总览
 
 ```text
-dbf validate [-f file] [--host name]
-dbf plan     [-f file] [--host name] [--format text|json] [--html file] [--debug] [--offline]
-dbf apply    [-f file] [--host name] [--parallel n] [--lock-timeout duration] [--auto-approve]
-dbf check    [-f file] [--host name] [--lock-timeout duration]
-dbf fmt      [-f file]
-dbf component inspect [-f file] component_name
+dbf validate [-f file ...] [--host name]
+dbf plan     [-f file ...] [--host name] [--format text|json] [--html file] [--debug] [--offline]
+dbf apply    [-f file ...] [--host name] [--parallel n] [--lock-timeout duration] [--auto-approve]
+dbf check    [-f file ...] [--host name] [--lock-timeout duration]
+dbf fmt      [-f file ...]
+dbf component inspect [-f file ...] component_name
 dbf version
 dbf --version
 dbf -version
@@ -38,10 +39,10 @@ dbf help
 
 | 选项 | 适用命令 | 说明 |
 | --- | --- | --- |
-| `-f file` | `validate`、`plan`、`apply`、`check`、`fmt`、`component inspect` | 只读取指定配置文件。不传时读取当前目录所有 `*.dbf.hcl`。 |
+| `-f file` | `validate`、`plan`、`apply`、`check`、`fmt`、`component inspect` | 可重复。传入一个或多个 `-f` 时，只读取显式指定的文件；不传时读取当前目录所有 `*.dbf.hcl`。 |
 | `--host name` | `validate`、`plan`、`apply`、`check` | 只处理指定 host。host 不存在时命令失败。 |
 
-`-f` 不会读取目录，也不会自动加载同目录的其他 `.dbf.hcl` 文件；它表示“精确使用这一个文件”。
+`-f` 不会读取目录，也不会自动加载同目录的其他 `.dbf.hcl` 文件；它表示“精确使用这些显式指定的文件”，并按命令行出现顺序解析。
 
 ## validate
 
@@ -64,7 +65,7 @@ v2 configuration is valid: 1 host(s)
 
 | 选项 | 说明 |
 | --- | --- |
-| `-f file` | 指定单个配置文件。 |
+| `-f file` | 可重复；只读取显式指定的文件。 |
 | `--host name` | 只校验指定 host。 |
 
 ## plan
@@ -108,7 +109,7 @@ dbf plan -f examples/v2-bbr.dbf.hcl --format json --debug --offline
 
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `-f file` | 当前目录所有 `*.dbf.hcl` | 指定单个配置文件。 |
+| `-f file` | 当前目录所有 `*.dbf.hcl` | 可重复；只读取显式指定的文件。 |
 | `--host name` | 空 | 只为指定 host 生成 plan。 |
 | `--format text\|json` | `text` | 输出文本或 JSON。JSON 格式见 `v2-plan-format.md`。 |
 | `--html file` | 空 | 将 plan 写成静态 HTML 文件。只能用于 `plan`，且不能和 `--format json` 同时使用。 |
@@ -153,7 +154,7 @@ dbf apply --parallel 4 --auto-approve
 
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `-f file` | 当前目录所有 `*.dbf.hcl` | 指定单个配置文件。 |
+| `-f file` | 当前目录所有 `*.dbf.hcl` | 可重复；只读取显式指定的文件。 |
 | `--host name` | 空 | 只应用指定 host。 |
 | `--parallel n` | `1` | 最多同时 apply 的 host 数量；必须大于等于 1，只能用于 `apply`。 |
 | `--lock-timeout duration` | `5m` | 等待远端 state lock 的最长时间。使用 Go duration 格式，例如 `30s`、`2m`、`10m`。 |
@@ -175,7 +176,7 @@ dbf check -f examples/v2-bbr.dbf.hcl --host bbr1
 
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `-f file` | 当前目录所有 `*.dbf.hcl` | 指定单个配置文件。 |
+| `-f file` | 当前目录所有 `*.dbf.hcl` | 可重复；只读取显式指定的文件。 |
 | `--host name` | 空 | 只检查指定 host。 |
 | `--lock-timeout duration` | `5m` | 等待远端 state lock 的最长时间。 |
 
@@ -207,7 +208,7 @@ formatted 1 file(s)
 
 | 选项 | 说明 |
 | --- | --- |
-| `-f file` | 只格式化指定配置文件。不传时格式化当前目录所有 `*.dbf.hcl`。 |
+| `-f file` | 可重复；只格式化显式指定的文件。不传时格式化当前目录所有 `*.dbf.hcl`。 |
 
 `fmt` 会改写文件内容。对已格式化的文件再次运行会输出 `formatted 0 file(s)`。
 
@@ -250,7 +251,7 @@ dbf component inspect -f examples/v2-component-inputs.dbf.hcl reverse_proxy
 
 | 选项/参数 | 说明 |
 | --- | --- |
-| `-f file` | 指定单个配置文件。不传时读取当前目录所有 `*.dbf.hcl`。 |
+| `-f file` | 可重复；只读取显式指定的文件。不传时读取当前目录所有 `*.dbf.hcl`。 |
 | `component_name` | 要检查的 component 名称，必填且只能传一个。 |
 
 如果 input 设置了 `sensitive = true`，且默认值存在，输出中的默认值会显示为

@@ -72,9 +72,10 @@ func runVariable(args []string) error {
 func runVariableInspect(args []string) error {
 	fs := flag.NewFlagSet("variable inspect", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	file := fs.String("f", "", "configuration file")
+	var filesFlag fileFlags
 	var cliVars repeatedFlag
 	var cliVarFiles repeatedFlag
+	fs.Var(&filesFlag, "f", "configuration file; may be repeated")
 	fs.Var(&cliVars, "var", "set a variable value as name=value")
 	fs.Var(&cliVarFiles, "var-file", "load variable values from a .dbfvars or .dbfvars.json file")
 	if err := fs.Parse(args); err != nil {
@@ -83,7 +84,7 @@ func runVariableInspect(args []string) error {
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("variable inspect does not accept positional arguments")
 	}
-	files, err := configFiles(*file)
+	files, err := configFiles(filesFlag)
 	if err != nil {
 		return err
 	}
@@ -155,7 +156,8 @@ func runComponent(args []string) error {
 func runComponentInspect(args []string) error {
 	fs := flag.NewFlagSet("component inspect", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	file := fs.String("f", "", "configuration file")
+	var filesFlag fileFlags
+	fs.Var(&filesFlag, "f", "configuration file; may be repeated")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -163,7 +165,7 @@ func runComponentInspect(args []string) error {
 	if len(rest) != 1 {
 		return fmt.Errorf("component inspect requires exactly one component name")
 	}
-	files, err := configFiles(*file)
+	files, err := configFiles(filesFlag)
 	if err != nil {
 		return err
 	}
@@ -240,11 +242,12 @@ func printVersion(detailed bool) {
 func runFmt(args []string) error {
 	fs := flag.NewFlagSet("fmt", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	file := fs.String("f", "", "configuration file")
+	var filesFlag fileFlags
+	fs.Var(&filesFlag, "f", "configuration file; may be repeated")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	files, err := configFiles(*file)
+	files, err := configFiles(filesFlag)
 	if err != nil {
 		return err
 	}
@@ -277,7 +280,7 @@ func runFmt(args []string) error {
 func runConfigCommand(cmd string, args []string) error {
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	file := fs.String("f", "", "configuration file")
+	var filesFlag fileFlags
 	host := fs.String("host", "", "limit execution to a host")
 	format := fs.String("format", "text", "plan output format: text or json")
 	htmlPath := fs.String("html", "", "write plan as static HTML")
@@ -288,17 +291,29 @@ func runConfigCommand(cmd string, args []string) error {
 	autoApprove := fs.Bool("auto-approve", false, "skip apply confirmation")
 	var cliVars repeatedFlag
 	var cliVarFiles repeatedFlag
+	fs.Var(&filesFlag, "f", "configuration file; may be repeated")
 	fs.Var(&cliVars, "var", "set a variable value as name=value")
 	fs.Var(&cliVarFiles, "var-file", "load variable values from a .dbfvars or .dbfvars.json file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	files, err := configFiles(*file)
+	files, err := configFiles(filesFlag)
 	if err != nil {
 		return err
 	}
 	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *debug, *offline, *parallel, *lockTimeout, *autoApprove, cliVars, cliVarFiles)
+}
+
+type fileFlags []string
+
+func (f *fileFlags) String() string {
+	return strings.Join(*f, ",")
+}
+
+func (f *fileFlags) Set(value string) error {
+	*f = append(*f, value)
+	return nil
 }
 
 type repeatedFlag []string
@@ -766,9 +781,9 @@ func commandHost(program *v2ir.Program, host string) string {
 	return ""
 }
 
-func configFiles(file string) ([]string, error) {
-	if file != "" {
-		return []string{file}, nil
+func configFiles(files []string) ([]string, error) {
+	if len(files) != 0 {
+		return append([]string(nil), files...), nil
 	}
 	matches, err := filepath.Glob("*.dbf.hcl")
 	if err != nil {
@@ -794,17 +809,17 @@ func usage() {
 	fmt.Println(`dbf manages Debian hosts from .dbf.hcl files.
 
 Usage:
-  dbf validate [-f file] [-var name=value] [-var-file path]
-  dbf plan     [-f file] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug]
-  dbf apply    [-f file] [-var name=value] [-var-file path] [--host name] [--parallel n] [--auto-approve]
-  dbf check    [-f file] [-var name=value] [-var-file path] [--host name]
-  dbf variable inspect [-f file] [-var name=value] [-var-file path]
-  dbf component inspect [-f file] name
-  dbf fmt      [-f file]
+  dbf validate [-f file ...] [-var name=value] [-var-file path]
+  dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug]
+  dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--parallel n] [--auto-approve]
+  dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name]
+  dbf variable inspect [-f file ...] [-var name=value] [-var-file path]
+  dbf component inspect [-f file ...] name
+  dbf fmt      [-f file ...]
   dbf version
 
 By default dbf loads all *.dbf.hcl files in the current directory, sorted by name.
-Use -f to load exactly one configuration file.`)
+Use -f file one or more times to load only the explicitly specified file(s).`)
 }
 
 func writePlanHTML(path string, doc v2plan.Document) error {

@@ -22,7 +22,7 @@ func TestConfigFilesLoadsAllDBFHCLInCurrentDirectory(t *testing.T) {
 		}
 	}
 
-	files, err := configFiles("")
+	files, err := configFiles(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,13 +33,41 @@ func TestConfigFilesLoadsAllDBFHCLInCurrentDirectory(t *testing.T) {
 }
 
 func TestConfigFilesWithExplicitFile(t *testing.T) {
-	files, err := configFiles("custom.dbf.hcl")
+	files, err := configFiles([]string{"custom.dbf.hcl"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"custom.dbf.hcl"}
 	if !reflect.DeepEqual(files, want) {
 		t.Fatalf("configFiles() = %#v, want %#v", files, want)
+	}
+}
+
+func TestConfigFilesWithExplicitFiles(t *testing.T) {
+	input := []string{"base.dbf.hcl", "app.dbf.hcl"}
+	files, err := configFiles(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input[0] = "mutated.dbf.hcl"
+
+	want := []string{"base.dbf.hcl", "app.dbf.hcl"}
+	if !reflect.DeepEqual(files, want) {
+		t.Fatalf("configFiles() = %#v, want %#v", files, want)
+	}
+}
+
+func TestFileFlagsPreserveSetOrder(t *testing.T) {
+	var files fileFlags
+	if err := files.Set("base.dbf.hcl"); err != nil {
+		t.Fatal(err)
+	}
+	if err := files.Set("app.dbf.hcl"); err != nil {
+		t.Fatal(err)
+	}
+	want := fileFlags{"base.dbf.hcl", "app.dbf.hcl"}
+	if !reflect.DeepEqual(files, want) {
+		t.Fatalf("fileFlags = %#v, want %#v", files, want)
 	}
 }
 
@@ -66,6 +94,69 @@ func TestVersionFlag(t *testing.T) {
 
 	if lines := strings.Count(strings.TrimSpace(output), "\n") + 1; lines != 1 {
 		t.Fatalf("--version output has %d lines, want 1: %q", lines, output)
+	}
+}
+
+func TestValidateAcceptsRepeatedConfigFiles(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.dbf.hcl")
+	app := filepath.Join(dir, "app.dbf.hcl")
+	writeTestFile(t, base, `
+profile "base" {
+  packages {
+    install = ["curl"]
+  }
+}
+`)
+	writeTestFile(t, app, `
+host "server1" {
+  imports = [profile.base]
+}
+`)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"validate", "-f", base, "-f", app}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "v2 configuration is valid: 1 host(s)") {
+		t.Fatalf("validate output = %q", output)
+	}
+}
+
+func TestPlanRepeatedConfigFilesCommandMetadata(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.dbf.hcl")
+	app := filepath.Join(dir, "app.dbf.hcl")
+	writeTestFile(t, base, `
+profile "base" {
+  packages {
+    install = ["curl"]
+  }
+}
+`)
+	writeTestFile(t, app, `
+host "server1" {
+  imports = [profile.base]
+}
+`)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", base, "-f", app, "--offline", "--format", "json"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	var doc struct {
+		Command struct {
+			File string `json:"file"`
+		} `json:"command"`
+	}
+	if err := json.Unmarshal([]byte(output), &doc); err != nil {
+		t.Fatalf("plan JSON did not parse: %v\n%s", err, output)
+	}
+	want := base + "," + app
+	if doc.Command.File != want {
+		t.Fatalf("command.file = %q, want %q", doc.Command.File, want)
 	}
 }
 
@@ -718,6 +809,32 @@ host "server1" {}
 	}
 }
 
+func TestComponentInspectAcceptsRepeatedConfigFiles(t *testing.T) {
+	dir := t.TempDir()
+	components := filepath.Join(dir, "components.dbf.hcl")
+	hosts := filepath.Join(dir, "hosts.dbf.hcl")
+	writeTestFile(t, components, `
+component "proxy" {
+  input "port" {
+    type    = number
+    default = 8080
+  }
+}
+`)
+	writeTestFile(t, hosts, `
+host "server1" {}
+`)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"component", "inspect", "-f", components, "-f", hosts, "proxy"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, `"name": "proxy"`) || !strings.Contains(output, `"name": "port"`) {
+		t.Fatalf("component inspect output = %q", output)
+	}
+}
+
 func TestVariableInspect(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")
@@ -998,6 +1115,65 @@ content="hello"
 	}
 }
 
+func TestFmtRepeatedConfigFilesFormatsOnlyExplicitFiles(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.dbf.hcl")
+	b := filepath.Join(dir, "b.dbf.hcl")
+	c := filepath.Join(dir, "c.dbf.hcl")
+	rawA := `host "a" {
+files {
+file "/tmp/a" {
+content="a"
+}
+}
+}
+`
+	rawB := `host "b" {
+files {
+file "/tmp/b" {
+content="b"
+}
+}
+}
+`
+	rawC := `host "c" {
+files {
+file "/tmp/c" {
+content="c"
+}
+}
+}
+`
+	writeTestFile(t, a, rawA)
+	writeTestFile(t, b, rawB)
+	writeTestFile(t, c, rawC)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"fmt", "-f", a, "-f", b}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "formatted 2 file(s)") {
+		t.Fatalf("fmt output = %q", output)
+	}
+	for _, path := range []string{a, b} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), `content = "`) {
+			t.Fatalf("%s was not formatted:\n%s", path, data)
+		}
+	}
+	data, err := os.ReadFile(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != rawC {
+		t.Fatalf("implicit file was changed:\n%s", data)
+	}
+}
+
 func runnableV2Examples() []string {
 	return []string{
 		"examples/v2-bbr.dbf.hcl",
@@ -1093,5 +1269,12 @@ func assertGolden(t *testing.T, golden string, got string) {
 	}
 	if got != string(want) {
 		t.Fatalf("golden mismatch\n--- got ---\n%s\n--- want ---\n%s", got, string(want))
+	}
+}
+
+func writeTestFile(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatal(err)
 	}
 }

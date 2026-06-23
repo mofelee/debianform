@@ -106,6 +106,9 @@ BBR v2 离线 plan 预览示例：
 dbf plan -f examples/v2-bbr.dbf.hcl --offline
 ```
 
+`-f file` 可以重复传入；传入一个或多个 `-f` 时只读取这些显式指定的文件，不传时读取当前目录所有
+`*.dbf.hcl` 并按文件名排序。
+
 ```text
 Plan:
   + host.bbr1.kernel.module["tcp_bbr"]
