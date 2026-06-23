@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -86,12 +87,7 @@ func runVariableInspect(args []string) error {
 	if err != nil {
 		return err
 	}
-	variableValues, err := collectExternalVariableValues(files, cliVarFiles, cliVars)
-	if err != nil {
-		return err
-	}
-	cfg, err := v2parser.ParseFilesWithOptions(files, v2parser.ParseOptions{
-		VariableValues:        variableValues,
+	cfg, err := parseV2ConfigWithExternalValues(files, cliVarFiles, cliVars, v2parser.ParseOptions{
 		AllowMissingVariables: true,
 		SkipTopLevel:          true,
 	})
@@ -342,11 +338,7 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 		return fmt.Errorf("--parallel is only supported for v2 apply")
 	}
 
-	variableValues, err := collectExternalVariableValues(files, cliVarFiles, cliVars)
-	if err != nil {
-		return err
-	}
-	cfg, err := v2parser.ParseFilesWithOptions(files, v2parser.ParseOptions{VariableValues: variableValues})
+	cfg, err := parseV2ConfigWithExternalValues(files, cliVarFiles, cliVars, v2parser.ParseOptions{})
 	if err != nil {
 		return err
 	}
@@ -480,7 +472,23 @@ func printPlanDocument(doc v2plan.Document, format string, htmlPath string) erro
 	}
 }
 
-func collectExternalVariableValues(files []string, cliVarFiles []string, cliVars []string) ([]v2parser.ExternalVariableValue, error) {
+func parseV2ConfigWithExternalValues(files []string, cliVarFiles []string, cliVars []string, opts v2parser.ParseOptions) (*v2parser.Config, error) {
+	declarations, err := v2parser.ParseFilesWithOptions(files, v2parser.ParseOptions{
+		AllowMissingVariables: true,
+		SkipTopLevel:          true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	variableValues, err := collectExternalVariableValues(files, cliVarFiles, cliVars, declarations.Variables)
+	if err != nil {
+		return nil, err
+	}
+	opts.VariableValues = variableValues
+	return v2parser.ParseFilesWithOptions(files, opts)
+}
+
+func collectExternalVariableValues(files []string, cliVarFiles []string, cliVars []string, variables map[string]v2parser.Variable) ([]v2parser.ExternalVariableValue, error) {
 	values := parseEnvVars(os.Environ())
 	autoVarFiles, err := autoVariableFiles(files)
 	if err != nil {
@@ -500,7 +508,7 @@ func collectExternalVariableValues(files []string, cliVarFiles []string, cliVars
 		}
 		values = append(values, fileValues...)
 	}
-	parsedCLIVars, err := parseCLIVars(cliVars)
+	parsedCLIVars, err := parseCLIVars(cliVars, variables)
 	if err != nil {
 		return nil, err
 	}
@@ -576,21 +584,89 @@ func autoVariableFiles(files []string) ([]string, error) {
 	return out, nil
 }
 
-func parseCLIVars(values []string) ([]v2parser.ExternalVariableValue, error) {
+func parseCLIVars(values []string, variables map[string]v2parser.Variable) ([]v2parser.ExternalVariableValue, error) {
 	out := make([]v2parser.ExternalVariableValue, 0, len(values))
 	for i, raw := range values {
 		name, value, ok := strings.Cut(raw, "=")
+		name = strings.TrimSpace(name)
 		source := v2ir.SourceRef{File: "cli", Line: i + 1, Path: fmt.Sprintf("cli.var[%d]", i)}
-		if !ok || strings.TrimSpace(name) == "" {
+		if !ok || name == "" {
 			return nil, fmt.Errorf("%s:%d:%s: -var must be name=value", source.File, source.Line, source.Path)
 		}
+		variable, known := variables[name]
+		if known && strings.HasPrefix(value, "@") {
+			loaded, loadedSource, err := readCLIVarAtSource(value, source, known && variable.Sensitive)
+			if err != nil {
+				return nil, err
+			}
+			value = loaded
+			source = loadedSource
+		} else if known && strings.HasPrefix(value, "env:") {
+			loaded, loadedSource, err := readCLIVarEnvSource(value, source, known && variable.Sensitive)
+			if err != nil {
+				return nil, err
+			}
+			value = loaded
+			source = loadedSource
+		}
 		out = append(out, v2parser.ExternalVariableValue{
-			Name:   strings.TrimSpace(name),
+			Name:   name,
 			Value:  value,
 			Source: source,
 		})
 	}
 	return out, nil
+}
+
+func readCLIVarAtSource(value string, source v2ir.SourceRef, sensitive bool) (string, v2ir.SourceRef, error) {
+	path := strings.TrimPrefix(value, "@")
+	if path == "" {
+		return "", source, fmt.Errorf("%s:%d:%s: -var @ source path must be non-empty", source.File, source.Line, source.Path)
+	}
+	if path == "-" {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return "", source, fmt.Errorf("%s:%d:%s: failed to read -var from stdin: %w", source.File, source.Line, source.Path, err)
+		}
+		source.Path = sourcePath("stdin", sensitive)
+		return string(data), source, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if sensitive {
+			return "", source, fmt.Errorf("%s:%d:%s: failed to read -var source %s: %s", source.File, source.Line, source.Path, sourcePath(path, sensitive), pathlessError(err))
+		}
+		return "", source, fmt.Errorf("%s:%d:%s: failed to read -var source %s: %w", source.File, source.Line, source.Path, sourcePath(path, sensitive), err)
+	}
+	source.Path = sourcePath(path, sensitive)
+	return string(data), source, nil
+}
+
+func readCLIVarEnvSource(value string, source v2ir.SourceRef, sensitive bool) (string, v2ir.SourceRef, error) {
+	name := strings.TrimPrefix(value, "env:")
+	if name == "" {
+		return "", source, fmt.Errorf("%s:%d:%s: -var env source name must be non-empty", source.File, source.Line, source.Path)
+	}
+	loaded, ok := os.LookupEnv(name)
+	if !ok {
+		return "", source, fmt.Errorf("%s:%d:%s: -var env source %s is not set", source.File, source.Line, source.Path, sourcePath(name, sensitive))
+	}
+	source.Path = sourcePath("env:"+name, sensitive)
+	return loaded, source, nil
+}
+
+func sourcePath(path string, sensitive bool) string {
+	if sensitive {
+		return "<sensitive-source>"
+	}
+	return path
+}
+
+func pathlessError(err error) string {
+	if pathErr, ok := err.(*os.PathError); ok {
+		return pathErr.Err.Error()
+	}
+	return err.Error()
 }
 
 func printWarnings(warnings []v2ir.Warning) {

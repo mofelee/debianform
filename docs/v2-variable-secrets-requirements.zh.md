@@ -1024,30 +1024,43 @@ stdin 或 secret backend。
 
 代码：
 
-- [ ] CLI `-var name=@path` 读取本地文件内容作为 value。
-- [ ] CLI `-var name=@-` 从 stdin 读取。
-- [ ] 可选支持 `-var name=env:ENV_NAME`，从指定环境变量读取 value。
-- [ ] 对 sensitive variable，读取路径和值都不得进入 HostSpec、ResourceGraph、plan、
+- [x] CLI `-var name=@path` 读取本地文件内容作为 value。
+- [x] CLI `-var name=@-` 从 stdin 读取。
+- [x] 可选支持 `-var name=env:ENV_NAME`，从指定环境变量读取 value。
+- [x] 对 sensitive variable，读取路径和值都不得进入 HostSpec、ResourceGraph、plan、
       state、debug log 或错误输出。
-- [ ] 缺失文件、权限错误和 stdin 读取错误不能回显部分 secret。
+- [x] 缺失文件、权限错误和 stdin 读取错误不能回显部分 secret。
 
 测试：
 
-- [ ] `@path` 内容进入目标 file content。
-- [ ] `@-` 可以从测试 stdin 注入。
-- [ ] `env:ENV_NAME` 行为若实现，覆盖存在、缺失和空值。
-- [ ] 缺失文件报错但不打印路径之外的敏感内容；sensitive source path 按规则 redacted。
-- [ ] plan/state 不包含注入的 secret 明文或本地 secret 路径。
+- [x] `@path` 内容进入目标 file content。
+- [x] `@-` 可以从测试 stdin 注入。
+- [x] `env:ENV_NAME` 行为若实现，覆盖存在、缺失和空值。
+- [x] 缺失文件报错但不打印路径之外的敏感内容；sensitive source path 按规则 redacted。
+- [x] plan/state 不包含注入的 secret 明文或本地 secret 路径。
 
 示例/文档：
 
-- [ ] 增加 `variable + files.file + -var secret=@path` fixture 或 CLI smoke。
-- [ ] 文档说明 `@path` 是输入来源，不是目标资源 source path。
+- [x] 增加 `variable + files.file + -var secret=@path` fixture 或 CLI smoke。
+- [x] 文档说明 `@path` 是输入来源，不是目标资源 source path。
 
 验收：
 
-- [ ] 用户可以用 `variable + files.file` 替代简单 `secrets.file` 来源。
-- [ ] `make test` 通过。
+- [x] 用户可以用 `variable + files.file` 替代简单 `secrets.file` 来源。
+- [x] `make test` 通过。
+
+实现记录：
+
+- CLI `-var` 现在支持三种运行时来源：`name=@path` 读取本地文件，`name=@-` 读取
+  stdin，`name=env:ENV_NAME` 读取指定环境变量。读取结果作为 variable value 参与后续
+  type conversion 和 sensitive propagation。
+- `@path` 是 CLI 输入来源，不是 DebianForm 目标资源的 `source` 字段；读取路径不会进入
+  HostSpec、ResourceGraph、plan 或 state。
+- 对声明为 `sensitive = true` 的 variable，source path、env var name 和读取结果都会在
+  CLI 错误、plan 输出和测试覆盖的序列化边界中脱敏；缺失文件和缺失 env var 报错使用
+  `<sensitive-source>`。
+- 本轮没有实现 `cmd:`、SOPS/age/Vault secret backend，也没有引入 `ephemeral` 或
+  write-only provider payload 语义。
 
 ### Loop 8：ephemeral 值传播和结构性字段限制
 

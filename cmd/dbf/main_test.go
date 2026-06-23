@@ -200,6 +200,122 @@ func TestPlanSensitiveCLIVariableDoesNotLeak(t *testing.T) {
 	}
 }
 
+func TestPlanCLIVariableRuntimeSources(t *testing.T) {
+	dir := t.TempDir()
+	secretPath := filepath.Join(dir, "api-token.txt")
+	if err := os.WriteFile(secretPath, []byte(testassert.SensitiveVariableCLIValue), 0600); err != nil {
+		t.Fatal(err)
+	}
+	output, stderr := captureOutput(t, func() {
+		if err := run([]string{
+			"plan", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", "--offline",
+			"-var", "api_token=@" + secretPath,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	testassert.NoSecretLeak(t, "@path plan stdout", output)
+	testassert.NoSecretLeak(t, "@path plan stderr", stderr)
+	if strings.Contains(output, secretPath) || strings.Contains(stderr, secretPath) {
+		t.Fatalf("sensitive @path leaked source path\nstdout=%q\nstderr=%q", output, stderr)
+	}
+	if !strings.Contains(output, "<sensitive sha256=") {
+		t.Fatalf("@path plan output missing sensitive summary:\n%s", output)
+	}
+
+	t.Setenv("DBF_RUNTIME_TOKEN", testassert.SensitiveVariableCLIValue)
+	output, stderr = captureOutput(t, func() {
+		if err := run([]string{
+			"plan", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", "--offline",
+			"-var", "api_token=env:DBF_RUNTIME_TOKEN",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	testassert.NoSecretLeak(t, "env: plan stdout", output)
+	testassert.NoSecretLeak(t, "env: plan stderr", stderr)
+	if strings.Contains(output, "DBF_RUNTIME_TOKEN") || strings.Contains(stderr, "DBF_RUNTIME_TOKEN") {
+		t.Fatalf("sensitive env source leaked name\nstdout=%q\nstderr=%q", output, stderr)
+	}
+
+	t.Setenv("DBF_EMPTY_ENVIRONMENT", "")
+	output = captureStdout(t, func() {
+		if err := run([]string{
+			"plan", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", "--offline",
+			"-var", "environment=env:DBF_EMPTY_ENVIRONMENT",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, `summary.sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"`) {
+		t.Fatalf("empty env value did not reach non-sensitive file summary:\n%s", output)
+	}
+}
+
+func TestPlanCLIVariableStdinSource(t *testing.T) {
+	oldStdin := os.Stdin
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = read
+	defer func() {
+		os.Stdin = oldStdin
+	}()
+	if _, err := write.WriteString(testassert.SensitiveVariableCLIValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := write.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	output, stderr := captureOutput(t, func() {
+		if err := run([]string{
+			"plan", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", "--offline",
+			"-var", "api_token=@-",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	testassert.NoSecretLeak(t, "@- plan stdout", output)
+	testassert.NoSecretLeak(t, "@- plan stderr", stderr)
+	if !strings.Contains(output, "<sensitive sha256=") {
+		t.Fatalf("@- plan output missing sensitive summary:\n%s", output)
+	}
+}
+
+func TestSensitiveCLIVariableSourceErrorsDoNotLeak(t *testing.T) {
+	dir := t.TempDir()
+	missingPath := filepath.Join(dir, "missing-token.txt")
+	err := run([]string{
+		"validate", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl",
+		"-var", "api_token=@" + missingPath,
+	})
+	if err == nil {
+		t.Fatal("validate missing sensitive @path succeeded")
+	}
+	if strings.Contains(err.Error(), missingPath) {
+		t.Fatalf("missing sensitive @path leaked source path: %v", err)
+	}
+	if !strings.Contains(err.Error(), "<sensitive-source>") {
+		t.Fatalf("missing sensitive @path error = %v, want redacted source", err)
+	}
+
+	err = run([]string{
+		"validate", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl",
+		"-var", "api_token=env:DBF_MISSING_RUNTIME_TOKEN",
+	})
+	if err == nil {
+		t.Fatal("validate missing sensitive env source succeeded")
+	}
+	if strings.Contains(err.Error(), "DBF_MISSING_RUNTIME_TOKEN") {
+		t.Fatalf("missing sensitive env source leaked name: %v", err)
+	}
+	if !strings.Contains(err.Error(), "<sensitive-source>") {
+		t.Fatalf("missing sensitive env source error = %v, want redacted source", err)
+	}
+}
+
 func TestCLIVariableErrors(t *testing.T) {
 	fixture := "../../internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl"
 
