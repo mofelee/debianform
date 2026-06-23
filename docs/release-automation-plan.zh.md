@@ -324,6 +324,14 @@ brew upgrade dbf
 gh run view --log
 ```
 
+已验证：`v0.0.0-verify-test.1` 触发的 release workflow run `28012012498`
+通过，包含 `GitHub Release` 和 `Post-release verification` 两个 job。verify job 已通过：
+curl installer 安装 Linux amd64 tarball、`dbf version` 包含 tag、
+`dbf validate -f examples/v2-bbr.dbf.hcl`、`dbf plan -f examples/v2-bbr.dbf.hcl --offline`。
+验证矩阵已写入 GitHub Release notes，并上传为 artifact
+`release-verification-v0.0.0-verify-test.1`。Ubuntu runner 未安装 Homebrew，因此 Homebrew
+路径记录为 `manual/best-effort`。
+
 release notes 中必须包含验证矩阵：
 
 | Path | linux/amd64 | linux/arm64 | darwin/amd64 | darwin/arm64 |
