@@ -48,6 +48,7 @@ jobs:
         env:
           GORELEASER_VERSION: 2.16.0
         run: |
+          cd "${RUNNER_TEMP}"
           archive="goreleaser_Linux_x86_64.tar.gz"
           base_url="https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}"
           curl --fail --location --retry 3 --show-error --silent --output "${archive}" "${base_url}/${archive}"
