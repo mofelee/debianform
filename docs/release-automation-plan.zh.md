@@ -29,11 +29,11 @@
 
 代码/文件：
 
-- [ ] 新增 `LICENSE`。
-- [ ] 新增 `CHANGELOG.md`，包含 `Unreleased` 和第一个 beta 版本占位。
-- [ ] 新增 `SECURITY.md`。
-- [ ] README 顶部明确 beta/public preview 定位。
-- [ ] `docs/release-process.zh.md` 中填入真实 license SPDX id。
+- [x] 新增 `LICENSE`。
+- [x] 新增 `CHANGELOG.md`，包含 `Unreleased` 和第一个 beta 版本占位。
+- [x] 新增 `SECURITY.md`。
+- [x] README 顶部明确 beta/public preview 定位。
+- [x] `docs/release-process.zh.md` 中填入真实 license SPDX id。
 
 验收：
 
@@ -47,8 +47,8 @@ rg -n "license" docs/release-process.zh.md README.md
 
 需要你介入：
 
-- 选择 license。建议 MIT 或 Apache-2.0；如果没有偏好，默认 MIT。
-- 确认安全漏洞报告方式，例如 GitHub Security Advisory 或指定邮箱。
+- 已按默认选择 MIT。
+- 已默认使用 GitHub Security Advisory 作为安全漏洞报告方式。
 
 ## Loop 1: 本地 release 打包能力
 

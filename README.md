@@ -1,6 +1,8 @@
 # DebianForm
 
-DebianForm 是面向 Debian 主机的 v2 配置工具。
+DebianForm 是面向 Debian 主机的 v2 配置工具，目前处于 public preview / beta 阶段。
+CLI、v2 DSL、state 和发布产物在 stable 前仍可能出现破坏性变更；公开发布会在
+`CHANGELOG.md` 和 release notes 中记录迁移影响。
 
 当前仓库以 v2 为唯一主线：
 

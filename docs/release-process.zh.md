@@ -219,7 +219,7 @@ class Dbf < Formula
   desc "Configuration tool for Debian hosts"
   homepage "https://github.com/mofelee/debianform"
   version "0.1.0-beta.1"
-  license "..." # TODO: use the SPDX id from LICENSE.
+  license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
