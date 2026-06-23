@@ -97,9 +97,9 @@ tar -tzf dist/dbf_*_linux_amd64.tar.gz | rg 'README.md|docs/|examples/|LICENSE|C
 
 代码/文件：
 
-- [ ] 新增 `.github/workflows/release-dry-run.yml`。
-- [ ] workflow 支持 `workflow_dispatch`。
-- [ ] workflow 在 Ubuntu runner 上执行：
+- [x] 新增 `.github/workflows/release-dry-run.yml`。
+- [x] workflow 支持 `workflow_dispatch`。
+- [x] workflow 在 Ubuntu runner 上执行：
   - checkout
   - setup-go
   - `go vet ./...`
@@ -107,7 +107,7 @@ tar -tzf dist/dbf_*_linux_amd64.tar.gz | rg 'README.md|docs/|examples/|LICENSE|C
   - `goreleaser check`
   - `goreleaser release --snapshot --clean --skip publish`
   - 检查 `dist/checksums.txt` 和四个平台 tarball 存在
-- [ ] dry-run workflow 权限使用只读 `contents: read`。
+- [x] dry-run workflow 权限使用只读 `contents: read`。
 
 验收：
 
@@ -120,8 +120,9 @@ gh run watch
 
 需要你介入：
 
-- 允许 GitHub Actions 运行新 workflow。
-- 如果仓库未安装 GoReleaser action pinning 策略，需要确认是否固定 action commit SHA。
+- 需要允许 GitHub Actions 运行新 workflow。
+- dry-run workflow 未引入 GoReleaser action；GoReleaser 通过 `go install github.com/goreleaser/goreleaser/v2@v2.16.0`
+  安装，避免额外 action pinning 策略问题。
 
 ## Loop 3: curl installer
 
