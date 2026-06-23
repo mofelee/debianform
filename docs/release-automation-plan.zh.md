@@ -367,6 +367,13 @@ cosign verify-blob \
   checksums.txt
 ```
 
+已验证：`v0.0.0-supply-chain-test.1` 触发的 release workflow run `28012412654`
+通过。GitHub Release 包含 `checksums.txt.sigstore.json` 和四个平台 SBOM
+`*.sbom.spdx.json`；post-release verify job 已执行
+`cosign verify-blob --bundle checksums.txt.sigstore.json ... checksums.txt` 并返回
+`Verified OK`，同时 `gh attestation verify dbf_v0.0.0-supply-chain-test.1_linux_amd64.tar.gz
+--repo mofelee/debianform` 通过。
+
 需要你介入：
 
 - 已选择 cosign keyless；无需长期 GPG 私钥。
