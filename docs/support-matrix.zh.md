@@ -5,6 +5,8 @@
 文档和自动化验证入口，不等同于 stable/GA 兼容性承诺。
 DSL、CLI、state schema 和 plan JSON 的具体兼容规则见
 [compatibility policy](compatibility-policy.zh.md)。
+root-only SSH、权限边界、secret 处理和漏洞响应见
+[security model](security-model.zh.md)。
 
 ## 状态定义
 

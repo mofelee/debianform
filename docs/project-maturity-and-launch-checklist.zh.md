@@ -173,7 +173,7 @@
 - [x] 明确 state schema migration policy。
 - [x] 明确 plan JSON format compatibility policy。
 - [ ] release、安装、升级、回滚路径经过多个正式 release 验证。
-- [ ] 安全文档包含 root-only SSH 执行模型、权限边界、secret 处理和漏洞响应流程。
+- [x] 安全文档包含 root-only SSH 执行模型、权限边界、secret 处理和漏洞响应流程。
 - [x] 常见失败场景都有可执行恢复步骤。
 - [ ] 更广泛的 Debian 版本或架构支持策略。
 - [x] 常见故障排查覆盖 root SSH 不可用、权限不足和目标系统不受支持。
@@ -238,6 +238,7 @@
 - [x] [v2 state](v2-state.md) 文档存在。
 - [x] [v2 plan format](v2-plan-format.md) 文档存在。
 - [x] [support matrix](support-matrix.zh.md) 文档存在。
+- [x] [security model](security-model.zh.md) 文档存在。
 - [x] [beta feedback and triage](beta-feedback-triage.zh.md) 文档存在。
 - [x] 发布流程、自动化计划和快速操作手册存在。
 - [x] 面向新用户的一页 quickstart 已独立成文。
@@ -386,3 +387,17 @@
 
 - [x] stable 前需要成文的 backward compatibility、state migration 和 plan JSON
       compatibility policy 已经补齐；stable 仍需要多个 release 的执行记录和真实反馈。
+
+### 2026-06-23 安全模型文档补充
+
+本次检查命令：
+
+- [x] 核对 SECURITY、README 权限模型、v2 requirements secret 语义和 beta feedback triage。
+- [x] 新增 `docs/security-model.zh.md`，集中说明 root-only SSH 执行模型、权限边界、
+      secret 处理、state/lock、供应链校验和漏洞响应流程。
+- [x] SECURITY、README 和 support matrix 增加入口。
+
+结论：
+
+- [x] stable 前要求的安全文档已经补齐；真实漏洞响应能力仍需要通过后续 release 和
+      advisory 实战验证。

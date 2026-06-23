@@ -116,6 +116,7 @@ DSL、CLI、state schema 和 plan JSON 的 beta/stable 兼容规则见
 - [v2 state](docs/v2-state.md)
 - [support matrix](docs/support-matrix.zh.md)
 - [compatibility policy](docs/compatibility-policy.zh.md)
+- [security model](docs/security-model.zh.md)
 - [beta feedback and triage](docs/beta-feedback-triage.zh.md)
 - [v2 systemd service units](docs/v2-systemd-service-units.md)
 - [v2 implementation plan](docs/v2-implementation-plan.zh.md)
