@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -27,6 +28,7 @@ type Result struct {
 
 type Runner interface {
 	Run(ctx context.Context, host, script string) (Result, error)
+	RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (Result, error)
 	RunCommand(ctx context.Context, host, remoteCommand string) (Result, error)
 }
 
@@ -59,6 +61,22 @@ func (r *SSHRunner) Run(ctx context.Context, host, script string) (Result, error
 	args := append(r.SSHArgs(host), "sh", "-s")
 	cmd := exec.CommandContext(ctx, "ssh", args...)
 	cmd.Stdin = strings.NewReader(script)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	result := Result{Stdout: stdout.String(), Stderr: stderr.String()}
+	if err != nil {
+		return result, fmt.Errorf("ssh %s failed: %w: %s", host, err, strings.TrimSpace(result.Stderr))
+	}
+	return result, nil
+}
+
+func (r *SSHRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (Result, error) {
+	args := append(r.SSHArgs(host), remoteCommand)
+	cmd := exec.CommandContext(ctx, "ssh", args...)
+	cmd.Stdin = input
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout

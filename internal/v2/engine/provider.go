@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -253,24 +254,14 @@ func (p NativeProvider) applyFileLike(ctx context.Context, step Step, daemonRelo
 	if err != nil {
 		return nil, err
 	}
-	encoded := base64.StdEncoding.EncodeToString(content)
-	tmp := path + ".dbf-tmp"
-	lines := []string{
-		"set -eu",
-		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
-		"base64 -d > " + shellQuote(tmp) + " <<'__DBF_FILE__'\n" + encoded + "\n__DBF_FILE__",
-		"install -o " + shellQuote(stringDesired(step.Node, "owner")) +
-			" -g " + shellQuote(stringDesired(step.Node, "group")) +
-			" -m " + shellQuote(stringDesired(step.Node, "mode")) +
-			" " + shellQuote(tmp) + " " + shellQuote(path),
-		"rm -f -- " + shellQuote(tmp),
+	if err := p.writePathContent(ctx, step.Node.Host, path, content, stringDesired(step.Node, "owner"), stringDesired(step.Node, "group"), stringDesired(step.Node, "mode")); err != nil {
+		return nil, err
 	}
 	if daemonReload {
-		lines = append(lines, "systemctl daemon-reload")
-	}
-	_, err = p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
-	if err != nil {
-		return nil, err
+		_, err = p.Runner.Run(ctx, step.Node.Host, "systemctl daemon-reload\n")
+		if err != nil {
+			return nil, err
+		}
 	}
 	return map[string]any{"exists": true, "desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
 }
@@ -1571,20 +1562,42 @@ if [ -f %s ]; then base64 < %s | tr -d '\n'; echo; else echo ''; fi
 }
 
 func (p NativeProvider) writePathContent(ctx context.Context, host, path string, content []byte, owner, group, mode string) error {
-	encoded := base64.StdEncoding.EncodeToString(content)
-	tmp := path + ".dbf-tmp"
-	lines := []string{
+	script := strings.Join([]string{
 		"set -eu",
-		"mkdir -p \"$(dirname " + shellQuote(path) + ")\"",
-		"base64 -d > " + shellQuote(tmp) + " <<'__DBF_FILE__'\n" + encoded + "\n__DBF_FILE__",
+		"dest=" + shellQuote(path),
+		"mkdir -p \"$(dirname \"$dest\")\"",
+		"tmp=\"$(mktemp \"${dest}.dbf-tmp.XXXXXX\")\"",
+		"trap 'rm -f -- \"$tmp\"' EXIT",
+		"cat > \"$tmp\"",
 		"install -o " + shellQuote(owner) +
 			" -g " + shellQuote(group) +
 			" -m " + shellQuote(mode) +
-			" " + shellQuote(tmp) + " " + shellQuote(path),
-		"rm -f -- " + shellQuote(tmp),
+			" \"$tmp\" \"$dest\"",
+	}, "\n") + "\n"
+	_, err := p.Runner.RunInput(ctx, host, script, bytes.NewReader(content))
+	if err != nil {
+		return redactPayloadError(err)
 	}
-	_, err := p.Runner.Run(ctx, host, strings.Join(lines, "\n")+"\n")
-	return err
+	return nil
+}
+
+type redactedPayloadError struct {
+	err error
+}
+
+func (e redactedPayloadError) Error() string {
+	return "redacted payload command failed: <redacted>"
+}
+
+func (e redactedPayloadError) Unwrap() error {
+	return e.err
+}
+
+func redactPayloadError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return redactedPayloadError{err: err}
 }
 
 func (p NativeProvider) aptSourceOriginal(ctx context.Context, step Step) (map[string]any, error) {

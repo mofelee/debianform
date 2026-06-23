@@ -1219,31 +1219,46 @@ stdin 或 secret backend。
 
 代码：
 
-- [ ] runner API 支持 redacted payload 或专门的 secret payload 类型。
-- [ ] 文件写入优先使用不会把 secret 拼进 shell command 的通道，例如 stdin、sftp/scp 或
+- [x] runner API 支持 redacted payload 或专门的 secret payload 类型。
+- [x] 文件写入优先使用不会把 secret 拼进 shell command 的通道，例如 stdin、sftp/scp 或
       严格权限临时文件。
-- [ ] command preview 不包含 secret。
-- [ ] stdout/stderr 和错误包装不回显 secret。
-- [ ] apply 临时文件使用严格权限，并在成功和失败路径尽量清理。
-- [ ] systemd reload、nftables validate/activate 等后续 operation 继续使用原依赖顺序。
+- [x] command preview 不包含 secret。
+- [x] stdout/stderr 和错误包装不回显 secret。
+- [x] apply 临时文件使用严格权限，并在成功和失败路径尽量清理。
+- [x] systemd reload、nftables validate/activate 等后续 operation 继续使用原依赖顺序。
 
 测试：
 
-- [ ] fake runner 记录的 command preview 不含 secret。
-- [ ] provider error 不含 secret。
-- [ ] stdout/stderr redaction 覆盖成功和失败路径。
-- [ ] 文件写入仍成功。
-- [ ] systemd unit reload 等后续 operation 不受影响。
+- [x] fake runner 记录的 command preview 不含 secret。
+- [x] provider error 不含 secret。
+- [x] stdout/stderr redaction 覆盖成功和失败路径。
+- [x] 文件写入仍成功。
+- [x] systemd unit reload 等后续 operation 不受影响。
 
 示例/文档：
 
-- [ ] 文档补充 runner 层 redaction 边界。
-- [ ] 如有调试输出示例，确认只展示 redacted preview。
+- [x] 文档补充 runner 层 redaction 边界。
+- [x] 如有调试输出示例，确认只展示 redacted preview。
 
 验收：
 
-- [ ] write-only secret 在执行通道中也满足“不进入日志和 preview”。
-- [ ] `make test` 通过；相关集成测试记录是否覆盖真实 SSH runner。
+- [x] write-only secret 在执行通道中也满足“不进入日志和 preview”。
+- [x] `make test` 通过；相关集成测试记录是否覆盖真实 SSH runner。
+
+实现记录：
+
+- runner API 新增 `RunInput(ctx, host, remoteCommand, input)`，用于把 payload 作为 stdin
+  传给远端命令。`SSHRunner` 对该路径执行远端命令并把输入连接到 stdin；普通 `Run` 和
+  `RunCommand` 保持原语义。
+- file-like provider 写入统一走 `writePathContent`，该 helper 现在使用 `RunInput`，命令脚本
+  只包含目标路径、owner/group/mode 和 `mktemp`/`trap` 清理逻辑，文件内容不再以明文或
+  base64 形式拼进 shell command。
+- payload 写入失败会包装为固定 redacted error；测试覆盖 runner 返回包含 secret 的错误时
+  provider error 不回显 payload。
+- systemd unit 写入仍会在内容写入后单独执行 `systemctl daemon-reload`，nftables validate
+  和 activate 操作仍由 ResourceGraph operation 依赖关系触发，依赖顺序不变。
+- 当前测试使用 fake/local runner 覆盖 stdin payload、命令预览和错误 redaction；没有新增
+  真实 SSH 集成环境覆盖。
 
 ### Loop 11：`secrets.file` 语法糖化
 

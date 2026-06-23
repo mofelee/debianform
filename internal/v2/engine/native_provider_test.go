@@ -3,7 +3,9 @@ package engine
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,17 +17,43 @@ import (
 
 type recordingRunner struct {
 	outputs []Result
+	errors  []error
 	scripts []string
+	inputs  []string
 }
 
 func (r *recordingRunner) Run(ctx context.Context, host, script string) (Result, error) {
 	r.scripts = append(r.scripts, script)
+	return r.next()
+}
+
+func (r *recordingRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (Result, error) {
+	data, err := io.ReadAll(input)
+	if err != nil {
+		return Result{}, err
+	}
+	r.scripts = append(r.scripts, remoteCommand)
+	r.inputs = append(r.inputs, string(data))
+	return r.next()
+}
+
+func (r *recordingRunner) next() (Result, error) {
 	if len(r.outputs) == 0 {
-		return Result{}, nil
+		if len(r.errors) == 0 {
+			return Result{}, nil
+		}
+		err := r.errors[0]
+		r.errors = r.errors[1:]
+		return Result{}, err
 	}
 	out := r.outputs[0]
 	r.outputs = r.outputs[1:]
-	return out, nil
+	if len(r.errors) == 0 {
+		return out, nil
+	}
+	err := r.errors[0]
+	r.errors = r.errors[1:]
+	return out, err
 }
 
 func (r *recordingRunner) RunCommand(ctx context.Context, host, remoteCommand string) (Result, error) {
@@ -96,7 +124,7 @@ func TestNativeProviderWriteOnlyFileUsesVersionForPlan(t *testing.T) {
 
 func TestNativeProviderWriteOnlyFileApplyUsesProviderPayload(t *testing.T) {
 	node := writeOnlyFileNode("v1")
-	runner := &recordingRunner{}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "not-a-real-ephemeral-token", Stderr: "not-a-real-ephemeral-token"}}}
 	provider := NewNativeProvider(runner)
 	observed, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate})
 	if err != nil {
@@ -105,9 +133,31 @@ func TestNativeProviderWriteOnlyFileApplyUsesProviderPayload(t *testing.T) {
 	if strings.Contains(anyMapText(observed), "not-a-real-ephemeral-token") {
 		t.Fatalf("observed leaked write-only content: %#v", observed)
 	}
-	encoded := base64.StdEncoding.EncodeToString([]byte("not-a-real-ephemeral-token"))
-	if len(runner.scripts) == 0 || !strings.Contains(runner.scripts[0], encoded) {
-		t.Fatalf("apply script did not receive write-only payload:\n%s", strings.Join(runner.scripts, "\n---\n"))
+	if len(runner.inputs) == 0 || runner.inputs[0] != "not-a-real-ephemeral-token" {
+		t.Fatalf("apply stdin = %#v, want write-only payload", runner.inputs)
+	}
+	if strings.Contains(strings.Join(runner.scripts, "\n---\n"), "not-a-real-ephemeral-token") ||
+		strings.Contains(strings.Join(runner.scripts, "\n---\n"), base64.StdEncoding.EncodeToString([]byte("not-a-real-ephemeral-token"))) {
+		t.Fatalf("apply script leaked write-only payload:\n%s", strings.Join(runner.scripts, "\n---\n"))
+	}
+	if !strings.Contains(runner.scripts[0], "mktemp") || !strings.Contains(runner.scripts[0], "trap 'rm -f --") {
+		t.Fatalf("apply script missing controlled temp file cleanup:\n%s", runner.scripts[0])
+	}
+}
+
+func TestNativeProviderWriteOnlyFileErrorRedactsPayload(t *testing.T) {
+	node := writeOnlyFileNode("v1")
+	runner := &recordingRunner{errors: []error{errors.New("remote stderr not-a-real-ephemeral-token")}}
+	provider := NewNativeProvider(runner)
+	_, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate})
+	if err == nil {
+		t.Fatal("apply succeeded, want injected runner failure")
+	}
+	if strings.Contains(err.Error(), "not-a-real-ephemeral-token") {
+		t.Fatalf("error leaked payload: %v", err)
+	}
+	if !strings.Contains(err.Error(), "<redacted>") {
+		t.Fatalf("error = %v, want redacted marker", err)
 	}
 }
 
@@ -223,9 +273,12 @@ func TestNativeProviderAPTSourceFilePreservesOriginalAndRestores(t *testing.T) {
 	if observed["original_content"] != oldContent || observed["original_mode"] != "644" {
 		t.Fatalf("apply observed original = %#v", observed)
 	}
+	if len(runner.inputs) == 0 || runner.inputs[len(runner.inputs)-1] != newContent {
+		t.Fatalf("apply stdin = %#v, want new content", runner.inputs)
+	}
 	applied := runner.scripts[len(runner.scripts)-1]
-	if !strings.Contains(applied, base64.StdEncoding.EncodeToString([]byte(newContent))) {
-		t.Fatalf("apply script should write new content:\n%s", applied)
+	if strings.Contains(applied, newContent) || strings.Contains(applied, base64.StdEncoding.EncodeToString([]byte(newContent))) {
+		t.Fatalf("apply script leaked new content:\n%s", applied)
 	}
 
 	prior := &v2state.Resource{
@@ -250,8 +303,11 @@ func TestNativeProviderAPTSourceFilePreservesOriginalAndRestores(t *testing.T) {
 		t.Fatalf("restore should write original content and refresh apt cache, scripts = %#v", runner.scripts)
 	}
 	restored := runner.scripts[len(runner.scripts)-2]
-	if !strings.Contains(restored, base64.StdEncoding.EncodeToString([]byte(oldContent))) {
-		t.Fatalf("destroy restore script should write original content:\n%s", restored)
+	if len(runner.inputs) == 0 || runner.inputs[len(runner.inputs)-1] != oldContent {
+		t.Fatalf("restore stdin = %#v, want original content", runner.inputs)
+	}
+	if strings.Contains(restored, oldContent) || strings.Contains(restored, base64.StdEncoding.EncodeToString([]byte(oldContent))) {
+		t.Fatalf("destroy restore script leaked original content:\n%s", restored)
 	}
 	if !strings.Contains(runner.scripts[len(runner.scripts)-1], "apt-get update") {
 		t.Fatalf("destroy restore should refresh apt cache:\n%s", runner.scripts[len(runner.scripts)-1])

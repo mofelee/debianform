@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,6 +24,16 @@ type localRunner struct{}
 func (localRunner) Run(ctx context.Context, host, script string) (v2engine.Result, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-s")
 	cmd.Stdin = bytes.NewBufferString(script)
+	return localRunner{}.run(cmd)
+}
+
+func (localRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (v2engine.Result, error) {
+	cmd := exec.CommandContext(ctx, "sh", "-c", remoteCommand)
+	cmd.Stdin = input
+	return localRunner{}.run(cmd)
+}
+
+func (localRunner) run(cmd *exec.Cmd) (v2engine.Result, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout

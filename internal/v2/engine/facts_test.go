@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -56,6 +57,10 @@ type factRunner struct {
 }
 
 func (r factRunner) Run(ctx context.Context, host, script string) (Result, error) {
+	return Result{Stdout: r.stdout}, nil
+}
+
+func (r factRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (Result, error) {
 	return Result{Stdout: r.stdout}, nil
 }
 

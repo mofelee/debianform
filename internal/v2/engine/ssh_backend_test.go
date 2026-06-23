@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,6 +21,16 @@ type localShellRunner struct{}
 func (localShellRunner) Run(ctx context.Context, host, script string) (Result, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-s")
 	cmd.Stdin = strings.NewReader(script)
+	return localShellRunner{}.run(cmd)
+}
+
+func (localShellRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (Result, error) {
+	cmd := exec.CommandContext(ctx, "sh", "-c", remoteCommand)
+	cmd.Stdin = input
+	return localShellRunner{}.run(cmd)
+}
+
+func (localShellRunner) run(cmd *exec.Cmd) (Result, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
