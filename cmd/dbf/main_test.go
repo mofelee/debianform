@@ -1046,6 +1046,75 @@ exit 1
 	}
 }
 
+func TestCheckDockerComposeProjectStoppedDriftReturnsError(t *testing.T) {
+	fakeBin := t.TempDir()
+	sshPath := filepath.Join(fakeBin, "ssh")
+	script := `#!/bin/sh
+input="$(cat)"
+case "$input" in
+  *"printf 'hostname=%s\n'"*)
+    printf 'hostname=compose1\narchitecture=amd64\ncodename=trixie\n'
+    exit 0
+    ;;
+  *"/var/lib/debianform/state/compose1.json"*)
+    exit 0
+    ;;
+  *"/etc/apt/keyrings/docker.asc"*)
+    printf 'file\nroot\nroot\n644\n1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570\n'
+    exit 0
+    ;;
+  *"/etc/apt/sources.list.d/docker_official.sources"*)
+    printf 'file\nroot\nroot\n644\n61246a32aa079ddf3d8a57d922a7fc311d82f23379bfe0bec65f7c685c141e97\n'
+    exit 0
+    ;;
+  *"dpkg-query"*"docker-ce"*|*"dpkg-query"*"docker-ce-cli"*|*"dpkg-query"*"containerd.io"*|*"dpkg-query"*"docker-buildx-plugin"*|*"dpkg-query"*"docker-compose-plugin"*)
+    printf 'install ok installed\t1.0\n'
+    exit 0
+    ;;
+  *"systemctl is-enabled 'docker.service'"*)
+    printf 'enabled=enabled\nactive=active\n'
+    exit 0
+    ;;
+  *"/opt/app/compose.yaml"*)
+    printf 'file\nroot\nroot\n644\nd1f744f61ab84b59402583765d65b4d6b984fd44c128388ac3ea0a07ef123d0f\n'
+    exit 0
+    ;;
+  *"/opt/app/.env"*)
+    printf 'file\nroot\nroot\n600\n13960174065f5092768d3f5b11c1acad09272142febb757484b9709779b52588\n'
+    exit 0
+    ;;
+  *"/opt/app"*)
+    printf 'dir\nroot\nroot\n755\n\n'
+    exit 0
+    ;;
+  *"'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'ps' '--format' 'json'"*)
+    printf '[{"Name":"web","State":"exited"}]\n'
+    exit 0
+    ;;
+esac
+printf 'unexpected fake ssh input:\n%s\n' "$input" >&2
+exit 1
+`
+	if err := os.WriteFile(sshPath, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	output := captureStdout(t, func() {
+		err := run([]string{"check", "-f", "../../examples/v2-docker-compose.dbf.hcl"})
+		if err == nil || !strings.Contains(err.Error(), "remote state does not match v2 configuration") {
+			t.Fatalf("docker compose check error = %v, want drift failure", err)
+		}
+	})
+	if !strings.Contains(output, `host.compose1.docker.compose["app"].project`) ||
+		!strings.Contains(output, "converge docker compose project app to running") {
+		t.Fatalf("docker compose check output missing project drift:\n%s", output)
+	}
+	if strings.Contains(output, "not-a-real-preview-secret") {
+		t.Fatalf("docker compose check output leaked env file content:\n%s", output)
+	}
+}
+
 func TestParallelFlagIsApplyOnlyAndPositive(t *testing.T) {
 	err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "2"})
 	if err == nil || !strings.Contains(err.Error(), "--parallel is only supported for v2 apply") {

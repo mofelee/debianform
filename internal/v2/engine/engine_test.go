@@ -528,6 +528,47 @@ func TestDockerComposeMemoryApplyDoesNotLeakEnvFileContent(t *testing.T) {
 	}
 }
 
+func TestDockerComposeMemoryApplyIsIdempotent(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-compose.dbf.hcl")
+	backend := NewMemoryBackend()
+	provider := NewMemoryProvider()
+	engine := Engine{Backend: backend, Provider: provider}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{Host: "compose1"}); err != nil {
+		t.Fatal(err)
+	}
+	next, err := engine.Plan(context.Background(), program, resourceGraph, Options{Host: "compose1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(next.Steps) != 0 || next.Summary.Create != 0 || next.Summary.Update != 0 || next.Summary.Delete != 0 || next.Summary.Operations != 0 {
+		t.Fatalf("second compose plan should be no-op, got steps=%#v summary=%#v", next.Steps, next.Summary)
+	}
+}
+
+func TestDockerComposeMemoryCheckDetectsStoppedProjectDrift(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-compose.dbf.hcl")
+	provider := NewMemoryProvider()
+	provider.Observed[`host.compose1.docker.compose["app"].project`] = Observed{Exists: true, DesiredDigest: "drifted", Values: map[string]any{
+		"exists": true,
+		"state":  "stopped",
+		"services": map[string]any{
+			"total":   1,
+			"running": 0,
+			"stopped": 1,
+		},
+	}}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	plan, err := engine.Plan(context.Background(), program, resourceGraph, Options{Host: "compose1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasStepAction(plan, `host.compose1.docker.compose["app"].project`, ActionUpdate) {
+		t.Fatalf("compose stopped drift plan missing project update: %#v", plan.Steps)
+	}
+}
+
 func TestDockerEngineMemoryCheckDetectsPackageAndServiceDrift(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/v2-docker-minimal.dbf.hcl")
 	provider := NewMemoryProvider()

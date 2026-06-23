@@ -943,6 +943,136 @@ func TestNativeProviderDockerComposeValidateOperation(t *testing.T) {
 	}
 }
 
+func TestNativeProviderDockerComposeProjectPlanStates(t *testing.T) {
+	tests := []struct {
+		name   string
+		state  string
+		stdout string
+		prior  *v2state.Resource
+		want   string
+	}{
+		{name: "running no-op", state: "running", stdout: `[{"Name":"web","State":"running"}]`, prior: &v2state.Resource{Ownership: "managed"}, want: ActionNoOp},
+		{name: "stopped drift", state: "running", stdout: `[{"Name":"web","State":"exited"}]`, prior: &v2state.Resource{Ownership: "managed"}, want: ActionUpdate},
+		{name: "absent no-op", state: "absent", stdout: `[]`, want: ActionNoOp},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := &recordingRunner{outputs: []Result{{Stdout: tt.stdout}}}
+			provider := NewNativeProvider(runner)
+			node := dockerComposeProjectNode(tt.state)
+
+			got, err := provider.Plan(context.Background(), node, tt.prior)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Action != tt.want {
+				t.Fatalf("plan action = %q, want %q; observed=%#v", got.Action, tt.want, got.Observed)
+			}
+		})
+	}
+}
+
+func TestNativeProviderDockerComposeProjectPlanDesiredChangeUpdates(t *testing.T) {
+	runner := &recordingRunner{outputs: []Result{{Stdout: `[{"Name":"web","State":"running"}]`}}}
+	provider := NewNativeProvider(runner)
+	node := dockerComposeProjectNode("running")
+	priorDesired := cloneMap(node.Desired)
+	priorDesired["pull"] = "never"
+	node.Desired["pull"] = "always"
+	prior := &v2state.Resource{Ownership: "managed", DesiredDigest: v2state.DesiredDigest(priorDesired)}
+
+	got, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionUpdate {
+		t.Fatalf("plan action = %q, want update", got.Action)
+	}
+}
+
+func TestNativeProviderDockerComposeProjectApplyRunningCommand(t *testing.T) {
+	runner := &recordingRunner{outputs: []Result{{Stdout: `[{"Name":"web","State":"running"}]`}}}
+	provider := NewNativeProvider(runner)
+	node := dockerComposeProjectNode("running")
+
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionUpdate}); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) < 2 {
+		t.Fatalf("scripts = %#v, want apply and read", runner.scripts)
+	}
+	applied := runner.scripts[0]
+	for _, want := range []string{
+		"'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'up' '-d'",
+		"'--pull' 'missing'",
+	} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("running compose command missing %q:\n%s", want, applied)
+		}
+	}
+}
+
+func TestNativeProviderDockerComposeProjectApplyStoppedAndAbsentCommands(t *testing.T) {
+	tests := []struct {
+		state string
+		want  string
+	}{
+		{state: "stopped", want: "'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'stop'"},
+		{state: "absent", want: "'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'down'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.state, func(t *testing.T) {
+			runner := &recordingRunner{outputs: []Result{{Stdout: "[]"}}}
+			provider := NewNativeProvider(runner)
+			node := dockerComposeProjectNode(tt.state)
+
+			if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionUpdate}); err != nil {
+				t.Fatal(err)
+			}
+			if len(runner.scripts) < 1 || !strings.Contains(runner.scripts[0], tt.want) {
+				t.Fatalf("%s compose command = %#v, want %q", tt.state, runner.scripts, tt.want)
+			}
+		})
+	}
+}
+
+func TestNativeProviderDockerComposeProjectApplyFlags(t *testing.T) {
+	runner := &recordingRunner{outputs: []Result{{Stdout: `[{"Name":"web","State":"running"}]`}}}
+	provider := NewNativeProvider(runner)
+	node := dockerComposeProjectNode("running")
+	node.Desired["pull"] = "always"
+	node.Desired["recreate"] = "always"
+	node.Desired["remove_orphans"] = true
+
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionUpdate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[0]
+	for _, want := range []string{"'--pull' 'always'", "'--force-recreate'", "'--remove-orphans'"} {
+		if !strings.Contains(applied, want) {
+			t.Fatalf("compose flags command missing %q:\n%s", want, applied)
+		}
+	}
+}
+
+func TestNativeProviderDockerComposeProjectDestroyRunsDown(t *testing.T) {
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+	node := dockerComposeProjectNode("running")
+	prior := &v2state.Resource{
+		Host:    node.Host,
+		Kind:    node.Kind,
+		Desired: cloneMap(node.Desired),
+	}
+
+	if err := provider.Destroy(context.Background(), Step{Address: node.Address, Prior: prior}); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 1 || !strings.Contains(runner.scripts[0], "'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'down'") {
+		t.Fatalf("destroy compose command = %#v, want docker compose down", runner.scripts)
+	}
+}
+
 func TestSSHRunnerExpandsHomeIdentityFile(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -963,6 +1093,24 @@ func TestSSHRunnerExpandsHomeIdentityFile(t *testing.T) {
 		}
 	}
 	t.Fatalf("ssh args %q do not contain expanded identity file %q", strings.Join(args, " "), want)
+}
+
+func dockerComposeProjectNode(state string) graph.Node {
+	return graph.Node{
+		Address: `host.compose1.docker.compose["app"].project`,
+		Host:    "compose1",
+		Kind:    "docker_compose_project",
+		Desired: map[string]any{
+			"directory":      "/opt/app",
+			"project":        "app",
+			"files":          []string{"/opt/app/compose.yaml"},
+			"env_files":      []string{"/opt/app/.env"},
+			"state":          state,
+			"pull":           "missing",
+			"recreate":       "auto",
+			"remove_orphans": false,
+		},
+	}
 }
 
 func writeOnlyFileNode(version string) graph.Node {

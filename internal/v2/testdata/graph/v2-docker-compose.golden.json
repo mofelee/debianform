@@ -183,6 +183,53 @@
     },
     {
       "host": "compose1",
+      "address": "host.compose1.docker.compose[\"app\"].project",
+      "kind": "docker_compose_project",
+      "summary": "converge docker compose project app",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
+      },
+      "desired": {
+        "directory": "/opt/app",
+        "env_files": [
+          "/opt/app/.env"
+        ],
+        "files": [
+          "/opt/app/compose.yaml"
+        ],
+        "name": "app",
+        "project": "app",
+        "pull": "missing",
+        "recreate": "auto",
+        "remove_orphans": false,
+        "state": "running"
+      },
+      "provider_type": "docker_compose_project",
+      "provider_address": "docker_compose_project.compose1_app",
+      "provider_payload": {
+        "directory": "/opt/app",
+        "env_files": [
+          "/opt/app/.env"
+        ],
+        "files": [
+          "/opt/app/compose.yaml"
+        ],
+        "name": "app",
+        "project": "app",
+        "pull": "missing",
+        "recreate": "auto",
+        "remove_orphans": false,
+        "state": "running"
+      },
+      "depends_on": [
+        "host.compose1.docker.compose[\"app\"].validate",
+        "host.compose1.docker.service[\"docker\"]"
+      ]
+    },
+    {
+      "host": "compose1",
       "address": "host.compose1.docker.package[\"containerd.io\"]",
       "kind": "package",
       "summary": "install docker package containerd.io",

@@ -212,8 +212,8 @@ func TestDockerComposePlanJSONGolden(t *testing.T) {
 	got := string(data) + "\n"
 	assertGolden(t, "../testdata/plan/v2-docker-compose.golden.json", got)
 
-	if doc.Summary.Create != 11 {
-		t.Fatalf("create count = %d, want 11", doc.Summary.Create)
+	if doc.Summary.Create != 12 {
+		t.Fatalf("create count = %d, want 12", doc.Summary.Create)
 	}
 	if doc.Summary.Operations != 2 {
 		t.Fatalf("operations = %d, want 2", doc.Summary.Operations)
@@ -226,6 +226,9 @@ func TestDockerComposePlanJSONGolden(t *testing.T) {
 	}
 	if !hasChange(doc, `host.compose1.docker.compose["app"].env_file["app"]`) {
 		t.Fatalf("compose env file change missing")
+	}
+	if !hasChange(doc, `host.compose1.docker.compose["app"].project`) {
+		t.Fatalf("compose project change missing")
 	}
 	if !hasOperation(doc, `host.compose1.docker.compose["app"].validate`) {
 		t.Fatalf("compose validate operation missing: %#v", doc.Operations)
@@ -254,6 +257,7 @@ func TestDockerComposePlanTextGolden(t *testing.T) {
 	assertGolden(t, "../testdata/plan/v2-docker-compose.golden.txt", text.String())
 	for _, want := range []string{
 		`host.compose1.docker.compose["app"].file`,
+		`host.compose1.docker.compose["app"].project`,
 		`+     image: nginx:1.27-alpine`,
 		`host.compose1.docker.compose["app"].validate`,
 		`docker compose -p app -f /opt/app/compose.yaml config`,

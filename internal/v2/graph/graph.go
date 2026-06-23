@@ -1722,7 +1722,11 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string) 
 		}
 	}
 
-	composeNodes, composeOperations, composeValidates, err := dockerComposeGraph(host, out.PackageAddresses, serviceAddress)
+	composeServiceAddress := serviceAddress
+	if !installPackages {
+		composeServiceAddress = ""
+	}
+	composeNodes, composeOperations, composeValidates, err := dockerComposeGraph(host, out.PackageAddresses, serviceAddress, composeServiceAddress)
 	if err != nil {
 		return dockerEngineGraph{}, err
 	}
@@ -1775,7 +1779,7 @@ func dockerDaemonGraph(host ir.HostSpec) (string, Node, Operation, error) {
 	return address, node, operation, nil
 }
 
-func dockerComposeGraph(host ir.HostSpec, packageAddresses []string, serviceAddress string) ([]Node, []Operation, map[string]string, error) {
+func dockerComposeGraph(host ir.HostSpec, packageAddresses []string, fileServiceAddress string, projectServiceAddress string) ([]Node, []Operation, map[string]string, error) {
 	if host.Docker == nil || len(host.Docker.Composes) == 0 {
 		return nil, nil, map[string]string{}, nil
 	}
@@ -1813,8 +1817,8 @@ func dockerComposeGraph(host ir.HostSpec, packageAddresses []string, serviceAddr
 		if len(packageAddresses) > 0 {
 			engineDeps = append(engineDeps, packageAddresses...)
 		}
-		if serviceAddress != "" {
-			engineDeps = append(engineDeps, serviceAddress)
+		if fileServiceAddress != "" {
+			engineDeps = append(engineDeps, fileServiceAddress)
 		}
 		fileDeps := dedupeStrings(append([]string{directoryAddress}, engineDeps...))
 
@@ -1843,8 +1847,50 @@ func dockerComposeGraph(host ir.HostSpec, packageAddresses []string, serviceAddr
 			CommandPreview: dockerComposeConfigCommand(compose),
 			Source:         compose.Source,
 		})
+
+		projectAddress := prefix + ".project"
+		projectDeps := []string{validateAddress}
+		if projectServiceAddress != "" {
+			projectDeps = append(projectDeps, projectServiceAddress)
+		}
+		projectDesired := dockerComposeProjectDesired(compose)
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         projectAddress,
+			Kind:            "docker_compose_project",
+			Summary:         "converge docker compose project " + compose.Project,
+			Source:          compose.Source,
+			Desired:         projectDesired,
+			DependsOn:       dedupeStrings(projectDeps),
+			ProviderType:    "docker_compose_project",
+			ProviderAddress: "docker_compose_project." + providerName(host.Name, name),
+			ProviderPayload: projectDesired,
+		})
 	}
 	return nodes, operations, validateAddresses, nil
+}
+
+func dockerComposeProjectDesired(compose ir.DockerComposeSpec) map[string]any {
+	desired := map[string]any{
+		"name":           compose.Name,
+		"directory":      compose.Directory,
+		"project":        compose.Project,
+		"state":          compose.State,
+		"pull":           compose.Pull,
+		"recreate":       compose.Recreate,
+		"remove_orphans": compose.RemoveOrphans,
+	}
+	if compose.File != nil {
+		desired["files"] = []string{compose.File.Path}
+	}
+	if len(compose.EnvFiles) > 0 {
+		envFiles := make([]string, 0, len(compose.EnvFiles))
+		for _, label := range sortedKeys(compose.EnvFiles) {
+			envFiles = append(envFiles, compose.EnvFiles[label].Path)
+		}
+		desired["env_files"] = envFiles
+	}
+	return desired
 }
 
 func dockerComposeFileNode(hostName, address, composeName string, item ir.DockerComposeFileSpec, summary string, deps []string) (string, Node) {

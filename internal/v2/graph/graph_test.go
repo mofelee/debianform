@@ -250,6 +250,7 @@ func TestCompileDockerComposeResourceGraphGolden(t *testing.T) {
 	composeFileAddress := `host.compose1.docker.compose["app"].file`
 	envFileAddress := `host.compose1.docker.compose["app"].env_file["app"]`
 	validateAddress := `host.compose1.docker.compose["app"].validate`
+	projectAddress := `host.compose1.docker.compose["app"].project`
 	serviceAddress := `host.compose1.docker.service["docker"]`
 	packageAddress := `host.compose1.docker.package["docker-compose-plugin"]`
 
@@ -295,6 +296,18 @@ func TestCompileDockerComposeResourceGraphGolden(t *testing.T) {
 			t.Fatalf("validate deps=%#v triggered_by=%#v, want %q", validate.DependsOn, validate.TriggeredBy, want)
 		}
 	}
+	project := nodeFor(resourceGraph, projectAddress)
+	if project == nil {
+		t.Fatal("compose project node missing")
+	}
+	if project.Kind != "docker_compose_project" || project.Desired["state"] != "running" || project.Desired["pull"] != "missing" {
+		t.Fatalf("compose project node = %#v", project)
+	}
+	for _, want := range []string{validateAddress, serviceAddress} {
+		if !containsString(project.DependsOn, want) {
+			t.Fatalf("project deps = %#v, want %q", project.DependsOn, want)
+		}
+	}
 }
 
 func TestCompileDockerComposePackageSourceNoneSkipsPackageDependencies(t *testing.T) {
@@ -330,6 +343,16 @@ host "server1" {
 	}
 	if !containsString(composeFile.DependsOn, `host.server1.docker.service["docker"]`) {
 		t.Fatalf("source none compose file deps = %#v, want docker service", composeFile.DependsOn)
+	}
+	project := nodeFor(resourceGraph, `host.server1.docker.compose["app"].project`)
+	if project == nil {
+		t.Fatal("compose project node missing")
+	}
+	if containsString(project.DependsOn, `host.server1.docker.service["docker"]`) {
+		t.Fatalf("source none compose project deps = %#v, want no docker service dependency", project.DependsOn)
+	}
+	if !containsString(project.DependsOn, `host.server1.docker.compose["app"].validate`) {
+		t.Fatalf("source none compose project deps = %#v, want validate dependency", project.DependsOn)
 	}
 }
 

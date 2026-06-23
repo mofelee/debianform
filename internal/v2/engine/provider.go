@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -60,6 +61,8 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *v2stat
 		return p.planAuthorizedKey(ctx, node, prior)
 	case "service":
 		return p.planService(ctx, node, prior)
+	case "docker_compose_project":
+		return p.planDockerComposeProject(ctx, node, prior)
 	default:
 		return ProviderPlan{}, fmt.Errorf("%s unsupported resource kind %q", node.Address, node.Kind)
 	}
@@ -101,6 +104,8 @@ func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, e
 		return p.applyAuthorizedKey(ctx, step)
 	case "service":
 		return p.applyService(ctx, step)
+	case "docker_compose_project":
+		return p.applyDockerComposeProject(ctx, step)
 	default:
 		return nil, fmt.Errorf("%s unsupported resource kind %q", step.Address, step.Node.Kind)
 	}
@@ -180,6 +185,15 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 			return nil
 		}
 		_, err := p.Runner.Run(ctx, host, "systemctl disable --now "+shellQuote(name)+" 2>/dev/null || true\n")
+		return err
+	case "docker_compose_project":
+		node := graph.Node{Address: step.Address, Host: host, Desired: cloneMap(desired)}
+		node.Desired["state"] = "absent"
+		command, err := dockerComposeProjectCommand(node)
+		if err != nil {
+			return err
+		}
+		_, err = p.Runner.Run(ctx, host, command)
 		return err
 	default:
 		return fmt.Errorf("%s unsupported prior kind %q", step.Address, step.Prior.Kind)
@@ -1434,6 +1448,190 @@ func (p NativeProvider) applyService(ctx context.Context, step Step) (map[string
 		return nil, err
 	}
 	return map[string]any{"desired_digest": v2state.DesiredDigest(step.Node.Desired)}, nil
+}
+
+func (p NativeProvider) planDockerComposeProject(ctx context.Context, node graph.Node, prior *v2state.Resource) (ProviderPlan, error) {
+	observed, err := p.readDockerComposeProject(ctx, node)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	want := stringDesired(node, "state")
+	actual, _ := observed["state"].(string)
+	project := stringDesired(node, "project")
+	if want == "absent" {
+		if actual == "absent" {
+			return absentInSyncPlan(prior, "already absent docker compose project "+project, observed), nil
+		}
+		return ProviderPlan{Action: ActionDelete, Summary: "remove docker compose project " + project, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if actual != want {
+		return ProviderPlan{Action: ActionUpdate, Summary: "converge docker compose project " + project + " to " + want, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	desiredDigest := v2state.DesiredDigest(node.Desired)
+	if prior != nil && prior.DesiredDigest != "" && prior.DesiredDigest != desiredDigest {
+		observed = cloneMap(observed)
+		observed["desired_digest"] = prior.DesiredDigest
+		return ProviderPlan{Action: ActionUpdate, Summary: "update docker compose project " + project, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for docker compose project "+project, observed), nil
+}
+
+func (p NativeProvider) applyDockerComposeProject(ctx context.Context, step Step) (map[string]any, error) {
+	command, err := dockerComposeProjectCommand(step.Node)
+	if err != nil {
+		return nil, err
+	}
+	_, err = p.Runner.Run(ctx, step.Node.Host, command)
+	if err != nil {
+		return nil, err
+	}
+	observed, err := p.readDockerComposeProject(ctx, step.Node)
+	if err != nil {
+		return nil, err
+	}
+	observed["desired_digest"] = v2state.DesiredDigest(step.Node.Desired)
+	return observed, nil
+}
+
+func (p NativeProvider) readDockerComposeProject(ctx context.Context, node graph.Node) (map[string]any, error) {
+	result, err := p.Runner.Run(ctx, node.Host, dockerComposeProjectPSCommand(node))
+	if err != nil {
+		return nil, err
+	}
+	return summarizeDockerComposePS(result.Stdout), nil
+}
+
+func dockerComposeProjectPSCommand(node graph.Node) string {
+	args := dockerComposeBaseArgs(node)
+	args = append(args, "ps", "--format", "json")
+	return strings.Join(shellQuoteArgs(args), " ") + " 2>/dev/null || true\n"
+}
+
+func dockerComposeProjectCommand(node graph.Node) (string, error) {
+	args := dockerComposeBaseArgs(node)
+	switch stringDesired(node, "state") {
+	case "running":
+		args = append(args, "up", "-d")
+		args = append(args, dockerComposePullArgs(stringDesired(node, "pull"))...)
+		args = append(args, dockerComposeRecreateArgs(stringDesired(node, "recreate"))...)
+		if boolDesired(node, "remove_orphans") {
+			args = append(args, "--remove-orphans")
+		}
+	case "stopped":
+		args = append(args, "stop")
+	case "absent":
+		args = append(args, "down")
+		if boolDesired(node, "remove_orphans") {
+			args = append(args, "--remove-orphans")
+		}
+	default:
+		return "", fmt.Errorf("%s unsupported docker compose state %q", node.Address, stringDesired(node, "state"))
+	}
+	return strings.Join(shellQuoteArgs(args), " ") + "\n", nil
+}
+
+func dockerComposeBaseArgs(node graph.Node) []string {
+	args := []string{"docker", "compose", "-p", stringDesired(node, "project")}
+	for _, file := range stringListDesired(node, "files") {
+		args = append(args, "-f", file)
+	}
+	return args
+}
+
+func dockerComposePullArgs(value string) []string {
+	switch value {
+	case "never":
+		return []string{"--pull", "never"}
+	case "always":
+		return []string{"--pull", "always"}
+	default:
+		return []string{"--pull", "missing"}
+	}
+}
+
+func dockerComposeRecreateArgs(value string) []string {
+	switch value {
+	case "always":
+		return []string{"--force-recreate"}
+	case "never":
+		return []string{"--no-recreate"}
+	default:
+		return nil
+	}
+}
+
+func shellQuoteArgs(args []string) []string {
+	out := make([]string, 0, len(args))
+	for _, arg := range args {
+		out = append(out, shellQuote(arg))
+	}
+	return out
+}
+
+func summarizeDockerComposePS(stdout string) map[string]any {
+	total := 0
+	running := 0
+	stopped := 0
+	for _, state := range dockerComposePSStates(stdout) {
+		total++
+		if strings.EqualFold(state, "running") {
+			running++
+		} else {
+			stopped++
+		}
+	}
+	state := "absent"
+	if total > 0 && running == total {
+		state = "running"
+	} else if total > 0 {
+		state = "stopped"
+	}
+	return map[string]any{
+		"exists":   total > 0,
+		"state":    state,
+		"services": map[string]any{"total": total, "running": running, "stopped": stopped},
+	}
+}
+
+func dockerComposePSStates(stdout string) []string {
+	text := strings.TrimSpace(stdout)
+	if text == "" || text == "[]" {
+		return nil
+	}
+	var array []map[string]any
+	if err := json.Unmarshal([]byte(text), &array); err == nil {
+		states := make([]string, 0, len(array))
+		for _, item := range array {
+			if state := dockerComposePSState(item); state != "" {
+				states = append(states, state)
+			}
+		}
+		return states
+	}
+	var states []string
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || line == "[]" {
+			continue
+		}
+		var item map[string]any
+		if err := json.Unmarshal([]byte(line), &item); err == nil {
+			if state := dockerComposePSState(item); state != "" {
+				states = append(states, state)
+			}
+		}
+	}
+	return states
+}
+
+func dockerComposePSState(item map[string]any) string {
+	for _, key := range []string{"State", "state"} {
+		if state, ok := item[key].(string); ok {
+			return state
+		}
+	}
+	return ""
 }
 
 func (p NativeProvider) removePath(ctx context.Context, host, path string, daemonReload bool) error {

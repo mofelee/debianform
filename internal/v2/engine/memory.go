@@ -109,6 +109,17 @@ func (p *MemoryProvider) Apply(ctx context.Context, step Step) (map[string]any, 
 		"exists":         true,
 		"desired_digest": v2state.DesiredDigest(step.Node.Desired),
 	}
+	if step.Node.Kind == "docker_compose_project" {
+		observed["state"] = stringMapValue(step.Node.Desired, "state")
+		observed["services"] = map[string]any{"total": 1, "running": 1, "stopped": 0}
+		if observed["state"] == "stopped" {
+			observed["services"] = map[string]any{"total": 1, "running": 0, "stopped": 1}
+		}
+		if observed["state"] == "absent" {
+			observed["exists"] = false
+			observed["services"] = map[string]any{"total": 0, "running": 0, "stopped": 0}
+		}
+	}
 	p.Observed[step.Address] = Observed{
 		Exists:        true,
 		DesiredDigest: v2state.DesiredDigest(step.Node.Desired),

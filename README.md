@@ -130,7 +130,7 @@ v2 领域块或 component。
 - `examples/v2-bird2.dbf.hcl`
 - `examples/v2-component-binary.dbf.hcl`（真实 apply 前需替换为上游下载物真实 sha256）
 - `examples/v2-component-inputs.dbf.hcl`
-- `examples/v2-docker-compose.dbf.hcl`（当前支持 Compose 文件写入和 `docker compose config` 校验）
+- `examples/v2-docker-compose.dbf.hcl`（当前支持 Compose 文件写入、`docker compose config` 校验，以及 Compose project apply/check）
 - `examples/v2-docker-daemon.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
 - `examples/v2-docker-minimal.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
 - `examples/v2-files-plan-preview.dbf.hcl`

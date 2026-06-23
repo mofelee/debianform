@@ -6,7 +6,7 @@
     "host": "compose1"
   },
   "summary": {
-    "create": 11,
+    "create": 12,
     "update": 0,
     "delete": 0,
     "no_op": 0,
@@ -518,6 +518,127 @@
                 "after": "d1f744f61ab84b59402583765d65b4d6b984fd44c128388ac3ea0a07ef123d0f"
               }
             ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.compose1.docker.compose[\"app\"].project",
+      "action": "create",
+      "summary": "converge docker compose project app",
+      "source": {
+        "file": "../../../examples/v2-docker-compose.dbf.hcl",
+        "line": 16,
+        "path": "host.compose1.docker.compose[\"app\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "directory"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/opt/app"
+          },
+          {
+            "path": [
+              "env_files"
+            ],
+            "kind": "list",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "env_files",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "/opt/app/.env"
+              }
+            ]
+          },
+          {
+            "path": [
+              "files"
+            ],
+            "kind": "list",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "files",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "/opt/app/compose.yaml"
+              }
+            ]
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "app"
+          },
+          {
+            "path": [
+              "project"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "app"
+          },
+          {
+            "path": [
+              "pull"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "missing"
+          },
+          {
+            "path": [
+              "recreate"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "auto"
+          },
+          {
+            "path": [
+              "remove_orphans"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": false
+          },
+          {
+            "path": [
+              "state"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "running"
           }
         ]
       }

@@ -29,9 +29,9 @@
 - [x] 已支持 Docker Engine apply / check 复用现有 provider 闭环
 - [x] 已支持 Docker daemon ResourceGraph / plan / apply / check 闭环
 - [x] 已支持 Compose directory / compose file / env file / config validate ResourceGraph 闭环
-- [ ] 尚未支持 Compose project 状态漂移检测
-- [ ] 尚未支持 users / Compose project state / Compose systemd ResourceGraph 展开
-- [ ] 尚未支持 users / Compose project state / Compose systemd apply / check 闭环
+- [x] 已支持 Compose project 状态 ResourceGraph 展开和状态漂移检测
+- [ ] 尚未支持 users / Compose systemd ResourceGraph 展开
+- [ ] 尚未支持 users / Compose systemd apply / check 闭环
 
 ## 总体实现边界
 
@@ -339,40 +339,51 @@ make test
 
 代码：
 
-- [ ] 新增 provider kind `docker_compose_project`
-- [ ] ResourceGraph 编译 `host.<host>.docker.compose["<name>"].project` 节点
-- [ ] project 节点 desired 包含 `directory`、`project`、compose files、env files、`state`
-- [ ] project 节点 desired 包含 `pull`、`recreate`、`remove_orphans`
-- [ ] project 节点依赖 validate operation
-- [ ] project 节点依赖 Docker Engine service，除非 `package.source = "none"`
-- [ ] provider plan 读取 Compose project 当前状态
-- [ ] provider apply 对 `running` 执行 `docker compose up -d`
-- [ ] provider apply 对 `stopped` 执行 `docker compose stop`
-- [ ] provider apply 对 `absent` 执行 `docker compose down`
-- [ ] `pull = never|missing|always` 映射为 Docker Compose v2 支持的命令行为
-- [ ] `recreate = auto|always|never` 映射为 Docker Compose v2 支持的命令行为
-- [ ] `remove_orphans = true` 时 up/down 命令附加 orphan 清理行为
-- [ ] provider observed 摘要不记录 container 环境变量或 secret
-- [ ] check 能检测 project 未运行、已停止或缺失
+- [x] 新增 provider kind `docker_compose_project`
+- [x] ResourceGraph 编译 `host.<host>.docker.compose["<name>"].project` 节点
+- [x] project 节点 desired 包含 `directory`、`project`、compose files、env files、`state`
+- [x] project 节点 desired 包含 `pull`、`recreate`、`remove_orphans`
+- [x] project 节点依赖 validate operation
+- [x] project 节点依赖 Docker Engine service，除非 `package.source = "none"`
+- [x] provider plan 读取 Compose project 当前状态
+- [x] provider apply 对 `running` 执行 `docker compose up -d`
+- [x] provider apply 对 `stopped` 执行 `docker compose stop`
+- [x] provider apply 对 `absent` 执行 `docker compose down`
+- [x] `pull = never|missing|always` 映射为 Docker Compose v2 支持的命令行为
+- [x] `recreate = auto|always|never` 映射为 Docker Compose v2 支持的命令行为
+- [x] `remove_orphans = true` 时 up/down 命令附加 orphan 清理行为
+- [x] provider observed 摘要不记录 container 环境变量或 secret
+- [x] check 能检测 project 未运行、已停止或缺失
 
 测试：
 
-- [ ] NativeProvider fake runner 测试 `running` 生成 up 命令
-- [ ] NativeProvider fake runner 测试 `stopped` 生成 stop 命令
-- [ ] NativeProvider fake runner 测试 `absent` 生成 down 命令
-- [ ] NativeProvider fake runner 测试 pull/recreate/remove_orphans flag
-- [ ] provider plan 单测覆盖 running/no-op、stopped drift、absent/no-op
-- [ ] Engine fake apply 后立即 plan 为 no-op
-- [ ] check 返回码测试覆盖 Compose project stopped drift
+- [x] NativeProvider fake runner 测试 `running` 生成 up 命令
+- [x] NativeProvider fake runner 测试 `stopped` 生成 stop 命令
+- [x] NativeProvider fake runner 测试 `absent` 生成 down 命令
+- [x] NativeProvider fake runner 测试 pull/recreate/remove_orphans flag
+- [x] provider plan 单测覆盖 running/no-op、stopped drift、absent/no-op
+- [x] Engine fake apply 后立即 plan 为 no-op
+- [x] check 返回码测试覆盖 Compose project stopped drift
 
 示例：
 
-- [ ] `examples/v2-docker-compose.dbf.hcl` 进入 fake runner apply 测试
+- [x] `examples/v2-docker-compose.dbf.hcl` 进入 fake runner apply 测试
 
 文档：
 
-- [ ] README 标明 Compose project 状态已可 apply/check
-- [ ] 文档列出 state/pull/recreate/remove_orphans 的实际命令映射
+- [x] README 标明 Compose project 状态已可 apply/check
+- [x] 文档列出 state/pull/recreate/remove_orphans 的实际命令映射
+
+命令映射：
+
+- `state = "running"`: `docker compose -p <project> -f <file> up -d`
+- `state = "stopped"`: `docker compose -p <project> -f <file> stop`
+- `state = "absent"`: `docker compose -p <project> -f <file> down`
+- `pull = "never" | "missing" | "always"`: 在 `up -d` 后附加 `--pull never|missing|always`
+- `recreate = "auto"`: 不附加 recreate flag，交给 Compose 判断
+- `recreate = "always"`: 在 `up -d` 后附加 `--force-recreate`
+- `recreate = "never"`: 在 `up -d` 后附加 `--no-recreate`
+- `remove_orphans = true`: 在 `up -d` 和 `down` 后附加 `--remove-orphans`
 
 验收：
 
