@@ -51,6 +51,33 @@ brew update && brew upgrade dbf
 curl 安装的用户重新运行安装脚本即可升级；需要回滚时使用安装脚本的 `--version` 参数安装
 旧版本。
 
+## 发布产物校验
+
+每个 GitHub Release 包含四个平台 tarball、`checksums.txt`、cosign keyless bundle
+`checksums.txt.sigstore.json`、SBOM 和 GitHub provenance attestation。
+
+下载 release 后可校验 checksum：
+
+```bash
+sha256sum --check checksums.txt
+```
+
+校验 `checksums.txt` 的 cosign keyless 签名：
+
+```bash
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp 'https://github.com/mofelee/debianform/.github/workflows/release.yml@refs/tags/v.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+```
+
+校验 GitHub provenance attestation：
+
+```bash
+gh attestation verify dbf_<tag>_linux_amd64.tar.gz --repo mofelee/debianform
+```
+
 ## 兼容性
 
 旧实验配置格式已废弃，不再作为 CLI 入口或兼容目标。v2 文件必须使用 `host`、

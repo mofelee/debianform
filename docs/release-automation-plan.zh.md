@@ -351,28 +351,25 @@ release notes 中必须包含验证矩阵：
 
 代码/文件：
 
-- [ ] 生成 `checksums.txt.sig`。
-- [ ] 使用 cosign keyless signing 或 GPG signing。
-- [ ] 生成 SBOM。
-- [ ] 生成 provenance。
-- [ ] README 增加手工校验签名说明。
+- [x] 生成 `checksums.txt.sigstore.json`。
+- [x] 使用 cosign keyless signing。
+- [x] 生成 SBOM。
+- [x] 生成 provenance。
+- [x] README 增加手工校验签名说明。
 
 验收：
 
 ```bash
-cosign verify-blob --signature checksums.txt.sig checksums.txt
-```
-
-或：
-
-```bash
-gpg --verify checksums.txt.sig checksums.txt
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp 'https://github.com/mofelee/debianform/.github/workflows/release.yml@refs/tags/v.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
 ```
 
 需要你介入：
 
-- 选择 cosign keyless 还是 GPG。
-- 如果使用 GPG，需要提供 release signing key 策略。
+- 已选择 cosign keyless；无需长期 GPG 私钥。
 
 ## 最小可上线路径
 

@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  attestations: write
+  id-token: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -49,6 +51,33 @@ jobs:
           install -D -m 0755 goreleaser "${HOME}/.local/bin/goreleaser"
           echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
 
+      - name: Install cosign and syft
+        env:
+          COSIGN_VERSION: 3.1.1
+          SYFT_VERSION: 1.45.1
+        run: |
+          cd "${RUNNER_TEMP}"
+
+          curl --fail --location --retry 3 --show-error --silent \
+            --output cosign-linux-amd64 \
+            "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64"
+          curl --fail --location --retry 3 --show-error --silent \
+            --output cosign_checksums.txt \
+            "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign_checksums.txt"
+          grep " cosign-linux-amd64$" cosign_checksums.txt | sha256sum --check -
+          install -D -m 0755 cosign-linux-amd64 "${HOME}/.local/bin/cosign"
+
+          syft_archive="syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          curl --fail --location --retry 3 --show-error --silent \
+            --output "${syft_archive}" \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${syft_archive}"
+          curl --fail --location --retry 3 --show-error --silent \
+            --output syft_checksums.txt \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_checksums.txt"
+          grep " ${syft_archive}$" syft_checksums.txt | sha256sum --check -
+          tar -xzf "${syft_archive}" syft
+          install -D -m 0755 syft "${HOME}/.local/bin/syft"
+
       - name: Run static analysis
         run: go vet ./...
 
@@ -59,6 +88,29 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: goreleaser release --clean
+
+      - name: Sign checksums and generate SBOMs
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign sign-blob --yes --bundle dist/checksums.txt.sigstore.json dist/checksums.txt
+          for archive in dist/dbf_*.tar.gz; do
+            syft "$archive" -o spdx-json="${archive}.sbom.spdx.json"
+          done
+
+      - name: Upload supply-chain artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" \
+            dist/checksums.txt.sigstore.json \
+            dist/dbf_*.tar.gz.sbom.spdx.json \
+            --clobber
+
+      - name: Generate provenance attestation
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-checksums: dist/checksums.txt
 
       - name: Update Homebrew tap
         env:
@@ -75,6 +127,21 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
 
+      - name: Install cosign
+        env:
+          COSIGN_VERSION: 3.1.1
+        run: |
+          cd "${RUNNER_TEMP}"
+          curl --fail --location --retry 3 --show-error --silent \
+            --output cosign-linux-amd64 \
+            "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64"
+          curl --fail --location --retry 3 --show-error --silent \
+            --output cosign_checksums.txt \
+            "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign_checksums.txt"
+          grep " cosign-linux-amd64$" cosign_checksums.txt | sha256sum --check -
+          install -D -m 0755 cosign-linux-amd64 "${HOME}/.local/bin/cosign"
+          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+
       - name: Verify curl installer on Linux amd64
         run: |
           prefix="${RUNNER_TEMP}/debianform-install"
@@ -88,6 +155,27 @@ jobs:
           grep "${{ needs.release.outputs.tag }}" "${RUNNER_TEMP}/dbf-version.txt"
           "${prefix}/bin/dbf" validate -f examples/v2-bbr.dbf.hcl
           "${prefix}/bin/dbf" plan -f examples/v2-bbr.dbf.hcl --offline
+
+      - name: Verify supply-chain artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ needs.release.outputs.tag }}"
+          artifact="dbf_${tag}_linux_amd64.tar.gz"
+          mkdir -p "${RUNNER_TEMP}/supply-chain"
+          gh release download "$tag" \
+            --pattern checksums.txt \
+            --pattern checksums.txt.sigstore.json \
+            --pattern "$artifact" \
+            --dir "${RUNNER_TEMP}/supply-chain"
+          cd "${RUNNER_TEMP}/supply-chain"
+          sha256sum --check --ignore-missing checksums.txt
+          cosign verify-blob \
+            --bundle checksums.txt.sigstore.json \
+            --certificate-identity-regexp 'https://github.com/mofelee/debianform/.github/workflows/release.yml@refs/tags/v.*' \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            checksums.txt
+          gh attestation verify "$artifact" --repo mofelee/debianform
 
       - name: Verify Homebrew path when available
         id: homebrew
