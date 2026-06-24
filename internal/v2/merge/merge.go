@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -415,6 +416,8 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 		return nil
 	}
 	seen := map[string]ir.SourceRef{}
+	check := target
+	check.Components = append([]ir.ComponentInstanceSpec(nil), target.Components...)
 	targetValue := runtimeValidationTargetValue(target)
 	for _, instance := range instances {
 		if instance.Name == "" {
@@ -472,9 +475,10 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 						Install:      install,
 						Source:       instance.Source,
 					}
-					if err := validateComponentAgainstHost(target, component); err != nil {
+					if err := validateComponentAgainstHost(check, component); err != nil {
 						return err
 					}
+					check.Components = append(check.Components, component)
 				}
 				continue
 			}
@@ -491,9 +495,10 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 			component.Version = template.Version
 			component.Install = install
 		}
-		if err := validateComponentAgainstHost(target, component); err != nil {
+		if err := validateComponentAgainstHost(check, component); err != nil {
 			return err
 		}
+		check.Components = append(check.Components, component)
 	}
 	return nil
 }
@@ -4201,7 +4206,10 @@ func validateHostSpec(spec ir.HostSpec) error {
 		}
 		for path, directory := range component.Directories.Directories {
 			if previous, exists := directories[path]; exists {
-				return fmt.Errorf("%s:%d:%s: component %q directory %q conflicts with directory declared at %s:%d:%s", directory.Source.File, directory.Source.Line, directory.Source.Path, component.Name, path, previous.Source.File, previous.Source.Line, previous.Source.Path)
+				if !sameManagedDirectory(directory, previous) {
+					return fmt.Errorf("%s:%d:%s: component %q directory %q conflicts with directory declared at %s:%d:%s", directory.Source.File, directory.Source.Line, directory.Source.Path, component.Name, path, previous.Source.File, previous.Source.Line, previous.Source.Path)
+				}
+				continue
 			}
 			directories[path] = directory
 		}
@@ -4271,6 +4279,15 @@ func validateHostSpec(spec ir.HostSpec) error {
 		}
 	}
 	return nil
+}
+
+func sameManagedDirectory(a, b ir.ManagedDirectory) bool {
+	return a.Path == b.Path &&
+		a.Owner == b.Owner &&
+		a.Group == b.Group &&
+		a.Mode == b.Mode &&
+		a.Ensure == b.Ensure &&
+		reflect.DeepEqual(a.Lifecycle, b.Lifecycle)
 }
 
 func validateNftablesPath(item *ir.NftablesFileSpec, files map[string]ir.SourceRef, secrets map[string]ir.SourceRef) error {

@@ -378,6 +378,9 @@ func orphanSteps(states map[string]v2state.State, desired map[string]graph.Node,
 			} else if forgetOrphan(prior) {
 				action = ActionForget
 				summary = "forget " + prior.Kind + " " + address
+			} else if desiredStillManagesOrphan(host, prior, desired) {
+				action = ActionForget
+				summary = "forget shared " + prior.Kind + " " + address
 			}
 			if action == ActionDestroy && preventsDestroy(prior.Lifecycle) {
 				return nil, preventDestroyError(address, prior.Kind, prior.Lifecycle)
@@ -397,6 +400,33 @@ func orphanSteps(states map[string]v2state.State, desired map[string]graph.Node,
 
 func forgetOrphan(prior v2state.Resource) bool {
 	return prior.Kind == "apt_source_file" && stringMapValue(prior.Desired, "on_destroy") == "keep"
+}
+
+func desiredStillManagesOrphan(host string, prior v2state.Resource, desired map[string]graph.Node) bool {
+	if prior.Kind != "directory" {
+		return false
+	}
+	for _, node := range desired {
+		if node.Host != host || node.Kind != "directory" {
+			continue
+		}
+		if sameDirectoryDesired(prior.Desired, node.Desired) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameDirectoryDesired(a, b map[string]any) bool {
+	if stringMapValue(a, "path") == "" {
+		return false
+	}
+	for _, key := range []string{"path", "owner", "group", "mode", "ensure"} {
+		if stringMapValue(a, key) != stringMapValue(b, key) {
+			return false
+		}
+	}
+	return true
 }
 
 func operationSteps(operations []graph.Operation, changed map[string]struct{}, opts Options) []OperationStep {

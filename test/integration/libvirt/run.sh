@@ -115,7 +115,9 @@ for case_dir in "${CASE_DIRS[@]}"; do
   case_name="$(basename "$case_dir")"
   log "running case $case_name in a fresh VM"
   runner="$SCRIPT_DIR/run-case.sh"
-  if [[ -f "$case_dir/two-host.case" ]]; then
+  if [[ -f "$case_dir/three-host.case" ]]; then
+    runner="$SCRIPT_DIR/run-three-host-case.sh"
+  elif [[ -f "$case_dir/two-host.case" ]]; then
     runner="$SCRIPT_DIR/run-two-host-case.sh"
   fi
   DBF_INTEGRATION_DBF_BIN="$DBF_BIN" \

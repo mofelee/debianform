@@ -1942,6 +1942,199 @@ host "server1" {
 	}
 }
 
+func TestCompileAllowsRepeatedComponentSharedDirectory(t *testing.T) {
+	program, err := parseOrCompileInlineWithFiles(t, `
+component "wireguard_networkd" {
+  input "private_key_source" {
+    type = string
+  }
+
+  input "interface" {
+    type = object({
+      name    = string
+      address = string
+    })
+  }
+
+  directories {
+    directory "/etc/wireguard" {
+      owner = "root"
+      group = "systemd-network"
+      mode  = "0750"
+    }
+  }
+
+  secrets {
+    file "private_key" {
+      path   = "/etc/wireguard/${input.interface.name}.key"
+      source = input.private_key_source
+      owner  = "root"
+      group  = "systemd-network"
+      mode   = "0640"
+    }
+  }
+
+  systemd {
+    networkd {
+      netdev "wireguard" {
+        path = "/etc/systemd/network/10-${input.interface.name}.netdev"
+
+        netdev = {
+          Name = input.interface.name
+          Kind = "wireguard"
+        }
+
+        wireguard = {
+          PrivateKeyFile = "/etc/wireguard/${input.interface.name}.key"
+        }
+      }
+
+      network "wireguard" {
+        path = "/etc/systemd/network/20-${input.interface.name}.network"
+
+        match = {
+          Name = input.interface.name
+        }
+
+        network = {
+          Address = [input.interface.address]
+        }
+      }
+    }
+  }
+}
+
+host "server1" {
+  component "wg_prod" {
+    source = component.wireguard_networkd
+
+    inputs = {
+      private_key_source = "wg-prod.key"
+      interface = {
+        name    = "wg-prod"
+        address = "10.80.0.1/30"
+      }
+    }
+  }
+
+  component "wg_backup" {
+    source = component.wireguard_networkd
+
+    inputs = {
+      private_key_source = "wg-backup.key"
+      interface = {
+        name    = "wg-backup"
+        address = "10.81.0.1/30"
+      }
+    }
+  }
+}
+`, map[string]string{
+		"wg-prod.key":   "prod-key",
+		"wg-backup.key": "backup-key",
+	})
+	if err != nil {
+		t.Fatalf("compile repeated component shared directory: %v", err)
+	}
+	host := program.Hosts[0]
+	if len(host.Components) != 2 {
+		t.Fatalf("components = %d, want 2", len(host.Components))
+	}
+	for _, component := range host.Components {
+		if _, ok := component.Directories.Directories["/etc/wireguard"]; !ok {
+			t.Fatalf("component %s missing shared wireguard directory", component.Name)
+		}
+	}
+}
+
+func TestCompileRejectsRepeatedComponentDirectoryWithDifferentAttributes(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+component "app" {
+  input "mode" {
+    type = string
+  }
+
+  directories {
+    directory "/opt/app" {
+      mode = input.mode
+    }
+  }
+}
+
+host "server1" {
+  component "one" {
+    source = component.app
+
+    inputs = {
+      mode = "0755"
+    }
+  }
+
+  component "two" {
+    source = component.app
+
+    inputs = {
+      mode = "0700"
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), `component "two" directory "/opt/app" conflicts`) {
+		t.Fatalf("error = %v, want conflicting shared directory rejection", err)
+	}
+}
+
+func TestValidateRuntimeComponentsRejectsRepeatedNetworkdPath(t *testing.T) {
+	cfg := parseInline(t, `
+component "wireguard_networkd" {
+  input "interface" {
+    type = object({
+      name = string
+    })
+  }
+
+  systemd {
+    networkd {
+      netdev "wireguard" {
+        path = "/etc/systemd/network/10-${input.interface.name}.netdev"
+
+        netdev = {
+          Name = input.interface.name
+          Kind = "wireguard"
+        }
+      }
+    }
+  }
+}
+
+host "server1" {
+  component "one" {
+    source = component.wireguard_networkd
+
+    inputs = {
+      interface = {
+        name = "wg-prod"
+      }
+    }
+  }
+
+  component "two" {
+    source = component.wireguard_networkd
+
+    inputs = {
+      interface = {
+        name = "wg-prod"
+      }
+    }
+  }
+}
+`)
+	_, err := CompileWithOptions(cfg, CompileOptions{ValidateRuntimeTemplates: true})
+	if err == nil || !strings.Contains(err.Error(), `networkd netdev path "/etc/systemd/network/10-wg-prod.netdev" conflicts`) {
+		t.Fatalf("error = %v, want repeated networkd path rejection", err)
+	}
+}
+
 func TestCompileSensitiveComponentInputPropagatesToFileContent(t *testing.T) {
 	program := compileInline(t, `
 component "app" {

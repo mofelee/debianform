@@ -265,6 +265,87 @@ func TestApplyDestroysOrphanStateResource(t *testing.T) {
 	}
 }
 
+func TestApplyForgetsSharedDirectoryOrphanWithoutDestroy(t *testing.T) {
+	program := &ir.Program{
+		Hosts: []ir.HostSpec{{
+			Name: "server1",
+		}},
+	}
+	activeAddress := `host.server1.components.wg_backup.directories.directory["/etc/wireguard"]`
+	orphanAddress := `host.server1.components.wg_prod.directories.directory["/etc/wireguard"]`
+	desired := map[string]any{
+		"path":   "/etc/wireguard",
+		"owner":  "root",
+		"group":  "systemd-network",
+		"mode":   "0750",
+		"ensure": "present",
+	}
+	resourceGraph := &graph.ResourceGraph{
+		Nodes: []graph.Node{{
+			Address:         activeAddress,
+			Host:            "server1",
+			Kind:            "directory",
+			Summary:         "create directory /etc/wireguard",
+			Desired:         cloneMap(desired),
+			ProviderType:    "directory",
+			ProviderAddress: "directory.server1_wg_backup_etc_wireguard",
+			ProviderPayload: cloneMap(desired),
+		}},
+	}
+	backend := NewMemoryBackend()
+	provider := NewMemoryProvider()
+	if err := backend.Write(context.Background(), program.Hosts[0], v2state.State{
+		Version: v2state.Version,
+		Host:    "server1",
+		Resources: map[string]v2state.Resource{
+			activeAddress: {
+				Host:            "server1",
+				Kind:            "directory",
+				ProviderType:    "directory",
+				ProviderAddress: "directory.server1_wg_backup_etc_wireguard",
+				Ownership:       "managed",
+				Desired:         cloneMap(desired),
+				DesiredDigest:   v2state.DesiredDigest(desired),
+				Observed:        map[string]any{"exists": true},
+			},
+			orphanAddress: {
+				Host:            "server1",
+				Kind:            "directory",
+				ProviderType:    "directory",
+				ProviderAddress: "directory.server1_wg_prod_etc_wireguard",
+				Ownership:       "managed",
+				Desired:         cloneMap(desired),
+				DesiredDigest:   v2state.DesiredDigest(desired),
+				Observed:        map[string]any{"exists": true},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	plan, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Steps) != 1 || plan.Steps[0].Action != ActionForget {
+		t.Fatalf("plan steps = %#v, want forget shared directory orphan", plan.Steps)
+	}
+	if len(provider.Destroyed) != 0 {
+		t.Fatalf("destroyed = %#v, want no remote destroy", provider.Destroyed)
+	}
+	st, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.Resources[orphanAddress]; ok {
+		t.Fatalf("shared directory orphan still in state: %#v", st.Resources)
+	}
+	if _, ok := st.Resources[activeAddress]; !ok {
+		t.Fatalf("active shared directory missing from state: %#v", st.Resources)
+	}
+}
+
 func TestApplyForgetsAdoptedOrphanWithoutDestroy(t *testing.T) {
 	program, _ := fixtureProgramAndGraph(t, "../../../examples/v2-bbr.dbf.hcl")
 	backend := NewMemoryBackend()
