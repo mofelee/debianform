@@ -152,10 +152,47 @@ dbf variable inspect
 DebianForm 的用户层只写 `host`、`profile`、`component`、`locals`、`variable` 和领域块。
 不需要写低阶 provider 资源。
 
-一个真实但仍很小的服务配置可以包含：
+一份 `.dbf.hcl` 可以把复用、主机事实、包、文件、systemd、服务和断言放在同一个
+声明式模型里。下面是常用语法速查；完整可运行版见
+[`examples/fleet.dbf.hcl`](examples/fleet.dbf.hcl)。
 
 ```hcl
-host "app1" {
+locals {
+  admin_key = "ssh-ed25519 AAAA... admin@example"
+}
+
+variable "environment" {
+  type     = string
+  default  = "staging"
+  nullable = false
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be dev, staging, or prod."
+  }
+}
+
+profile "base" {
+  system {
+    timezone = "UTC"
+    locale   = "en_US.UTF-8"
+  }
+
+  packages {
+    install = ["ca-certificates", "curl", "vim"]
+  }
+
+  groups {
+    group "deploy" {}
+  }
+}
+
+component "app" {
+  input "listen_addr" {
+    type    = string
+    default = "127.0.0.1:8080"
+  }
+
   groups {
     group "app" {
       system = true
@@ -166,27 +203,21 @@ host "app1" {
     user "app" {
       system = true
       group  = "app"
-      home   = "/var/lib/app"
-      shell  = "/usr/sbin/nologin"
-    }
-  }
-
-  files {
-    file "/etc/app/config.env" {
-      owner   = "root"
-      group   = "app"
-      mode    = "0640"
-      content = "APP_ENV=prod\n"
     }
   }
 
   systemd {
     service_unit "app" {
       description = "App worker"
-      run         = ["/usr/local/bin/app-worker"]
+      run         = ["/usr/local/bin/app", "--listen", input.listen_addr]
       user        = "app"
       group       = "app"
       restart     = "always"
+
+      service_config = {
+        NoNewPrivileges = true
+        ProtectSystem   = "strict"
+      }
     }
   }
 
@@ -195,6 +226,58 @@ host "app1" {
       enabled = true
       state   = "running"
     }
+  }
+}
+
+host "app1" {
+  imports = [profile.base]
+
+  component "app" {
+    source = component.app
+    inputs = {
+      listen_addr = "127.0.0.1:8080"
+    }
+  }
+
+  system {
+    hostname     = "app1"
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  files {
+    file "/etc/app/config.env" {
+      owner   = "root"
+      group   = "app"
+      mode    = "0640"
+      content = "APP_ENV=${var.environment}\n"
+    }
+  }
+
+  systemd {
+    resolved {
+      enable = true
+
+      resolve = {
+        DNS = ["1.1.1.1", "9.9.9.9"]
+      }
+    }
+
+    timer "app-healthcheck" {
+      enable = true
+      state  = "running"
+
+      timer = {
+        Unit       = "app.service"
+        OnCalendar = "hourly"
+        Persistent = true
+      }
+    }
+  }
+
+  assert {
+    condition = self.system.codename == "trixie"
+    message   = "app1 example expects Debian 13 trixie."
   }
 }
 ```
@@ -207,6 +290,8 @@ dbf validate -f examples/bbr.dbf.hcl
 dbf plan -f examples/bbr.dbf.hcl --offline
 dbf validate -f examples/realistic-systemd-app.dbf.hcl
 dbf plan -f examples/realistic-systemd-app.dbf.hcl --offline
+dbf validate -f examples/fleet.dbf.hcl
+dbf plan -f examples/fleet.dbf.hcl --offline
 dbf plan -f examples/docker-minimal.dbf.hcl --offline
 dbf plan -f examples/nftables.dbf.hcl --offline
 ```
@@ -218,6 +303,7 @@ dbf plan -f examples/nftables.dbf.hcl --offline
 - `examples/bird2.dbf.hcl`
 - `examples/component-binary.dbf.hcl`
 - `examples/files-plan-preview.dbf.hcl`
+- `examples/fleet.dbf.hcl`
 - `examples/mihomo.dbf.hcl`
 - `examples/nftables.dbf.hcl`
 - `examples/plan-preview.dbf.hcl`

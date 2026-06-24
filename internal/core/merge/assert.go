@@ -245,14 +245,72 @@ func systemdSpecToCty(spec ir.SystemdSpec) cty.Value {
 			"source_path": cty.StringVal(item.SourcePath),
 		})
 	}
+	timers := make(map[string]cty.Value, len(spec.Timers))
+	for _, name := range sortedMapKeys(spec.Timers) {
+		item := spec.Timers[name]
+		enable := cty.NullVal(cty.Bool)
+		if item.Enable != nil {
+			enable = cty.BoolVal(*item.Enable)
+		}
+		timers[name] = cty.ObjectVal(map[string]cty.Value{
+			"name":    cty.StringVal(item.Name),
+			"unit":    systemdUnitToCty(item.Unit),
+			"timer":   networkdSectionToCty(item.Timer),
+			"install": networkdSectionToCty(item.Install),
+			"enable":  enable,
+			"state":   cty.StringVal(item.State),
+		})
+	}
 	values := map[string]cty.Value{
 		"units":    objectOrEmpty(units),
+		"timers":   objectOrEmpty(timers),
 		"networkd": cty.NullVal(cty.DynamicPseudoType),
+		"resolved": cty.NullVal(cty.DynamicPseudoType),
+		"journald": cty.NullVal(cty.DynamicPseudoType),
 	}
 	if spec.Networkd != nil {
 		values["networkd"] = networkdSpecToCty(*spec.Networkd)
 	}
+	if spec.Resolved != nil {
+		values["resolved"] = systemdResolvedSpecToCty(*spec.Resolved)
+	}
+	if spec.Journald != nil {
+		values["journald"] = systemdJournaldSpecToCty(*spec.Journald)
+	}
 	return cty.ObjectVal(values)
+}
+
+func systemdUnitToCty(item ir.SystemdUnit) cty.Value {
+	return cty.ObjectVal(map[string]cty.Value{
+		"name":        cty.StringVal(item.Name),
+		"path":        cty.StringVal(item.Path),
+		"owner":       cty.StringVal(item.Owner),
+		"group":       cty.StringVal(item.Group),
+		"mode":        cty.StringVal(item.Mode),
+		"ensure":      cty.StringVal(item.Ensure),
+		"source_path": cty.StringVal(item.SourcePath),
+	})
+}
+
+func systemdResolvedSpecToCty(spec ir.SystemdResolvedSpec) cty.Value {
+	enable := cty.NullVal(cty.Bool)
+	if spec.Enable != nil {
+		enable = cty.BoolVal(*spec.Enable)
+	}
+	return cty.ObjectVal(map[string]cty.Value{
+		"unit":    systemdUnitToCty(spec.Unit),
+		"resolve": networkdSectionToCty(spec.Resolve),
+		"enable":  enable,
+		"state":   cty.StringVal(spec.State),
+	})
+}
+
+func systemdJournaldSpecToCty(spec ir.SystemdJournaldSpec) cty.Value {
+	return cty.ObjectVal(map[string]cty.Value{
+		"unit":    systemdUnitToCty(spec.Unit),
+		"journal": networkdSectionToCty(spec.Journal),
+		"state":   cty.StringVal(spec.State),
+	})
 }
 
 func networkdSpecToCty(spec ir.NetworkdSpec) cty.Value {

@@ -2960,6 +2960,11 @@ host "server1" {
         MYAPP_ENV = "production"
         PATH      = "/usr/local/bin:/usr/bin:/bin"
       }
+
+      service_config = {
+        AmbientCapabilities = "CAP_NET_BIND_SERVICE"
+        NoNewPrivileges     = true
+      }
     }
   }
 
@@ -2994,6 +2999,8 @@ Restart=always
 RestartSec=5s
 StandardOutput=journal
 StandardError=journal
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=multi-user.target
@@ -3026,6 +3033,83 @@ host "server1" {
 	}
 	if unit.Content != "[Service]\nExecStart=/bin/true\n" {
 		t.Fatalf("unit content = %q", unit.Content)
+	}
+}
+
+func TestCompileSystemdTimerResolvedAndJournald(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  systemd {
+    timer "cleanup" {
+      description = "Cleanup cache"
+      enable      = true
+      state       = "running"
+
+      timer = {
+        OnCalendar = "daily"
+        Persistent = true
+      }
+    }
+
+    resolved {
+      enable = true
+      state  = "running"
+
+      resolve = {
+        DNS      = ["1.1.1.1", "9.9.9.9"]
+        DNSSEC   = "allow-downgrade"
+        DNSStubListener = false
+      }
+    }
+
+    journald {
+      state = "reloaded"
+
+      journal = {
+        SystemMaxUse = "1G"
+        Compress     = true
+      }
+    }
+  }
+
+  assert {
+    condition = self.systemd.timers["cleanup.timer"].timer.Persistent == "yes"
+    message   = "timer assertion failed"
+  }
+
+  assert {
+    condition = self.systemd.resolved.resolve.DNS[0] == "1.1.1.1"
+    message   = "resolved assertion failed"
+  }
+
+  assert {
+    condition = self.systemd.journald.journal.Compress == "yes"
+    message   = "journald assertion failed"
+  }
+}
+`)
+
+	host := program.Hosts[0]
+	timer, ok := host.Systemd.Timers["cleanup.timer"]
+	if !ok {
+		t.Fatalf("cleanup.timer missing: %#v", host.Systemd.Timers)
+	}
+	for _, want := range []string{"[Timer]", "OnCalendar=daily", "Persistent=yes", "WantedBy=timers.target"} {
+		if !strings.Contains(timer.Unit.Content, want) {
+			t.Fatalf("timer content missing %q:\n%s", want, timer.Unit.Content)
+		}
+	}
+	if timer.Enable == nil || !*timer.Enable || timer.State != "running" {
+		t.Fatalf("timer service settings = %#v", timer)
+	}
+	if host.Systemd.Resolved == nil ||
+		!strings.Contains(host.Systemd.Resolved.Unit.Content, "DNS=1.1.1.1") ||
+		!strings.Contains(host.Systemd.Resolved.Unit.Content, "DNS=9.9.9.9") ||
+		!strings.Contains(host.Systemd.Resolved.Unit.Content, "DNSStubListener=no") {
+		t.Fatalf("resolved content = %#v", host.Systemd.Resolved)
+	}
+	if host.Systemd.Journald == nil || !strings.Contains(host.Systemd.Journald.Unit.Content, "Compress=yes") || host.Systemd.Journald.State != "reloaded" {
+		t.Fatalf("journald spec = %#v", host.Systemd.Journald)
 	}
 }
 

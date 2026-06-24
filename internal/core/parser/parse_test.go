@@ -1376,6 +1376,7 @@ func runnableExampleFixtures() []string {
 		"../../../examples/docker-package-sources.dbf.hcl",
 		"../../../examples/docker-users.dbf.hcl",
 		"../../../examples/files-plan-preview.dbf.hcl",
+		"../../../examples/fleet.dbf.hcl",
 		"../../../examples/mihomo.dbf.hcl",
 		"../../../examples/nftables.dbf.hcl",
 		"../../../examples/plan-preview.dbf.hcl",

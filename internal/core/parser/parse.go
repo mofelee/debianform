@@ -1513,6 +1513,16 @@ func validateDomainBlockShape(file, path string, block *hclsyntax.Block) error {
 			values["networkd"] = struct{}{}
 			continue
 		}
+		if block.Type == "systemd" && (child.Type == "resolved" || child.Type == "journald") {
+			if _, exists := values[child.Type]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.%s block", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			if err := validateSystemdSingletonBlockShape(file, path+"."+child.Type, child); err != nil {
+				return err
+			}
+			values[child.Type] = struct{}{}
+			continue
+		}
 		if block.Type == "docker" {
 			return validateDockerBlockShape(file, path, block)
 		}
@@ -1700,6 +1710,42 @@ func validateNetworkdBlockShape(file, path string, block *hclsyntax.Block) error
 				return fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, objectPath)
 			}
 			collection[label] = struct{}{}
+		default:
+			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return nil
+}
+
+func validateSystemdSingletonBlockShape(file, path string, block *hclsyntax.Block) error {
+	if len(block.Labels) != 0 {
+		return fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	var allowed map[string]struct{}
+	switch block.Type {
+	case "resolved":
+		allowed = attrSet("enable", "state", "resolve", "owner", "file_group", "mode", "ensure")
+	case "journald":
+		allowed = attrSet("state", "journal", "owner", "file_group", "mode", "ensure")
+	default:
+		return fmt.Errorf("%s:%d: unsupported block %s", file, block.TypeRange.Start.Line, path)
+	}
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	values := map[string]struct{}{}
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "lifecycle":
+			if _, exists := values["lifecycle"]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.lifecycle block", file, child.TypeRange.Start.Line, path)
+			}
+			if err := validateLifecycleBlockShape(file, path+".lifecycle", child); err != nil {
+				return err
+			}
+			values["lifecycle"] = struct{}{}
 		default:
 			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
 		}
@@ -1909,6 +1955,17 @@ func parseDomainBlock(file, path string, block *hclsyntax.Block, ctx EvalContext
 			values["networkd"] = networkd
 			continue
 		}
+		if block.Type == "systemd" && (child.Type == "resolved" || child.Type == "journald") {
+			if _, exists := values[child.Type]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.%s block", file, child.TypeRange.Start.Line, path, child.Type)
+			}
+			value, err := parseSystemdSingletonBlock(file, path+"."+child.Type, child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values[child.Type] = value
+			continue
+		}
 		if _, ok := allowedBlocks[child.Type]; !ok {
 			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
 		}
@@ -1973,6 +2030,49 @@ func parseNetworkdBlock(file, path string, block *hclsyntax.Block, ctx EvalConte
 			}
 			collection.Map[label] = object
 			values[child.Type] = collection
+		default:
+			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseSystemdSingletonBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	if len(block.Labels) != 0 {
+		return Value{}, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	var allowed map[string]struct{}
+	switch block.Type {
+	case "resolved":
+		allowed = attrSet("enable", "state", "resolve", "owner", "file_group", "mode", "ensure")
+	case "journald":
+		allowed = attrSet("state", "journal", "owner", "file_group", "mode", "ensure")
+	default:
+		return Value{}, fmt.Errorf("%s:%d: unsupported block %s", file, block.TypeRange.Start.Line, path)
+	}
+	values := map[string]Value{}
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "lifecycle":
+			if _, exists := values["lifecycle"]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.lifecycle block", file, child.TypeRange.Start.Line, path)
+			}
+			lifecycle, err := parseLifecycleBlock(file, path+".lifecycle", child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values["lifecycle"] = lifecycle
 		default:
 			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
 		}
@@ -2279,7 +2379,7 @@ func allowedDomainObjectBlocks(domain string) map[string]struct{} {
 	case "users":
 		return attrSet("user")
 	case "systemd":
-		return attrSet("unit", "service_unit")
+		return attrSet("unit", "service_unit", "timer")
 	case "services":
 		return attrSet("service")
 	case "nftables":
@@ -2314,8 +2414,10 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 			"content", "source", "owner", "file_group", "mode", "ensure",
 			"description", "run", "type", "user", "group", "working_dir",
 			"environment", "restart", "restart_delay", "wants", "after",
-			"wanted_by", "stdout", "stderr",
+			"wanted_by", "stdout", "stderr", "service_config",
 		)
+	case "systemd.timer":
+		return attrSet("description", "timer", "install", "wanted_by", "enable", "state", "owner", "file_group", "mode", "ensure")
 	case "services.service":
 		return attrSet("package", "enabled", "state")
 	case "nftables.file":

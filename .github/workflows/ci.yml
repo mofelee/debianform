@@ -62,12 +62,26 @@ jobs:
       - name: Discover integration cases
         id: integration_cases
         run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          python3 - <<'PY'
           import json
+          import os
           from pathlib import Path
 
           cases = sorted(path.name for path in Path("test/integration/libvirt/cases").iterdir() if path.is_dir())
-          print("cases=" + json.dumps(cases))
+          if not cases:
+              raise SystemExit("no libvirt integration cases discovered")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print("cases=" + json.dumps(cases), file=output)
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as handle:
+                  print("### Libvirt integration cases", file=handle)
+                  for case in cases:
+                      print(f"- `{case}`", file=handle)
+
+          print("Discovered libvirt integration cases: " + ", ".join(cases))
           PY
 
   integration:

@@ -1155,7 +1155,16 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	}
 
 	unitTriggers := []string{}
+	timerServiceNodes := []Node{}
 	networkdTriggers := []string{}
+	resolvedTriggers := []string{}
+	journaldTriggers := []string{}
+	resolvedServiceAddress := ""
+	journaldServiceAddress := ""
+	resolvedSource := ir.SourceRef{}
+	journaldSource := ir.SourceRef{}
+	resolvedRestartOnChange := false
+	journaldRestartOnChange := false
 	networkdDeleteNames := []string{}
 	networkdSource := ir.SourceRef{}
 	var networkdEnable *bool
@@ -1165,47 +1174,21 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		address := fmt.Sprintf("host.%s.systemd.unit[%s]", host.Name, strconv.Quote(name))
 		unitAddresses[name] = address
 		unitTriggers = append(unitTriggers, address)
-		desired := map[string]any{
-			"name":        item.Name,
-			"path":        item.Path,
-			"owner":       item.Owner,
-			"group":       item.Group,
-			"mode":        item.Mode,
-			"ensure":      item.Ensure,
-			"summary":     item.Summary,
-			"source_path": item.SourcePath,
+		nodes = append(nodes, systemdUnitNode(host.Name, address, "", item, ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses)))
+	}
+
+	for _, name := range sortedKeys(host.Systemd.Timers) {
+		timer := host.Systemd.Timers[name]
+		item := timer.Unit
+		address := fmt.Sprintf("host.%s.systemd.timer[%s]", host.Name, strconv.Quote(name))
+		unitAddresses[item.Name] = address
+		unitTriggers = append(unitTriggers, address)
+		nodes = append(nodes, systemdUnitNode(host.Name, address, "", item, ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses)))
+		if timer.Enable != nil || timer.State != "" {
+			serviceAddress := fmt.Sprintf("host.%s.systemd.timer[%s].service", host.Name, strconv.Quote(name))
+			deps := []string{address}
+			timerServiceNodes = append(timerServiceNodes, systemdManagedServiceNode(host.Name, serviceAddress, "", item.Name, item.Name, "", timer.Enable, timer.State, "manage timer "+item.Name, timer.Source, deps))
 		}
-		if item.Sensitive {
-			desired["sensitive"] = true
-			delete(desired, "source_path")
-		}
-		if item.Content != "" && !item.Sensitive {
-			desired["content"] = item.Content
-		}
-		if item.Content != "" && item.Sensitive {
-			desired["content_sha256"] = item.Summary.SHA256
-			desired["content_bytes"] = item.Summary.Bytes
-		}
-		payload := cloneMap(desired)
-		if item.SourcePath != "" {
-			payload["source_path"] = item.SourcePath
-		}
-		if item.Content != "" {
-			payload["content"] = item.Content
-		}
-		nodes = append(nodes, Node{
-			Host:            host.Name,
-			Address:         address,
-			Kind:            "systemd_unit",
-			Summary:         "create systemd unit " + item.Name,
-			Source:          item.Source,
-			Lifecycle:       lifecyclePtr(item.Lifecycle),
-			Desired:         desired,
-			DependsOn:       ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses),
-			ProviderType:    "systemd_unit",
-			ProviderAddress: "systemd_unit." + providerName(host.Name, item.Name),
-			ProviderPayload: payload,
-		})
 	}
 
 	for _, component := range host.Components {
@@ -1215,53 +1198,106 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			address := fmt.Sprintf("%s.systemd.unit[%s]", componentPrefix, strconv.Quote(name))
 			unitAddresses[name] = address
 			unitTriggers = append(unitTriggers, address)
-			desired := map[string]any{
-				"name":        item.Name,
-				"component":   component.Name,
-				"path":        item.Path,
-				"owner":       item.Owner,
-				"group":       item.Group,
-				"mode":        item.Mode,
-				"ensure":      item.Ensure,
-				"summary":     item.Summary,
-				"source_path": item.SourcePath,
-			}
-			if item.Sensitive {
-				desired["sensitive"] = true
-				delete(desired, "source_path")
-			}
-			if item.Content != "" && !item.Sensitive {
-				desired["content"] = item.Content
-			}
-			if item.Content != "" && item.Sensitive {
-				desired["content_sha256"] = item.Summary.SHA256
-				desired["content_bytes"] = item.Summary.Bytes
-			}
-			payload := cloneMap(desired)
-			if item.SourcePath != "" {
-				payload["source_path"] = item.SourcePath
-			}
-			if item.Content != "" {
-				payload["content"] = item.Content
-			}
 			deps := ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses)
 			if installAddress, ok := componentArtifactInstallAddresses[component.Name]; ok {
 				deps = append(deps, installAddress)
 			}
-			deps = dedupeStrings(deps)
-			nodes = append(nodes, Node{
-				Host:            host.Name,
-				Address:         address,
-				Kind:            "systemd_unit",
-				Summary:         "create systemd unit " + item.Name,
-				Source:          item.Source,
-				Lifecycle:       lifecyclePtr(item.Lifecycle),
-				Desired:         desired,
-				DependsOn:       deps,
-				ProviderType:    "systemd_unit",
-				ProviderAddress: "systemd_unit." + providerName(host.Name, component.Name, item.Name),
-				ProviderPayload: payload,
-			})
+			nodes = append(nodes, systemdUnitNode(host.Name, address, component.Name, item, dedupeStrings(deps)))
+		}
+		for _, name := range sortedKeys(component.Systemd.Timers) {
+			timer := component.Systemd.Timers[name]
+			item := timer.Unit
+			address := fmt.Sprintf("%s.systemd.timer[%s]", componentPrefix, strconv.Quote(name))
+			unitAddresses[item.Name] = address
+			unitTriggers = append(unitTriggers, address)
+			deps := ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses)
+			if installAddress, ok := componentArtifactInstallAddresses[component.Name]; ok {
+				deps = append(deps, installAddress)
+			}
+			nodes = append(nodes, systemdUnitNode(host.Name, address, component.Name, item, dedupeStrings(deps)))
+			if timer.Enable != nil || timer.State != "" {
+				serviceAddress := fmt.Sprintf("%s.systemd.timer[%s].service", componentPrefix, strconv.Quote(name))
+				serviceDeps := append([]string{address}, deps...)
+				timerServiceNodes = append(timerServiceNodes, systemdManagedServiceNode(host.Name, serviceAddress, component.Name, item.Name, item.Name, "", timer.Enable, timer.State, "manage timer "+item.Name, timer.Source, serviceDeps))
+			}
+		}
+	}
+
+	if host.Systemd.Resolved != nil {
+		item := *host.Systemd.Resolved
+		address := "host." + host.Name + ".systemd.resolved"
+		if resolvedSource.File == "" {
+			resolvedSource = item.Source
+		}
+		resolvedRestartOnChange = systemdDropInShouldRestartOnChange(item.Enable, item.State)
+		deps := ownershipDependencies(item.Unit.Owner, item.Unit.Group, userAddresses, groupAddresses)
+		if packageAddress, ok := packageAddresses["systemd-resolved"]; ok {
+			deps = append(deps, packageAddress)
+		}
+		nodes = append(nodes, systemdDropInFileNode(host.Name, address, "", item.Unit, "manage systemd-resolved drop-in", deps))
+		resolvedTriggers = append(resolvedTriggers, address)
+		if serviceNode, ok := systemdStateServiceNode(host.Name, address+".service", "", "systemd-resolved", "systemd-resolved.service", item.Enable, item.State, "manage systemd-resolved", item.Source, []string{address}); ok {
+			resolvedServiceAddress = serviceNode.Address
+			nodes = append(nodes, serviceNode)
+		}
+	}
+
+	if host.Systemd.Journald != nil {
+		item := *host.Systemd.Journald
+		address := "host." + host.Name + ".systemd.journald"
+		if journaldSource.File == "" {
+			journaldSource = item.Source
+		}
+		journaldRestartOnChange = systemdDropInShouldRestartOnChange(nil, item.State)
+		deps := ownershipDependencies(item.Unit.Owner, item.Unit.Group, userAddresses, groupAddresses)
+		nodes = append(nodes, systemdDropInFileNode(host.Name, address, "", item.Unit, "manage systemd-journald drop-in", deps))
+		journaldTriggers = append(journaldTriggers, address)
+		if serviceNode, ok := systemdStateServiceNode(host.Name, address+".service", "", "systemd-journald", "systemd-journald.service", nil, item.State, "manage systemd-journald", item.Source, []string{address}); ok {
+			journaldServiceAddress = serviceNode.Address
+			nodes = append(nodes, serviceNode)
+		}
+	}
+
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		if component.Systemd.Resolved != nil {
+			item := *component.Systemd.Resolved
+			address := componentPrefix + ".systemd.resolved"
+			if resolvedSource.File == "" {
+				resolvedSource = item.Source
+			}
+			resolvedRestartOnChange = systemdDropInShouldRestartOnChange(item.Enable, item.State)
+			deps := ownershipDependencies(item.Unit.Owner, item.Unit.Group, userAddresses, groupAddresses)
+			if installAddress, ok := componentArtifactInstallAddresses[component.Name]; ok {
+				deps = append(deps, installAddress)
+			}
+			if packageAddress, ok := packageAddresses["systemd-resolved"]; ok {
+				deps = append(deps, packageAddress)
+			}
+			nodes = append(nodes, systemdDropInFileNode(host.Name, address, component.Name, item.Unit, "manage systemd-resolved drop-in", dedupeStrings(deps)))
+			resolvedTriggers = append(resolvedTriggers, address)
+			if serviceNode, ok := systemdStateServiceNode(host.Name, address+".service", component.Name, "systemd-resolved", "systemd-resolved.service", item.Enable, item.State, "manage systemd-resolved", item.Source, []string{address}); ok {
+				resolvedServiceAddress = serviceNode.Address
+				nodes = append(nodes, serviceNode)
+			}
+		}
+		if component.Systemd.Journald != nil {
+			item := *component.Systemd.Journald
+			address := componentPrefix + ".systemd.journald"
+			if journaldSource.File == "" {
+				journaldSource = item.Source
+			}
+			journaldRestartOnChange = systemdDropInShouldRestartOnChange(nil, item.State)
+			deps := ownershipDependencies(item.Unit.Owner, item.Unit.Group, userAddresses, groupAddresses)
+			if installAddress, ok := componentArtifactInstallAddresses[component.Name]; ok {
+				deps = append(deps, installAddress)
+			}
+			nodes = append(nodes, systemdDropInFileNode(host.Name, address, component.Name, item.Unit, "manage systemd-journald drop-in", dedupeStrings(deps)))
+			journaldTriggers = append(journaldTriggers, address)
+			if serviceNode, ok := systemdStateServiceNode(host.Name, address+".service", component.Name, "systemd-journald", "systemd-journald.service", nil, item.State, "manage systemd-journald", item.Source, []string{address}); ok {
+				journaldServiceAddress = serviceNode.Address
+				nodes = append(nodes, serviceNode)
+			}
 		}
 	}
 
@@ -1390,6 +1426,43 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			TriggeredBy:    append([]string(nil), unitTriggers...),
 			CommandPreview: "systemctl daemon-reload",
 			Source:         host.Systemd.Source,
+		})
+	}
+	if daemonReloadAddress != "" {
+		for i := range timerServiceNodes {
+			timerServiceNodes[i].DependsOn = dedupeStrings(append(timerServiceNodes[i].DependsOn, daemonReloadAddress))
+		}
+	}
+	nodes = append(nodes, timerServiceNodes...)
+
+	if len(resolvedTriggers) > 0 && resolvedRestartOnChange {
+		deps := append([]string(nil), resolvedTriggers...)
+		if resolvedServiceAddress != "" {
+			deps = append(deps, resolvedServiceAddress)
+		}
+		operations = append(operations, Operation{
+			Address:        "host." + host.Name + ".systemd.resolved.restart",
+			Action:         "run",
+			Summary:        "restart systemd-resolved",
+			DependsOn:      dedupeStrings(deps),
+			TriggeredBy:    append([]string(nil), resolvedTriggers...),
+			CommandPreview: "systemctl restart systemd-resolved.service",
+			Source:         resolvedSource,
+		})
+	}
+	if len(journaldTriggers) > 0 && journaldRestartOnChange {
+		deps := append([]string(nil), journaldTriggers...)
+		if journaldServiceAddress != "" {
+			deps = append(deps, journaldServiceAddress)
+		}
+		operations = append(operations, Operation{
+			Address:        "host." + host.Name + ".systemd.journald.restart",
+			Action:         "run",
+			Summary:        "restart systemd-journald",
+			DependsOn:      dedupeStrings(deps),
+			TriggeredBy:    append([]string(nil), journaldTriggers...),
+			CommandPreview: "systemctl restart systemd-journald.service",
+			Source:         journaldSource,
 		})
 	}
 
@@ -2220,6 +2293,138 @@ func packageNameFromDockerPackageAddress(address string) string {
 		return ""
 	}
 	return name
+}
+
+func systemdUnitNode(hostName, address, component string, item ir.SystemdUnit, deps []string) Node {
+	desired := map[string]any{
+		"name":        item.Name,
+		"path":        item.Path,
+		"owner":       item.Owner,
+		"group":       item.Group,
+		"mode":        item.Mode,
+		"ensure":      item.Ensure,
+		"summary":     item.Summary,
+		"source_path": item.SourcePath,
+	}
+	if component != "" {
+		desired["component"] = component
+	}
+	if item.Sensitive {
+		desired["sensitive"] = true
+		delete(desired, "source_path")
+	}
+	if item.Content != "" && !item.Sensitive {
+		desired["content"] = item.Content
+	}
+	if item.Content != "" && item.Sensitive {
+		desired["content_sha256"] = item.Summary.SHA256
+		desired["content_bytes"] = item.Summary.Bytes
+	}
+	payload := cloneMap(desired)
+	if item.SourcePath != "" {
+		payload["source_path"] = item.SourcePath
+	}
+	if item.Content != "" {
+		payload["content"] = item.Content
+	}
+	providerParts := []string{hostName}
+	if component != "" {
+		providerParts = append(providerParts, component)
+	}
+	providerParts = append(providerParts, item.Name)
+	return Node{
+		Host:            hostName,
+		Address:         address,
+		Kind:            "systemd_unit",
+		Summary:         "create systemd unit " + item.Name,
+		Source:          item.Source,
+		Lifecycle:       lifecyclePtr(item.Lifecycle),
+		Desired:         desired,
+		DependsOn:       dedupeStrings(deps),
+		ProviderType:    "systemd_unit",
+		ProviderAddress: "systemd_unit." + providerName(providerParts...),
+		ProviderPayload: payload,
+	}
+}
+
+func systemdDropInFileNode(hostName, address, component string, item ir.SystemdUnit, summary string, deps []string) Node {
+	desired, payload := fileResourceDesiredPayload(fileResourceSpec{
+		Path:       item.Path,
+		Component:  component,
+		Content:    item.Content,
+		SourcePath: item.SourcePath,
+		Owner:      item.Owner,
+		Group:      item.Group,
+		Mode:       item.Mode,
+		Sensitive:  item.Sensitive,
+		Ensure:     item.Ensure,
+		Summary:    item.Summary,
+	})
+	return Node{
+		Host:            hostName,
+		Address:         address,
+		Kind:            "file",
+		Summary:         summary,
+		Source:          item.Source,
+		Lifecycle:       lifecyclePtr(item.Lifecycle),
+		Desired:         desired,
+		DependsOn:       dedupeStrings(deps),
+		ProviderType:    "file",
+		ProviderAddress: "file." + providerName(hostName, item.Path),
+		ProviderPayload: payload,
+	}
+}
+
+func systemdStateServiceNode(hostName, address, component, name, unit string, enabled *bool, state, summary string, source ir.SourceRef, deps []string) (Node, bool) {
+	if enabled == nil && state == "" {
+		return Node{}, false
+	}
+	return systemdManagedServiceNode(hostName, address, component, name, unit, "", enabled, state, summary, source, deps), true
+}
+
+func systemdDropInShouldRestartOnChange(enabled *bool, state string) bool {
+	switch state {
+	case "running":
+		return true
+	case "stopped", "restarted", "reloaded":
+		return false
+	default:
+		return enabled == nil || *enabled
+	}
+}
+
+func systemdManagedServiceNode(hostName, address, component, name, unit, packageName string, enabled *bool, state, summary string, source ir.SourceRef, deps []string) Node {
+	desired := map[string]any{
+		"name":  name,
+		"unit":  unit,
+		"state": state,
+	}
+	if component != "" {
+		desired["component"] = component
+	}
+	if packageName != "" {
+		desired["package"] = packageName
+	}
+	if enabled != nil {
+		desired["enabled"] = *enabled
+	}
+	providerParts := []string{hostName}
+	if component != "" {
+		providerParts = append(providerParts, component)
+	}
+	providerParts = append(providerParts, name)
+	return Node{
+		Host:            hostName,
+		Address:         address,
+		Kind:            "service",
+		Summary:         summary,
+		Source:          source,
+		Desired:         desired,
+		DependsOn:       dedupeStrings(deps),
+		ProviderType:    "service",
+		ProviderAddress: "service." + providerName(providerParts...),
+		ProviderPayload: desired,
+	}
 }
 
 func networkdNetDevNode(hostName, address, component string, item ir.NetworkdNetDev, deps []string) Node {

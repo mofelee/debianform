@@ -1,27 +1,48 @@
-# DebianForm 设计示例。
+# DebianForm fleet syntax cheatsheet.
 #
-# 本文件用于冻结 DSL 的目标形态；编译器尚未接入当前 CLI。
-# 示例刻意同时展示两种复用边界：
+# This file is intentionally broad but still runnable:
 #
-# - profile：复用并合并主机基线配置。
-# - component：复用一个部署单元，并在挂载它的 host 上展开资源图。
+#   dbf validate -f examples/fleet.dbf.hcl
+#   dbf plan -f examples/fleet.dbf.hcl --offline
 #
-# `REPLACE_*`、示例域名和公钥都是待替换占位符；正式 validate 应拒绝它们。
-# secrets/ 下的文件只表示本地 secret 输入，不能提交到版本库。DebianForm 的
-# plan 和 state 只能记录其摘要，不能记录明文内容。
-#
-# 权限模型：
-# - 当前 DebianForm 只支持使用 root SSH 管理目标主机。
-# - 不支持 sudo/become/非 root 管理连接；旧的 sudo/sshd 设想不要作为当前实现目标。
-# - component 内的 systemd service 仍可声明低权限运行用户。
+# It is not a production deployment. Replace example hosts, keys, URLs, hashes,
+# CIDRs and secret source paths before applying to a real machine.
 
 locals {
-  administrator_key = "ssh-ed25519 AAAA_REPLACE_ME"
+  admin_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIexamplepreviewkey admin@example"
 }
 
-profile "base" {
+variable "environment" {
+  type        = string
+  description = "Deployment environment label rendered into config files."
+  default     = "staging"
+  nullable    = false
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be dev, staging, or prod."
+  }
+}
+
+variable "api_token" {
+  type        = string
+  description = "Example sensitive runtime value."
+  default     = "not-a-real-preview-token"
+  sensitive   = true
+  ephemeral   = true
+}
+
+variable "wireguard_private_key" {
+  type        = string
+  description = "Example WireGuard private key runtime value."
+  default     = "not-a-real-wireguard-private-key"
+  sensitive   = true
+  ephemeral   = true
+}
+
+profile "debian_base" {
   system {
-    timezone = "Asia/Tokyo"
+    timezone = "UTC"
     locale   = "en_US.UTF-8"
   }
 
@@ -30,29 +51,17 @@ profile "base" {
       "ca-certificates",
       "curl",
       "htop",
-      "locales",
       "nftables",
-      "openssh-server",
       "tzdata",
       "vim",
     ]
   }
 
-  environment {
-    variables = {
-      EDITOR = "vim"
-      LANG   = "en_US.UTF-8"
-    }
-
-    shell_aliases = {
-      la = "ls -A"
-      ll = "ls -alF"
-    }
-
-    profile_scripts = {
-      company_path = <<-EOF
-        export PATH="/opt/company/bin:$PATH"
-      EOF
+  apt {
+    source_file "local-note" {
+      path    = "/etc/apt/sources.list.d/local-note.sources"
+      content = "# managed by DebianForm\n"
+      ensure  = "present"
     }
   }
 
@@ -62,24 +71,14 @@ profile "base" {
 
   users {
     user "deploy" {
+      group  = "deploy"
+      groups = ["docker"]
       home   = "/home/deploy"
       shell  = "/bin/bash"
-      group  = "deploy"
 
       ssh_authorized_keys = [
-        local.administrator_key,
+        local.admin_key,
       ]
-    }
-  }
-
-  sshd {
-    enable = true
-    port   = 22
-
-    settings = {
-      PasswordAuthentication = "no"
-      PermitRootLogin        = "prohibit-password"
-      PubkeyAuthentication   = "yes"
     }
   }
 }
@@ -93,335 +92,204 @@ profile "bbr" {
       "net.ipv4.tcp_congestion_control" = "bbr"
     }
   }
-}
 
-profile "wireguard" {
-  kernel {
-    modules = ["wireguard"]
-  }
-
-  directories {
-    directory "/etc/wireguard" {
-      owner = "root"
-      group = "systemd-network"
-      mode  = "0750"
-    }
+  assert {
+    condition = self.kernel.sysctl["net.ipv4.tcp_congestion_control"] == "bbr"
+    message   = "BBR profile must keep tcp_bbr congestion control enabled."
   }
 }
 
-component "rclone" {
+component "static_tool" {
   type    = "binary"
-  version = "1.66.0"
+  version = "1.0.0"
 
   source "amd64" {
-    url    = "https://downloads.rclone.org/v1.66.0/rclone-v1.66.0-linux-amd64.zip"
-    sha256 = "REPLACE_WITH_RCLONE_AMD64_SHA256"
+    url    = "https://downloads.example.invalid/static-tool-1.0.0-linux-amd64.tar.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   }
 
   source "arm64" {
-    url    = "https://downloads.rclone.org/v1.66.0/rclone-v1.66.0-linux-arm64.zip"
-    sha256 = "REPLACE_WITH_RCLONE_ARM64_SHA256"
-  }
-
-  extract {
-    format           = "zip"
-    strip_components = 1
-    include          = "rclone"
-  }
-
-  install {
-    path  = "/usr/local/bin/rclone"
-    owner = "root"
-    group = "root"
-    mode  = "0755"
-  }
-}
-
-component "company_ca" {
-  type    = "ca_certificate"
-  version = "2026.06.20"
-
-  source {
-    url    = "https://example.com/company-ca.crt"
-    sha256 = "REPLACE_WITH_COMPANY_CA_SHA256"
-  }
-
-  install {
-    path  = "/usr/local/share/ca-certificates/company-ca.crt"
-    owner = "root"
-    group = "root"
-    mode  = "0644"
-  }
-
-  # ca_certificate 是有语义的资源类型。证书变化时由编译器生成
-  # update-ca-certificates 激活动作，不需要用户写 after_install shell。
-}
-
-component "myapp" {
-  type    = "archive"
-  version = "2026.06.20"
-
-  source "amd64" {
-    url    = "https://example.com/releases/myapp-2026.06.20-linux-amd64.tar.gz"
-    sha256 = "REPLACE_WITH_MYAPP_AMD64_SHA256"
-  }
-
-  source "arm64" {
-    url    = "https://example.com/releases/myapp-2026.06.20-linux-arm64.tar.gz"
-    sha256 = "REPLACE_WITH_MYAPP_ARM64_SHA256"
+    url    = "https://downloads.example.invalid/static-tool-1.0.0-linux-arm64.tar.gz"
+    sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
   }
 
   extract {
     format           = "tar.gz"
     strip_components = 1
+    include          = "static-tool"
   }
 
   install {
-    path  = "/opt/myapp"
-    owner = "myapp"
-    group = "myapp"
-    mode  = "0755"
+    path = "/usr/local/bin/static-tool"
+    mode = "0755"
+  }
+}
+
+component "webapp" {
+  input "listen_addr" {
+    type        = string
+    description = "Address passed to the generated systemd service."
+    default     = "127.0.0.1:8080"
+    nullable    = false
+  }
+
+  input "extra_environment" {
+    type        = map(string)
+    description = "Additional app environment values."
+    default     = {}
+    nullable    = false
   }
 
   groups {
-    group "myapp" {
+    group "webapp" {
       system = true
     }
   }
 
   users {
-    user "myapp" {
+    user "webapp" {
       system = true
-      home   = "/var/lib/myapp"
+      group  = "webapp"
+      home   = "/var/lib/webapp"
       shell  = "/usr/sbin/nologin"
-      group  = "myapp"
     }
   }
 
   directories {
-    directory "/etc/myapp" {
-      owner = "root"
-      group = "root"
-      mode  = "0755"
-    }
+    directory "/etc/webapp" {}
 
-    directory "/var/lib/myapp" {
-      owner = "myapp"
-      group = "myapp"
+    directory "/var/lib/webapp" {
+      owner = "webapp"
+      group = "webapp"
       mode  = "0750"
     }
   }
 
   files {
-    file "/etc/myapp/config.yaml" {
+    file "/etc/webapp/config.env" {
       owner = "root"
-      group = "root"
-      mode  = "0644"
+      group = "webapp"
+      mode  = "0640"
 
-      content = <<-EOF
-        listen: 127.0.0.1:8080
-        data_dir: /var/lib/myapp
-      EOF
+      content = <<-ENV
+        WEBAPP_ENV=${var.environment}
+        LISTEN_ADDR=${input.listen_addr}
+      ENV
+    }
+
+    file "/etc/webapp/extra-env.json" {
+      owner           = "root"
+      group           = "webapp"
+      mode            = "0640"
+      sensitive       = true
+      content         = jsonencode(input.extra_environment)
+      content_version = "2026-06-24-example"
     }
   }
 
   systemd {
-    service "myapp" {
-      enable      = true
-      state       = "running"
-      description = "My App"
-
-      wanted_by = ["multi-user.target"]
-      wants     = ["network-online.target"]
-      after     = ["network-online.target"]
+    service_unit "webapp" {
+      description = "Example Web App"
+      run         = ["/usr/local/bin/static-tool", "serve", "--listen", input.listen_addr]
+      type        = "simple"
+      user        = "webapp"
+      group       = "webapp"
+      working_dir = "/var/lib/webapp"
+      restart     = "always"
+      after       = ["network-online.target"]
+      wants       = ["network-online.target"]
 
       environment = {
-        MYAPP_ENV = "production"
+        WEBAPP_ENV = var.environment
       }
 
       service_config = {
-        ExecStart        = "/opt/myapp/bin/myapp --config /etc/myapp/config.yaml"
-        Group            = "myapp"
-        NoNewPrivileges  = true
-        PrivateTmp       = true
-        ProtectHome      = true
-        ProtectSystem    = "strict"
-        ReadWritePaths   = ["/var/lib/myapp"]
-        Restart          = "on-failure"
-        RestartSec       = "5s"
-        User             = "myapp"
-        WorkingDirectory = "/var/lib/myapp"
+        AmbientCapabilities = "CAP_NET_BIND_SERVICE"
+        EnvironmentFile     = "/etc/webapp/config.env"
+        NoNewPrivileges     = true
+        PrivateTmp          = true
+        ProtectHome         = true
+        ProtectSystem       = "strict"
+        ReadWritePaths      = ["/var/lib/webapp"]
       }
+    }
+  }
+
+  services {
+    service "webapp" {
+      enabled = true
+      state   = "running"
     }
   }
 }
 
-component "restic" {
-  type    = "binary"
-  version = "0.16.5"
-
-  input "environment_source" {
-    type = string
-  }
-
-  source "amd64" {
-    url    = "https://github.com/restic/restic/releases/download/v0.16.5/restic_0.16.5_linux_amd64.bz2"
-    sha256 = "REPLACE_WITH_RESTIC_AMD64_SHA256"
-  }
-
-  source "arm64" {
-    url    = "https://github.com/restic/restic/releases/download/v0.16.5/restic_0.16.5_linux_arm64.bz2"
-    sha256 = "REPLACE_WITH_RESTIC_ARM64_SHA256"
-  }
-
-  extract {
-    format = "bz2"
-  }
-
-  install {
-    path  = "/usr/local/bin/restic"
-    owner = "root"
-    group = "root"
-    mode  = "0755"
-  }
-
-  directories {
-    directory "/etc/restic" {
-      owner = "root"
-      group = "root"
-      mode  = "0700"
-    }
-  }
-
-  secrets {
-    file "/etc/restic/environment" {
-      source = input.environment_source
-      owner  = "root"
-      group  = "root"
-      mode   = "0600"
-    }
-  }
-
-  files {
-    file "/usr/local/bin/restic-backup" {
-      owner = "root"
-      group = "root"
-      mode  = "0755"
-
-      content = <<-EOF
-        #!/usr/bin/env bash
-        set -euo pipefail
-
-        exec /usr/local/bin/restic backup /etc /opt /var/lib
-      EOF
-    }
-  }
-
-  systemd {
-    service "restic-backup" {
-      description = "Restic backup job"
-
-      service_config = {
-        EnvironmentFile = "/etc/restic/environment"
-        ExecStart       = "/usr/local/bin/restic-backup"
-        Type            = "oneshot"
-      }
-    }
-
-    timer "restic-backup" {
-      enable      = true
-      state       = "running"
-      description = "Run Restic backup daily"
-
-      wanted_by = ["timers.target"]
-
-      timer_config = {
-        OnCalendar         = "daily"
-        Persistent         = true
-        RandomizedDelaySec = "30m"
-      }
-    }
-  }
-}
-
-host "server1" {
+host "fleet1" {
   imports = [
-    profile.base,
+    profile.debian_base,
     profile.bbr,
-    profile.wireguard,
   ]
 
   components = [
-    component.rclone,
-    component.company_ca,
-    component.myapp,
+    component.static_tool,
   ]
 
-  component "restic" {
-    source = component.restic
+  component "webapp" {
+    source = component.webapp
 
     inputs = {
-      environment_source = "secrets/server1-restic-environment"
+      listen_addr = "127.0.0.1:8080"
+      extra_environment = {
+        API_TOKEN = var.api_token
+      }
     }
   }
 
+  ssh {
+    host          = "fleet1.example.invalid"
+    port          = 22
+    user          = "root"
+    identity_file = "~/.ssh/id_ed25519"
+  }
+
   state {
-    path      = "/var/lib/debianform/state/server1.json"
-    lock_path = "/var/lock/debianform/state/server1.lock"
+    path      = "/var/lib/debianform/state/fleet1.json"
+    lock_path = "/var/lock/debianform/state/fleet1.lock"
+  }
+
+  system {
+    hostname     = "fleet1"
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  apt {
+    repository "example_tools" {
+      uris          = ["https://repo.example.invalid/debian"]
+      suites        = ["trixie"]
+      components    = ["main"]
+      architectures = ["amd64"]
+
+      signing_key {
+        url    = "https://repo.example.invalid/key.asc"
+        sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+        path   = "/etc/apt/keyrings/example-tools.asc"
+      }
+    }
   }
 
   packages {
+    package "example-tool" {
+      repositories = ["example_tools"]
+    }
+
     install = [
-      "docker-compose",
-      "docker.io",
       "git",
       "systemd-resolved",
     ]
   }
 
-  # profile.base 中定义 deploy 用户；host 的列表默认追加并去重，
-  # 因此最终附加组列表是 ["docker"]。
-  users {
-    user "deploy" {
-      groups = ["docker"]
-    }
-  }
-
   groups {
     group "docker" {}
-  }
-
-  kernel {
-    sysctl = {
-      # 只有承担转发职责的主机才启用。
-      "net.ipv4.ip_forward" = "1"
-    }
-  }
-
-  secrets {
-    file "/etc/wireguard/private.key" {
-      source = "secrets/server1-wireguard.key"
-      owner  = "root"
-      group  = "systemd-network"
-      mode   = "0640"
-    }
-  }
-
-  files {
-    file "/opt/app/docker-compose.yml" {
-      owner = "deploy"
-      group = "deploy"
-      mode  = "0644"
-
-      content = <<-EOF
-        services:
-          web:
-            image: nginx:1.27-alpine
-            restart: unless-stopped
-            ports:
-              - "8080:80"
-      EOF
-    }
   }
 
   directories {
@@ -430,24 +298,43 @@ host "server1" {
       group = "deploy"
       mode  = "0755"
     }
+
+    directory "/etc/nftables.d" {}
+  }
+
+  files {
+    file "/etc/example-token" {
+      mode            = "0600"
+      sensitive       = true
+      content         = var.api_token
+      content_version = "2026-06-24-example"
+    }
+
+    file "/etc/wireguard/wg0.key" {
+      owner           = "root"
+      group           = "systemd-network"
+      mode            = "0640"
+      sensitive       = true
+      content         = var.wireguard_private_key
+      content_version = "2026-06-24-example"
+    }
   }
 
   systemd {
     resolved {
       enable = true
+      state  = "running"
 
       resolve = {
-        DNS = [
-          "1.1.1.1",
-          "8.8.8.8",
-        ]
-
-        DNSStubListener = "yes"
+        DNS             = ["1.1.1.1", "9.9.9.9"]
+        DNSSEC          = "allow-downgrade"
+        DNSStubListener = true
       }
     }
 
     journald {
       journal = {
+        Compress        = true
         MaxRetentionSec = "7day"
         Storage         = "persistent"
         SystemMaxUse    = "1G"
@@ -457,102 +344,72 @@ host "server1" {
     networkd {
       enable = true
 
-      network "10-eth0" {
-        match = {
-          Name = "eth0"
-        }
-
-        network = {
-          DHCP = "yes"
-        }
-
-        dhcp_v4 = {
-          UseDNS = false
-        }
-      }
-
-      netdev "20-wg0" {
+      netdev "wg0" {
         netdev = {
-          Kind = "wireguard"
           Name = "wg0"
+          Kind = "wireguard"
         }
 
         wireguard = {
           ListenPort     = 51820
-          PrivateKeyFile = "/etc/wireguard/private.key"
-
-          # 不根据 peer.AllowedIPs 自动向系统路由表写路由。
-          RouteTable = "off"
+          PrivateKeyFile = "/etc/wireguard/wg0.key"
+          RouteTable     = "off"
         }
 
-        wireguard_peer "server2" {
-          PublicKey = "SERVER2_PUBLIC_KEY"
-
-          AllowedIPs = [
-            "10.100.0.2/32",
-            "10.200.0.0/24",
-          ]
-
-          Endpoint            = "server2.example.com:51820"
-          PersistentKeepalive = 25
-        }
-
-        wireguard_peer "laptop" {
-          PublicKey = "LAPTOP_PUBLIC_KEY"
-
-          AllowedIPs = [
-            "10.100.0.10/32",
-          ]
-
+        wireguard_peer "peer1" {
+          PublicKey           = "peer1-public-key-placeholder"
+          AllowedIPs          = ["10.80.0.2/32"]
+          Endpoint            = "peer1.example.invalid:51820"
           PersistentKeepalive = 25
         }
       }
 
-      network "20-wg0" {
+      network "wg0" {
         match = {
           Name = "wg0"
         }
 
         network = {
-          Address      = ["10.100.0.1/24"]
-          IPv6AcceptRA = "no"
-        }
-
-        link = {
-          RequiredForOnline = "no"
-        }
-      }
-
-      link "10-eth0" {
-        match = {
-          OriginalName = "eth0"
-        }
-
-        link = {
-          MTUBytes = 1500
+          Address = ["10.80.0.1/30"]
         }
       }
     }
 
-    service "cleanup-tmp" {
-      description = "Clean old temporary files"
+    unit "oneshot-maintenance.service" {
+      content = <<-UNIT
+        [Unit]
+        Description=Example raw oneshot unit
 
-      service_config = {
-        ExecStart = "/usr/bin/find /tmp -xdev -type f -mtime +7 -delete"
-        Type      = "oneshot"
-      }
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/bin/true
+      UNIT
     }
 
-    timer "cleanup-tmp" {
-      enable = true
-      state  = "running"
+    service_unit "cleanup-cache" {
+      description = "Clean cache"
+      run         = ["/usr/bin/find", "/var/cache", "-type", "f", "-mtime", "+30", "-delete"]
+      type        = "oneshot"
+      wanted_by   = []
+    }
 
-      wanted_by = ["timers.target"]
+    timer "cleanup-cache" {
+      description = "Run cache cleanup daily"
+      enable      = true
+      state       = "running"
 
-      timer_config = {
-        OnCalendar = "daily"
-        Persistent = true
+      timer = {
+        Unit               = "cleanup-cache.service"
+        OnCalendar         = "daily"
+        Persistent         = true
+        RandomizedDelaySec = "30m"
       }
+    }
+  }
+
+  services {
+    service "oneshot-maintenance" {
+      state = "stopped"
     }
   }
 
@@ -564,204 +421,81 @@ host "server1" {
       validate = true
       activate = true
 
-      content = <<-EOF
+      content = <<-NFT
         flush ruleset
 
         include "/etc/nftables.d/*.nft"
-      EOF
+      NFT
     }
 
-    file "20-server1-filter" {
-      path = "/etc/nftables.d/20-server1-filter.nft"
+    file "20-input" {
+      path = "/etc/nftables.d/20-input.nft"
 
-      content = <<-EOF
+      content = <<-NFT
         table inet filter {
           chain input {
             type filter hook input priority 0; policy drop;
 
             ct state established,related accept
             iifname "lo" accept
-
             tcp dport { 22, 8080 } accept
             udp dport 51820 accept
 
             counter drop
           }
-
-          chain forward {
-            type filter hook forward priority 0; policy drop;
-          }
-
-          chain output {
-            type filter hook output priority 0; policy accept;
-          }
         }
-      EOF
+      NFT
     }
   }
 
   docker {
     enable = true
+    users  = ["deploy"]
 
-    daemon_settings = {
-      "log-driver" = "json-file"
+    package {
+      source           = "debian"
+      remove_conflicts = "auto"
+    }
 
-      "log-opts" = {
-        "max-file" = "3"
-        "max-size" = "100m"
+    daemon {
+      settings = {
+        "log-driver" = "json-file"
+        "log-opts" = {
+          "max-file" = "3"
+          "max-size" = "100m"
+        }
       }
     }
 
     compose "app" {
-      enable    = true
       state     = "running"
       directory = "/opt/app"
-      file      = "/opt/app/docker-compose.yml"
 
-      wanted_by = ["multi-user.target"]
-      after     = ["docker.service", "network-online.target"]
-    }
-  }
+      file {
+        path  = "/opt/app/compose.yaml"
+        owner = "deploy"
+        group = "deploy"
+        mode  = "0644"
 
-  assert {
-    condition = contains(self.kernel.modules, "tcp_bbr")
-    message   = "BBR requires the tcp_bbr kernel module."
-  }
-
-  assert {
-    condition = self.kernel.sysctl["net.ipv4.tcp_congestion_control"] == "bbr"
-    message   = "The BBR profile must set tcp_congestion_control to bbr."
-  }
-
-  assert {
-    condition = self.systemd.networkd.netdev["20-wg0"].wireguard.RouteTable == "off"
-    message   = "WireGuard must not auto-install AllowedIPs into a route table."
-  }
-}
-
-host "server2" {
-  imports = [
-    profile.base,
-    profile.bbr,
-    profile.wireguard,
-  ]
-
-  components = [
-    component.rclone,
-    component.company_ca,
-  ]
-
-  secrets {
-    file "/etc/wireguard/private.key" {
-      source = "secrets/server2-wireguard.key"
-      owner  = "root"
-      group  = "systemd-network"
-      mode   = "0640"
-    }
-  }
-
-  systemd {
-    networkd {
-      enable = true
-
-      network "10-eth0" {
-        match = {
-          Name = "eth0"
-        }
-
-        network = {
-          DHCP = "yes"
-        }
+        content = <<-YAML
+          services:
+            web:
+              image: nginx:1.27-alpine
+              ports:
+                - "8080:80"
+        YAML
       }
 
-      netdev "20-wg0" {
-        netdev = {
-          Kind = "wireguard"
-          Name = "wg0"
-        }
-
-        wireguard = {
-          ListenPort     = 51820
-          PrivateKeyFile = "/etc/wireguard/private.key"
-          RouteTable     = "off"
-        }
-
-        wireguard_peer "server1" {
-          PublicKey = "SERVER1_PUBLIC_KEY"
-
-          AllowedIPs = [
-            "10.10.0.0/24",
-            "10.100.0.1/32",
-          ]
-
-          Endpoint            = "server1.example.com:51820"
-          PersistentKeepalive = 25
-        }
-      }
-
-      network "20-wg0" {
-        match = {
-          Name = "wg0"
-        }
-
-        network = {
-          Address      = ["10.100.0.2/24"]
-          IPv6AcceptRA = "no"
-        }
-
-        link = {
-          RequiredForOnline = "no"
-        }
+      env_file "app" {
+        path    = "/opt/app/.env"
+        mode    = "0600"
+        content = "APP_ENV=${var.environment}\n"
       }
     }
   }
 
-  nftables {
-    enable = true
-
-    main {
-      path     = "/etc/nftables.conf"
-      validate = true
-      activate = true
-
-      content = <<-EOF
-        flush ruleset
-
-        include "/etc/nftables.d/*.nft"
-      EOF
-    }
-
-    file "20-server2-filter" {
-      path = "/etc/nftables.d/20-server2-filter.nft"
-
-      content = <<-EOF
-        table inet filter {
-          chain input {
-            type filter hook input priority 0; policy drop;
-
-            ct state established,related accept
-            iifname "lo" accept
-
-            tcp dport 22 accept
-            udp dport 51820 accept
-
-            counter drop
-          }
-
-          chain forward {
-            type filter hook forward priority 0; policy drop;
-          }
-
-          chain output {
-            type filter hook output priority 0; policy accept;
-          }
-        }
-      EOF
-    }
-  }
-
   assert {
-    condition = self.systemd.networkd.netdev["20-wg0"].wireguard.RouteTable == "off"
-    message   = "WireGuard must not auto-install routes from AllowedIPs."
+    condition = self.systemd.resolved.resolve.DNS[0] == "1.1.1.1"
+    message   = "fleet1 should use the documented resolver example."
   }
 }

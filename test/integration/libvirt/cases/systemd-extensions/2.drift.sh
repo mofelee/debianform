@@ -1,0 +1,2 @@
+run_remote "drift systemd extension files and timer state" \
+  "printf '# drifted timer\n' > /etc/systemd/system/dbf-systemd-extensions-worker.timer && mkdir -p /etc/systemd/resolved.conf.d /etc/systemd/journald.conf.d && printf '[Resolve]\nDNS=8.8.8.8\n' > /etc/systemd/resolved.conf.d/debianform.conf && printf '[Journal]\nSystemMaxUse=1M\n' > /etc/systemd/journald.conf.d/debianform.conf && systemctl disable --now dbf-systemd-extensions-worker.timer"

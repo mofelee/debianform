@@ -239,9 +239,12 @@ type ManagedUser struct {
 }
 
 type SystemdSpec struct {
-	Units    map[string]SystemdUnit `json:"units,omitempty"`
-	Networkd *NetworkdSpec          `json:"networkd,omitempty"`
-	Source   SourceRef              `json:"source,omitempty"`
+	Units    map[string]SystemdUnit  `json:"units,omitempty"`
+	Networkd *NetworkdSpec           `json:"networkd,omitempty"`
+	Timers   map[string]SystemdTimer `json:"timers,omitempty"`
+	Resolved *SystemdResolvedSpec    `json:"resolved,omitempty"`
+	Journald *SystemdJournaldSpec    `json:"journald,omitempty"`
+	Source   SourceRef               `json:"source,omitempty"`
 }
 
 type SystemdUnit struct {
@@ -267,6 +270,31 @@ type NetworkdSpec struct {
 }
 
 type NetworkdSection map[string][]string
+
+type SystemdTimer struct {
+	Name    string          `json:"name"`
+	Unit    SystemdUnit     `json:"unit"`
+	Timer   NetworkdSection `json:"timer,omitempty"`
+	Install NetworkdSection `json:"install,omitempty"`
+	Enable  *bool           `json:"enable,omitempty"`
+	State   string          `json:"state,omitempty"`
+	Source  SourceRef       `json:"source,omitempty"`
+}
+
+type SystemdResolvedSpec struct {
+	Unit    SystemdUnit     `json:"unit"`
+	Resolve NetworkdSection `json:"resolve,omitempty"`
+	Enable  *bool           `json:"enable,omitempty"`
+	State   string          `json:"state,omitempty"`
+	Source  SourceRef       `json:"source,omitempty"`
+}
+
+type SystemdJournaldSpec struct {
+	Unit    SystemdUnit     `json:"unit"`
+	Journal NetworkdSection `json:"journal,omitempty"`
+	State   string          `json:"state,omitempty"`
+	Source  SourceRef       `json:"source,omitempty"`
+}
 
 type NetworkdNetDev struct {
 	Label          string                     `json:"label"`

@@ -1370,7 +1370,8 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 			Users: map[string]ir.ManagedUser{},
 		},
 		Systemd: ir.SystemdSpec{
-			Units: map[string]ir.SystemdUnit{},
+			Units:  map[string]ir.SystemdUnit{},
+			Timers: map[string]ir.SystemdTimer{},
 		},
 		Services: ir.ServiceSpec{
 			Services: map[string]ir.ManagedService{},
@@ -1564,11 +1565,26 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 			return spec, err
 		}
 		spec.Systemd.Units = units
+		timers, err := systemdTimerSpecs(systemd)
+		if err != nil {
+			return spec, err
+		}
+		spec.Systemd.Timers = timers
 		networkd, err := networkdSpec(systemd)
 		if err != nil {
 			return spec, err
 		}
 		spec.Systemd.Networkd = networkd
+		resolved, err := systemdResolvedSpec(systemd)
+		if err != nil {
+			return spec, err
+		}
+		spec.Systemd.Resolved = resolved
+		journald, err := systemdJournaldSpec(systemd)
+		if err != nil {
+			return spec, err
+		}
+		spec.Systemd.Journald = journald
 	}
 
 	if services, ok, err := mapField(raw, "services"); err != nil {
@@ -1649,7 +1665,8 @@ func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, raw par
 			Users: map[string]ir.ManagedUser{},
 		},
 		Systemd: ir.SystemdSpec{
-			Units: map[string]ir.SystemdUnit{},
+			Units:  map[string]ir.SystemdUnit{},
+			Timers: map[string]ir.SystemdTimer{},
 		},
 		Services: ir.ServiceSpec{
 			Services: map[string]ir.ManagedService{},
@@ -1748,11 +1765,26 @@ func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, raw par
 			return spec, err
 		}
 		spec.Systemd.Units = units
+		timers, err := systemdTimerSpecs(systemd)
+		if err != nil {
+			return spec, err
+		}
+		spec.Systemd.Timers = timers
 		networkd, err := networkdSpec(systemd)
 		if err != nil {
 			return spec, err
 		}
 		spec.Systemd.Networkd = networkd
+		resolved, err := systemdResolvedSpec(systemd)
+		if err != nil {
+			return spec, err
+		}
+		spec.Systemd.Resolved = resolved
+		journald, err := systemdJournaldSpec(systemd)
+		if err != nil {
+			return spec, err
+		}
+		spec.Systemd.Journald = journald
 	}
 
 	if services, ok, err := mapField(raw, "services"); err != nil {
@@ -2620,6 +2652,29 @@ func systemdSpecs(systemd parser.Value) (map[string]ir.SystemdUnit, error) {
 	return out, nil
 }
 
+func systemdTimerSpecs(systemd parser.Value) (map[string]ir.SystemdTimer, error) {
+	objects, ok, err := objectCollection(systemd, "timer")
+	if err != nil || !ok {
+		return map[string]ir.SystemdTimer{}, err
+	}
+	out := make(map[string]ir.SystemdTimer, len(objects))
+	for _, name := range sortedKeys(objects) {
+		item := objects[name]
+		if name == "" {
+			return nil, fmt.Errorf("%s:%d:%s: systemd timer name must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		timer, err := systemdTimerSpec(name, item)
+		if err != nil {
+			return nil, err
+		}
+		if previous, exists := out[timer.Name]; exists {
+			return nil, fmt.Errorf("%s:%d:%s: systemd timer %q conflicts with timer declared at %s:%d:%s", timer.Source.File, timer.Source.Line, timer.Source.Path, timer.Name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+		}
+		out[timer.Name] = timer
+	}
+	return out, nil
+}
+
 func networkdSpec(systemd parser.Value) (*ir.NetworkdSpec, error) {
 	networkd, ok, err := mapField(systemd, "networkd")
 	if err != nil || !ok {
@@ -2673,6 +2728,72 @@ func networkdSpec(systemd parser.Value) (*ir.NetworkdSpec, error) {
 		}
 	}
 	return spec, nil
+}
+
+func systemdResolvedSpec(systemd parser.Value) (*ir.SystemdResolvedSpec, error) {
+	resolved, ok, err := mapField(systemd, "resolved")
+	if err != nil || !ok {
+		return nil, err
+	}
+	ensure, err := ensureField(resolved, "present")
+	if err != nil {
+		return nil, err
+	}
+	resolve, err := systemdSectionField(resolved, "resolve")
+	if err != nil {
+		return nil, err
+	}
+	if ensure == "present" && len(resolve) == 0 {
+		return nil, fmt.Errorf("%s:%d:%s.resolve: systemd.resolved requires resolve section when ensure is present", resolved.Source.File, resolved.Source.Line, resolved.Source.Path)
+	}
+	unit, err := systemdDropInUnit(resolved, "systemd-resolved", "/etc/systemd/resolved.conf.d/debianform.conf", "Resolve", resolve, ensure)
+	if err != nil {
+		return nil, err
+	}
+	var enable *bool
+	if value, ok, err := boolField(resolved, "enable"); err != nil {
+		return nil, err
+	} else if ok {
+		enable = &value
+	}
+	state, _, err := stringField(resolved, "state")
+	if err != nil {
+		return nil, err
+	}
+	if state != "" && !stringIn(state, "running", "stopped", "restarted", "reloaded") {
+		return nil, fmt.Errorf("%s:%d:%s.state: systemd.resolved state must be running, stopped, restarted, or reloaded", resolved.Source.File, resolved.Source.Line, resolved.Source.Path)
+	}
+	return &ir.SystemdResolvedSpec{Unit: unit, Resolve: resolve, Enable: enable, State: state, Source: resolved.Source}, nil
+}
+
+func systemdJournaldSpec(systemd parser.Value) (*ir.SystemdJournaldSpec, error) {
+	journald, ok, err := mapField(systemd, "journald")
+	if err != nil || !ok {
+		return nil, err
+	}
+	ensure, err := ensureField(journald, "present")
+	if err != nil {
+		return nil, err
+	}
+	journal, err := systemdSectionField(journald, "journal")
+	if err != nil {
+		return nil, err
+	}
+	if ensure == "present" && len(journal) == 0 {
+		return nil, fmt.Errorf("%s:%d:%s.journal: systemd.journald requires journal section when ensure is present", journald.Source.File, journald.Source.Line, journald.Source.Path)
+	}
+	unit, err := systemdDropInUnit(journald, "systemd-journald", "/etc/systemd/journald.conf.d/debianform.conf", "Journal", journal, ensure)
+	if err != nil {
+		return nil, err
+	}
+	state, _, err := stringField(journald, "state")
+	if err != nil {
+		return nil, err
+	}
+	if state != "" && !stringIn(state, "running", "stopped", "restarted", "reloaded") {
+		return nil, fmt.Errorf("%s:%d:%s.state: systemd.journald state must be running, stopped, restarted, or reloaded", journald.Source.File, journald.Source.Line, journald.Source.Path)
+	}
+	return &ir.SystemdJournaldSpec{Unit: unit, Journal: journal, State: state, Source: journald.Source}, nil
 }
 
 func networkdNetDevSpec(label string, item parser.Value) (ir.NetworkdNetDev, error) {
@@ -2841,6 +2962,14 @@ func networkdSectionField(root parser.Value, name string) (ir.NetworkdSection, e
 	return networkdSection(section)
 }
 
+func systemdSectionField(root parser.Value, name string) (ir.NetworkdSection, error) {
+	section, ok, err := mapField(root, name)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return systemdSection(section)
+}
+
 func networkdSectionCollection(root parser.Value, name string) (map[string]ir.NetworkdSection, error) {
 	objects, ok, err := objectCollection(root, name)
 	if err != nil || !ok {
@@ -2864,6 +2993,25 @@ func networkdSectionCollection(root parser.Value, name string) (map[string]ir.Ne
 func networkdSection(root parser.Value) (ir.NetworkdSection, error) {
 	if !root.IsMap() {
 		return nil, fmt.Errorf("%s:%d:%s: networkd section must be a map", root.Source.File, root.Source.Line, root.Source.Path)
+	}
+	out := ir.NetworkdSection{}
+	for _, key := range sortedKeys(root.Map) {
+		item := root.Map[key]
+		if item.Kind == parser.KindNull {
+			continue
+		}
+		values, err := networkdSectionValues(item)
+		if err != nil {
+			return nil, err
+		}
+		out[key] = values
+	}
+	return out, nil
+}
+
+func systemdSection(root parser.Value) (ir.NetworkdSection, error) {
+	if !root.IsMap() {
+		return nil, fmt.Errorf("%s:%d:%s: systemd section must be a map", root.Source.File, root.Source.Line, root.Source.Path)
 	}
 	out := ir.NetworkdSection{}
 	for _, key := range sortedKeys(root.Map) {
@@ -2967,6 +3115,41 @@ func appendNetworkdSection(lines *[]string, name string, values ir.NetworkdSecti
 		}
 	}
 	return nil
+}
+
+func appendSystemdSection(lines *[]string, name string, values ir.NetworkdSection, source ir.SourceRef) error {
+	if name != "" {
+		if len(*lines) > 0 {
+			*lines = append(*lines, "")
+		}
+		*lines = append(*lines, "["+name+"]")
+	}
+	for _, key := range sortedKeys(values) {
+		if strings.TrimSpace(key) == "" || strings.ContainsAny(key, "=\x00\n\r") {
+			return fmt.Errorf("%s:%d:%s: systemd section key %q is invalid", source.File, source.Line, source.Path, key)
+		}
+		for _, value := range values[key] {
+			if err := validateSystemdSingleLine(value, source); err != nil {
+				return err
+			}
+			*lines = append(*lines, key+"="+value)
+		}
+	}
+	return nil
+}
+
+func systemdSectionNeedsRedaction(root parser.Value, name string) bool {
+	value, ok := root.Map[name]
+	return ok && contentNeedsRedaction(value)
+}
+
+func systemdAnySectionNeedsRedaction(root parser.Value) bool {
+	for _, name := range []string{"resolve", "journal", "timer", "install", "service_config"} {
+		if systemdSectionNeedsRedaction(root, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func firstSectionValue(section ir.NetworkdSection, key string) string {
@@ -3120,7 +3303,7 @@ func systemdServiceUnitHasStructuredFields(item parser.Value) bool {
 	for _, name := range []string{
 		"description", "run", "type", "user", "group", "working_dir",
 		"environment", "restart", "restart_delay", "wants", "after",
-		"wanted_by", "stdout", "stderr",
+		"wanted_by", "stdout", "stderr", "service_config",
 	} {
 		if _, ok := item.Map[name]; ok {
 			return true
@@ -3133,7 +3316,7 @@ func systemdServiceUnitStructuredSensitive(item parser.Value) bool {
 	for _, name := range []string{
 		"description", "run", "type", "user", "group", "working_dir",
 		"environment", "restart", "restart_delay", "wants", "after",
-		"wanted_by", "stdout", "stderr",
+		"wanted_by", "stdout", "stderr", "service_config",
 	} {
 		if value, ok := item.Map[name]; ok && contentNeedsRedaction(value) {
 			return true
@@ -3290,6 +3473,15 @@ func renderSystemdServiceUnit(unitName string, item parser.Value) (string, error
 			return "", err
 		}
 	}
+	serviceConfig, err := systemdSectionField(item, "service_config")
+	if err != nil {
+		return "", err
+	}
+	if len(serviceConfig) > 0 {
+		if err := appendSystemdSection(&serviceLines, "", serviceConfig, item.Map["service_config"].Source); err != nil {
+			return "", err
+		}
+	}
 
 	wantedBy, hasWantedBy, err := optionalStringListField(item, "wanted_by")
 	if err != nil {
@@ -3321,6 +3513,158 @@ func renderSystemdServiceUnit(unitName string, item parser.Value) (string, error
 		lines = append(lines, installLines...)
 	}
 	return strings.Join(lines, "\n") + "\n", nil
+}
+
+func systemdTimerSpec(name string, item parser.Value) (ir.SystemdTimer, error) {
+	timerName := timerUnitName(name)
+	ensure, err := ensureField(item, "present")
+	if err != nil {
+		return ir.SystemdTimer{}, err
+	}
+	timerSection, err := systemdSectionField(item, "timer")
+	if err != nil {
+		return ir.SystemdTimer{}, err
+	}
+	if ensure == "present" && len(timerSection) == 0 {
+		return ir.SystemdTimer{}, fmt.Errorf("%s:%d:%s.timer: systemd.timer requires timer section when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	install, err := systemdSectionField(item, "install")
+	if err != nil {
+		return ir.SystemdTimer{}, err
+	}
+	if install == nil {
+		install = ir.NetworkdSection{}
+	}
+	wantedBy, hasWantedBy, err := optionalStringListField(item, "wanted_by")
+	if err != nil {
+		return ir.SystemdTimer{}, err
+	}
+	if !hasWantedBy {
+		wantedBy = []string{"timers.target"}
+	}
+	if len(wantedBy) > 0 {
+		install["WantedBy"] = append([]string(nil), wantedBy...)
+	}
+	content := ""
+	if ensure == "present" {
+		description, ok, err := stringField(item, "description")
+		if err != nil {
+			return ir.SystemdTimer{}, err
+		}
+		if !ok {
+			description = strings.TrimSuffix(timerName, ".timer")
+		} else if strings.TrimSpace(description) == "" {
+			return ir.SystemdTimer{}, fmt.Errorf("%s:%d:%s.description: must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		content, err = renderSystemdTimerUnit(description, timerSection, install, item.Source)
+		if err != nil {
+			return ir.SystemdTimer{}, err
+		}
+	}
+	owner, err := stringFieldDefault(item, "owner", "root")
+	if err != nil {
+		return ir.SystemdTimer{}, err
+	}
+	group, err := stringFieldDefault(item, "file_group", "root")
+	if err != nil {
+		return ir.SystemdTimer{}, err
+	}
+	mode, err := modeFieldDefault(item, "mode", "0644")
+	if err != nil {
+		return ir.SystemdTimer{}, err
+	}
+	lifecycle, err := lifecycleSpec(item)
+	if err != nil {
+		return ir.SystemdTimer{}, err
+	}
+	var enable *bool
+	if value, ok, err := boolField(item, "enable"); err != nil {
+		return ir.SystemdTimer{}, err
+	} else if ok {
+		enable = &value
+	}
+	state, _, err := stringField(item, "state")
+	if err != nil {
+		return ir.SystemdTimer{}, err
+	}
+	if state != "" && !stringIn(state, "running", "stopped") {
+		return ir.SystemdTimer{}, fmt.Errorf("%s:%d:%s.state: systemd.timer state must be running or stopped", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	unit := ir.SystemdUnit{
+		Name:      timerName,
+		Path:      "/etc/systemd/system/" + timerName,
+		Content:   content,
+		Owner:     owner,
+		Group:     group,
+		Mode:      mode,
+		Sensitive: systemdSectionNeedsRedaction(item, "timer") || systemdSectionNeedsRedaction(item, "install"),
+		Ensure:    ensure,
+		Lifecycle: lifecycle,
+		Source:    item.Source,
+	}
+	if content != "" {
+		unit.Summary = contentSummary([]byte(content))
+	}
+	return ir.SystemdTimer{Name: timerName, Unit: unit, Timer: timerSection, Install: install, Enable: enable, State: state, Source: item.Source}, nil
+}
+
+func renderSystemdTimerUnit(description string, timer ir.NetworkdSection, install ir.NetworkdSection, source ir.SourceRef) (string, error) {
+	lines := []string{"[Unit]"}
+	if err := appendSystemdAssignment(&lines, "Description", description, source); err != nil {
+		return "", err
+	}
+	if err := appendSystemdSection(&lines, "Timer", timer, source); err != nil {
+		return "", err
+	}
+	if len(install) > 0 {
+		if err := appendSystemdSection(&lines, "Install", install, source); err != nil {
+			return "", err
+		}
+	}
+	return strings.Join(lines, "\n") + "\n", nil
+}
+
+func systemdDropInUnit(item parser.Value, name string, path string, sectionName string, section ir.NetworkdSection, ensure string) (ir.SystemdUnit, error) {
+	content := ""
+	if ensure == "present" {
+		lines := []string{}
+		if err := appendSystemdSection(&lines, sectionName, section, item.Source); err != nil {
+			return ir.SystemdUnit{}, err
+		}
+		content = strings.Join(lines, "\n") + "\n"
+	}
+	owner, err := stringFieldDefault(item, "owner", "root")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	group, err := stringFieldDefault(item, "file_group", "root")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	mode, err := modeFieldDefault(item, "mode", "0644")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	lifecycle, err := lifecycleSpec(item)
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	unit := ir.SystemdUnit{
+		Name:      name,
+		Path:      path,
+		Content:   content,
+		Owner:     owner,
+		Group:     group,
+		Mode:      mode,
+		Sensitive: systemdAnySectionNeedsRedaction(item),
+		Ensure:    ensure,
+		Lifecycle: lifecycle,
+		Source:    item.Source,
+	}
+	if content != "" {
+		unit.Summary = contentSummary([]byte(content))
+	}
+	return unit, nil
 }
 
 func systemdRunCommandField(root parser.Value, name string) (string, bool, error) {
@@ -4077,8 +4421,42 @@ func validateHostSpec(spec ir.HostSpec) error {
 	for name, user := range spec.Users.Users {
 		users[name] = user
 	}
-	for name, unit := range spec.Systemd.Units {
+	for _, unit := range spec.Systemd.Units {
+		units[unit.Name] = unit
+		files[unit.Path] = unit.Source
+	}
+	for name, timer := range spec.Systemd.Timers {
+		unit := timer.Unit
+		if previous, exists := units[unit.Name]; exists {
+			return fmt.Errorf("%s:%d:%s: systemd timer %q conflicts with unit declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, unit.Name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+		}
+		if previous, exists := files[unit.Path]; exists {
+			return fmt.Errorf("%s:%d:%s: systemd timer path %q conflicts with file declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, unit.Path, previous.File, previous.Line, previous.Path)
+		}
+		if previous, exists := secrets[unit.Path]; exists {
+			return fmt.Errorf("%s:%d:%s: systemd timer path %q conflicts with secret declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, unit.Path, previous.File, previous.Line, previous.Path)
+		}
 		units[name] = unit
+		files[unit.Path] = unit.Source
+	}
+	if spec.Systemd.Resolved != nil {
+		unit := spec.Systemd.Resolved.Unit
+		if previous, exists := files[unit.Path]; exists {
+			return fmt.Errorf("%s:%d:%s: systemd resolved path %q conflicts with file declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, unit.Path, previous.File, previous.Line, previous.Path)
+		}
+		if previous, exists := secrets[unit.Path]; exists {
+			return fmt.Errorf("%s:%d:%s: systemd resolved path %q conflicts with secret declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, unit.Path, previous.File, previous.Line, previous.Path)
+		}
+		files[unit.Path] = unit.Source
+	}
+	if spec.Systemd.Journald != nil {
+		unit := spec.Systemd.Journald.Unit
+		if previous, exists := files[unit.Path]; exists {
+			return fmt.Errorf("%s:%d:%s: systemd journald path %q conflicts with file declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, unit.Path, previous.File, previous.Line, previous.Path)
+		}
+		if previous, exists := secrets[unit.Path]; exists {
+			return fmt.Errorf("%s:%d:%s: systemd journald path %q conflicts with secret declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, unit.Path, previous.File, previous.Line, previous.Path)
+		}
 		files[unit.Path] = unit.Source
 	}
 	if spec.Systemd.Networkd != nil {
@@ -4235,7 +4613,41 @@ func validateHostSpec(spec ir.HostSpec) error {
 			if previous, exists := secrets[unit.Path]; exists {
 				return fmt.Errorf("%s:%d:%s: component %q systemd unit path %q conflicts with secret declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, unit.Path, previous.File, previous.Line, previous.Path)
 			}
+			units[unit.Name] = unit
+			files[unit.Path] = unit.Source
+		}
+		for name, timer := range component.Systemd.Timers {
+			unit := timer.Unit
+			if previous, exists := units[unit.Name]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q systemd timer %q conflicts with unit declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, unit.Name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+			}
+			if previous, exists := files[unit.Path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q systemd timer path %q conflicts with file declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, unit.Path, previous.File, previous.Line, previous.Path)
+			}
+			if previous, exists := secrets[unit.Path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q systemd timer path %q conflicts with secret declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, unit.Path, previous.File, previous.Line, previous.Path)
+			}
 			units[name] = unit
+			files[unit.Path] = unit.Source
+		}
+		if component.Systemd.Resolved != nil {
+			unit := component.Systemd.Resolved.Unit
+			if previous, exists := files[unit.Path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q systemd resolved path %q conflicts with file declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, unit.Path, previous.File, previous.Line, previous.Path)
+			}
+			if previous, exists := secrets[unit.Path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q systemd resolved path %q conflicts with secret declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, unit.Path, previous.File, previous.Line, previous.Path)
+			}
+			files[unit.Path] = unit.Source
+		}
+		if component.Systemd.Journald != nil {
+			unit := component.Systemd.Journald.Unit
+			if previous, exists := files[unit.Path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q systemd journald path %q conflicts with file declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, unit.Path, previous.File, previous.Line, previous.Path)
+			}
+			if previous, exists := secrets[unit.Path]; exists {
+				return fmt.Errorf("%s:%d:%s: component %q systemd journald path %q conflicts with secret declared at %s:%d:%s", unit.Source.File, unit.Source.Line, unit.Source.Path, component.Name, unit.Path, previous.File, previous.Line, previous.Path)
+			}
 			files[unit.Path] = unit.Source
 		}
 		if component.Systemd.Networkd != nil {
@@ -4552,6 +4964,13 @@ func serviceUnitName(name string) string {
 		return name
 	}
 	return name + ".service"
+}
+
+func timerUnitName(name string) string {
+	if strings.Contains(name, ".") {
+		return name
+	}
+	return name + ".timer"
 }
 
 func resolvePath(sourceFile string, value string) string {

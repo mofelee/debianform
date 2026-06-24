@@ -79,6 +79,9 @@ Linux Homebrew best-effort 规则见
 | `users` | Beta | uid/home/shell/primary group/supplementary groups/authorized keys。 | user/group example 和 tests。 |
 | `systemd.unit` | Beta | 原始 unit 文件管理。 | systemd examples 和 integration case。 |
 | `systemd.service_unit` | Beta | 结构化 `.service` 生成。 | `systemd-service-unit` integration case。 |
+| `systemd.timer` | Preview | 结构化 `.timer` 生成，并可管理 timer enabled/state。 | merge/graph 单测、`fleet` 示例和 `systemd-extensions` integration case。 |
+| `systemd.resolved` | Preview | 管理 `/etc/systemd/resolved.conf.d/debianform.conf` drop-in，并可管理/重启 `systemd-resolved`。 | merge/graph 单测、`fleet` 示例和 `systemd-extensions` integration case。 |
+| `systemd.journald` | Preview | 管理 `/etc/systemd/journald.conf.d/debianform.conf` drop-in，并可重载/重启 journald。 | merge/graph 单测、`fleet` 示例和 `systemd-extensions` integration case。 |
 | `systemd.networkd` | Preview | netdev/network、WireGuard peer、networkd enable。 | WireGuard examples 和 two-host integration case。 |
 | `services` | Beta | systemd service enabled/state，支持 running/stopped/restarted/reloaded。 | service tests 和 integration cases。 |
 | `nftables` | Beta | `/etc/nftables.conf`、snippet file、validate/activate。 | `nftables` integration case。 |
@@ -93,13 +96,13 @@ Linux Homebrew best-effort 规则见
 | `sysctl` | Beta | `kernel.sysctl` | 写 sysctl 配置并应用运行时值。 |
 | `package` | Beta | `packages`、`docker.package` | APT package 安装。 |
 | `apt_signing_key` | Beta | `apt.repository.signing_key`、Docker official repo | 管理 keyring 文件。 |
-| `file` | Beta | `apt.source_file`、`files.file`、Docker daemon/Compose | 管理普通文件和敏感摘要。 |
+| `file` | Beta | `apt.source_file`、`files.file`、Docker daemon/Compose、systemd drop-in | 管理普通文件和敏感摘要。 |
 | `directory` | Beta | `directories.directory`、Docker Compose | 管理目录。 |
 | `group` | Beta | `groups.group`、`docker.users` | 管理 group。 |
 | `user` | Beta | `users.user` | 管理 user。 |
 | `user_group_membership` | Beta | `docker.users` | 将已有或声明用户加入 supplementary group。 |
-| `systemd_unit` | Beta | `systemd.unit`、`systemd.service_unit`、Docker Compose | 管理 systemd unit 文件。 |
-| `service` | Beta | `services.service`、Docker service/Compose service | 管理 systemd enabled/state。 |
+| `systemd_unit` | Beta | `systemd.unit`、`systemd.service_unit`、`systemd.timer`、Docker Compose | 管理 systemd unit 文件。 |
+| `service` | Beta | `services.service`、systemd timer/resolved/journald、Docker service/Compose service | 管理 systemd enabled/state。 |
 | `nftables_file` | Beta | `nftables.file` | 管理 nftables 文件并触发 validate/activate。 |
 | `component_artifact` | Beta | `component.source` | 下载或准备 binary/file/archive/ca_certificate/source artifact。 |
 | `docker_package_conflicts` | Beta | `docker.package.source = "official"` | 检测并按策略移除冲突包。 |
@@ -154,13 +157,14 @@ Linux Homebrew best-effort 规则见
 | `examples/component-source-build.dbf.hcl` | Beta | source build component。 |
 | `examples/component-inputs.dbf.hcl` | Beta | typed input、validation、sensitive。 |
 | `examples/docker-*.dbf.hcl` | Beta | Docker minimal、daemon、Compose、users、package source。 |
+| `examples/fleet.dbf.hcl` | Preview | 当前语法速查，覆盖 profile/component/host、systemd timer/resolved/journald、Docker、nftables 等组合用法。 |
 | `examples/nftables.dbf.hcl` | Beta | nftables validate/activate。 |
 | `examples/realistic-systemd-app.dbf.hcl` | Beta | 低权限 systemd app 部署模板，覆盖 user/group、目录、文件、unit 和 service。 |
 | `examples/systemd-service*.dbf.hcl` | Beta | raw unit 和 structured service_unit。 |
 | `examples/user-group.dbf.hcl` | Beta | users/groups/directories/files。 |
 | `examples/variable-secret-file.dbf.hcl` | Beta | variable + sensitive file 写入。 |
 | `examples/wireguard-networkd.dbf.hcl` | Preview | WireGuard networkd component，多 peer 和多 interface 复用，需准备本地 secrets。 |
-| `examples/fleet.dbf.hcl` | Design-only | fleet 方向 fixture，不作为当前可运行样例。 |
+| `test/integration/libvirt/cases/systemd-extensions` | Preview | `service_config`、timer enable/state 和实际触发、resolved/journald drop-in、漂移修复和删除。 |
 | `test/integration/libvirt/cases/*` | Beta | Debian 13 VM 上 validate/apply/check/drift/remove/restore 覆盖。 |
 
 ## 当前不支持或尚未承诺

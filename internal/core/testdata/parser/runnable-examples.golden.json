@@ -169,6 +169,66 @@
     ]
   },
   {
+    "fixture": "../../../examples/fleet.dbf.hcl",
+    "locals": [
+      "admin_key"
+    ],
+    "variables": [
+      "api_token",
+      "environment",
+      "wireguard_private_key"
+    ],
+    "profiles": [
+      {
+        "name": "bbr",
+        "body_keys": [
+          "kernel"
+        ]
+      },
+      {
+        "name": "debian_base",
+        "body_keys": [
+          "apt",
+          "groups",
+          "packages",
+          "system",
+          "users"
+        ]
+      }
+    ],
+    "components": [
+      "static_tool",
+      "webapp"
+    ],
+    "hosts": [
+      {
+        "name": "fleet1",
+        "imports": [
+          "debian_base",
+          "bbr"
+        ],
+        "components": [
+          "static_tool=static_tool",
+          "webapp=webapp"
+        ],
+        "body_keys": [
+          "apt",
+          "directories",
+          "docker",
+          "files",
+          "groups",
+          "nftables",
+          "packages",
+          "services",
+          "ssh",
+          "state",
+          "system",
+          "systemd"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/mihomo.dbf.hcl",
     "components": [
       "mihomo"
