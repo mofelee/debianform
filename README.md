@@ -183,15 +183,33 @@ host "app1" {
 }
 ```
 
-更多可运行样例在 `examples/`。这些示例文件目前仍保留历史 `v2-` 文件名前缀，
-例如：
+更多可运行样例在 `examples/`。这些示例文件目前仍保留历史 `v2-` 文件名前缀。
+常用本地预览命令：
 
 ```bash
+dbf validate -f examples/v2-bbr.dbf.hcl
+dbf plan -f examples/v2-bbr.dbf.hcl --offline
 dbf validate -f examples/v2-realistic-systemd-app.dbf.hcl
 dbf plan -f examples/v2-realistic-systemd-app.dbf.hcl --offline
 dbf plan -f examples/v2-docker-minimal.dbf.hcl --offline
 dbf plan -f examples/v2-nftables.dbf.hcl --offline
 ```
+
+当前 README 覆盖的可运行示例包括：
+
+- `examples/v2-bbr.dbf.hcl`
+- `examples/v2-apt-repository.dbf.hcl`
+- `examples/v2-bird2.dbf.hcl`
+- `examples/v2-component-binary.dbf.hcl`
+- `examples/v2-files-plan-preview.dbf.hcl`
+- `examples/v2-mihomo.dbf.hcl`
+- `examples/v2-nftables.dbf.hcl`
+- `examples/v2-plan-preview.dbf.hcl`
+- `examples/v2-profile-merge.dbf.hcl`
+- `examples/v2-realistic-systemd-app.dbf.hcl`
+- `examples/v2-systemd-service.dbf.hcl`
+- `examples/v2-user-group.dbf.hcl`
+- `examples/v2-variable-secret-file.dbf.hcl`
 
 ## 支持边界
 
