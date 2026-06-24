@@ -22,7 +22,10 @@ dbf version
 ## 2. 准备目标主机
 
 准备一台低风险 Debian 13 amd64 主机，并在控制机的 `~/.ssh/config` 里给它一个稳定名字。
-DebianForm 当前不支持 sudo、become 或非 root 管理连接；SSH config 中的用户应为 root。
+
+这里必须使用 root：DebianForm 需要安装包、写 `/etc`、管理 systemd，并在
+`/var/lib/debianform` 和 `/var/lock/debianform` 写 state/lock。当前不支持 sudo、become
+或非 root 管理连接；SSH config 中的用户应为 root。
 
 ```sshconfig
 Host server1
@@ -39,6 +42,13 @@ ssh server1 'cat /etc/debian_version && uname -m'
 ```
 
 ## 3. 写第一份配置
+
+创建一个配置目录并进入目录。这个目录里先只放一份 `site.dbf.hcl`：
+
+```bash
+mkdir debianform-demo
+cd debianform-demo
+```
 
 新建 `site.dbf.hcl`：
 
@@ -68,12 +78,15 @@ host "server1" {
 
 只有需要覆盖连接名、端口、identity file 或 state 路径时，才写 `ssh` 或 `state` block。
 
+下面的命令都不写 `-f`。不加 `-f` 时，`dbf` 会读取当前工作目录下所有 `*.dbf.hcl`
+文件，并按文件名排序后合并处理。当前目录只有 `site.dbf.hcl`，所以命令可以保持简洁。
+
 ## 4. 本地校验
 
 `validate` 只解析和校验配置，不连接目标主机：
 
 ```bash
-dbf validate -f site.dbf.hcl
+dbf validate
 ```
 
 预期输出类似：
@@ -89,7 +102,7 @@ v2 configuration is valid: 1 host(s)
 `--offline` 不连接目标主机，适合先检查资源地址和变更形状：
 
 ```bash
-dbf plan -f site.dbf.hcl --offline
+dbf plan --offline
 ```
 
 预期会看到 `tcp_bbr` module 和两个 sysctl 资源的 create 计划。
@@ -99,7 +112,7 @@ dbf plan -f site.dbf.hcl --offline
 在线 plan 会通过 SSH 读取 runtime facts、远端 state 和 observed 状态：
 
 ```bash
-dbf plan -f site.dbf.hcl
+dbf plan
 ```
 
 第一次运行通常会看到 create/update 计划。此时还不会修改目标主机。
@@ -109,13 +122,13 @@ dbf plan -f site.dbf.hcl
 确认 plan 符合预期后执行：
 
 ```bash
-dbf apply -f site.dbf.hcl
+dbf apply
 ```
 
 如果用于 CI 或临时测试环境，可以跳过交互确认：
 
 ```bash
-dbf apply -f site.dbf.hcl --auto-approve
+dbf apply --auto-approve
 ```
 
 apply 会先重新生成在线 plan，获取目标主机 state lock，然后按资源图顺序执行变更并写入
@@ -126,7 +139,7 @@ state。
 apply 成功后，重新运行在线 plan：
 
 ```bash
-dbf plan -f site.dbf.hcl
+dbf plan
 ```
 
 预期 summary 中 create/update/delete/operations 都为 0。
@@ -134,7 +147,7 @@ dbf plan -f site.dbf.hcl
 最后运行 check：
 
 ```bash
-dbf check -f site.dbf.hcl
+dbf check
 ```
 
 目标主机与配置一致时，`check` 返回 0；如果有人手动修改了远端状态，`check` 会输出 plan

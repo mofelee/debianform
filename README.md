@@ -38,7 +38,11 @@ dbf version
 ## 5 分钟快速开始
 
 准备一台低风险 Debian 13 amd64 主机，并在控制机的 `~/.ssh/config` 里给它一个稳定名字。
-DebianForm 默认把 `host "server1"` 当作 `ssh server1` 使用；连接细节交给 SSH config：
+DebianForm 默认把 `host "server1"` 当作 `ssh server1` 使用；连接细节交给 SSH config。
+
+这里必须使用 root：DebianForm 需要安装包、写 `/etc`、管理 systemd，并在
+`/var/lib/debianform` 和 `/var/lock/debianform` 写 state/lock。当前不支持 sudo、become
+或非 root 管理连接。
 
 ```sshconfig
 Host server1
@@ -51,6 +55,13 @@ Host server1
 
 ```bash
 ssh server1 'cat /etc/debian_version && uname -m'
+```
+
+创建一个配置目录并进入目录。这个目录里先只放一份 `site.dbf.hcl`：
+
+```bash
+mkdir debianform-demo
+cd debianform-demo
 ```
 
 新建 `site.dbf.hcl`：
@@ -68,15 +79,15 @@ host "server1" {
 }
 ```
 
-然后执行：
+然后执行。因为当前目录只有这一份 `*.dbf.hcl`，所以不需要写 `-f`：
 
 ```bash
-dbf validate -f site.dbf.hcl
-dbf plan -f site.dbf.hcl --offline
-dbf plan -f site.dbf.hcl
-dbf apply -f site.dbf.hcl
-dbf plan -f site.dbf.hcl
-dbf check -f site.dbf.hcl
+dbf validate
+dbf plan --offline
+dbf plan
+dbf apply
+dbf plan
+dbf check
 ```
 
 这条路径覆盖了完整闭环：
@@ -95,39 +106,40 @@ dbf check -f site.dbf.hcl
 
 ```bash
 # 校验配置
-dbf validate -f site.dbf.hcl
+dbf validate
 
 # 本地预览，不连接目标机
-dbf plan -f site.dbf.hcl --offline
+dbf plan --offline
 
 # 在线 plan，读取 facts/state/observed 状态
-dbf plan -f site.dbf.hcl
+dbf plan
 
 # 输出机器可读 plan
-dbf plan -f site.dbf.hcl --format json
+dbf plan --format json
 
 # 输出静态 HTML plan
-dbf plan -f site.dbf.hcl --html plan.html
+dbf plan --html plan.html
 
 # 应用变更
-dbf apply -f site.dbf.hcl
+dbf apply
 
 # CI 或临时环境跳过确认
-dbf apply -f site.dbf.hcl --auto-approve
+dbf apply --auto-approve
 
 # 检查漂移
-dbf check -f site.dbf.hcl
+dbf check
 
 # 格式化配置
-dbf fmt -f site.dbf.hcl
+dbf fmt
 
 # 查看 component/variable 公开输入
-dbf component inspect -f site.dbf.hcl component_name
-dbf variable inspect -f site.dbf.hcl
+dbf component inspect component_name
+dbf variable inspect
 ```
 
-不传 `-f` 时，`dbf` 读取当前目录所有 `*.dbf.hcl` 并按文件名排序。传入一个或多个
-`-f file` 时，只读取这些显式文件，并按命令行顺序解析。
+不加 `-f` 时，`dbf` 会读取当前工作目录，也就是你运行命令的这个目录下所有
+`*.dbf.hcl` 文件，并按文件名排序。传入一个或多个 `-f file` 时，只读取这些显式文件，
+并按命令行顺序解析。
 
 默认情况下，`host "<name>"` 会通过 `ssh <name>` 连接，管理用户为 root。推荐把
 `HostName`、`User`、`IdentityFile`、`ProxyJump`、端口等连接细节放在 `~/.ssh/config`。
