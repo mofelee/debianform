@@ -20,6 +20,7 @@
 - [Plan JSON 格式](plan-format.md)：`dbf plan --format json` 的结构化输出。
 - [State 格式](state.md)：远端 state、lock、ownership 和脱敏规则。
 - [systemd service units](systemd-service-units.md)：纯文本 unit 和结构化 `service_unit` 写法。
+- [删除行为提示设计稿](delete-behavior-diagnostics-plan.zh.md)：plan/apply 删除提示、颜色和行为矩阵。
 
 ## 运维排障
 
