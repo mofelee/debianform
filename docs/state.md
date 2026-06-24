@@ -13,7 +13,8 @@ DebianForm 为每台 host 保存独立的远端 JSON state：
 /var/lock/debianform/state/<host>.lock.d/
 ```
 
-用户可以在 host 中覆盖路径：
+这两个路径是默认值；通常不需要在配置中写 `state` block。需要自定义远端 state 或 lock
+位置时，可以在 host 中覆盖：
 
 ```hcl
 host "server1" {

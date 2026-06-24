@@ -21,16 +21,22 @@ dbf version
 
 ## 2. 准备目标主机
 
-准备一台低风险 Debian 13 amd64 主机，并确认控制机可以用 root SSH key 登录。
-DebianForm 当前不支持 sudo、become 或非 root 管理连接。
+准备一台低风险 Debian 13 amd64 主机，并在控制机的 `~/.ssh/config` 里给它一个稳定名字。
+DebianForm 当前不支持 sudo、become 或非 root 管理连接；SSH config 中的用户应为 root。
 
-```bash
-export DBF_HOST=192.0.2.10
-ssh root@"$DBF_HOST" 'cat /etc/debian_version && uname -m'
+```sshconfig
+Host server1
+  HostName 192.0.2.10
+  User root
+  IdentityFile ~/.ssh/id_ed25519
 ```
 
-如果 SSH 需要指定私钥，先确认普通 `ssh` 可以工作，再把同一个私钥写入配置中的
-`ssh.identity_file`。
+先确认普通 `ssh` 可以工作。DebianForm 默认把 `host "server1"` 当作 `ssh server1`
+使用，因此连接细节应该优先放在 SSH config 中：
+
+```bash
+ssh server1 'cat /etc/debian_version && uname -m'
+```
 
 ## 3. 写第一份配置
 
@@ -38,17 +44,6 @@ ssh root@"$DBF_HOST" 'cat /etc/debian_version && uname -m'
 
 ```hcl
 host "server1" {
-  ssh {
-    host = "192.0.2.10"
-    user = "root"
-    # identity_file = "~/.ssh/id_ed25519"
-  }
-
-  state {
-    path      = "/var/lib/debianform/state/server1.json"
-    lock_path = "/var/lock/debianform/state/server1.lock"
-  }
-
   kernel {
     modules = ["tcp_bbr"]
 
@@ -65,8 +60,13 @@ host "server1" {
 }
 ```
 
-把 `ssh.host` 改成目标主机地址。`state.path` 和 `state.lock_path` 是目标主机上的
-DebianForm state 与 lock 文件路径。
+这份配置没有写 `ssh` 和 `state`：
+
+- `host "server1"` 默认通过 `ssh server1` 连接。
+- state 默认写到目标主机的 `/var/lib/debianform/state/server1.json`。
+- lock 默认写到目标主机的 `/var/lock/debianform/state/server1.lock`。
+
+只有需要覆盖连接名、端口、identity file 或 state 路径时，才写 `ssh` 或 `state` block。
 
 ## 4. 本地校验
 
@@ -144,7 +144,7 @@ dbf check -f site.dbf.hcl
 
 更完整的恢复步骤见 [operations runbook](operations-runbook.zh.md)。
 
-- `ssh: connect ...`：先用普通 `ssh root@host` 排查网络、密钥和 root 登录权限。
+- `ssh: connect ...`：先用普通 `ssh server1` 排查网络、SSH config、密钥和 root 登录权限。
 - `offline plan cannot resolve runtime facts`：当前配置依赖远端 facts。改用在线 plan，
   或在 fixture 中显式声明 `system.architecture` / `system.codename`。
 - `remote state does not match v2 configuration`：`check` 检测到 drift 或尚未 apply 的

@@ -37,28 +37,26 @@ dbf version
 
 ## 5 分钟快速开始
 
-准备一台低风险 Debian 13 amd64 主机，并确认控制机能用 root SSH key 登录：
+准备一台低风险 Debian 13 amd64 主机，并在控制机的 `~/.ssh/config` 里给它一个稳定名字。
+DebianForm 默认把 `host "server1"` 当作 `ssh server1` 使用；连接细节交给 SSH config：
+
+```sshconfig
+Host server1
+  HostName 192.0.2.10
+  User root
+  IdentityFile ~/.ssh/id_ed25519
+```
+
+先确认普通 SSH 可以工作：
 
 ```bash
-export DBF_HOST=192.0.2.10
-ssh root@"$DBF_HOST" 'cat /etc/debian_version && uname -m'
+ssh server1 'cat /etc/debian_version && uname -m'
 ```
 
 新建 `site.dbf.hcl`：
 
 ```hcl
 host "server1" {
-  ssh {
-    host = "192.0.2.10"
-    user = "root"
-    # identity_file = "~/.ssh/id_ed25519"
-  }
-
-  state {
-    path      = "/var/lib/debianform/state/server1.json"
-    lock_path = "/var/lock/debianform/state/server1.lock"
-  }
-
   kernel {
     modules = ["tcp_bbr"]
 
@@ -70,7 +68,7 @@ host "server1" {
 }
 ```
 
-把 `ssh.host` 改成你的测试主机地址，然后执行：
+然后执行：
 
 ```bash
 dbf validate -f site.dbf.hcl
@@ -130,6 +128,11 @@ dbf variable inspect -f site.dbf.hcl
 
 不传 `-f` 时，`dbf` 读取当前目录所有 `*.dbf.hcl` 并按文件名排序。传入一个或多个
 `-f file` 时，只读取这些显式文件，并按命令行顺序解析。
+
+默认情况下，`host "<name>"` 会通过 `ssh <name>` 连接，管理用户为 root。推荐把
+`HostName`、`User`、`IdentityFile`、`ProxyJump`、端口等连接细节放在 `~/.ssh/config`。
+只有需要覆盖默认连接名、端口、identity file 或 state 路径时，才在 `.dbf.hcl` 中写
+`ssh` 或 `state` block。
 
 ## 配置模型
 
@@ -195,7 +198,7 @@ dbf plan -f examples/v2-docker-minimal.dbf.hcl --offline
 dbf plan -f examples/v2-nftables.dbf.hcl --offline
 ```
 
-当前 README 覆盖的可运行示例包括：
+当前 README 覆盖的可运行示例：
 
 - `examples/v2-bbr.dbf.hcl`
 - `examples/v2-apt-repository.dbf.hcl`
@@ -210,6 +213,8 @@ dbf plan -f examples/v2-nftables.dbf.hcl --offline
 - `examples/v2-systemd-service.dbf.hcl`
 - `examples/v2-user-group.dbf.hcl`
 - `examples/v2-variable-secret-file.dbf.hcl`
+
+更完整的示例状态和覆盖范围见 [支持矩阵](docs/support-matrix.zh.md)。
 
 ## 支持边界
 

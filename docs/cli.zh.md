@@ -49,6 +49,17 @@ dbf help
 
 `-f` 不会读取目录，也不会自动加载同目录的其他 `.dbf.hcl` 文件；它表示“精确使用这些显式指定的文件”，并按命令行出现顺序解析。
 
+`host "<name>"` 默认通过 `ssh <name>` 连接，管理用户为 root。推荐把 `HostName`、
+`User`、`IdentityFile`、`ProxyJump`、端口等连接细节放在 `~/.ssh/config`。只有需要在
+配置内覆盖连接名、端口、identity file 或 state 路径时，才写 `ssh` 或 `state` block。
+
+默认 state 路径为：
+
+```text
+/var/lib/debianform/state/<host>.json
+/var/lock/debianform/state/<host>.lock
+```
+
 ## validate
 
 `validate` 在本地解析配置、合并 profile/host/component，并校验生成的 HostSpec。
