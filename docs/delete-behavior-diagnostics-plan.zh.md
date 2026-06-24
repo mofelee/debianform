@@ -89,6 +89,57 @@ Apply：
 - 两处都应保留删除行为说明。
 - 如果执行后的实际计划没有删除项，则不显示删除图例。
 
+## 如何修改默认删除行为
+
+删除行为必须以“显式配置”为准，不能靠 DebianForm 猜测用户意图。用户想改变默认删除行为时，
+应该通过 resource 已支持的 DSL 字段表达；没有字段支持时，`plan` / `apply` 只能提示当前行为和限制，
+不能悄悄替用户恢复、销毁或保留远端资源。
+
+### 基本规则
+
+- 从 `.dbf.hcl` 中删除一段配置，表示“不再用这段配置声明目标状态”。具体会 destroy、forget、restore
+  还是触发 operation，取决于该 resource 的 provider 语义。
+- 在 `.dbf.hcl` 中保留 resource，并设置 `ensure = "absent"`、`state = "absent"`、
+  `enabled = false`、`state = "stopped"` 等字段，表示用户显式要求远端收敛到某个状态。
+- `lifecycle.prevent_destroy = true` 是保护开关，不是恢复策略。它应阻止删除、替换或显式 absent
+  产生的危险动作，让用户先修改配置或手动处理。
+- `on_destroy` 是 provider 专属字段。只有明确支持的 resource 可以使用，不能作为所有 resource 的通用字段。
+- `remove_orphans`、`remove_conflicts`、`validate`、`activate` 这类字段只控制对应 provider 的附加行为，
+  不代表 resource 删除后可以恢复接管前状态。
+- 如果某个 resource 不支持自定义删除行为，文档和 plan 应明确写出“不支持自定义”，并说明可以采用的安全做法。
+
+### 常见修改方式
+
+| 用户意图 | 推荐写法 | 适用范围 | 说明 |
+| --- | --- | --- | --- |
+| 删除前先收敛到一个已知值 | 保留 resource，把字段改成目标值，先 `plan/apply`；确认系统符合预期后，再考虑删除配置。 | `sysctl`、`service`、`docker.compose` 等有目标状态字段的 resource。 | 这不是自动恢复接管前状态，而是用户显式声明新的目标状态。 |
+| 删除配置但保留远端产物 | 使用 provider 支持的 keep/forget 语义，例如 `apt.source_file.on_destroy = "keep"`。 | 仅明确支持 keep/forget 的 resource。 | 不支持时不能通过通用字段强行 keep。 |
+| 删除配置并恢复接管前内容 | 使用 provider 支持的 restore 语义，例如 `apt.source_file.on_destroy = "restore"`。 | 仅 state 中保存了原始内容且 provider 支持 restore 的 resource。 | restore 不能推广到 secret、普通 file、directory、package、user 等资源。 |
+| 明确要求远端对象不存在 | 使用 `ensure = "absent"` 或 `state = "absent"`。 | 支持 ensure/state 的 resource。 | 这比“从配置删除”更强，应该在 plan 中显示 destructive 或 external side effect 风险。 |
+| 阻止误删 | 加 `lifecycle { prevent_destroy = true }`。 | 支持 lifecycle 的 resource。 | 适合 package、user、directory、file、systemd unit、nftables file 等高风险资源。 |
+| 控制删除附带清理 | 使用 provider 专属字段，例如 `docker.compose.remove_orphans`。 | Docker Compose 等特定 provider。 | 只改变附加清理范围，不等于恢复旧状态。 |
+| 避免删除时触发 reload/activate | 修改 provider 的触发字段，例如 `nftables.validate`、`nftables.activate`。 | 支持 validate/activate 的 resource。 | 需要在矩阵里说明哪些 operation 会被影响。 |
+
+### BBR / sysctl 示例
+
+以 BBR 为例，如果用户删除 `kernel.sysctl["net.ipv4.tcp_congestion_control"]` 配置，默认行为只应删除
+DebianForm 写入的 `/etc/sysctl.d/99-dbf-...conf`，不应该猜测并恢复运行时值。
+
+如果用户希望恢复到 `cubic`，应先显式写入目标值：
+
+```hcl
+host "server1" {
+  kernel {
+    sysctl "net.ipv4.tcp_congestion_control" {
+      value = "cubic"
+    }
+  }
+}
+```
+
+执行 `plan/apply` 后，系统会收敛到用户声明的值。之后如果再删除这段配置，删除行为仍然只是清理
+DebianForm 管理的持久化文件，不应被解释为“恢复默认值”。
+
 ## 删除行为矩阵
 
 下面矩阵描述当前或建议的删除行为。它应成为后续实现和测试的来源。
