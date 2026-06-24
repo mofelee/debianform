@@ -311,8 +311,8 @@ curl -fsSL https://raw.githubusercontent.com/mofelee/debianform/main/scripts/ins
 
 ```bash
 dbf version
-dbf validate -f examples/v2-bbr.dbf.hcl
-dbf plan -f examples/v2-bbr.dbf.hcl --offline
+dbf validate -f examples/bbr.dbf.hcl
+dbf plan -f examples/bbr.dbf.hcl --offline
 ```
 
 curl 验证矩阵：

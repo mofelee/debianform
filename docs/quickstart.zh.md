@@ -92,7 +92,7 @@ dbf validate
 预期输出类似：
 
 ```text
-v2 configuration is valid: 1 host(s)
+configuration is valid: 1 host(s)
 ```
 
 当前成功信息仍保留历史格式名；看到这个输出即表示当前配置校验通过。
@@ -160,5 +160,5 @@ dbf check
 - `ssh: connect ...`：先用普通 `ssh server1` 排查网络、SSH config、密钥和 root 登录权限。
 - `offline plan cannot resolve runtime facts`：当前配置依赖远端 facts。改用在线 plan，
   或在 fixture 中显式声明 `system.architecture` / `system.codename`。
-- `remote state does not match v2 configuration`：`check` 检测到 drift 或尚未 apply 的
+- `remote state does not match configuration`：`check` 检测到 drift 或尚未 apply 的
   变更。先读 plan，再决定 apply、修正配置或恢复远端状态。

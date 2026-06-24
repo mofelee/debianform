@@ -198,33 +198,33 @@ host "app1" {
 }
 ```
 
-更多可运行样例在 `examples/`。这些示例文件目前仍保留历史 `v2-` 文件名前缀。
+更多可运行样例在 `examples/`。
 常用本地预览命令：
 
 ```bash
-dbf validate -f examples/v2-bbr.dbf.hcl
-dbf plan -f examples/v2-bbr.dbf.hcl --offline
-dbf validate -f examples/v2-realistic-systemd-app.dbf.hcl
-dbf plan -f examples/v2-realistic-systemd-app.dbf.hcl --offline
-dbf plan -f examples/v2-docker-minimal.dbf.hcl --offline
-dbf plan -f examples/v2-nftables.dbf.hcl --offline
+dbf validate -f examples/bbr.dbf.hcl
+dbf plan -f examples/bbr.dbf.hcl --offline
+dbf validate -f examples/realistic-systemd-app.dbf.hcl
+dbf plan -f examples/realistic-systemd-app.dbf.hcl --offline
+dbf plan -f examples/docker-minimal.dbf.hcl --offline
+dbf plan -f examples/nftables.dbf.hcl --offline
 ```
 
 当前 README 覆盖的可运行示例：
 
-- `examples/v2-bbr.dbf.hcl`
-- `examples/v2-apt-repository.dbf.hcl`
-- `examples/v2-bird2.dbf.hcl`
-- `examples/v2-component-binary.dbf.hcl`
-- `examples/v2-files-plan-preview.dbf.hcl`
-- `examples/v2-mihomo.dbf.hcl`
-- `examples/v2-nftables.dbf.hcl`
-- `examples/v2-plan-preview.dbf.hcl`
-- `examples/v2-profile-merge.dbf.hcl`
-- `examples/v2-realistic-systemd-app.dbf.hcl`
-- `examples/v2-systemd-service.dbf.hcl`
-- `examples/v2-user-group.dbf.hcl`
-- `examples/v2-variable-secret-file.dbf.hcl`
+- `examples/bbr.dbf.hcl`
+- `examples/apt-repository.dbf.hcl`
+- `examples/bird2.dbf.hcl`
+- `examples/component-binary.dbf.hcl`
+- `examples/files-plan-preview.dbf.hcl`
+- `examples/mihomo.dbf.hcl`
+- `examples/nftables.dbf.hcl`
+- `examples/plan-preview.dbf.hcl`
+- `examples/profile-merge.dbf.hcl`
+- `examples/realistic-systemd-app.dbf.hcl`
+- `examples/systemd-service.dbf.hcl`
+- `examples/user-group.dbf.hcl`
+- `examples/variable-secret-file.dbf.hcl`
 
 更完整的示例状态和覆盖范围见 [支持矩阵](docs/support-matrix.zh.md)。
 

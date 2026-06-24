@@ -152,4 +152,4 @@ WantedBy=multi-user.target
 可以直接启用服务。需要只生成无 install section 的 unit 时，可以显式设置
 `wanted_by = []`。
 
-完整示例见 `examples/v2-systemd-service-unit.dbf.hcl`。
+完整示例见 `examples/systemd-service-unit.dbf.hcl`。

@@ -21,7 +21,7 @@ REMOTE_BASE_IMAGE="${DBF_INTEGRATION_REMOTE_BASE_IMAGE:-}"
 
 RUN_SUFFIX="${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 SAFE_CASE_NAME="$(tr -c 'a-zA-Z0-9' '-' <<<"$CASE_NAME" | sed 's/-*$//')"
-NETWORK_NAME="dbf-v2-${SAFE_CASE_NAME}-${RUN_SUFFIX}-net"
+NETWORK_NAME="dbf-core-${SAFE_CASE_NAME}-${RUN_SUFFIX}-net"
 BRIDGE_NAME=""
 SUBNET_OCTET=""
 VIRT_TYPE="qemu"
@@ -33,7 +33,7 @@ HOST_LABELS=(a b c)
 HOST_ALIASES=(wg-a wg-b wg-c)
 declare -A VM_NAMES VM_MACS VM_IPS VM_DISKS VM_SEEDS VM_DOMAINS VM_CONSOLES VM_DEFINED VM_STARTED
 for label in "${HOST_LABELS[@]}"; do
-  VM_NAMES[$label]="dbf-v2-${SAFE_CASE_NAME}-${label}-${RUN_SUFFIX}"
+  VM_NAMES[$label]="dbf-core-${SAFE_CASE_NAME}-${label}-${RUN_SUFFIX}"
   printf -v "VM_MACS[$label]" '52:54:00:%02x:%02x:%02x' \
     "$((RANDOM % 256))" "$((RANDOM % 256))" "$((RANDOM % 256))"
   VM_DEFINED[$label]=0
@@ -126,7 +126,7 @@ prepare_vm_paths() {
   local pool_dir=""
   if is_remote_libvirt; then
     pool_dir="$(pool_path)"
-    REMOTE_TMP_DIR="$pool_dir/.dbf-v2-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
+    REMOTE_TMP_DIR="$pool_dir/.dbf-core-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
     if [[ -z "$REMOTE_BASE_IMAGE" ]]; then
       REMOTE_BASE_IMAGE="$pool_dir/$(basename "$BASE_IMAGE")"
     fi

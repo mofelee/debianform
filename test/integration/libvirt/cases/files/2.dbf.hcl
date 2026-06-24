@@ -6,14 +6,14 @@ host "cihost" {
   }
 
   state {
-    path      = "/var/lib/debianform-integration/v2-state.json"
-    lock_path = "/var/lock/debianform-integration/v2-state.lock"
+    path      = "/var/lib/debianform-integration/core-state.json"
+    lock_path = "/var/lock/debianform-integration/core-state.lock"
   }
 
   files {
-    file "/tmp/debianform-v2-libvirt.txt" {
+    file "/tmp/debianform-core-libvirt.txt" {
       mode    = "0600"
-      content = "v2 libvirt updated\n"
+      content = "core libvirt updated\n"
     }
   }
 }

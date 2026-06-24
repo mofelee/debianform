@@ -25,7 +25,7 @@ REMOTE_BASE_IMAGE="${DBF_INTEGRATION_REMOTE_BASE_IMAGE:-}"
 
 RUN_SUFFIX="${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 SAFE_CASE_NAME="$(tr -c 'a-zA-Z0-9' '-' <<<"$CASE_NAME" | sed 's/-*$//')"
-VM_NAME="dbf-v2-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
+VM_NAME="dbf-core-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
 NETWORK_NAME="${VM_NAME}-net"
 BRIDGE_NAME=""
 SUBNET_OCTET=""
@@ -133,7 +133,7 @@ prepare_vm_paths() {
   SEED_IMAGE="$pool_dir/$VM_NAME-seed.img"
   CONSOLE_LOG="$pool_dir/$VM_NAME-console.log"
   DOMAIN_XML="$CASE_WORK/domain.xml"
-  REMOTE_TMP_DIR="$pool_dir/.dbf-v2-$VM_NAME"
+  REMOTE_TMP_DIR="$pool_dir/.dbf-core-$VM_NAME"
   if [[ -z "$REMOTE_BASE_IMAGE" ]]; then
     REMOTE_BASE_IMAGE="$pool_dir/$(basename "$BASE_IMAGE")"
   fi

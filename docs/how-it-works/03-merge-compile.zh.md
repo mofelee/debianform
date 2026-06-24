@@ -1,6 +1,6 @@
 # 03. Profile、Host 与 Component 如何编译成 IR
 
-本章解释 `internal/v2/merge` 如何把 parser 输出的原始配置编译成 `internal/v2/ir.Program`。
+本章解释 `internal/core/merge` 如何把 parser 输出的原始配置编译成 `internal/core/ir.Program`。
 这个阶段是 DebianForm 从“配置语法树”进入“领域模型”的边界。
 
 ## 数据流
@@ -115,7 +115,7 @@ component 实例化后产生的用户、组、文件、systemd、component artif
 
 ## Assertions
 
-断言逻辑在 `internal/v2/merge/assert.go`。compile 收集 profile 和 host assert 后，在 `HostSpec`
+断言逻辑在 `internal/core/merge/assert.go`。compile 收集 profile 和 host assert 后，在 `HostSpec`
 构建和 facts/component 处理后执行 `evaluateAssertions`。
 
 断言面对的是已经归一化后的 host spec，而不是原始 HCL。这样 assert 能验证最终语义，例如导入 profile

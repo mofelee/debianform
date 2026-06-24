@@ -107,7 +107,7 @@ dbf check
 
 ```text
 Summary: 0 create, 1 update, 0 delete, 2 no-op, 0 operations
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 `check` 不会修复主机。它只检查远端状态是否和配置一致，并在发现差异时返回非零退出码。

@@ -44,12 +44,12 @@ CLI flags -> parser.Config -> ir.Program -> graph.ResourceGraph -> engine.Plan -
 
 - `run`
 - `runConfigCommand`
-- `runV2ConfigCommand`
-- `parseV2ConfigWithExternalValues`
+- `runConfigWorkflow`
+- `parseConfigWithExternalValues`
 
 ### [02. HCL 解析、变量和值模型](02-parser-values.zh.md)
 
-解释 `internal/v2/parser` 如何读取多个 `.dbf.hcl` 文件，如何分阶段处理 `locals`、`variable`
+解释 `internal/core/parser` 如何读取多个 `.dbf.hcl` 文件，如何分阶段处理 `locals`、`variable`
 和顶层 block，以及变量值来源的优先级。重点说明 `.dbfvars`、`.auto.dbfvars`、环境变量
 `DBF_VAR_`、命令行 `-var` 和 `-var-file` 如何进入解析过程。
 
@@ -64,7 +64,7 @@ CLI flags -> parser.Config -> ir.Program -> graph.ResourceGraph -> engine.Plan -
 
 ### [03. Profile、Host 与 Component 如何编译成 IR](03-merge-compile.zh.md)
 
-解释 `internal/v2/merge` 如何把解析后的配置合并成 `internal/v2/ir.Program`。重点说明
+解释 `internal/core/merge` 如何把解析后的配置合并成 `internal/core/ir.Program`。重点说明
 profile import、host 覆盖、component 模板、component input 校验、assert 和 runtime facts
 在编译阶段的关系。
 
@@ -80,7 +80,7 @@ profile import、host 覆盖、component 模板、component input 校验、asser
 
 ### [04. IR 数据模型与资源边界](04-ir-model.zh.md)
 
-围绕 `internal/v2/ir/types.go` 解释 `Program`、`HostSpec` 以及各类 domain spec 的职责。
+围绕 `internal/core/ir/types.go` 解释 `Program`、`HostSpec` 以及各类 domain spec 的职责。
 重点说明 IR 是领域层结构，不直接等同于 provider 操作；它应该表达用户意图和稳定语义，
 而不是远端命令细节。
 
@@ -94,7 +94,7 @@ profile import、host 覆盖、component 模板、component input 校验、asser
 
 ### [05. ResourceGraph 如何展开资源和依赖](05-resource-graph.zh.md)
 
-解释 `internal/v2/graph` 如何把一个 host 的 IR 展开为可计划、可执行的 resource node 和
+解释 `internal/core/graph` 如何把一个 host 的 IR 展开为可计划、可执行的 resource node 和
 operation。重点说明 address 命名、provider payload、依赖关系、operation trigger，以及
 敏感内容如何在 graph JSON 中避免泄漏。
 
@@ -108,7 +108,7 @@ operation。重点说明 address 命名、provider payload、依赖关系、oper
 
 ### [06. Plan 文档、Diff 与输出格式](06-plan-output.zh.md)
 
-解释 `internal/v2/plan` 如何把离线 graph 或在线 engine plan 渲染成人类可读文本、JSON 和
+解释 `internal/core/plan` 如何把离线 graph 或在线 engine plan 渲染成人类可读文本、JSON 和
 HTML。重点说明 `plan.Document` 的格式版本、summary 统计、diff tree、敏感内容摘要和
 `--debug` provider address。
 
@@ -123,7 +123,7 @@ HTML。重点说明 `plan.Document` 的格式版本、summary 统计、diff tree
 
 ### [07. 在线 Engine：读取状态、观测现实、计算动作](07-engine-plan.zh.md)
 
-解释 `internal/v2/engine` 如何在在线模式中读取远端 state，调用 provider 观测实际状态，
+解释 `internal/core/engine` 如何在在线模式中读取远端 state，调用 provider 观测实际状态，
 然后把 desired、prior state 和 observed reality 比较成 action。重点说明 `create`、`update`、
 `delete`、`adopt`、`forget`、`destroy`、`no-op` 的语义。
 
@@ -152,8 +152,8 @@ HTML。重点说明 `plan.Document` 的格式版本、summary 统计、diff tree
 
 ### [09. Backend、SSH 与远端 State](09-backend-state.zh.md)
 
-解释 `internal/v2/engine` 的 backend 抽象和 SSH 实现如何读写远端 state、获取 lock、执行命令、
-上传内容，并说明 `internal/v2/state` 的格式、normalize、desired digest 和 ownership。
+解释 `internal/core/engine` 的 backend 抽象和 SSH 实现如何读写远端 state、获取 lock、执行命令、
+上传内容，并说明 `internal/core/state` 的格式、normalize、desired digest 和 ownership。
 
 需要覆盖的代码入口：
 
@@ -191,7 +191,7 @@ HTML。重点说明 `plan.Document` 的格式版本、summary 统计、diff tree
 - `Node.MarshalJSON`
 - `plan.BuildDiff`
 - `cmd/dbf/redaction_matrix_test.go`
-- `internal/v2/testassert/secrets.go`
+- `internal/core/testassert/secrets.go`
 - sensitive variable 和 component input 的编译逻辑
 
 ### [12. 测试体系与新增能力清单](12-testing-and-extension.zh.md)
@@ -202,12 +202,12 @@ HTML。重点说明 `plan.Document` 的格式版本、summary 统计、diff tree
 需要覆盖的路径：
 
 - `cmd/dbf/*_test.go`
-- `internal/v2/parser/*_test.go`
-- `internal/v2/merge/*_test.go`
-- `internal/v2/graph/*_test.go`
-- `internal/v2/plan/*_test.go`
-- `internal/v2/engine/*_test.go`
-- `internal/v2/testdata/**`
+- `internal/core/parser/*_test.go`
+- `internal/core/merge/*_test.go`
+- `internal/core/graph/*_test.go`
+- `internal/core/plan/*_test.go`
+- `internal/core/engine/*_test.go`
+- `internal/core/testdata/**`
 - `test/integration/libvirt/**`
 
 ## 写作约定

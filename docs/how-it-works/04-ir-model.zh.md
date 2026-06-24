@@ -1,6 +1,6 @@
 # 04. IR 数据模型与资源边界
 
-本章解释 `internal/v2/ir` 的职责。IR 是 DebianForm 的领域层模型：它已经脱离原始 HCL，但还不是
+本章解释 `internal/core/ir` 的职责。IR 是 DebianForm 的领域层模型：它已经脱离原始 HCL，但还不是
 provider 操作，也不是 state。
 
 ## 数据流位置

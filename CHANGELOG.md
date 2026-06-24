@@ -38,10 +38,10 @@ This project follows semantic versioning after the public beta line begins.
 
 ## v0.1.0-beta.1
 
-- First public beta / public preview release for the v2 DebianForm line.
-- Includes the v2 CLI flow for `validate`, `fmt`, `plan`, `apply`, `check`,
+- First public beta / public preview release for the DebianForm line.
+- Includes the CLI flow for `validate`, `fmt`, `plan`, `apply`, `check`,
   `version`, `component inspect`, and `variable inspect`.
-- Supports the v2 `host`, `profile`, `component`, `locals`, and `variable`
+- Supports the `host`, `profile`, `component`, `locals`, and `variable`
   model, with profile/host merging, component inputs, validation warnings, and
   sensitive metadata propagation.
 - Provides online SSH-backed plan/apply/check with runtime facts, observed drift
@@ -54,13 +54,13 @@ This project follows semantic versioning after the public beta line begins.
 - Provides Homebrew and curl installer paths, including version pinning,
   checksum verification, dry-run support, custom install directories, and
   post-release verification jobs.
-- Includes runnable v2 examples for BBR, APT sources, files, nftables,
+- Includes runnable examples for BBR, APT sources, files, nftables,
   systemd, users/groups, component inputs, source builds, shadowsocks-rust, and
   WireGuard/networkd patterns.
 
 Known beta limits:
 
-- This is not a stable/GA release. The CLI, v2 DSL, state shape, and plan JSON
+- This is not a stable/GA release. The CLI, DSL, state shape, and plan JSON
   may still change before a stable release.
 - Debian 13 is the primary managed target. Other Debian versions and
   non-Debian targets are not part of the beta support promise.

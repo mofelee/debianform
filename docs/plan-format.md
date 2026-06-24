@@ -18,10 +18,10 @@ plan format 的目标：
 
 ```json
 {
-  "format_version": "debianform.plan.v2alpha1",
+  "format_version": "debianform.plan.alpha1",
   "generated_at": "2026-06-20T12:00:00Z",
   "command": {
-    "file": "examples/v2-fleet.dbf.hcl",
+    "file": "examples/fleet.dbf.hcl",
     "host": "server1"
   },
   "summary": {
@@ -73,7 +73,7 @@ run
   "action": "update",
   "summary": "update nftables snippet 20-services",
   "source": {
-    "file": "examples/v2-fleet.dbf.hcl",
+    "file": "examples/fleet.dbf.hcl",
     "line": 560,
     "path": "host.server1.nftables.file[\"20-services\"]"
   },
@@ -206,7 +206,7 @@ sensitive
   ],
   "command_preview": "nft -f /etc/nftables.conf",
   "source": {
-    "file": "examples/v2-fleet.dbf.hcl",
+    "file": "examples/fleet.dbf.hcl",
     "line": 560,
     "path": "host.server1.nftables.file[\"20-services\"]"
   }
@@ -230,7 +230,7 @@ host.server1.services.service["myapp"].restart
   "severity": "warning",
   "message": "The WireGuard private key source is local; keep examples/secrets out of git.",
   "source": {
-    "file": "examples/v2-fleet.dbf.hcl",
+    "file": "examples/fleet.dbf.hcl",
     "line": 410,
     "path": "host.server1.secrets.file[\"/etc/wireguard/private.key\"]"
   }

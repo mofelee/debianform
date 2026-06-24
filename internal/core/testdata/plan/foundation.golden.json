@@ -1,0 +1,764 @@
+{
+  "format_version": "debianform.plan.alpha1",
+  "generated_at": "2026-06-20T12:00:00Z",
+  "command": {
+    "file": "../testdata/fixtures/foundation.dbf.hcl",
+    "host": "foundation1"
+  },
+  "summary": {
+    "create": 9,
+    "update": 0,
+    "delete": 0,
+    "no_op": 0,
+    "operations": 1
+  },
+  "changes": [
+    {
+      "address": "host.foundation1.directories.directory[\"/etc/myapp\"]",
+      "action": "create",
+      "summary": "create directory /etc/myapp",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 27,
+        "path": "host.foundation1.directories.directory[\"/etc/myapp\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0755"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/myapp"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.foundation1.files.file[\"/etc/myapp/config.yaml\"]",
+      "action": "create",
+      "summary": "create file /etc/myapp/config.yaml",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 47,
+        "path": "host.foundation1.files.file[\"/etc/myapp/config.yaml\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 1,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "listen: 127.0.0.1:8080"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/myapp/config.yaml"
+          },
+          {
+            "path": [
+              "sensitive"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": false
+          },
+          {
+            "path": [
+              "summary"
+            ],
+            "kind": "map",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "summary",
+                  "bytes"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": 23
+              },
+              {
+                "path": [
+                  "summary",
+                  "sha256"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "d39d0ff40a9b3871880999a1ba603e8cb11e841856d7f7f92f51dcaba2bb6eda"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.foundation1.groups.group[\"deploy\"]",
+      "action": "create",
+      "summary": "create group deploy",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 7,
+        "path": "profile.base.groups.group[\"deploy\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "gid"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": ""
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "deploy"
+          },
+          {
+            "path": [
+              "system"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.foundation1.packages.install[\"curl\"]",
+      "action": "create",
+      "summary": "create package curl",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 3,
+        "path": "profile.base.packages.install[0]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "curl"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.foundation1.secrets.file[\"/etc/myapp/token\"]",
+      "action": "create",
+      "summary": "create secret file /etc/myapp/token",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 59,
+        "path": "host.foundation1.secrets.file[\"/etc/myapp/token\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": true,
+        "children": [
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "sensitive",
+            "action": "create",
+            "sensitive": true,
+            "after_summary": {
+              "bytes": 24,
+              "sha256": "f807665a6313f37a4f9c7885876d603d78999ed82a816fbb4c805d4ecfe21fa6"
+            }
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0600"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/myapp/token"
+          },
+          {
+            "path": [
+              "sensitive"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.foundation1.services.service[\"myapp\"]",
+      "action": "create",
+      "summary": "manage service myapp",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 77,
+        "path": "host.foundation1.services.service[\"myapp\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "enabled"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "myapp"
+          },
+          {
+            "path": [
+              "package"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "curl"
+          },
+          {
+            "path": [
+              "state"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "running"
+          },
+          {
+            "path": [
+              "unit"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "myapp.service"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.foundation1.systemd.unit[\"myapp.service\"]",
+      "action": "create",
+      "summary": "create systemd unit myapp.service",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 65,
+        "path": "host.foundation1.systemd.unit[\"myapp.service\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 5,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "[Unit]"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Description=My App"
+                  },
+                  {
+                    "op": "create",
+                    "text": ""
+                  },
+                  {
+                    "op": "create",
+                    "text": "[Service]"
+                  },
+                  {
+                    "op": "create",
+                    "text": "ExecStart=/usr/local/bin/myapp --config /etc/myapp/config.yaml"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "myapp.service"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/systemd/system/myapp.service"
+          },
+          {
+            "path": [
+              "source_path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": ""
+          },
+          {
+            "path": [
+              "summary"
+            ],
+            "kind": "map",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "summary",
+                  "bytes"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": 100
+              },
+              {
+                "path": [
+                  "summary",
+                  "sha256"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "6f062c170b9b86c43cbd33a7406c7ce69a2043aac850076d373582b7ae9c8e63"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.foundation1.users.user[\"deploy\"]",
+      "action": "create",
+      "summary": "create user deploy",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 35,
+        "path": "host.foundation1.users.user[\"deploy\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "deploy"
+          },
+          {
+            "path": [
+              "groups"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false
+          },
+          {
+            "path": [
+              "home"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/home/deploy"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "deploy"
+          },
+          {
+            "path": [
+              "shell"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/bin/bash"
+          },
+          {
+            "path": [
+              "ssh_authorized_keys"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "ssh_authorized_keys",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "ssh-ed25519 AAAATESTKEY deploy@example"
+              }
+            ]
+          },
+          {
+            "path": [
+              "system"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": false
+          },
+          {
+            "path": [
+              "uid"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": ""
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.foundation1.users.user[\"deploy\"].ssh_authorized_key[\"ab6a85a3317fb10f\"]",
+      "action": "create",
+      "summary": "create authorized key for deploy",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 35,
+        "path": "host.foundation1.users.user[\"deploy\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "key"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "ssh-ed25519 AAAATESTKEY deploy@example"
+          },
+          {
+            "path": [
+              "user"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "deploy"
+          }
+        ]
+      }
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.foundation1.systemd.daemon_reload",
+      "action": "run",
+      "summary": "reload systemd manager configuration",
+      "depends_on": [
+        "host.foundation1.systemd.unit[\"myapp.service\"]"
+      ],
+      "triggered_by": [
+        "host.foundation1.systemd.unit[\"myapp.service\"]"
+      ],
+      "command_preview": "systemctl daemon-reload",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 64,
+        "path": "host.foundation1.systemd"
+      }
+    }
+  ],
+  "diagnostics": []
+}

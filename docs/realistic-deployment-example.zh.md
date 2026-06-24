@@ -1,7 +1,7 @@
 # 真实部署模板：systemd app
 
 本文档给出一个可本地验证的小型部署案例：
-`examples/v2-realistic-systemd-app.dbf.hcl`。它不依赖外部下载、不包含真实 secret，
+`examples/realistic-systemd-app.dbf.hcl`。它不依赖外部下载、不包含真实 secret，
 适合作为第一台低风险 Debian 13 主机上的模板起点。
 
 ## 覆盖范围
@@ -23,8 +23,8 @@
 只做本地语法和离线 plan 预览：
 
 ```bash
-dbf validate -f examples/v2-realistic-systemd-app.dbf.hcl
-dbf plan -f examples/v2-realistic-systemd-app.dbf.hcl --offline
+dbf validate -f examples/realistic-systemd-app.dbf.hcl
+dbf plan -f examples/realistic-systemd-app.dbf.hcl --offline
 ```
 
 预期 plan 会包含：

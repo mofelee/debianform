@@ -70,7 +70,7 @@ import json
 with open("plan.json", encoding="utf-8") as f:
     doc = json.load(f)
 
-assert doc["format_version"] == "debianform.plan.v2alpha1", doc["format_version"]
+assert doc["format_version"] == "debianform.plan.alpha1", doc["format_version"]
 assert doc["summary"]["create"] == 1, doc["summary"]
 assert doc["changes"][0]["address"] == 'host.manual1.files.file["/etc/debianform-manual/operations.txt"]'
 print("json plan ok")
@@ -173,7 +173,7 @@ dbf check
   update file /etc/debianform-manual/operations.txt
 
 Summary: 0 create, 1 update, 0 delete, 0 no-op, 0 operations
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 `check` 只检测，不修改远端。
@@ -287,7 +287,7 @@ import json
 with open("plan.json", encoding="utf-8") as f:
     doc = json.load(f)
 
-assert doc["format_version"] == "debianform.plan.v2alpha1", doc["format_version"]
+assert doc["format_version"] == "debianform.plan.alpha1", doc["format_version"]
 assert doc["summary"]["create"] == 1, doc["summary"]
 assert doc["changes"][0]["address"] == 'host.manual1.files.file["/etc/debianform-manual/operations.txt"]'
 print("json plan ok")

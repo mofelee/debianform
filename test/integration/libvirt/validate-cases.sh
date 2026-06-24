@@ -15,7 +15,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ -z "$DBF_BIN" ]]; then
-  TEMP_DBF="$(mktemp "${TMPDIR:-/tmp}/dbf-v2-integration-layout.XXXXXX")"
+  TEMP_DBF="$(mktemp "${TMPDIR:-/tmp}/dbf-core-integration-layout.XXXXXX")"
   (
     cd "$ROOT_DIR"
     go build -o "$TEMP_DBF" ./cmd/dbf

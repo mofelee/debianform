@@ -1,6 +1,6 @@
 # 06. Plan 文档、Diff 与输出格式
 
-本章解释 `internal/v2/plan` 如何把资源图或 engine plan 转成用户可读和机器可读输出。
+本章解释 `internal/core/plan` 如何把资源图或 engine plan 转成用户可读和机器可读输出。
 
 ## 两种 plan 来源
 
@@ -23,7 +23,7 @@ online:
 
 `plan.Document` 的关键字段：
 
-- `FormatVersion`：当前是 `debianform.plan.v2alpha1`。
+- `FormatVersion`：当前是 `debianform.plan.alpha1`。
 - `GeneratedAt`：UTC RFC3339 时间。
 - `Command`：本次命令的 file/host 上下文。
 - `Summary`：create/update/delete/no-op/operations 统计。

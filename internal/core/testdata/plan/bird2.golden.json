@@ -1,0 +1,394 @@
+{
+  "format_version": "debianform.plan.alpha1",
+  "generated_at": "2026-06-20T12:00:00Z",
+  "command": {
+    "file": "../../../examples/bird2.dbf.hcl",
+    "host": "router1"
+  },
+  "summary": {
+    "create": 4,
+    "update": 0,
+    "delete": 0,
+    "no_op": 0,
+    "operations": 1
+  },
+  "changes": [
+    {
+      "address": "host.router1.components.bird2.apt.repository[\"cznic_bird2\"]",
+      "action": "create",
+      "summary": "manage apt repository cznic_bird2",
+      "source": {
+        "file": "../../../examples/bird2.dbf.hcl",
+        "line": 13,
+        "path": "component.bird2.apt.repository[\"cznic_bird2\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "component"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "bird2"
+          },
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 5,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "Types: deb"
+                  },
+                  {
+                    "op": "create",
+                    "text": "URIs: https://pkg.labs.nic.cz/bird2"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Suites: trixie"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Components: main"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Signed-By: /etc/apt/keyrings/cznic-bird2.asc"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "cznic_bird2"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/apt/sources.list.d/cznic_bird2.sources"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.router1.components.bird2.apt.signing_key[\"cznic_bird2\"]",
+      "action": "create",
+      "summary": "manage apt signing key cznic_bird2",
+      "source": {
+        "file": "../../../examples/bird2.dbf.hcl",
+        "line": 18,
+        "path": "component.bird2.apt.repository[\"cznic_bird2\"].signing_key"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "component"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "bird2"
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "cznic_bird2"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/apt/keyrings/cznic-bird2.asc"
+          },
+          {
+            "path": [
+              "sha256"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          },
+          {
+            "path": [
+              "url"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "https://pkg.labs.nic.cz/gpg"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.router1.components.bird2.packages.install[\"bird2\"]",
+      "action": "create",
+      "summary": "create package bird2",
+      "source": {
+        "file": "../../../examples/bird2.dbf.hcl",
+        "line": 27,
+        "path": "component.bird2.packages.package[\"bird2\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "component"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "bird2"
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "bird2"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "cznic_bird2"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.router1.components.bird2.services.service[\"bird\"]",
+      "action": "create",
+      "summary": "manage service bird",
+      "source": {
+        "file": "../../../examples/bird2.dbf.hcl",
+        "line": 33,
+        "path": "component.bird2.services.service[\"bird\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "component"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "bird2"
+          },
+          {
+            "path": [
+              "enabled"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "bird"
+          },
+          {
+            "path": [
+              "package"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "bird2"
+          },
+          {
+            "path": [
+              "state"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "running"
+          },
+          {
+            "path": [
+              "unit"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "bird.service"
+          }
+        ]
+      }
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.router1.apt.cache_refresh",
+      "action": "run",
+      "summary": "refresh apt package cache",
+      "depends_on": [
+        "host.router1.components.bird2.apt.signing_key[\"cznic_bird2\"]",
+        "host.router1.components.bird2.apt.repository[\"cznic_bird2\"]"
+      ],
+      "triggered_by": [
+        "host.router1.components.bird2.apt.signing_key[\"cznic_bird2\"]",
+        "host.router1.components.bird2.apt.repository[\"cznic_bird2\"]"
+      ],
+      "command_preview": "apt-get update",
+      "source": {
+        "file": "../../../examples/bird2.dbf.hcl",
+        "line": 13,
+        "path": "component.bird2.apt.repository[\"cznic_bird2\"]"
+      }
+    }
+  ],
+  "diagnostics": []
+}

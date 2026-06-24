@@ -15,38 +15,38 @@ import (
 	"path/filepath"
 	"testing"
 
-	v2engine "github.com/mofelee/debianform/internal/v2/engine"
-	v2graph "github.com/mofelee/debianform/internal/v2/graph"
+	coreengine "github.com/mofelee/debianform/internal/core/engine"
+	coregraph "github.com/mofelee/debianform/internal/core/graph"
 )
 
 type localRunner struct{}
 
-func (localRunner) Run(ctx context.Context, host, script string) (v2engine.Result, error) {
+func (localRunner) Run(ctx context.Context, host, script string) (coreengine.Result, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-s")
 	cmd.Stdin = bytes.NewBufferString(script)
 	return localRunner{}.run(cmd)
 }
 
-func (localRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (v2engine.Result, error) {
+func (localRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (coreengine.Result, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-c", remoteCommand)
 	cmd.Stdin = input
 	return localRunner{}.run(cmd)
 }
 
-func (localRunner) run(cmd *exec.Cmd) (v2engine.Result, error) {
+func (localRunner) run(cmd *exec.Cmd) (coreengine.Result, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	result := v2engine.Result{Stdout: stdout.String(), Stderr: stderr.String()}
+	result := coreengine.Result{Stdout: stdout.String(), Stderr: stderr.String()}
 	if err != nil {
 		return result, fmt.Errorf("local script failed: %w: %s", err, stderr.String())
 	}
 	return result, nil
 }
 
-func (r localRunner) RunCommand(ctx context.Context, host, remoteCommand string) (v2engine.Result, error) {
+func (r localRunner) RunCommand(ctx context.Context, host, remoteCommand string) (coreengine.Result, error) {
 	return r.Run(ctx, host, remoteCommand+"\n")
 }
 
@@ -92,8 +92,8 @@ int main(void) {
 	}))
 	defer server.Close()
 
-	provider := v2engine.NewNativeProvider(localRunner{})
-	download := v2graph.Node{
+	provider := coreengine.NewNativeProvider(localRunner{})
+	download := coregraph.Node{
 		Address: "host.local.components.hello_from_source.artifact.download[\"default\"]",
 		Host:    "local",
 		Kind:    "component_download",
@@ -107,7 +107,7 @@ int main(void) {
 			"ensure": "present",
 		},
 	}
-	build := v2graph.Node{
+	build := coregraph.Node{
 		Address: "host.local.components.hello_from_source.artifact.build[\"" + buildOutputPath + "\"]",
 		Host:    "local",
 		Kind:    "component_build",
@@ -126,7 +126,7 @@ int main(void) {
 			"ensure":      "present",
 		},
 	}
-	install := v2graph.Node{
+	install := coregraph.Node{
 		Address: "host.local.components.hello_from_source.artifact.install[\"" + installPath + "\"]",
 		Host:    "local",
 		Kind:    "component_binary",
@@ -140,15 +140,15 @@ int main(void) {
 		},
 	}
 
-	for _, node := range []v2graph.Node{download, build, install} {
+	for _, node := range []coregraph.Node{download, build, install} {
 		plan, err := provider.Plan(ctx, node, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if plan.Action != v2engine.ActionCreate {
+		if plan.Action != coreengine.ActionCreate {
 			t.Fatalf("%s action = %q, want create", node.Address, plan.Action)
 		}
-		if _, err := provider.Apply(ctx, v2engine.Step{Address: node.Address, Host: node.Host, Action: v2engine.ActionCreate, Node: node}); err != nil {
+		if _, err := provider.Apply(ctx, coreengine.Step{Address: node.Address, Host: node.Host, Action: coreengine.ActionCreate, Node: node}); err != nil {
 			t.Fatalf("%s apply failed: %v", node.Address, err)
 		}
 	}

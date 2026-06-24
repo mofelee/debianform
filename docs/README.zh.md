@@ -39,5 +39,5 @@
 ## 归档设计稿
 
 历史需求文档、实施计划和过期检查清单已移动到
-[`archive/legacy-v2/`](archive/legacy-v2/)。这些文档只用于追溯设计背景，不作为当前用户入口
+[`archive/legacy-design/`](archive/legacy-design/)。这些文档只用于追溯设计背景，不作为当前用户入口
 或能力承诺。

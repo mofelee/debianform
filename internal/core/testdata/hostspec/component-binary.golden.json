@@ -1,0 +1,148 @@
+{
+  "name": "tool1",
+  "source": {
+    "file": "../../../examples/component-binary.dbf.hcl",
+    "line": 39,
+    "path": "host.tool1"
+  },
+  "facts": {
+    "system": {
+      "hostname": "tool1",
+      "architecture": "amd64",
+      "codename": "trixie"
+    }
+  },
+  "ssh": {
+    "host": "tool1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../../../examples/component-binary.dbf.hcl",
+      "line": 39,
+      "path": "host.tool1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/tool1.json",
+    "lock_path": "/var/lock/debianform/state/tool1.lock",
+    "source": {
+      "file": "../../../examples/component-binary.dbf.hcl",
+      "line": 39,
+      "path": "host.tool1"
+    }
+  },
+  "system": {
+    "hostname": "tool1",
+    "architecture": "amd64",
+    "codename": "trixie",
+    "source": {
+      "file": "../../../examples/component-binary.dbf.hcl",
+      "line": 39,
+      "path": "host.tool1"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  },
+  "components": [
+    {
+      "name": "rclone",
+      "template": "rclone",
+      "artifact_type": "binary",
+      "version": "1.66.0",
+      "selected_source": {
+        "architecture": "amd64",
+        "url": "https://downloads.rclone.org/v1.66.0/rclone-v1.66.0-linux-amd64.zip",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source": {
+          "file": "../../../examples/component-binary.dbf.hcl",
+          "line": 15,
+          "path": "component.rclone.source[\"amd64\"]"
+        }
+      },
+      "extract": {
+        "format": "zip",
+        "strip_components": 1,
+        "include": "rclone",
+        "source": {
+          "file": "../../../examples/component-binary.dbf.hcl",
+          "line": 25,
+          "path": "component.rclone.extract"
+        }
+      },
+      "install": {
+        "path": "/usr/local/bin/rclone",
+        "owner": "root",
+        "group": "root",
+        "mode": "0755",
+        "source": {
+          "file": "../../../examples/component-binary.dbf.hcl",
+          "line": 31,
+          "path": "component.rclone.install"
+        }
+      },
+      "apt": {
+        "source": {}
+      },
+      "packages": {
+        "source": {}
+      },
+      "files": {
+        "source": {}
+      },
+      "secrets": {
+        "source": {}
+      },
+      "directories": {
+        "source": {}
+      },
+      "groups": {
+        "source": {}
+      },
+      "users": {
+        "source": {}
+      },
+      "systemd": {
+        "source": {}
+      },
+      "services": {
+        "source": {}
+      },
+      "source": {
+        "file": "../../../examples/component-binary.dbf.hcl",
+        "line": 41,
+        "path": "host.tool1.components[0]"
+      }
+    }
+  ]
+}

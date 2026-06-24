@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mofelee/debianform/internal/v2/testassert"
+	"github.com/mofelee/debianform/internal/core/testassert"
 )
 
 func TestConfigFilesLoadsAllDBFHCLInCurrentDirectory(t *testing.T) {
@@ -143,7 +143,7 @@ host "server1" {
 			t.Fatal(err)
 		}
 	})
-	if !strings.Contains(output, "v2 configuration is valid: 1 host(s)") {
+	if !strings.Contains(output, "configuration is valid: 1 host(s)") {
 		t.Fatalf("validate output = %q", output)
 	}
 }
@@ -184,8 +184,8 @@ host "server1" {
 	}
 }
 
-func TestValidateRunnableV2Examples(t *testing.T) {
-	for _, example := range runnableV2Examples() {
+func TestValidateRunnableExamples(t *testing.T) {
+	for _, example := range runnableExamples() {
 		t.Run(filepath.Base(example), func(t *testing.T) {
 			output := captureStdout(t, func() {
 				if err := run([]string{"validate", "-f", "../../" + example}); err != nil {
@@ -193,14 +193,14 @@ func TestValidateRunnableV2Examples(t *testing.T) {
 				}
 			})
 
-			if !strings.Contains(output, "v2 configuration is valid: 1 host(s)") {
+			if !strings.Contains(output, "configuration is valid: 1 host(s)") {
 				t.Fatalf("validate output = %q", output)
 			}
 		})
 	}
 }
 
-func TestValidateV2StillRejectsComponentInputErrors(t *testing.T) {
+func TestValidateStillRejectsComponentInputErrors(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")
 	if err := os.WriteFile(config, []byte(`
@@ -224,27 +224,27 @@ host "server1" {
 
 func TestValidateAcceptsUnreferencedVariableDeclarations(t *testing.T) {
 	output := captureStdout(t, func() {
-		if err := run([]string{"validate", "-f", "../../internal/v2/testdata/fixtures/v2-variable-declarations.dbf.hcl"}); err != nil {
+		if err := run([]string{"validate", "-f", "../../internal/core/testdata/fixtures/variable-declarations.dbf.hcl"}); err != nil {
 			t.Fatal(err)
 		}
 	})
-	if !strings.Contains(output, "v2 configuration is valid: 1 host(s)") {
+	if !strings.Contains(output, "configuration is valid: 1 host(s)") {
 		t.Fatalf("validate output = %q", output)
 	}
 }
 
 func TestValidateAndPlanAcceptVariableDefaults(t *testing.T) {
 	validateOutput := captureStdout(t, func() {
-		if err := run([]string{"validate", "-f", "../../internal/v2/testdata/fixtures/v2-variable-defaults.dbf.hcl"}); err != nil {
+		if err := run([]string{"validate", "-f", "../../internal/core/testdata/fixtures/variable-defaults.dbf.hcl"}); err != nil {
 			t.Fatal(err)
 		}
 	})
-	if !strings.Contains(validateOutput, "v2 configuration is valid: 1 host(s)") {
+	if !strings.Contains(validateOutput, "configuration is valid: 1 host(s)") {
 		t.Fatalf("validate output = %q", validateOutput)
 	}
 
 	planOutput := captureStdout(t, func() {
-		if err := run([]string{"plan", "-f", "../../internal/v2/testdata/fixtures/v2-variable-defaults.dbf.hcl", "--offline"}); err != nil {
+		if err := run([]string{"plan", "-f", "../../internal/core/testdata/fixtures/variable-defaults.dbf.hcl", "--offline"}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -254,7 +254,7 @@ func TestValidateAndPlanAcceptVariableDefaults(t *testing.T) {
 }
 
 func TestValidateAndPlanAcceptCLIVariableValues(t *testing.T) {
-	fixture := "../../internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl"
+	fixture := "../../internal/core/testdata/fixtures/variable-cli.dbf.hcl"
 	args := []string{
 		"-var", "environment=prod",
 		"-var", "environment=stage",
@@ -270,7 +270,7 @@ func TestValidateAndPlanAcceptCLIVariableValues(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if !strings.Contains(validateOutput, "v2 configuration is valid: 1 host(s)") {
+	if !strings.Contains(validateOutput, "configuration is valid: 1 host(s)") {
 		t.Fatalf("validate output = %q", validateOutput)
 	}
 
@@ -299,7 +299,7 @@ func TestValidateAndPlanAcceptCLIVariableValues(t *testing.T) {
 func TestPlanSensitiveCLIVariableDoesNotLeak(t *testing.T) {
 	output, stderr := captureOutput(t, func() {
 		if err := run([]string{
-			"plan", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", "--offline",
+			"plan", "-f", "../../internal/core/testdata/fixtures/sensitive-variable-files.dbf.hcl", "--offline",
 			"-var", "api_token=" + testassert.SensitiveVariableCLIValue,
 		}); err != nil {
 			t.Fatal(err)
@@ -323,7 +323,7 @@ func TestPlanCLIVariableRuntimeSources(t *testing.T) {
 	}
 	output, stderr := captureOutput(t, func() {
 		if err := run([]string{
-			"plan", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", "--offline",
+			"plan", "-f", "../../internal/core/testdata/fixtures/sensitive-variable-files.dbf.hcl", "--offline",
 			"-var", "api_token=@" + secretPath,
 		}); err != nil {
 			t.Fatal(err)
@@ -341,7 +341,7 @@ func TestPlanCLIVariableRuntimeSources(t *testing.T) {
 	t.Setenv("DBF_RUNTIME_TOKEN", testassert.SensitiveVariableCLIValue)
 	output, stderr = captureOutput(t, func() {
 		if err := run([]string{
-			"plan", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", "--offline",
+			"plan", "-f", "../../internal/core/testdata/fixtures/sensitive-variable-files.dbf.hcl", "--offline",
 			"-var", "api_token=env:DBF_RUNTIME_TOKEN",
 		}); err != nil {
 			t.Fatal(err)
@@ -356,7 +356,7 @@ func TestPlanCLIVariableRuntimeSources(t *testing.T) {
 	t.Setenv("DBF_EMPTY_ENVIRONMENT", "")
 	output = captureStdout(t, func() {
 		if err := run([]string{
-			"plan", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", "--offline",
+			"plan", "-f", "../../internal/core/testdata/fixtures/sensitive-variable-files.dbf.hcl", "--offline",
 			"-var", "environment=env:DBF_EMPTY_ENVIRONMENT",
 		}); err != nil {
 			t.Fatal(err)
@@ -386,7 +386,7 @@ func TestPlanCLIVariableStdinSource(t *testing.T) {
 
 	output, stderr := captureOutput(t, func() {
 		if err := run([]string{
-			"plan", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl", "--offline",
+			"plan", "-f", "../../internal/core/testdata/fixtures/sensitive-variable-files.dbf.hcl", "--offline",
 			"-var", "api_token=@-",
 		}); err != nil {
 			t.Fatal(err)
@@ -403,7 +403,7 @@ func TestSensitiveCLIVariableSourceErrorsDoNotLeak(t *testing.T) {
 	dir := t.TempDir()
 	missingPath := filepath.Join(dir, "missing-token.txt")
 	err := run([]string{
-		"validate", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl",
+		"validate", "-f", "../../internal/core/testdata/fixtures/sensitive-variable-files.dbf.hcl",
 		"-var", "api_token=@" + missingPath,
 	})
 	if err == nil {
@@ -417,7 +417,7 @@ func TestSensitiveCLIVariableSourceErrorsDoNotLeak(t *testing.T) {
 	}
 
 	err = run([]string{
-		"validate", "-f", "../../internal/v2/testdata/fixtures/v2-sensitive-variable-files.dbf.hcl",
+		"validate", "-f", "../../internal/core/testdata/fixtures/sensitive-variable-files.dbf.hcl",
 		"-var", "api_token=env:DBF_MISSING_RUNTIME_TOKEN",
 	})
 	if err == nil {
@@ -432,7 +432,7 @@ func TestSensitiveCLIVariableSourceErrorsDoNotLeak(t *testing.T) {
 }
 
 func TestCLIVariableErrors(t *testing.T) {
-	fixture := "../../internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl"
+	fixture := "../../internal/core/testdata/fixtures/variable-cli.dbf.hcl"
 
 	err := run([]string{"validate", "-f", fixture, "-var", "missing=value"})
 	if err == nil || !strings.Contains(err.Error(), `unknown variable "missing"`) {
@@ -750,7 +750,7 @@ host "server1" {
 	if err := json.Unmarshal([]byte(planJSONStdout), &doc); err != nil {
 		t.Fatalf("plan JSON stdout did not parse: %v\n%s", err, planJSONStdout)
 	}
-	if doc.FormatVersion != "debianform.plan.v2alpha1" {
+	if doc.FormatVersion != "debianform.plan.alpha1" {
 		t.Fatalf("format_version = %q", doc.FormatVersion)
 	}
 }
@@ -910,9 +910,9 @@ host "server1" {}
 	assertGolden(t, filepath.Join("testdata", "variable-inspect.golden.json"), output)
 }
 
-func TestPlanV2BBRText(t *testing.T) {
+func TestPlanBBRText(t *testing.T) {
 	output := captureStdout(t, func() {
-		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"}); err != nil {
+		if err := run([]string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--offline"}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -928,9 +928,9 @@ func TestPlanV2BBRText(t *testing.T) {
 	}
 }
 
-func TestPlanV2NftablesText(t *testing.T) {
+func TestPlanNftablesText(t *testing.T) {
 	output := captureStdout(t, func() {
-		if err := run([]string{"plan", "-f", "../../examples/v2-nftables.dbf.hcl", "--offline"}); err != nil {
+		if err := run([]string{"plan", "-f", "../../examples/nftables.dbf.hcl", "--offline"}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -947,9 +947,9 @@ func TestPlanV2NftablesText(t *testing.T) {
 	}
 }
 
-func TestPlanV2BBRJSON(t *testing.T) {
+func TestPlanBBRJSON(t *testing.T) {
 	output := captureStdout(t, func() {
-		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--offline"}); err != nil {
+		if err := run([]string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--format", "json", "--offline"}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -963,7 +963,7 @@ func TestPlanV2BBRJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(output), &doc); err != nil {
 		t.Fatalf("plan JSON did not parse: %v\n%s", err, output)
 	}
-	if doc.FormatVersion != "debianform.plan.v2alpha1" {
+	if doc.FormatVersion != "debianform.plan.alpha1" {
 		t.Fatalf("format_version = %q", doc.FormatVersion)
 	}
 	if doc.Summary.Create != 3 {
@@ -971,9 +971,9 @@ func TestPlanV2BBRJSON(t *testing.T) {
 	}
 }
 
-func TestPlanV2BBRJSONDebug(t *testing.T) {
+func TestPlanBBRJSONDebug(t *testing.T) {
 	output := captureStdout(t, func() {
-		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}); err != nil {
+		if err := run([]string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -992,7 +992,7 @@ func TestPlanV2BBRJSONDebug(t *testing.T) {
 }
 
 func TestOfflinePlanExplainsRuntimeFactsDependency(t *testing.T) {
-	err := run([]string{"plan", "-f", "../../examples/v2-bird2.dbf.hcl", "--offline"})
+	err := run([]string{"plan", "-f", "../../examples/bird2.dbf.hcl", "--offline"})
 	if err == nil || !strings.Contains(err.Error(), "offline plan cannot resolve runtime facts") {
 		t.Fatalf("plan --offline error = %v, want runtime facts explanation", err)
 	}
@@ -1062,8 +1062,8 @@ exit 1
 	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	output := captureStdout(t, func() {
-		err := run([]string{"check", "-f", "../../examples/v2-docker-minimal.dbf.hcl"})
-		if err == nil || !strings.Contains(err.Error(), "remote state does not match v2 configuration") {
+		err := run([]string{"check", "-f", "../../examples/docker-minimal.dbf.hcl"})
+		if err == nil || !strings.Contains(err.Error(), "remote state does not match configuration") {
 			t.Fatalf("docker check error = %v, want drift failure", err)
 		}
 	})
@@ -1143,8 +1143,8 @@ exit 1
 	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	output := captureStdout(t, func() {
-		err := run([]string{"check", "-f", "../../examples/v2-docker-compose.dbf.hcl"})
-		if err == nil || !strings.Contains(err.Error(), "remote state does not match v2 configuration") {
+		err := run([]string{"check", "-f", "../../examples/docker-compose.dbf.hcl"})
+		if err == nil || !strings.Contains(err.Error(), "remote state does not match configuration") {
 			t.Fatalf("docker compose check error = %v, want drift failure", err)
 		}
 	})
@@ -1227,8 +1227,8 @@ exit 1
 	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	output := captureStdout(t, func() {
-		err := run([]string{"check", "-f", "../../examples/v2-docker-compose.dbf.hcl"})
-		if err == nil || !strings.Contains(err.Error(), "remote state does not match v2 configuration") {
+		err := run([]string{"check", "-f", "../../examples/docker-compose.dbf.hcl"})
+		if err == nil || !strings.Contains(err.Error(), "remote state does not match configuration") {
 			t.Fatalf("docker compose orphan check error = %v, want drift failure", err)
 		}
 	})
@@ -1239,27 +1239,27 @@ exit 1
 }
 
 func TestParallelFlagIsApplyOnlyAndPositive(t *testing.T) {
-	err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "2"})
-	if err == nil || !strings.Contains(err.Error(), "--parallel is only supported for v2 apply") {
+	err := run([]string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--parallel", "2"})
+	if err == nil || !strings.Contains(err.Error(), "--parallel is only supported for apply") {
 		t.Fatalf("plan --parallel error = %v", err)
 	}
 
-	err = run([]string{"check", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"})
-	if err == nil || !strings.Contains(err.Error(), "--offline is only supported for v2 plan") {
+	err = run([]string{"check", "-f", "../../examples/bbr.dbf.hcl", "--offline"})
+	if err == nil || !strings.Contains(err.Error(), "--offline is only supported for plan") {
 		t.Fatalf("check --offline error = %v", err)
 	}
 
-	err = run([]string{"apply", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "0", "--auto-approve"})
+	err = run([]string{"apply", "-f", "../../examples/bbr.dbf.hcl", "--parallel", "0", "--auto-approve"})
 	if err == nil || !strings.Contains(err.Error(), "--parallel must be at least 1") {
 		t.Fatalf("apply --parallel 0 error = %v", err)
 	}
 }
 
-func TestPlanV2BBRHTML(t *testing.T) {
+func TestPlanBBRHTML(t *testing.T) {
 	dir := t.TempDir()
 	htmlPath := filepath.Join(dir, "plan.html")
 	output := captureStdout(t, func() {
-		if err := run([]string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--html", htmlPath, "--offline"}); err != nil {
+		if err := run([]string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--html", htmlPath, "--offline"}); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -1289,18 +1289,18 @@ func TestREADMELocalCommandsAreCopyRunnable(t *testing.T) {
 		t.Fatal(err)
 	}
 	readmeText := string(readme)
-	for _, example := range runnableV2Examples() {
+	for _, example := range runnableExamples() {
 		if !strings.Contains(readmeText, example) {
-			t.Fatalf("README does not mention runnable v2 example %s", example)
+			t.Fatalf("README does not mention runnable example %s", example)
 		}
 	}
-	if strings.Contains(readmeText, "dbf plan -f examples/v2-bird2.dbf.hcl\n") {
+	if strings.Contains(readmeText, "dbf plan -f examples/bird2.dbf.hcl\n") {
 		t.Fatal("README contains a copy-runnable-looking online BIRD2 plan command")
 	}
 
 	dir := t.TempDir()
-	fmtFixture := filepath.Join(dir, "v2-bbr.dbf.hcl")
-	data, err := os.ReadFile("../../examples/v2-bbr.dbf.hcl")
+	fmtFixture := filepath.Join(dir, "bbr.dbf.hcl")
+	data, err := os.ReadFile("../../examples/bbr.dbf.hcl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1312,22 +1312,22 @@ func TestREADMELocalCommandsAreCopyRunnable(t *testing.T) {
 		name string
 		args []string
 	}{
-		{name: "validate-bbr", args: []string{"validate", "-f", "../../examples/v2-bbr.dbf.hcl"}},
+		{name: "validate-bbr", args: []string{"validate", "-f", "../../examples/bbr.dbf.hcl"}},
 		{name: "validate-vars", args: []string{
-			"validate", "-f", "../../internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl",
-			"-var-file", "../../internal/v2/testdata/fixtures/v2-variable-prod.dbfvars",
+			"validate", "-f", "../../internal/core/testdata/fixtures/variable-cli.dbf.hcl",
+			"-var-file", "../../internal/core/testdata/fixtures/variable-prod.dbfvars",
 			"-var", "environment=staging",
 		}},
-		{name: "validate-realistic-systemd-app", args: []string{"validate", "-f", "../../examples/v2-realistic-systemd-app.dbf.hcl"}},
-		{name: "plan-realistic-systemd-app-offline", args: []string{"plan", "-f", "../../examples/v2-realistic-systemd-app.dbf.hcl", "--offline"}},
-		{name: "plan-bbr-offline", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"}},
-		{name: "plan-bbr-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--offline"}},
-		{name: "plan-bbr-debug-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}},
-		{name: "plan-files-html", args: []string{"plan", "-f", "../../examples/v2-files-plan-preview.dbf.hcl", "--html", filepath.Join(dir, "plan.html"), "--offline"}},
+		{name: "validate-realistic-systemd-app", args: []string{"validate", "-f", "../../examples/realistic-systemd-app.dbf.hcl"}},
+		{name: "plan-realistic-systemd-app-offline", args: []string{"plan", "-f", "../../examples/realistic-systemd-app.dbf.hcl", "--offline"}},
+		{name: "plan-bbr-offline", args: []string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--offline"}},
+		{name: "plan-bbr-json", args: []string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--format", "json", "--offline"}},
+		{name: "plan-bbr-debug-json", args: []string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}},
+		{name: "plan-files-html", args: []string{"plan", "-f", "../../examples/files-plan-preview.dbf.hcl", "--html", filepath.Join(dir, "plan.html"), "--offline"}},
 		{name: "fmt-bbr-copy", args: []string{"fmt", "-f", fmtFixture}},
-		{name: "validate-bird2", args: []string{"validate", "-f", "../../examples/v2-bird2.dbf.hcl"}},
-		{name: "plan-nftables-offline", args: []string{"plan", "-f", "../../examples/v2-nftables.dbf.hcl", "--offline"}},
-		{name: "plan-variable-secret-file-offline", args: []string{"plan", "-f", "../../examples/v2-variable-secret-file.dbf.hcl", "--offline"}},
+		{name: "validate-bird2", args: []string{"validate", "-f", "../../examples/bird2.dbf.hcl"}},
+		{name: "plan-nftables-offline", args: []string{"plan", "-f", "../../examples/nftables.dbf.hcl", "--offline"}},
+		{name: "plan-variable-secret-file-offline", args: []string{"plan", "-f", "../../examples/variable-secret-file.dbf.hcl", "--offline"}},
 	}
 	for _, command := range commands {
 		t.Run(command.name, func(t *testing.T) {
@@ -1511,21 +1511,21 @@ content = "fmt"
 		name string
 		args []string
 	}{
-		{name: "validate-explicit", args: []string{"validate", "-f", "../../examples/v2-bbr.dbf.hcl"}},
+		{name: "validate-explicit", args: []string{"validate", "-f", "../../examples/bbr.dbf.hcl"}},
 		{name: "validate-repeated", args: []string{"validate", "-f", base, "-f", app}},
-		{name: "validate-host", args: []string{"validate", "-f", "../../examples/v2-bird2.dbf.hcl", "--host", "router1"}},
+		{name: "validate-host", args: []string{"validate", "-f", "../../examples/bird2.dbf.hcl", "--host", "router1"}},
 		{name: "validate-vars", args: []string{
-			"validate", "-f", "../../internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl",
-			"-var-file", "../../internal/v2/testdata/fixtures/v2-variable-prod.dbfvars",
+			"validate", "-f", "../../internal/core/testdata/fixtures/variable-cli.dbf.hcl",
+			"-var-file", "../../internal/core/testdata/fixtures/variable-prod.dbfvars",
 			"-var", "environment=staging",
 		}},
-		{name: "plan-offline", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"}},
-		{name: "plan-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--offline"}},
-		{name: "plan-html", args: []string{"plan", "-f", "../../examples/v2-files-plan-preview.dbf.hcl", "--html", htmlPath, "--offline"}},
-		{name: "plan-debug-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}},
+		{name: "plan-offline", args: []string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--offline"}},
+		{name: "plan-json", args: []string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--format", "json", "--offline"}},
+		{name: "plan-html", args: []string{"plan", "-f", "../../examples/files-plan-preview.dbf.hcl", "--html", htmlPath, "--offline"}},
+		{name: "plan-debug-json", args: []string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}},
 		{name: "fmt-explicit", args: []string{"fmt", "-f", fmtFixture}},
-		{name: "component-inspect", args: []string{"component", "inspect", "-f", "../../examples/v2-component-inputs.dbf.hcl", "reverse_proxy"}},
-		{name: "variable-inspect", args: []string{"variable", "inspect", "-f", "../../examples/v2-variable-secret-file.dbf.hcl"}},
+		{name: "component-inspect", args: []string{"component", "inspect", "-f", "../../examples/component-inputs.dbf.hcl", "reverse_proxy"}},
+		{name: "variable-inspect", args: []string{"variable", "inspect", "-f", "../../examples/variable-secret-file.dbf.hcl"}},
 		{name: "version", args: []string{"version"}},
 		{name: "version-flag", args: []string{"--version"}},
 		{name: "version-short-flag", args: []string{"-version"}},
@@ -1549,9 +1549,9 @@ content = "fmt"
 		args []string
 		want string
 	}{
-		{name: "plan-parallel", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "2"}, want: "--parallel is only supported for v2 apply"},
-		{name: "check-offline", args: []string{"check", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"}, want: "--offline is only supported for v2 plan"},
-		{name: "html-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--html", filepath.Join(dir, "bad.html"), "--format", "json"}, want: "--html cannot be combined with --format"},
+		{name: "plan-parallel", args: []string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--parallel", "2"}, want: "--parallel is only supported for apply"},
+		{name: "check-offline", args: []string{"check", "-f", "../../examples/bbr.dbf.hcl", "--offline"}, want: "--offline is only supported for plan"},
+		{name: "html-json", args: []string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--html", filepath.Join(dir, "bad.html"), "--format", "json"}, want: "--html cannot be combined with --format"},
 	}
 	for _, command := range invalidCommands {
 		command := command
@@ -1564,7 +1564,7 @@ content = "fmt"
 	}
 }
 
-func TestFmtV2IsIdempotent(t *testing.T) {
+func TestFmtIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")
 	if err := os.WriteFile(config, []byte(`host "web1" {
@@ -1669,21 +1669,21 @@ content="c"
 	}
 }
 
-func runnableV2Examples() []string {
+func runnableExamples() []string {
 	return []string{
-		"examples/v2-bbr.dbf.hcl",
-		"examples/v2-apt-repository.dbf.hcl",
-		"examples/v2-bird2.dbf.hcl",
-		"examples/v2-component-binary.dbf.hcl",
-		"examples/v2-files-plan-preview.dbf.hcl",
-		"examples/v2-mihomo.dbf.hcl",
-		"examples/v2-nftables.dbf.hcl",
-		"examples/v2-plan-preview.dbf.hcl",
-		"examples/v2-profile-merge.dbf.hcl",
-		"examples/v2-realistic-systemd-app.dbf.hcl",
-		"examples/v2-systemd-service.dbf.hcl",
-		"examples/v2-user-group.dbf.hcl",
-		"examples/v2-variable-secret-file.dbf.hcl",
+		"examples/bbr.dbf.hcl",
+		"examples/apt-repository.dbf.hcl",
+		"examples/bird2.dbf.hcl",
+		"examples/component-binary.dbf.hcl",
+		"examples/files-plan-preview.dbf.hcl",
+		"examples/mihomo.dbf.hcl",
+		"examples/nftables.dbf.hcl",
+		"examples/plan-preview.dbf.hcl",
+		"examples/profile-merge.dbf.hcl",
+		"examples/realistic-systemd-app.dbf.hcl",
+		"examples/systemd-service.dbf.hcl",
+		"examples/user-group.dbf.hcl",
+		"examples/variable-secret-file.dbf.hcl",
 	}
 }
 

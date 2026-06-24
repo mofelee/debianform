@@ -1,6 +1,6 @@
-# v2 Libvirt Integration Tests
+# Libvirt Integration Tests
 
-These tests boot fresh Debian 13 cloud VMs with libvirt and exercise v2
+These tests boot fresh Debian 13 cloud VMs with libvirt and exercise
 `validate`, `apply`, and `check` against real remote state.
 
 Run all cases:

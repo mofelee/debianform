@@ -1,0 +1,145 @@
+{
+  "format_version": "debianform.plan.alpha1",
+  "generated_at": "2026-06-20T12:00:00Z",
+  "command": {
+    "file": "../../../examples/docker-package-sources.dbf.hcl",
+    "host": "docker-sources1"
+  },
+  "summary": {
+    "create": 3,
+    "update": 0,
+    "delete": 0,
+    "no_op": 0,
+    "operations": 0
+  },
+  "changes": [
+    {
+      "address": "host.docker-sources1.docker.package[\"docker-compose-plugin\"]",
+      "action": "create",
+      "summary": "install docker package docker-compose-plugin",
+      "source": {
+        "file": "../../../examples/docker-package-sources.dbf.hcl",
+        "line": 10,
+        "path": "host.docker-sources1.docker.package"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-compose-plugin"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.docker-sources1.docker.package[\"docker.io\"]",
+      "action": "create",
+      "summary": "install docker package docker.io",
+      "source": {
+        "file": "../../../examples/docker-package-sources.dbf.hcl",
+        "line": 10,
+        "path": "host.docker-sources1.docker.package"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker.io"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.docker-sources1.docker.service[\"docker\"]",
+      "action": "create",
+      "summary": "manage docker service",
+      "source": {
+        "file": "../../../examples/docker-package-sources.dbf.hcl",
+        "line": 7,
+        "path": "host.docker-sources1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "enabled"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker"
+          },
+          {
+            "path": [
+              "state"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "running"
+          },
+          {
+            "path": [
+              "unit"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker.service"
+          }
+        ]
+      }
+    }
+  ],
+  "operations": [],
+  "diagnostics": []
+}

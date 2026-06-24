@@ -1,0 +1,93 @@
+{
+  "nodes": [
+    {
+      "host": "tool1",
+      "address": "host.tool1.components.rclone.artifact.download[\"amd64\"]",
+      "kind": "component_download",
+      "summary": "download component rclone source",
+      "source": {
+        "file": "../../../examples/component-binary.dbf.hcl",
+        "line": 15,
+        "path": "component.rclone.source[\"amd64\"]"
+      },
+      "desired": {
+        "architecture": "amd64",
+        "component": "rclone",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/var/cache/debianform/components/rclone/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/source",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "type": "binary",
+        "url": "https://downloads.rclone.org/v1.66.0/rclone-v1.66.0-linux-amd64.zip",
+        "version": "1.66.0"
+      },
+      "provider_type": "component_download",
+      "provider_address": "component_download.tool1_rclone_amd64",
+      "provider_payload": {
+        "architecture": "amd64",
+        "component": "rclone",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/var/cache/debianform/components/rclone/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/source",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "type": "binary",
+        "url": "https://downloads.rclone.org/v1.66.0/rclone-v1.66.0-linux-amd64.zip",
+        "version": "1.66.0"
+      }
+    },
+    {
+      "host": "tool1",
+      "address": "host.tool1.components.rclone.artifact.install[\"/usr/local/bin/rclone\"]",
+      "kind": "component_binary",
+      "summary": "install component rclone binary /usr/local/bin/rclone",
+      "source": {
+        "file": "../../../examples/component-binary.dbf.hcl",
+        "line": 25,
+        "path": "component.rclone.extract"
+      },
+      "desired": {
+        "architecture": "amd64",
+        "cache_path": "/var/cache/debianform/components/rclone/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/source",
+        "component": "rclone",
+        "ensure": "present",
+        "extract_format": "zip",
+        "group": "root",
+        "include": "rclone",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/usr/local/bin/rclone",
+        "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source_url": "https://downloads.rclone.org/v1.66.0/rclone-v1.66.0-linux-amd64.zip",
+        "strip_components": 1,
+        "type": "binary",
+        "version": "1.66.0"
+      },
+      "provider_type": "component_binary",
+      "provider_address": "component_binary.tool1_rclone__usr_local_bin_rclone",
+      "provider_payload": {
+        "architecture": "amd64",
+        "cache_path": "/var/cache/debianform/components/rclone/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/source",
+        "component": "rclone",
+        "ensure": "present",
+        "extract_format": "zip",
+        "group": "root",
+        "include": "rclone",
+        "mode": "0755",
+        "owner": "root",
+        "path": "/usr/local/bin/rclone",
+        "source_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "source_url": "https://downloads.rclone.org/v1.66.0/rclone-v1.66.0-linux-amd64.zip",
+        "strip_components": 1,
+        "type": "binary",
+        "version": "1.66.0"
+      },
+      "depends_on": [
+        "host.tool1.components.rclone.artifact.download[\"amd64\"]"
+      ]
+    }
+  ]
+}

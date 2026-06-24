@@ -130,7 +130,7 @@ dbf check
 
 ```text
 Summary: 0 create, 1 update, 0 delete, 1 no-op, 1 operations
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 `check` 只报告漂移，不会运行 `apt-get update` 或修改文件。

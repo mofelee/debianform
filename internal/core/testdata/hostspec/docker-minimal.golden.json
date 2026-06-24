@@ -1,0 +1,101 @@
+{
+  "name": "docker1",
+  "source": {
+    "file": "../../../examples/docker-minimal.dbf.hcl",
+    "line": 6,
+    "path": "host.docker1"
+  },
+  "facts": {
+    "system": {}
+  },
+  "ssh": {
+    "host": "docker1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../../../examples/docker-minimal.dbf.hcl",
+      "line": 6,
+      "path": "host.docker1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/docker1.json",
+    "lock_path": "/var/lock/debianform/state/docker1.lock",
+    "source": {
+      "file": "../../../examples/docker-minimal.dbf.hcl",
+      "line": 6,
+      "path": "host.docker1"
+    }
+  },
+  "system": {
+    "hostname": "docker1",
+    "architecture": "amd64",
+    "codename": "trixie",
+    "source": {
+      "file": "../../../examples/docker-minimal.dbf.hcl",
+      "line": 7,
+      "path": "host.docker1.system"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  },
+  "docker": {
+    "enable": true,
+    "package": {
+      "source": "official",
+      "channel": "stable",
+      "remove_conflicts": "auto",
+      "source_ref": {
+        "file": "../../../examples/docker-minimal.dbf.hcl",
+        "line": 12,
+        "path": "host.docker1.docker"
+      }
+    },
+    "service": {
+      "enable": true,
+      "state": "running",
+      "name": "docker.service",
+      "source_ref": {
+        "file": "../../../examples/docker-minimal.dbf.hcl",
+        "line": 12,
+        "path": "host.docker1.docker"
+      }
+    },
+    "source": {
+      "file": "../../../examples/docker-minimal.dbf.hcl",
+      "line": 12,
+      "path": "host.docker1.docker"
+    }
+  }
+}

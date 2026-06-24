@@ -35,7 +35,7 @@ CLI flags
 
 1. 定义和解析 flags。
 2. 用 `configFiles` 决定读取哪些 `.dbf.hcl`。
-3. 调用 `runV2ConfigCommand` 执行真正的 v2 流程。
+3. 调用 `runConfigWorkflow` 执行真正的 流程。
 
 `configFiles` 的规则很直接：
 
@@ -51,7 +51,7 @@ CLI flags
 - 显式 `-var-file`。
 - 显式 `-var name=value`。
 
-入口函数是 `parseV2ConfigWithExternalValues`。它先用 `SkipTopLevel` 解析变量声明，再收集外部变量值，
+入口函数是 `parseConfigWithExternalValues`。它先用 `SkipTopLevel` 解析变量声明，再收集外部变量值，
 最后把变量值交回 parser 做完整解析。
 
 ## `validate`
@@ -62,8 +62,8 @@ CLI flags
 
 ```text
 files + vars
-  -> parseV2ConfigWithExternalValues
-  -> compileV2ValidationProgram
+  -> parseConfigWithExternalValues
+  -> compileValidationProgram
   -> merge.CompileWithOptions(ValidateRuntimeTemplates: true)
 ```
 
@@ -100,10 +100,10 @@ parser.Config
 
 ```text
 parser.Config
-  -> compileV2Program(SkipComponents: true)
+  -> compileProgram(SkipComponents: true)
   -> SSHRunner
   -> DiscoverProgramFacts
-  -> compileV2Program(HostFacts: facts)
+  -> compileProgram(HostFacts: facts)
   -> graph.Compile
   -> engine.Plan
   -> engine.Plan.Document
@@ -143,7 +143,7 @@ parser.Config
 
 ## `fmt`
 
-`fmt` 是一个特殊命令。它会先调用 `loadV2Program` 验证配置能解析和编译，然后用
+`fmt` 是一个特殊命令。它会先调用 `loadProgram` 验证配置能解析和编译，然后用
 `hclwrite.Format` 重写输入文件。也就是说，格式化不是纯文本操作；语义上无效的配置不会被格式化。
 
 ## Inspect 命令

@@ -1,0 +1,80 @@
+{
+  "nodes": [
+    {
+      "host": "bbr1",
+      "address": "host.bbr1.kernel.module[\"tcp_bbr\"]",
+      "kind": "kernel_module",
+      "summary": "create kernel module tcp_bbr",
+      "source": {
+        "file": "../../../examples/bbr.dbf.hcl",
+        "line": 13,
+        "path": "host.bbr1.kernel.modules[0]"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "tcp_bbr",
+        "persist": true
+      },
+      "provider_type": "kernel_module",
+      "provider_address": "kernel_module.bbr1_tcp_bbr",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "tcp_bbr",
+        "persist": true
+      }
+    },
+    {
+      "host": "bbr1",
+      "address": "host.bbr1.kernel.sysctl[\"net.core.default_qdisc\"]",
+      "kind": "sysctl",
+      "summary": "create sysctl net.core.default_qdisc",
+      "source": {
+        "file": "../../../examples/bbr.dbf.hcl",
+        "line": 17,
+        "path": "host.bbr1.kernel.sysctl[\"net.core.default_qdisc\"]"
+      },
+      "desired": {
+        "apply_runtime": true,
+        "key": "net.core.default_qdisc",
+        "persist": true,
+        "value": "fq"
+      },
+      "provider_type": "sysctl",
+      "provider_address": "sysctl.bbr1_net_core_default_qdisc",
+      "provider_payload": {
+        "apply_runtime": true,
+        "key": "net.core.default_qdisc",
+        "persist": true,
+        "value": "fq"
+      }
+    },
+    {
+      "host": "bbr1",
+      "address": "host.bbr1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]",
+      "kind": "sysctl",
+      "summary": "create sysctl net.ipv4.tcp_congestion_control",
+      "source": {
+        "file": "../../../examples/bbr.dbf.hcl",
+        "line": 18,
+        "path": "host.bbr1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]"
+      },
+      "desired": {
+        "apply_runtime": true,
+        "key": "net.ipv4.tcp_congestion_control",
+        "persist": true,
+        "value": "bbr"
+      },
+      "provider_type": "sysctl",
+      "provider_address": "sysctl.bbr1_net_ipv4_tcp_congestion_control",
+      "provider_payload": {
+        "apply_runtime": true,
+        "key": "net.ipv4.tcp_congestion_control",
+        "persist": true,
+        "value": "bbr"
+      },
+      "depends_on": [
+        "host.bbr1.kernel.module[\"tcp_bbr\"]"
+      ]
+    }
+  ]
+}

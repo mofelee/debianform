@@ -15,7 +15,7 @@ Stale lock、apply 中途失败、drift 恢复和常见故障排查见
 如果只想读取一个或多个明确指定的文件，使用可重复的 `-f file`：
 
 ```bash
-dbf validate -f examples/v2-bbr.dbf.hcl
+dbf validate -f examples/bbr.dbf.hcl
 dbf validate -f base.dbf.hcl -f app.dbf.hcl
 ```
 
@@ -85,17 +85,17 @@ dbf help
 
 ```bash
 dbf validate
-dbf validate -f examples/v2-bbr.dbf.hcl
-dbf validate -f examples/v2-bird2.dbf.hcl --host router1
-dbf validate -f internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl \
-  -var-file internal/v2/testdata/fixtures/v2-variable-prod.dbfvars \
+dbf validate -f examples/bbr.dbf.hcl
+dbf validate -f examples/bird2.dbf.hcl --host router1
+dbf validate -f internal/core/testdata/fixtures/variable-cli.dbf.hcl \
+  -var-file internal/core/testdata/fixtures/variable-prod.dbfvars \
   -var environment=staging
 ```
 
 成功时输出类似：
 
 ```text
-v2 configuration is valid: 1 host(s)
+configuration is valid: 1 host(s)
 ```
 
 选项：
@@ -114,7 +114,7 @@ state，并对比 observed state。纯本地预览使用 `--offline`。
 在线 `plan` 会把 facts/state/observed 探测进度写到 stderr；plan 正文仍写到 stdout。
 
 ```bash
-dbf plan -f examples/v2-bbr.dbf.hcl --offline
+dbf plan -f examples/bbr.dbf.hcl --offline
 ```
 
 文本输出示例：
@@ -130,19 +130,19 @@ Summary: 3 create, 0 update, 0 delete, 0 no-op, 0 operations
 输出 JSON：
 
 ```bash
-dbf plan -f examples/v2-bbr.dbf.hcl --format json --offline
+dbf plan -f examples/bbr.dbf.hcl --format json --offline
 ```
 
 生成静态 HTML plan：
 
 ```bash
-dbf plan -f examples/v2-files-plan-preview.dbf.hcl --html plan.html --offline
+dbf plan -f examples/files-plan-preview.dbf.hcl --html plan.html --offline
 ```
 
 调试 provider address：
 
 ```bash
-dbf plan -f examples/v2-bbr.dbf.hcl --format json --debug --offline
+dbf plan -f examples/bbr.dbf.hcl --format json --debug --offline
 ```
 
 选项：
@@ -174,7 +174,7 @@ host 上多个 apply 并发写 state。
 执行期间会向 stderr 输出当前 host、资源地址、动作和长步骤心跳；stdout 仍保留 plan 输出。
 
 ```bash
-dbf apply -f examples/v2-bbr.dbf.hcl
+dbf apply -f examples/bbr.dbf.hcl
 ```
 
 默认情况下，如果 plan 中存在变更或 operation，`apply` 会要求确认：
@@ -186,7 +186,7 @@ Apply these changes? Type yes to continue:
 跳过确认：
 
 ```bash
-dbf apply -f examples/v2-bbr.dbf.hcl --auto-approve
+dbf apply -f examples/bbr.dbf.hcl --auto-approve
 ```
 
 多 host 并发应用：
@@ -217,8 +217,8 @@ dbf apply --parallel 4 --auto-approve
 和在线 `plan` 一样，探测进度会写到 stderr，检查结果 plan 写到 stdout。
 
 ```bash
-dbf check -f examples/v2-bbr.dbf.hcl
-dbf check -f examples/v2-bbr.dbf.hcl --host bbr1
+dbf check -f examples/bbr.dbf.hcl
+dbf check -f examples/bbr.dbf.hcl --host bbr1
 ```
 
 选项：
@@ -235,7 +235,7 @@ dbf check -f examples/v2-bbr.dbf.hcl --host bbr1
 `check` 返回非零退出码，并输出：
 
 ```text
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 当前错误文本仍保留历史格式名；语义是远端状态和当前配置不一致。
@@ -248,7 +248,7 @@ dbf: remote state does not match v2 configuration
 
 ```bash
 dbf fmt
-dbf fmt -f examples/v2-bbr.dbf.hcl
+dbf fmt -f examples/bbr.dbf.hcl
 ```
 
 输出示例：
@@ -271,7 +271,7 @@ formatted 1 file(s)
 component 需要哪些参数、参数类型、默认值和说明。
 
 ```bash
-dbf component inspect -f examples/v2-component-inputs.dbf.hcl reverse_proxy
+dbf component inspect -f examples/component-inputs.dbf.hcl reverse_proxy
 ```
 
 输出结构示例：
@@ -316,7 +316,7 @@ dbf component inspect -f examples/v2-component-inputs.dbf.hcl reverse_proxy
 需要哪些外部变量、变量类型、默认值、nullable/sensitive/ephemeral/deprecated 标记和说明。
 
 ```bash
-dbf variable inspect -f examples/v2-variable-secret-file.dbf.hcl
+dbf variable inspect -f examples/variable-secret-file.dbf.hcl
 ```
 
 选项：
@@ -390,9 +390,9 @@ dbf -h
 无效组合会直接失败，例如：
 
 ```bash
-dbf plan -f examples/v2-bbr.dbf.hcl --parallel 2
-dbf check -f examples/v2-bbr.dbf.hcl --offline
-dbf plan -f examples/v2-bbr.dbf.hcl --html plan.html --format json
+dbf plan -f examples/bbr.dbf.hcl --parallel 2
+dbf check -f examples/bbr.dbf.hcl --offline
+dbf plan -f examples/bbr.dbf.hcl --html plan.html --format json
 ```
 
 ## 常见工作流
@@ -400,31 +400,31 @@ dbf plan -f examples/v2-bbr.dbf.hcl --html plan.html --format json
 本地检查配置：
 
 ```bash
-dbf validate -f examples/v2-bbr.dbf.hcl
+dbf validate -f examples/bbr.dbf.hcl
 ```
 
 本地预览可运行示例：
 
 ```bash
-dbf plan -f examples/v2-bbr.dbf.hcl --offline
+dbf plan -f examples/bbr.dbf.hcl --offline
 ```
 
 输出机器可读 plan：
 
 ```bash
-dbf plan -f examples/v2-bbr.dbf.hcl --format json --offline
+dbf plan -f examples/bbr.dbf.hcl --format json --offline
 ```
 
 应用到远端主机：
 
 ```bash
-dbf apply -f examples/v2-bbr.dbf.hcl --auto-approve
+dbf apply -f examples/bbr.dbf.hcl --auto-approve
 ```
 
 检查远端是否漂移：
 
 ```bash
-dbf check -f examples/v2-bbr.dbf.hcl
+dbf check -f examples/bbr.dbf.hcl
 ```
 
 格式化当前目录配置：
@@ -436,5 +436,5 @@ dbf fmt
 查看 component 输入：
 
 ```bash
-dbf component inspect -f examples/v2-component-inputs.dbf.hcl reverse_proxy
+dbf component inspect -f examples/component-inputs.dbf.hcl reverse_proxy
 ```

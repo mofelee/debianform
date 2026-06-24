@@ -118,7 +118,7 @@ stable 之后遵循 semver：
 
 ## Plan JSON Format 兼容性
 
-`dbf plan --format json` 当前格式版本是 `debianform.plan.v2alpha1`。
+`dbf plan --format json` 当前格式版本是 `debianform.plan.alpha1`。
 
 兼容变更包括：
 

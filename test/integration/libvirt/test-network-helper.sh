@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CASE_WORK="$(mktemp -d "${TMPDIR:-/tmp}/dbf-network-helper.XXXXXX")"
-NETWORK_NAME="dbf-v2-network-helper-test-net"
+NETWORK_NAME="dbf-core-network-helper-test-net"
 NETWORK_DEFINED=0
 BRIDGE_NAME=""
 SUBNET_OCTET=""

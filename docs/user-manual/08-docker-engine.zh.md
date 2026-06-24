@@ -148,7 +148,7 @@ dbf check
   restart docker service
 
 Summary: 0 create, 1 update, 0 delete, 12 no-op, 1 operations
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 daemon 配置变化后，DebianForm 会重写文件并重启 Docker。

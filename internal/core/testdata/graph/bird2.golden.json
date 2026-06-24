@@ -1,0 +1,161 @@
+{
+  "nodes": [
+    {
+      "host": "router1",
+      "address": "host.router1.components.bird2.apt.repository[\"cznic_bird2\"]",
+      "kind": "file",
+      "summary": "manage apt repository cznic_bird2",
+      "source": {
+        "file": "../../../examples/bird2.dbf.hcl",
+        "line": 13,
+        "path": "component.bird2.apt.repository[\"cznic_bird2\"]"
+      },
+      "desired": {
+        "component": "bird2",
+        "content": "Types: deb\nURIs: https://pkg.labs.nic.cz/bird2\nSuites: trixie\nComponents: main\nSigned-By: /etc/apt/keyrings/cznic-bird2.asc\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "cznic_bird2",
+        "owner": "root",
+        "path": "/etc/apt/sources.list.d/cznic_bird2.sources"
+      },
+      "provider_type": "file",
+      "provider_address": "file.router1__etc_apt_sources_list_d_cznic_bird2_sources",
+      "provider_payload": {
+        "component": "bird2",
+        "content": "Types: deb\nURIs: https://pkg.labs.nic.cz/bird2\nSuites: trixie\nComponents: main\nSigned-By: /etc/apt/keyrings/cznic-bird2.asc\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "cznic_bird2",
+        "owner": "root",
+        "path": "/etc/apt/sources.list.d/cznic_bird2.sources"
+      },
+      "depends_on": [
+        "host.router1.components.bird2.apt.signing_key[\"cznic_bird2\"]"
+      ]
+    },
+    {
+      "host": "router1",
+      "address": "host.router1.components.bird2.apt.signing_key[\"cznic_bird2\"]",
+      "kind": "apt_signing_key",
+      "summary": "manage apt signing key cznic_bird2",
+      "source": {
+        "file": "../../../examples/bird2.dbf.hcl",
+        "line": 18,
+        "path": "component.bird2.apt.repository[\"cznic_bird2\"].signing_key"
+      },
+      "desired": {
+        "component": "bird2",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "cznic_bird2",
+        "owner": "root",
+        "path": "/etc/apt/keyrings/cznic-bird2.asc",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "url": "https://pkg.labs.nic.cz/gpg"
+      },
+      "provider_type": "apt_signing_key",
+      "provider_address": "apt_signing_key.router1_bird2_cznic_bird2",
+      "provider_payload": {
+        "component": "bird2",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "cznic_bird2",
+        "owner": "root",
+        "path": "/etc/apt/keyrings/cznic-bird2.asc",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "url": "https://pkg.labs.nic.cz/gpg"
+      }
+    },
+    {
+      "host": "router1",
+      "address": "host.router1.components.bird2.packages.install[\"bird2\"]",
+      "kind": "package",
+      "summary": "create package bird2",
+      "source": {
+        "file": "../../../examples/bird2.dbf.hcl",
+        "line": 27,
+        "path": "component.bird2.packages.package[\"bird2\"]"
+      },
+      "desired": {
+        "component": "bird2",
+        "ensure": "present",
+        "name": "bird2",
+        "repositories": [
+          "cznic_bird2"
+        ]
+      },
+      "provider_type": "package",
+      "provider_address": "package.router1_bird2_bird2",
+      "provider_payload": {
+        "component": "bird2",
+        "ensure": "present",
+        "name": "bird2",
+        "repositories": [
+          "cznic_bird2"
+        ]
+      },
+      "depends_on": [
+        "host.router1.components.bird2.apt.repository[\"cznic_bird2\"]",
+        "host.router1.apt.cache_refresh"
+      ]
+    },
+    {
+      "host": "router1",
+      "address": "host.router1.components.bird2.services.service[\"bird\"]",
+      "kind": "service",
+      "summary": "manage service bird",
+      "source": {
+        "file": "../../../examples/bird2.dbf.hcl",
+        "line": 33,
+        "path": "component.bird2.services.service[\"bird\"]"
+      },
+      "desired": {
+        "component": "bird2",
+        "enabled": true,
+        "name": "bird",
+        "package": "bird2",
+        "state": "running",
+        "unit": "bird.service"
+      },
+      "provider_type": "service",
+      "provider_address": "service.router1_bird2_bird",
+      "provider_payload": {
+        "component": "bird2",
+        "enabled": true,
+        "name": "bird",
+        "package": "bird2",
+        "state": "running",
+        "unit": "bird.service"
+      },
+      "depends_on": [
+        "host.router1.components.bird2.packages.install[\"bird2\"]"
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.router1.apt.cache_refresh",
+      "action": "run",
+      "summary": "refresh apt package cache",
+      "depends_on": [
+        "host.router1.components.bird2.apt.signing_key[\"cznic_bird2\"]",
+        "host.router1.components.bird2.apt.repository[\"cznic_bird2\"]"
+      ],
+      "triggered_by": [
+        "host.router1.components.bird2.apt.signing_key[\"cznic_bird2\"]",
+        "host.router1.components.bird2.apt.repository[\"cznic_bird2\"]"
+      ],
+      "command_preview": "apt-get update",
+      "source": {
+        "file": "../../../examples/bird2.dbf.hcl",
+        "line": 13,
+        "path": "component.bird2.apt.repository[\"cznic_bird2\"]"
+      }
+    }
+  ]
+}

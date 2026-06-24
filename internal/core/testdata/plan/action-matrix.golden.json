@@ -1,0 +1,167 @@
+{
+  "format_version": "debianform.plan.alpha1",
+  "generated_at": "2026-06-20T12:00:00Z",
+  "command": {
+    "file": "examples/action-matrix.dbf.hcl",
+    "host": "server1"
+  },
+  "summary": {
+    "create": 1,
+    "update": 1,
+    "delete": 1,
+    "no_op": 1,
+    "operations": 1
+  },
+  "changes": [
+    {
+      "address": "host.server1.files.file[\"/tmp/create\"]",
+      "action": "create",
+      "summary": "create file /tmp/create",
+      "source": {
+        "file": "examples/action-matrix.dbf.hcl",
+        "line": 12,
+        "path": "host.server1.files.file[\"/tmp/example\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/tmp/create"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.server1.files.file[\"/tmp/update\"]",
+      "action": "update",
+      "summary": "update file /tmp/update",
+      "source": {
+        "file": "examples/action-matrix.dbf.hcl",
+        "line": 12,
+        "path": "host.server1.files.file[\"/tmp/example\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "update",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "update",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 1,
+                "new_start": 1,
+                "new_lines": 1,
+                "lines": [
+                  {
+                    "op": "delete",
+                    "text": "old"
+                  },
+                  {
+                    "op": "create",
+                    "text": "new"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "update",
+            "sensitive": false,
+            "before": "0644",
+            "after": "0600"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.server1.files.file[\"/tmp/delete\"]",
+      "action": "delete",
+      "summary": "delete file /tmp/delete",
+      "source": {
+        "file": "examples/action-matrix.dbf.hcl",
+        "line": 12,
+        "path": "host.server1.files.file[\"/tmp/example\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "delete",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "delete",
+            "sensitive": false,
+            "before": "/tmp/delete"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.server1.files.file[\"/tmp/no-op\"]",
+      "action": "no-op",
+      "summary": "no changes for file /tmp/no-op",
+      "source": {
+        "file": "examples/action-matrix.dbf.hcl",
+        "line": 12,
+        "path": "host.server1.files.file[\"/tmp/example\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "no-op",
+        "sensitive": false
+      }
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.server1.systemd.daemon_reload",
+      "action": "run",
+      "summary": "reload systemd manager configuration",
+      "triggered_by": [
+        "host.server1.files.file[\"/tmp/update\"]"
+      ],
+      "command_preview": "systemctl daemon-reload",
+      "source": {
+        "file": "examples/action-matrix.dbf.hcl",
+        "line": 12,
+        "path": "host.server1.files.file[\"/tmp/example\"]"
+      }
+    }
+  ],
+  "diagnostics": []
+}

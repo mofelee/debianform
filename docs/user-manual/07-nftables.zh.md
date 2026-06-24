@@ -136,7 +136,7 @@ dbf check
   update file /etc/nftables.d/debianform-manual-input.nft
 
 Summary: 0 create, 1 update, 0 delete, 3 no-op, 2 operations
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 注意 summary 里仍然有 2 个 operations。nftables 文件变化后，DebianForm 会重新校验并激活规则集。

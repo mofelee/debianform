@@ -1,0 +1,21 @@
+# DebianForm user/group/authorized_key 示例。
+
+host "users1" {
+  groups {
+    group "deploy" {
+      system = true
+    }
+  }
+
+  users {
+    user "deploy" {
+      home  = "/home/deploy"
+      shell = "/bin/bash"
+      group = "deploy"
+
+      ssh_authorized_keys = [
+        "ssh-ed25519 AAAA_REPLACE_ME deploy@example",
+      ]
+    }
+  }
+}

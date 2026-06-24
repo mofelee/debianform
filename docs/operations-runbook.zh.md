@@ -41,7 +41,7 @@ ssh root@"$DBF_TARGET" "test -f '$DBF_LOCK' && cat '$DBF_LOCK' || true"
 `check` 发现 drift 时会返回非零并输出：
 
 ```text
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 当前错误文本仍保留历史格式名；语义是远端状态和当前配置不一致。
@@ -169,7 +169,7 @@ host.server1.files.file["/etc/app/config.yaml"] failed: ...
 现象：
 
 ```text
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 处理顺序：
@@ -352,7 +352,7 @@ ssh root@"$DBF_TARGET" 'dpkg --print-architecture && . /etc/os-release && printf
 常见输出：
 
 ```text
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 处理：这是 drift 或未 apply 变更，不是单纯语法错误。读 check 输出中的 plan，再选择 apply、

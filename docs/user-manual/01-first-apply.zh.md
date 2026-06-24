@@ -95,7 +95,7 @@ dbf validate
 预期：
 
 ```text
-v2 configuration is valid: 1 host(s)
+configuration is valid: 1 host(s)
 ```
 
 `validate` 只解析和校验配置，不连接主机。

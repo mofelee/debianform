@@ -149,7 +149,7 @@ dbf check
   converge docker compose project manualapp from stopped to running
 
 Summary: 0 create, 1 update, 0 delete, 14 no-op, 0 operations
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 ## 修复漂移

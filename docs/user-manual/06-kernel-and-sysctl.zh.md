@@ -112,7 +112,7 @@ dbf check
   sysctl -w net.ipv4.tcp_congestion_control=bbr and write /etc/sysctl.d/99-dbf-net_ipv4_tcp_congestion_control.conf
 
 Summary: 0 create, 1 update, 0 delete, 2 no-op, 0 operations
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 ## 修复漂移

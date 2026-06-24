@@ -111,7 +111,7 @@ redaction matrix 里专门测试 native provider command preview、错误、stdo
 - native provider command preview 和 error。
 - native provider stdout/stderr。
 
-`internal/v2/testassert/secrets.go` 维护一组哨兵 secret 字符串。`NoSecretLeak` 会检查输出中不包含这些值。
+`internal/core/testassert/secrets.go` 维护一组哨兵 secret 字符串。`NoSecretLeak` 会检查输出中不包含这些值。
 
 新增敏感路径时，优先把它纳入 matrix。
 

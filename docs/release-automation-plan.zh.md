@@ -89,7 +89,7 @@ tar -tzf dist/dbf_*_linux_amd64.tar.gz | rg 'README.md|docs/|examples/|LICENSE|C
 
 需要你介入：
 
-- 当前环境已临时安装 GoReleaser v2.16.0 到 `/tmp/debianform-tools/goreleaser` 并用于本地验收。
+- 当前环境已临时安装 GoReleaser 到 `/tmp/debianform-tools/goreleaser` 并用于本地验收。
 
 ## Loop 2: release dry-run CI
 
@@ -121,8 +121,8 @@ gh run watch
 需要你介入：
 
 - 需要允许 GitHub Actions 运行新 workflow。
-- dry-run workflow 未引入 GoReleaser action；GoReleaser 通过 `go install github.com/goreleaser/goreleaser/v2@v2.16.0`
-  安装，避免额外 action pinning 策略问题。
+- dry-run workflow 未引入 GoReleaser action；GoReleaser 通过 `go install` 安装，
+  避免额外 action pinning 策略问题。
 
 ## Loop 3: curl installer
 
@@ -311,8 +311,8 @@ brew upgrade dbf
 - [x] Linux amd64 验证：
   - `curl` installer 安装指定 tag 到临时 prefix。
   - `dbf version` 包含 tag。
-  - `dbf validate -f examples/v2-bbr.dbf.hcl`。
-  - `dbf plan -f examples/v2-bbr.dbf.hcl --offline`。
+  - `dbf validate -f examples/bbr.dbf.hcl`。
+  - `dbf plan -f examples/bbr.dbf.hcl --offline`。
   - Homebrew 路径在 runner 有 `brew` 时执行，否则 release notes 标记为
     `manual/best-effort`。
 - [x] macOS amd64/arm64 验证尽量使用 GitHub hosted runners。
@@ -328,7 +328,7 @@ gh run view --log
 已验证：`v0.0.0-verify-test.1` 触发的 release workflow run `28012012498`
 通过，包含 `GitHub Release` 和 `Post-release verification` 两个 job。verify job 已通过：
 curl installer 安装 Linux amd64 tarball、`dbf version` 包含 tag、
-`dbf validate -f examples/v2-bbr.dbf.hcl`、`dbf plan -f examples/v2-bbr.dbf.hcl --offline`。
+`dbf validate -f examples/bbr.dbf.hcl`、`dbf plan -f examples/bbr.dbf.hcl --offline`。
 验证矩阵已写入 GitHub Release notes，并上传为 artifact
 `release-verification-v0.0.0-verify-test.1`。Ubuntu runner 未安装 Homebrew，因此 Homebrew
 路径记录为 `manual/best-effort`。

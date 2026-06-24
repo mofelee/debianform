@@ -117,7 +117,7 @@ dbf check
   add authorized key for manualapp
 
 Summary: 1 create, 0 update, 0 delete, 3 no-op, 0 operations
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 authorized key 被建成独立资源，所以只修复 key，不需要重建用户。

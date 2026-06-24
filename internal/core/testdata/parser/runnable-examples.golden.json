@@ -1,0 +1,330 @@
+[
+  {
+    "fixture": "../../../examples/bbr.dbf.hcl",
+    "hosts": [
+      {
+        "name": "bbr1",
+        "body_keys": [
+          "kernel"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/apt-source-file.dbf.hcl",
+    "hosts": [
+      {
+        "name": "apt-source1",
+        "body_keys": [
+          "apt"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/apt-repository.dbf.hcl",
+    "hosts": [
+      {
+        "name": "apt1",
+        "body_keys": [
+          "apt",
+          "packages"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/bird2.dbf.hcl",
+    "components": [
+      "bird2"
+    ],
+    "hosts": [
+      {
+        "name": "router1",
+        "components": [
+          "bird2=bird2"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/component-binary.dbf.hcl",
+    "components": [
+      "rclone"
+    ],
+    "hosts": [
+      {
+        "name": "tool1",
+        "components": [
+          "rclone=rclone"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/component-inputs.dbf.hcl",
+    "components": [
+      "reverse_proxy"
+    ],
+    "hosts": [
+      {
+        "name": "input1",
+        "components": [
+          "proxy=reverse_proxy"
+        ],
+        "body_keys": [
+          "system"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/component-source-build.dbf.hcl",
+    "components": [
+      "hello_from_source"
+    ],
+    "hosts": [
+      {
+        "name": "build1",
+        "components": [
+          "hello_from_source=hello_from_source"
+        ],
+        "body_keys": [
+          "system"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/docker-compose.dbf.hcl",
+    "hosts": [
+      {
+        "name": "compose1",
+        "body_keys": [
+          "docker",
+          "system"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/docker-daemon.dbf.hcl",
+    "hosts": [
+      {
+        "name": "docker-daemon1",
+        "body_keys": [
+          "docker",
+          "system"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/docker-minimal.dbf.hcl",
+    "hosts": [
+      {
+        "name": "docker1",
+        "body_keys": [
+          "docker",
+          "system"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/docker-package-sources.dbf.hcl",
+    "hosts": [
+      {
+        "name": "docker-sources1",
+        "body_keys": [
+          "docker",
+          "system"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/docker-users.dbf.hcl",
+    "hosts": [
+      {
+        "name": "docker-users1",
+        "body_keys": [
+          "docker",
+          "groups",
+          "system",
+          "users"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/files-plan-preview.dbf.hcl",
+    "hosts": [
+      {
+        "name": "preview1",
+        "body_keys": [
+          "files"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/mihomo.dbf.hcl",
+    "components": [
+      "mihomo"
+    ],
+    "hosts": [
+      {
+        "name": "proxy1",
+        "components": [
+          "mihomo=mihomo"
+        ],
+        "body_keys": [
+          "system"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/nftables.dbf.hcl",
+    "hosts": [
+      {
+        "name": "edge1",
+        "body_keys": [
+          "nftables",
+          "packages"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/plan-preview.dbf.hcl",
+    "hosts": [
+      {
+        "name": "preview1",
+        "body_keys": [
+          "nftables",
+          "secrets"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/profile-merge.dbf.hcl",
+    "profiles": [
+      {
+        "name": "base",
+        "body_keys": [
+          "packages",
+          "system"
+        ]
+      },
+      {
+        "name": "bbr",
+        "imports": [
+          "base"
+        ],
+        "body_keys": [
+          "kernel",
+          "packages"
+        ]
+      }
+    ],
+    "hosts": [
+      {
+        "name": "merge1",
+        "imports": [
+          "bbr"
+        ],
+        "body_keys": [
+          "packages",
+          "system"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/realistic-systemd-app.dbf.hcl",
+    "hosts": [
+      {
+        "name": "demoapp1",
+        "body_keys": [
+          "directories",
+          "files",
+          "groups",
+          "services",
+          "systemd",
+          "users"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/shadowsocks-rust.dbf.hcl",
+    "components": [
+      "shadowsocks_rust"
+    ],
+    "hosts": [
+      {
+        "name": "ss1",
+        "components": [
+          "shadowsocks_rust=shadowsocks_rust"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/systemd-service.dbf.hcl",
+    "hosts": [
+      {
+        "name": "service1",
+        "body_keys": [
+          "files",
+          "services",
+          "systemd"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/systemd-service-unit.dbf.hcl",
+    "hosts": [
+      {
+        "name": "service_unit1",
+        "body_keys": [
+          "directories",
+          "files",
+          "services",
+          "systemd"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/user-group.dbf.hcl",
+    "hosts": [
+      {
+        "name": "users1",
+        "body_keys": [
+          "groups",
+          "users"
+        ]
+      }
+    ]
+  },
+  {
+    "fixture": "../../../examples/variable-secret-file.dbf.hcl",
+    "variables": [
+      "app_token",
+      "app_token_version"
+    ],
+    "hosts": [
+      {
+        "name": "secret_file1",
+        "body_keys": [
+          "files"
+        ]
+      }
+    ]
+  }
+]

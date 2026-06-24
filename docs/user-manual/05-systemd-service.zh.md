@@ -149,7 +149,7 @@ dbf check
   start service manualsvc.service
 
 Summary: 0 create, 1 update, 0 delete, 5 no-op, 0 operations
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 `check` 仍然只检测，不会启动服务。

@@ -1,0 +1,73 @@
+{
+  "nodes": [
+    {
+      "host": "input1",
+      "address": "host.input1.components.proxy.files.file[\"/etc/reverse-proxy/environment.json\"]",
+      "kind": "file",
+      "summary": "create file /etc/reverse-proxy/environment.json",
+      "source": {
+        "file": "../../../examples/component-inputs.dbf.hcl",
+        "line": 42,
+        "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/environment.json\"]"
+      },
+      "desired": {
+        "component": "proxy",
+        "content_bytes": 36,
+        "content_sha256": "901872bae2ef4d5b57311cc1061aed39cf816aa3ce8340bb2a038e57cea2b08f",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0600",
+        "owner": "root",
+        "path": "/etc/reverse-proxy/environment.json",
+        "sensitive": true,
+        "summary": {
+          "sha256": "901872bae2ef4d5b57311cc1061aed39cf816aa3ce8340bb2a038e57cea2b08f",
+          "bytes": 36
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.input1_proxy__etc_reverse_proxy_environment_json"
+    },
+    {
+      "host": "input1",
+      "address": "host.input1.components.proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]",
+      "kind": "file",
+      "summary": "create file /etc/reverse-proxy/listeners.json",
+      "source": {
+        "file": "../../../examples/component-inputs.dbf.hcl",
+        "line": 37,
+        "path": "component.reverse_proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]"
+      },
+      "desired": {
+        "component": "proxy",
+        "content": "[{\"name\":\"http\",\"note\":null,\"port\":80,\"tags\":{},\"tls\":false},{\"name\":\"https\",\"note\":null,\"port\":443,\"tags\":{\"public\":\"true\"},\"tls\":true}]",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/reverse-proxy/listeners.json",
+        "sensitive": false,
+        "summary": {
+          "sha256": "b74a83b8b18992d585d318e4b2ae3cffb0e1ba7a82dad377ccf3432f4ef23ce5",
+          "bytes": 137
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.input1_proxy__etc_reverse_proxy_listeners_json",
+      "provider_payload": {
+        "component": "proxy",
+        "content": "[{\"name\":\"http\",\"note\":null,\"port\":80,\"tags\":{},\"tls\":false},{\"name\":\"https\",\"note\":null,\"port\":443,\"tags\":{\"public\":\"true\"},\"tls\":true}]",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/reverse-proxy/listeners.json",
+        "sensitive": false,
+        "summary": {
+          "sha256": "b74a83b8b18992d585d318e4b2ae3cffb0e1ba7a82dad377ccf3432f4ef23ce5",
+          "bytes": 137
+        }
+      }
+    }
+  ]
+}

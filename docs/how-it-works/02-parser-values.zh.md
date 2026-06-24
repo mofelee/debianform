@@ -1,6 +1,6 @@
 # 02. HCL 解析、变量和值模型
 
-本章解释 `internal/v2/parser` 如何把 `.dbf.hcl`、变量文件、环境变量和 CLI 变量转换成
+本章解释 `internal/core/parser` 如何把 `.dbf.hcl`、变量文件、环境变量和 CLI 变量转换成
 `parser.Config`。这个阶段只负责读配置和表达式求值，不负责把配置变成最终资源。
 
 ## 数据流
@@ -141,14 +141,14 @@ number 的字符串形态，避免过早丢失数字表示。
 - `host`
 - `component`
 
-`locals` 和 `variable` 已经在前面阶段处理。其他顶层 block 都会报 `unknown v2 top-level block`。
+`locals` 和 `variable` 已经在前面阶段处理。其他顶层 block 都会报 `unknown top-level block`。
 
 这里 parser 只检查语法和局部结构，例如 block label 数量、重复定义、支持的 attribute/block。
 跨 profile、component、host 的语义合并放在 merge 层。
 
 ## SourceRef 的作用
 
-`ir.SourceRef` 在 parser 阶段大量产生，即使它定义在 `internal/v2/ir` 包里。它记录：
+`ir.SourceRef` 在 parser 阶段大量产生，即使它定义在 `internal/core/ir` 包里。它记录：
 
 - `File`
 - `Line`

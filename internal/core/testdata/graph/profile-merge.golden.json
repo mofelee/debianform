@@ -1,0 +1,164 @@
+{
+  "nodes": [
+    {
+      "host": "merge1",
+      "address": "host.merge1.kernel.module[\"tcp_bbr\"]",
+      "kind": "kernel_module",
+      "summary": "create kernel module tcp_bbr",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 24,
+        "path": "profile.bbr.kernel.modules[0]"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "tcp_bbr",
+        "persist": true
+      },
+      "provider_type": "kernel_module",
+      "provider_address": "kernel_module.merge1_tcp_bbr",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "tcp_bbr",
+        "persist": true
+      }
+    },
+    {
+      "host": "merge1",
+      "address": "host.merge1.kernel.sysctl[\"net.core.default_qdisc\"]",
+      "kind": "sysctl",
+      "summary": "create sysctl net.core.default_qdisc",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 27,
+        "path": "profile.bbr.kernel.sysctl[\"net.core.default_qdisc\"]"
+      },
+      "desired": {
+        "apply_runtime": true,
+        "key": "net.core.default_qdisc",
+        "persist": true,
+        "value": "fq"
+      },
+      "provider_type": "sysctl",
+      "provider_address": "sysctl.merge1_net_core_default_qdisc",
+      "provider_payload": {
+        "apply_runtime": true,
+        "key": "net.core.default_qdisc",
+        "persist": true,
+        "value": "fq"
+      }
+    },
+    {
+      "host": "merge1",
+      "address": "host.merge1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]",
+      "kind": "sysctl",
+      "summary": "create sysctl net.ipv4.tcp_congestion_control",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 28,
+        "path": "profile.bbr.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]"
+      },
+      "desired": {
+        "apply_runtime": true,
+        "key": "net.ipv4.tcp_congestion_control",
+        "persist": true,
+        "value": "bbr"
+      },
+      "provider_type": "sysctl",
+      "provider_address": "sysctl.merge1_net_ipv4_tcp_congestion_control",
+      "provider_payload": {
+        "apply_runtime": true,
+        "key": "net.ipv4.tcp_congestion_control",
+        "persist": true,
+        "value": "bbr"
+      },
+      "depends_on": [
+        "host.merge1.kernel.module[\"tcp_bbr\"]"
+      ]
+    },
+    {
+      "host": "merge1",
+      "address": "host.merge1.packages.install[\"curl\"]",
+      "kind": "package",
+      "summary": "create package curl",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 14,
+        "path": "profile.base.packages.install[0]"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "curl"
+      },
+      "provider_type": "package",
+      "provider_address": "package.merge1_curl",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "curl"
+      }
+    },
+    {
+      "host": "merge1",
+      "address": "host.merge1.packages.install[\"git\"]",
+      "kind": "package",
+      "summary": "create package git",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 45,
+        "path": "host.merge1.packages.install[0]"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "git"
+      },
+      "provider_type": "package",
+      "provider_address": "package.merge1_git",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "git"
+      }
+    },
+    {
+      "host": "merge1",
+      "address": "host.merge1.packages.install[\"htop\"]",
+      "kind": "package",
+      "summary": "create package htop",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 33,
+        "path": "profile.bbr.packages.install[0]"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "htop"
+      },
+      "provider_type": "package",
+      "provider_address": "package.merge1_htop",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "htop"
+      }
+    },
+    {
+      "host": "merge1",
+      "address": "host.merge1.packages.install[\"vim\"]",
+      "kind": "package",
+      "summary": "create package vim",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 15,
+        "path": "profile.base.packages.install[1]"
+      },
+      "desired": {
+        "ensure": "present",
+        "name": "vim"
+      },
+      "provider_type": "package",
+      "provider_address": "package.merge1_vim",
+      "provider_payload": {
+        "ensure": "present",
+        "name": "vim"
+      }
+    }
+  ]
+}

@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
-	v2engine "github.com/mofelee/debianform/internal/v2/engine"
-	v2graph "github.com/mofelee/debianform/internal/v2/graph"
-	v2ir "github.com/mofelee/debianform/internal/v2/ir"
-	v2merge "github.com/mofelee/debianform/internal/v2/merge"
-	v2parser "github.com/mofelee/debianform/internal/v2/parser"
-	v2plan "github.com/mofelee/debianform/internal/v2/plan"
+	coreengine "github.com/mofelee/debianform/internal/core/engine"
+	coregraph "github.com/mofelee/debianform/internal/core/graph"
+	coreir "github.com/mofelee/debianform/internal/core/ir"
+	coremerge "github.com/mofelee/debianform/internal/core/merge"
+	coreparser "github.com/mofelee/debianform/internal/core/parser"
+	coreplan "github.com/mofelee/debianform/internal/core/plan"
 	"github.com/mofelee/debianform/internal/version"
 )
 
@@ -88,15 +88,15 @@ func runVariableInspect(args []string) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := parseV2ConfigWithExternalValues(files, cliVarFiles, cliVars, v2parser.ParseOptions{
+	cfg, err := parseConfigWithExternalValues(files, cliVarFiles, cliVars, coreparser.ParseOptions{
 		AllowMissingVariables: true,
 		SkipTopLevel:          true,
 	})
 	if err != nil {
 		return err
 	}
-	var warnings []v2ir.Warning
-	program, err := compileV2Program(cfg, "", v2merge.CompileOptions{SkipComponents: true, Warnings: &warnings})
+	var warnings []coreir.Warning
+	program, err := compileProgram(cfg, "", coremerge.CompileOptions{SkipComponents: true, Warnings: &warnings})
 	if err != nil {
 		return err
 	}
@@ -169,12 +169,12 @@ func runComponentInspect(args []string) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := v2parser.ParseFiles(files)
+	cfg, err := coreparser.ParseFiles(files)
 	if err != nil {
 		return err
 	}
-	var warnings []v2ir.Warning
-	program, err := compileV2Program(cfg, "", v2merge.CompileOptions{SkipComponents: true, Warnings: &warnings})
+	var warnings []coreir.Warning
+	program, err := compileProgram(cfg, "", coremerge.CompileOptions{SkipComponents: true, Warnings: &warnings})
 	if err != nil {
 		return err
 	}
@@ -251,7 +251,7 @@ func runFmt(args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := loadV2Program(files, "", v2merge.CompileOptions{SkipComponents: true}); err != nil {
+	if _, err := loadProgram(files, "", coremerge.CompileOptions{SkipComponents: true}); err != nil {
 		return err
 	}
 	changed := 0
@@ -302,7 +302,7 @@ func runConfigCommand(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runV2ConfigCommand(cmd, files, *host, *format, *htmlPath, *debug, *offline, *parallel, *lockTimeout, *autoApprove, cliVars, cliVarFiles)
+	return runConfigWorkflow(cmd, files, *host, *format, *htmlPath, *debug, *offline, *parallel, *lockTimeout, *autoApprove, cliVars, cliVarFiles)
 }
 
 type fileFlags []string
@@ -327,90 +327,90 @@ func (f *repeatedFlag) Set(value string) error {
 	return nil
 }
 
-func runV2ConfigCommand(cmd string, files []string, host string, format string, htmlPath string, debug bool, offline bool, parallel int, lockTimeout time.Duration, autoApprove bool, cliVars []string, cliVarFiles []string) error {
+func runConfigWorkflow(cmd string, files []string, host string, format string, htmlPath string, debug bool, offline bool, parallel int, lockTimeout time.Duration, autoApprove bool, cliVars []string, cliVarFiles []string) error {
 	if format == "" {
 		format = "text"
 	}
 	if format != "text" && format != "json" {
-		return fmt.Errorf("unsupported v2 plan format %q", format)
+		return fmt.Errorf("unsupported plan format %q", format)
 	}
 	if htmlPath != "" && cmd != "plan" {
-		return fmt.Errorf("--html is only supported for v2 plan")
+		return fmt.Errorf("--html is only supported for plan")
 	}
 	if htmlPath != "" && format != "text" {
 		return fmt.Errorf("--html cannot be combined with --format")
 	}
 	if debug && cmd != "plan" {
-		return fmt.Errorf("--debug is only supported for v2 plan")
+		return fmt.Errorf("--debug is only supported for plan")
 	}
 	if offline && cmd != "plan" {
-		return fmt.Errorf("--offline is only supported for v2 plan")
+		return fmt.Errorf("--offline is only supported for plan")
 	}
 	if parallel < 1 {
 		return fmt.Errorf("--parallel must be at least 1")
 	}
 	if parallel != 1 && cmd != "apply" {
-		return fmt.Errorf("--parallel is only supported for v2 apply")
+		return fmt.Errorf("--parallel is only supported for apply")
 	}
 
-	cfg, err := parseV2ConfigWithExternalValues(files, cliVarFiles, cliVars, v2parser.ParseOptions{})
+	cfg, err := parseConfigWithExternalValues(files, cliVarFiles, cliVars, coreparser.ParseOptions{})
 	if err != nil {
 		return err
 	}
-	var warnings []v2ir.Warning
+	var warnings []coreir.Warning
 
 	switch cmd {
 	case "validate":
-		program, err := compileV2ValidationProgram(cfg, host, &warnings)
+		program, err := compileValidationProgram(cfg, host, &warnings)
 		if err != nil {
 			return err
 		}
 		if format != "text" {
-			return fmt.Errorf("--format is only supported for v2 plan")
+			return fmt.Errorf("--format is only supported for plan")
 		}
 		printWarnings(warnings)
-		fmt.Printf("v2 configuration is valid: %d host(s)\n", len(program.Hosts))
+		fmt.Printf("configuration is valid: %d host(s)\n", len(program.Hosts))
 		return nil
 	case "plan":
-		var doc v2plan.Document
+		var doc coreplan.Document
 		if offline {
-			program, err := compileV2Program(cfg, host, v2merge.CompileOptions{Warnings: &warnings})
+			program, err := compileProgram(cfg, host, coremerge.CompileOptions{Warnings: &warnings})
 			if err != nil {
 				if isRuntimeFactCompileError(err) {
 					return fmt.Errorf("offline plan cannot resolve runtime facts; run dbf plan without --offline or declare matching system facts: %w", err)
 				}
 				return err
 			}
-			resourceGraph, err := v2graph.Compile(program)
+			resourceGraph, err := coregraph.Compile(program)
 			if err != nil {
 				if isRuntimeFactCompileError(err) {
 					return fmt.Errorf("offline plan cannot resolve runtime facts; run dbf plan without --offline or declare matching system facts: %w", err)
 				}
 				return err
 			}
-			doc = v2plan.New(resourceGraph, v2plan.Options{
+			doc = coreplan.New(resourceGraph, coreplan.Options{
 				CommandFile: commandFile(files),
 				Host:        commandHost(program, host),
 				Debug:       debug,
 			})
 		} else {
-			program, runner, err := loadOnlineV2ProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr)
+			program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr)
 			if err != nil {
 				return err
 			}
-			resourceGraph, err := v2graph.Compile(program)
+			resourceGraph, err := coregraph.Compile(program)
 			if err != nil {
 				return err
 			}
-			engine := v2engine.Engine{
-				Backend:  v2engine.NewSSHBackend(runner),
-				Provider: v2engine.NewNativeProvider(runner),
+			engine := coreengine.Engine{
+				Backend:  coreengine.NewSSHBackend(runner),
+				Provider: coreengine.NewNativeProvider(runner),
 			}
-			onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, v2engine.Options{Host: host, Progress: os.Stderr})
+			onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, coreengine.Options{Host: host, Progress: os.Stderr})
 			if err != nil {
 				return err
 			}
-			doc = onlinePlan.Document(v2plan.Options{
+			doc = onlinePlan.Document(coreplan.Options{
 				CommandFile: commandFile(files),
 				Host:        commandHost(program, host),
 				Debug:       debug,
@@ -420,34 +420,34 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 		return printPlanDocument(doc, format, htmlPath)
 	case "check", "apply":
 		if format != "text" {
-			return fmt.Errorf("--format is only supported for v2 plan")
+			return fmt.Errorf("--format is only supported for plan")
 		}
-		program, runner, err := loadOnlineV2ProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr)
+		program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr)
 		if err != nil {
 			return err
 		}
-		resourceGraph, err := v2graph.Compile(program)
+		resourceGraph, err := coregraph.Compile(program)
 		if err != nil {
 			return err
 		}
-		engine := v2engine.Engine{
-			Backend:  v2engine.NewSSHBackend(runner),
-			Provider: v2engine.NewNativeProvider(runner),
+		engine := coreengine.Engine{
+			Backend:  coreengine.NewSSHBackend(runner),
+			Provider: coreengine.NewNativeProvider(runner),
 		}
-		opts := v2engine.Options{Host: host, LockTimeout: lockTimeout, Parallel: parallel, Progress: os.Stderr}
+		opts := coreengine.Options{Host: host, LockTimeout: lockTimeout, Parallel: parallel, Progress: os.Stderr}
 		onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, opts)
 		if err != nil {
 			return err
 		}
-		doc := onlinePlan.Document(v2plan.Options{
+		doc := onlinePlan.Document(coreplan.Options{
 			CommandFile: commandFile(files),
 			Host:        commandHost(program, host),
 		})
 		printWarnings(warnings)
-		v2plan.PrintText(os.Stdout, doc)
+		coreplan.PrintText(os.Stdout, doc)
 		if cmd == "check" {
 			if len(onlinePlan.Steps) > 0 || len(onlinePlan.Operations) > 0 {
-				return fmt.Errorf("remote state does not match v2 configuration")
+				return fmt.Errorf("remote state does not match configuration")
 			}
 			return nil
 		}
@@ -461,11 +461,11 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 		if err != nil {
 			return err
 		}
-		appliedDoc := applied.Document(v2plan.Options{
+		appliedDoc := applied.Document(coreplan.Options{
 			CommandFile: commandFile(files),
 			Host:        commandHost(program, host),
 		})
-		v2plan.PrintText(os.Stdout, appliedDoc)
+		coreplan.PrintText(os.Stdout, appliedDoc)
 		fmt.Println("apply complete")
 		return nil
 	default:
@@ -473,7 +473,7 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 	}
 }
 
-func printPlanDocument(doc v2plan.Document, format string, htmlPath string) error {
+func printPlanDocument(doc coreplan.Document, format string, htmlPath string) error {
 	if htmlPath != "" {
 		if err := writePlanHTML(htmlPath, doc); err != nil {
 			return err
@@ -483,15 +483,15 @@ func printPlanDocument(doc v2plan.Document, format string, htmlPath string) erro
 	}
 	switch format {
 	case "json":
-		return v2plan.PrintJSON(os.Stdout, doc)
+		return coreplan.PrintJSON(os.Stdout, doc)
 	default:
-		v2plan.PrintText(os.Stdout, doc)
+		coreplan.PrintText(os.Stdout, doc)
 		return nil
 	}
 }
 
-func parseV2ConfigWithExternalValues(files []string, cliVarFiles []string, cliVars []string, opts v2parser.ParseOptions) (*v2parser.Config, error) {
-	declarations, err := v2parser.ParseFilesWithOptions(files, v2parser.ParseOptions{
+func parseConfigWithExternalValues(files []string, cliVarFiles []string, cliVars []string, opts coreparser.ParseOptions) (*coreparser.Config, error) {
+	declarations, err := coreparser.ParseFilesWithOptions(files, coreparser.ParseOptions{
 		AllowMissingVariables: true,
 		SkipTopLevel:          true,
 	})
@@ -503,24 +503,24 @@ func parseV2ConfigWithExternalValues(files []string, cliVarFiles []string, cliVa
 		return nil, err
 	}
 	opts.VariableValues = variableValues
-	return v2parser.ParseFilesWithOptions(files, opts)
+	return coreparser.ParseFilesWithOptions(files, opts)
 }
 
-func collectExternalVariableValues(files []string, cliVarFiles []string, cliVars []string, variables map[string]v2parser.Variable) ([]v2parser.ExternalVariableValue, error) {
+func collectExternalVariableValues(files []string, cliVarFiles []string, cliVars []string, variables map[string]coreparser.Variable) ([]coreparser.ExternalVariableValue, error) {
 	values := parseEnvVars(os.Environ())
 	autoVarFiles, err := autoVariableFiles(files)
 	if err != nil {
 		return nil, err
 	}
 	for _, path := range autoVarFiles {
-		fileValues, err := v2parser.ParseVariableFile(path)
+		fileValues, err := coreparser.ParseVariableFile(path)
 		if err != nil {
 			return nil, err
 		}
 		values = append(values, fileValues...)
 	}
 	for _, path := range cliVarFiles {
-		fileValues, err := v2parser.ParseVariableFile(path)
+		fileValues, err := coreparser.ParseVariableFile(path)
 		if err != nil {
 			return nil, err
 		}
@@ -534,9 +534,9 @@ func collectExternalVariableValues(files []string, cliVarFiles []string, cliVars
 	return values, nil
 }
 
-func parseEnvVars(environ []string) []v2parser.ExternalVariableValue {
+func parseEnvVars(environ []string) []coreparser.ExternalVariableValue {
 	const prefix = "DBF_VAR_"
-	values := []v2parser.ExternalVariableValue{}
+	values := []coreparser.ExternalVariableValue{}
 	for _, item := range environ {
 		nameValue := strings.SplitN(item, "=", 2)
 		if len(nameValue) != 2 || !strings.HasPrefix(nameValue[0], prefix) {
@@ -546,10 +546,10 @@ func parseEnvVars(environ []string) []v2parser.ExternalVariableValue {
 		if name == "" {
 			continue
 		}
-		values = append(values, v2parser.ExternalVariableValue{
+		values = append(values, coreparser.ExternalVariableValue{
 			Name:          name,
 			Value:         nameValue[1],
-			Source:        v2ir.SourceRef{File: "env", Line: 1, Path: nameValue[0]},
+			Source:        coreir.SourceRef{File: "env", Line: 1, Path: nameValue[0]},
 			IgnoreUnknown: true,
 		})
 	}
@@ -602,12 +602,12 @@ func autoVariableFiles(files []string) ([]string, error) {
 	return out, nil
 }
 
-func parseCLIVars(values []string, variables map[string]v2parser.Variable) ([]v2parser.ExternalVariableValue, error) {
-	out := make([]v2parser.ExternalVariableValue, 0, len(values))
+func parseCLIVars(values []string, variables map[string]coreparser.Variable) ([]coreparser.ExternalVariableValue, error) {
+	out := make([]coreparser.ExternalVariableValue, 0, len(values))
 	for i, raw := range values {
 		name, value, ok := strings.Cut(raw, "=")
 		name = strings.TrimSpace(name)
-		source := v2ir.SourceRef{File: "cli", Line: i + 1, Path: fmt.Sprintf("cli.var[%d]", i)}
+		source := coreir.SourceRef{File: "cli", Line: i + 1, Path: fmt.Sprintf("cli.var[%d]", i)}
 		if !ok || name == "" {
 			return nil, fmt.Errorf("%s:%d:%s: -var must be name=value", source.File, source.Line, source.Path)
 		}
@@ -627,7 +627,7 @@ func parseCLIVars(values []string, variables map[string]v2parser.Variable) ([]v2
 			value = loaded
 			source = loadedSource
 		}
-		out = append(out, v2parser.ExternalVariableValue{
+		out = append(out, coreparser.ExternalVariableValue{
 			Name:   name,
 			Value:  value,
 			Source: source,
@@ -636,7 +636,7 @@ func parseCLIVars(values []string, variables map[string]v2parser.Variable) ([]v2
 	return out, nil
 }
 
-func readCLIVarAtSource(value string, source v2ir.SourceRef, sensitive bool) (string, v2ir.SourceRef, error) {
+func readCLIVarAtSource(value string, source coreir.SourceRef, sensitive bool) (string, coreir.SourceRef, error) {
 	path := strings.TrimPrefix(value, "@")
 	if path == "" {
 		return "", source, fmt.Errorf("%s:%d:%s: -var @ source path must be non-empty", source.File, source.Line, source.Path)
@@ -660,7 +660,7 @@ func readCLIVarAtSource(value string, source v2ir.SourceRef, sensitive bool) (st
 	return string(data), source, nil
 }
 
-func readCLIVarEnvSource(value string, source v2ir.SourceRef, sensitive bool) (string, v2ir.SourceRef, error) {
+func readCLIVarEnvSource(value string, source coreir.SourceRef, sensitive bool) (string, coreir.SourceRef, error) {
 	name := strings.TrimPrefix(value, "env:")
 	if name == "" {
 		return "", source, fmt.Errorf("%s:%d:%s: -var env source name must be non-empty", source.File, source.Line, source.Path)
@@ -687,7 +687,7 @@ func pathlessError(err error) string {
 	return err.Error()
 }
 
-func printWarnings(warnings []v2ir.Warning) {
+func printWarnings(warnings []coreir.Warning) {
 	for _, warning := range warnings {
 		if warning.Source.File != "" {
 			fmt.Fprintf(os.Stderr, "warning: %s:%d:%s: %s\n", warning.Source.File, warning.Source.Line, warning.Source.Path, warning.Message)
@@ -697,7 +697,7 @@ func printWarnings(warnings []v2ir.Warning) {
 	}
 }
 
-func sortedComponentInputNames(inputs map[string]v2ir.ComponentInputSpec) []string {
+func sortedComponentInputNames(inputs map[string]coreir.ComponentInputSpec) []string {
 	names := make([]string, 0, len(inputs))
 	for name := range inputs {
 		names = append(names, name)
@@ -706,7 +706,7 @@ func sortedComponentInputNames(inputs map[string]v2ir.ComponentInputSpec) []stri
 	return names
 }
 
-func sortedVariableSpecNames(variables map[string]v2ir.VariableSpec) []string {
+func sortedVariableSpecNames(variables map[string]coreir.VariableSpec) []string {
 	names := make([]string, 0, len(variables))
 	for name := range variables {
 		names = append(names, name)
@@ -715,17 +715,17 @@ func sortedVariableSpecNames(variables map[string]v2ir.VariableSpec) []string {
 	return names
 }
 
-func loadV2Program(files []string, host string, opts v2merge.CompileOptions) (*v2ir.Program, error) {
-	cfg, err := v2parser.ParseFiles(files)
+func loadProgram(files []string, host string, opts coremerge.CompileOptions) (*coreir.Program, error) {
+	cfg, err := coreparser.ParseFiles(files)
 	if err != nil {
 		return nil, err
 	}
-	return compileV2Program(cfg, host, opts)
+	return compileProgram(cfg, host, opts)
 }
 
-func compileV2Program(cfg *v2parser.Config, host string, opts v2merge.CompileOptions) (*v2ir.Program, error) {
+func compileProgram(cfg *coreparser.Config, host string, opts coremerge.CompileOptions) (*coreir.Program, error) {
 	opts.HostFilter = host
-	program, err := v2merge.CompileWithOptions(cfg, opts)
+	program, err := coremerge.CompileWithOptions(cfg, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -735,8 +735,8 @@ func compileV2Program(cfg *v2parser.Config, host string, opts v2merge.CompileOpt
 	return program, nil
 }
 
-func compileV2ValidationProgram(cfg *v2parser.Config, host string, warnings *[]v2ir.Warning) (*v2ir.Program, error) {
-	return compileV2Program(cfg, host, v2merge.CompileOptions{ValidateRuntimeTemplates: true, Warnings: warnings})
+func compileValidationProgram(cfg *coreparser.Config, host string, warnings *[]coreir.Warning) (*coreir.Program, error) {
+	return compileProgram(cfg, host, coremerge.CompileOptions{ValidateRuntimeTemplates: true, Warnings: warnings})
 }
 
 func isRuntimeFactCompileError(err error) bool {
@@ -753,21 +753,21 @@ func isRuntimeFactCompileError(err error) bool {
 	return strings.Contains(msg, ".suites") && strings.Contains(msg, "non-empty")
 }
 
-func loadOnlineV2Program(ctx context.Context, cfg *v2parser.Config, host string, warnings *[]v2ir.Warning) (*v2ir.Program, *v2engine.SSHRunner, error) {
-	return loadOnlineV2ProgramWithProgress(ctx, cfg, host, warnings, nil)
+func loadOnlineProgram(ctx context.Context, cfg *coreparser.Config, host string, warnings *[]coreir.Warning) (*coreir.Program, *coreengine.SSHRunner, error) {
+	return loadOnlineProgramWithProgress(ctx, cfg, host, warnings, nil)
 }
 
-func loadOnlineV2ProgramWithProgress(ctx context.Context, cfg *v2parser.Config, host string, warnings *[]v2ir.Warning, progress io.Writer) (*v2ir.Program, *v2engine.SSHRunner, error) {
-	base, err := compileV2Program(cfg, host, v2merge.CompileOptions{SkipComponents: true})
+func loadOnlineProgramWithProgress(ctx context.Context, cfg *coreparser.Config, host string, warnings *[]coreir.Warning, progress io.Writer) (*coreir.Program, *coreengine.SSHRunner, error) {
+	base, err := compileProgram(cfg, host, coremerge.CompileOptions{SkipComponents: true})
 	if err != nil {
 		return nil, nil, err
 	}
-	runner := v2engine.NewSSHRunner(v2engine.HostsFromProgram(base))
-	facts, err := v2engine.DiscoverProgramFactsWithProgress(ctx, runner, base, nil, progress)
+	runner := coreengine.NewSSHRunner(coreengine.HostsFromProgram(base))
+	facts, err := coreengine.DiscoverProgramFactsWithProgress(ctx, runner, base, nil, progress)
 	if err != nil {
 		return nil, nil, err
 	}
-	resolved, err := compileV2Program(cfg, host, v2merge.CompileOptions{HostFacts: facts, Warnings: warnings})
+	resolved, err := compileProgram(cfg, host, coremerge.CompileOptions{HostFacts: facts, Warnings: warnings})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -781,7 +781,7 @@ func commandFile(files []string) string {
 	return strings.Join(files, ",")
 }
 
-func commandHost(program *v2ir.Program, host string) string {
+func commandHost(program *coreir.Program, host string) string {
 	if host != "" {
 		return host
 	}
@@ -832,7 +832,7 @@ By default dbf loads all *.dbf.hcl files in the current directory, sorted by nam
 Use -f file one or more times to load only the explicitly specified file(s).`)
 }
 
-func writePlanHTML(path string, doc v2plan.Document) error {
+func writePlanHTML(path string, doc coreplan.Document) error {
 	if path == "" {
 		return fmt.Errorf("html output path is required")
 	}
@@ -846,5 +846,5 @@ func writePlanHTML(path string, doc v2plan.Document) error {
 		return err
 	}
 	defer file.Close()
-	return v2plan.PrintHTML(file, doc)
+	return coreplan.PrintHTML(file, doc)
 }

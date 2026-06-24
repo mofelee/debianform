@@ -1,0 +1,143 @@
+{
+  "name": "docker-custom1",
+  "source": {
+    "file": "../testdata/fixtures/docker-package-source-custom.dbf.hcl",
+    "line": 1,
+    "path": "host.docker-custom1"
+  },
+  "facts": {
+    "system": {}
+  },
+  "ssh": {
+    "host": "docker-custom1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../testdata/fixtures/docker-package-source-custom.dbf.hcl",
+      "line": 1,
+      "path": "host.docker-custom1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/docker-custom1.json",
+    "lock_path": "/var/lock/debianform/state/docker-custom1.lock",
+    "source": {
+      "file": "../testdata/fixtures/docker-package-source-custom.dbf.hcl",
+      "line": 1,
+      "path": "host.docker-custom1"
+    }
+  },
+  "system": {
+    "hostname": "docker-custom1",
+    "source": {
+      "file": "../testdata/fixtures/docker-package-source-custom.dbf.hcl",
+      "line": 1,
+      "path": "host.docker-custom1"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  },
+  "docker": {
+    "enable": true,
+    "package": {
+      "source": "custom",
+      "channel": "stable",
+      "remove_conflicts": "auto",
+      "source_ref": {
+        "file": "../testdata/fixtures/docker-package-source-custom.dbf.hcl",
+        "line": 5,
+        "path": "host.docker-custom1.docker.package"
+      }
+    },
+    "service": {
+      "enable": true,
+      "state": "running",
+      "name": "docker.service",
+      "source_ref": {
+        "file": "../testdata/fixtures/docker-package-source-custom.dbf.hcl",
+        "line": 2,
+        "path": "host.docker-custom1.docker"
+      }
+    },
+    "compose": {
+      "app": {
+        "name": "app",
+        "enable": true,
+        "state": "running",
+        "directory": "/opt/app",
+        "project": "app",
+        "file": {
+          "path": "/opt/app/compose.yaml",
+          "content": "services: {}\n",
+          "owner": "root",
+          "group": "root",
+          "mode": "0644",
+          "summary": {
+            "sha256": "fa6ccea1ca4e3a031d9e99f25cc05db803aa9bac642c000ddab14f6d9da54b52",
+            "bytes": 13
+          },
+          "source": {
+            "file": "../testdata/fixtures/docker-package-source-custom.dbf.hcl",
+            "line": 12,
+            "path": "host.docker-custom1.docker.compose[\"app\"].file"
+          }
+        },
+        "pull": "missing",
+        "recreate": "auto",
+        "remove_orphans": false,
+        "service": {
+          "enable": true,
+          "name": "debianform-compose-app"
+        },
+        "after": [
+          "docker.service",
+          "network-online.target"
+        ],
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "source": {
+          "file": "../testdata/fixtures/docker-package-source-custom.dbf.hcl",
+          "line": 9,
+          "path": "host.docker-custom1.docker.compose[\"app\"]"
+        }
+      }
+    },
+    "source": {
+      "file": "../testdata/fixtures/docker-package-source-custom.dbf.hcl",
+      "line": 2,
+      "path": "host.docker-custom1.docker"
+    }
+  }
+}

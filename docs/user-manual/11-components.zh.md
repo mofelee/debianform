@@ -216,7 +216,7 @@ dbf check
   install component binary /usr/local/bin/hello-from-source
 
 Summary: 1 create, 0 update, 0 delete, 5 no-op, 0 operations
-dbf: remote state does not match v2 configuration
+dbf: remote state does not match configuration
 ```
 
 ## 修复漂移

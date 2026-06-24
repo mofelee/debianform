@@ -9,7 +9,7 @@ program + resourceGraph
   -> Backend.Lock(each host)
   -> persistHostFacts
   -> Engine.Plan
-  -> Backend.Read(current state)
+  -> Backend.Read(state)
   -> executionWaves
   -> runExecutionWaves
   -> Provider.Apply/Destroy/RunOperation

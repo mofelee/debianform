@@ -1,0 +1,165 @@
+{
+  "name": "compose1",
+  "source": {
+    "file": "../../../examples/docker-compose.dbf.hcl",
+    "line": 7,
+    "path": "host.compose1"
+  },
+  "facts": {
+    "system": {}
+  },
+  "ssh": {
+    "host": "compose1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../../../examples/docker-compose.dbf.hcl",
+      "line": 7,
+      "path": "host.compose1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/compose1.json",
+    "lock_path": "/var/lock/debianform/state/compose1.lock",
+    "source": {
+      "file": "../../../examples/docker-compose.dbf.hcl",
+      "line": 7,
+      "path": "host.compose1"
+    }
+  },
+  "system": {
+    "hostname": "compose1",
+    "architecture": "amd64",
+    "codename": "trixie",
+    "source": {
+      "file": "../../../examples/docker-compose.dbf.hcl",
+      "line": 8,
+      "path": "host.compose1.system"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  },
+  "docker": {
+    "enable": true,
+    "package": {
+      "source": "official",
+      "channel": "stable",
+      "remove_conflicts": "auto",
+      "source_ref": {
+        "file": "../../../examples/docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      }
+    },
+    "service": {
+      "enable": true,
+      "state": "running",
+      "name": "docker.service",
+      "source_ref": {
+        "file": "../../../examples/docker-compose.dbf.hcl",
+        "line": 13,
+        "path": "host.compose1.docker"
+      }
+    },
+    "compose": {
+      "app": {
+        "name": "app",
+        "enable": true,
+        "state": "running",
+        "directory": "/opt/app",
+        "project": "app",
+        "file": {
+          "path": "/opt/app/compose.yaml",
+          "content": "services:\n  web:\n    image: nginx:1.27-alpine\n    ports:\n      - \"8080:80\"\n",
+          "owner": "root",
+          "group": "root",
+          "mode": "0644",
+          "summary": {
+            "sha256": "d1f744f61ab84b59402583765d65b4d6b984fd44c128388ac3ea0a07ef123d0f",
+            "bytes": 75
+          },
+          "source": {
+            "file": "../../../examples/docker-compose.dbf.hcl",
+            "line": 20,
+            "path": "host.compose1.docker.compose[\"app\"].file"
+          }
+        },
+        "env_file": {
+          "app": {
+            "label": "app",
+            "path": "/opt/app/.env",
+            "content": "TOKEN=not-a-real-preview-secret\n",
+            "owner": "root",
+            "group": "root",
+            "mode": "0600",
+            "sensitive": true,
+            "summary": {
+              "sha256": "13960174065f5092768d3f5b11c1acad09272142febb757484b9709779b52588",
+              "bytes": 32
+            },
+            "source": {
+              "file": "../../../examples/docker-compose.dbf.hcl",
+              "line": 32,
+              "path": "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
+            }
+          }
+        },
+        "pull": "missing",
+        "recreate": "auto",
+        "remove_orphans": false,
+        "service": {
+          "enable": true,
+          "name": "debianform-compose-app"
+        },
+        "after": [
+          "docker.service",
+          "network-online.target"
+        ],
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "source": {
+          "file": "../../../examples/docker-compose.dbf.hcl",
+          "line": 16,
+          "path": "host.compose1.docker.compose[\"app\"]"
+        }
+      }
+    },
+    "source": {
+      "file": "../../../examples/docker-compose.dbf.hcl",
+      "line": 13,
+      "path": "host.compose1.docker"
+    }
+  }
+}

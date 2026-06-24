@@ -99,4 +99,4 @@ Before creating the release tag, check that:
   rollback guidance for breaking releases.
 - The release notes do not use stable/GA/production-ready language unless the
   release has passed the stable gates in
-  [project maturity checklist](archive/legacy-v2/project-maturity-and-launch-checklist.zh.md).
+  [project maturity checklist](archive/legacy-design/project-maturity-and-launch-checklist.zh.md).
