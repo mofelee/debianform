@@ -6,6 +6,18 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+## v0.1.0-beta.5
+
+- Added `--color=auto|always|never` for `plan`, `apply`, and `check` text
+  output, while keeping JSON and HTML output free of ANSI escapes.
+- Added delete behavior diagnostics to plan output so delete-like actions
+  identify whether they forget state, remove managed artifacts, restore
+  original content, perform destructive deletes, or have external side effects.
+- Renamed the internal v2 packages and example files to the canonical
+  `internal/core` and `examples/*.dbf.hcl` layout.
+- Added the core graph plan/apply engine path and refreshed examples, support
+  matrix, CLI docs, and user-manual links for the canonical layout.
+
 ## v0.1.0-beta.4
 
 - Added online `plan`, `apply`, and `check` progress logging to stderr so

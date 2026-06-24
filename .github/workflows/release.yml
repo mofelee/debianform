@@ -156,8 +156,8 @@ jobs:
             --force
           "${prefix}/bin/dbf" version | tee "${RUNNER_TEMP}/dbf-version.txt"
           grep "${{ needs.release.outputs.tag }}" "${RUNNER_TEMP}/dbf-version.txt"
-          "${prefix}/bin/dbf" validate -f examples/v2-bbr.dbf.hcl
-          "${prefix}/bin/dbf" plan -f examples/v2-bbr.dbf.hcl --offline
+          "${prefix}/bin/dbf" validate -f examples/bbr.dbf.hcl
+          "${prefix}/bin/dbf" plan -f examples/bbr.dbf.hcl --offline
 
       - name: Verify supply-chain artifacts
         env:
@@ -245,8 +245,8 @@ jobs:
             --force
           "${prefix}/bin/dbf" version | tee "${RUNNER_TEMP}/dbf-version.txt"
           grep "${{ needs.release.outputs.tag }}" "${RUNNER_TEMP}/dbf-version.txt"
-          "${prefix}/bin/dbf" validate -f examples/v2-bbr.dbf.hcl
-          "${prefix}/bin/dbf" plan -f examples/v2-bbr.dbf.hcl --offline
+          "${prefix}/bin/dbf" validate -f examples/bbr.dbf.hcl
+          "${prefix}/bin/dbf" plan -f examples/bbr.dbf.hcl --offline
 
       - name: Verify Homebrew path when available
         id: homebrew
