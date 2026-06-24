@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"sync"
@@ -60,6 +61,7 @@ type Options struct {
 	LockTimeout     time.Duration
 	Parallel        int
 	PerHostParallel int
+	Progress        io.Writer
 }
 
 type Engine struct {
@@ -101,16 +103,20 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	if err := resourceGraph.Validate(); err != nil {
 		return Plan{}, err
 	}
+	progress := newProgressLogger(opts.Progress)
 	hosts := hostsByName(program)
 	stateByHost := map[string]v2state.State{}
 	for _, host := range program.Hosts {
 		if opts.Host != "" && host.Name != opts.Host {
 			continue
 		}
+		task := progress.Start(host.Name, "read state", "", "")
 		st, err := e.Backend.Read(ctx, host)
 		if err != nil {
+			task.Done(err)
 			return Plan{}, err
 		}
+		task.Done(nil)
 		v2state.Normalize(&st, host.Name)
 		stateByHost[host.Name] = st
 	}
@@ -130,10 +136,13 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 		}
 		st := stateByHost[host.Name]
 		prior := priorResource(st, node.Address)
+		task := progress.Start(node.Host, "inspect", node.Address, node.Summary)
 		providerPlan, err := e.Provider.Plan(ctx, node, prior)
 		if err != nil {
+			task.Done(err)
 			return Plan{}, err
 		}
+		task.Done(nil)
 		if providerPlan.Action == "" {
 			providerPlan.Action = ActionNoOp
 		}
@@ -181,15 +190,19 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 }
 
 func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
+	progress := newProgressLogger(opts.Progress)
 	hosts := hostsByName(program)
 	for _, host := range program.Hosts {
 		if opts.Host != "" && host.Name != opts.Host {
 			continue
 		}
+		task := progress.Start(host.Name, "lock state", "", "")
 		lock, err := e.Backend.Lock(ctx, host, opts.LockTimeout)
 		if err != nil {
+			task.Done(err)
 			return Plan{}, err
 		}
+		task.Done(nil)
 		defer lock.Unlock(ctx)
 	}
 	if err := e.persistHostFacts(ctx, program, opts); err != nil {
@@ -209,10 +222,13 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		if opts.Host != "" && name != opts.Host {
 			continue
 		}
+		task := progress.Start(host.Name, "read state", "", "")
 		st, err := e.Backend.Read(ctx, host)
 		if err != nil {
+			task.Done(err)
 			return plan, err
 		}
+		task.Done(nil)
 		v2state.Normalize(&st, host.Name)
 		states[name] = st
 	}
@@ -231,6 +247,7 @@ func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts 
 	if program == nil {
 		return nil
 	}
+	progress := newProgressLogger(opts.Progress)
 	for _, host := range program.Hosts {
 		if opts.Host != "" && host.Name != opts.Host {
 			continue
@@ -238,16 +255,20 @@ func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts 
 		if !hasHostFacts(host.Facts) {
 			continue
 		}
+		task := progress.Start(host.Name, "persist facts", "", "")
 		st, err := e.Backend.Read(ctx, host)
 		if err != nil {
+			task.Done(err)
 			return err
 		}
 		v2state.Normalize(&st, host.Name)
 		facts := host.Facts
 		st.Facts = &facts
 		if err := e.Backend.Write(ctx, host, st); err != nil {
+			task.Done(err)
 			return err
 		}
+		task.Done(nil)
 	}
 	return nil
 }
@@ -703,6 +724,7 @@ func (e Engine) runExecutionWaves(ctx context.Context, hosts map[string]ir.HostS
 	if perHostParallel < 1 {
 		perHostParallel = 1
 	}
+	progress := newProgressLogger(opts.Progress)
 
 	globalSem := make(chan struct{}, parallel)
 	hostSems := map[string]chan struct{}{}
@@ -725,7 +747,7 @@ func (e Engine) runExecutionWaves(ctx context.Context, hosts map[string]ir.HostS
 			}
 			runnable = append(runnable, item)
 		}
-		results := runExecutionWave(ctx, e, hosts, states, statesLock, stateLocks, globalSem, hostSems, perHostParallel, runnable)
+		results := runExecutionWave(ctx, e, hosts, states, statesLock, stateLocks, globalSem, hostSems, perHostParallel, progress, runnable)
 		for _, item := range runnable {
 			if err := results[item.address]; err != nil {
 				failed[item.address] = err
@@ -738,7 +760,7 @@ func (e Engine) runExecutionWaves(ctx context.Context, hosts map[string]ir.HostS
 	return firstErr
 }
 
-func runExecutionWave(ctx context.Context, e Engine, hosts map[string]ir.HostSpec, states map[string]v2state.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, globalSem chan struct{}, hostSems map[string]chan struct{}, perHostParallel int, wave []executionItem) map[string]error {
+func runExecutionWave(ctx context.Context, e Engine, hosts map[string]ir.HostSpec, states map[string]v2state.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, globalSem chan struct{}, hostSems map[string]chan struct{}, perHostParallel int, progress *progressLogger, wave []executionItem) map[string]error {
 	type result struct {
 		address string
 		err     error
@@ -781,7 +803,7 @@ func runExecutionWave(ctx context.Context, e Engine, hosts map[string]ir.HostSpe
 
 			results <- result{
 				address: item.address,
-				err:     e.executeItem(ctx, hosts, states, statesLock, stateLocks, item),
+				err:     e.executeItem(ctx, hosts, states, statesLock, stateLocks, progress, item),
 			}
 		}()
 	}
@@ -795,12 +817,18 @@ func runExecutionWave(ctx context.Context, e Engine, hosts map[string]ir.HostSpe
 	return out
 }
 
-func (e Engine) executeItem(ctx context.Context, hosts map[string]ir.HostSpec, states map[string]v2state.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, item executionItem) error {
+func (e Engine) executeItem(ctx context.Context, hosts map[string]ir.HostSpec, states map[string]v2state.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, progress *progressLogger, item executionItem) error {
 	switch item.kind {
 	case "resource":
-		return e.executeResourceStep(ctx, hosts, states, statesLock, stateLocks, item.step)
+		task := progress.Start(item.step.Host, item.step.Action, item.step.Address, item.step.Summary)
+		err := e.executeResourceStep(ctx, hosts, states, statesLock, stateLocks, item.step)
+		task.Done(err)
+		return err
 	case "operation":
-		if err := e.Provider.RunOperation(ctx, item.operation); err != nil {
+		task := progress.Start(item.host, "run", item.operation.Address, item.operation.Summary)
+		err := e.Provider.RunOperation(ctx, item.operation)
+		task.Done(err)
+		if err != nil {
 			return fmt.Errorf("%s failed: %w", item.operation.Address, err)
 		}
 		return nil

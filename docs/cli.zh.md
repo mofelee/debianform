@@ -111,6 +111,7 @@ v2 configuration is valid: 1 host(s)
 
 `plan` 生成配置变更预览。默认模式会通过 SSH 连接目标主机，探测 runtime facts、读取远端
 state，并对比 observed state。纯本地预览使用 `--offline`。
+在线 `plan` 会把 facts/state/observed 探测进度写到 stderr；plan 正文仍写到 stdout。
 
 ```bash
 dbf plan -f examples/v2-bbr.dbf.hcl --offline
@@ -170,6 +171,7 @@ dbf plan -f examples/v2-bbr.dbf.hcl --format json --debug --offline
 
 `apply` 先生成在线 plan，再按 plan 修改远端主机。它会使用远端 state lock，避免同一
 host 上多个 apply 并发写 state。
+执行期间会向 stderr 输出当前 host、资源地址、动作和长步骤心跳；stdout 仍保留 plan 输出。
 
 ```bash
 dbf apply -f examples/v2-bbr.dbf.hcl
@@ -207,10 +209,12 @@ dbf apply --parallel 4 --auto-approve
 
 如果 plan 没有任何变更和 operation，`apply` 会输出 plan 后直接结束，不会执行确认步骤。
 每台 host 内部仍按 ResourceGraph 的确定性顺序串行执行。
+进度日志不会输出资源 desired 内容或远端命令 stdout，因此不会破坏 JSON/text plan 消费。
 
 ## check
 
 `check` 生成在线 plan 并用于检测远端状态是否偏离配置。它不会应用变更。
+和在线 `plan` 一样，探测进度会写到 stderr，检查结果 plan 写到 stdout。
 
 ```bash
 dbf check -f examples/v2-bbr.dbf.hcl

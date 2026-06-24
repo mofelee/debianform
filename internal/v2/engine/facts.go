@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -10,15 +11,23 @@ import (
 )
 
 func DiscoverProgramFacts(ctx context.Context, runner Runner, program *ir.Program, now func() time.Time) (map[string]ir.HostFacts, error) {
+	return DiscoverProgramFactsWithProgress(ctx, runner, program, now, nil)
+}
+
+func DiscoverProgramFactsWithProgress(ctx context.Context, runner Runner, program *ir.Program, now func() time.Time, progressWriter io.Writer) (map[string]ir.HostFacts, error) {
 	facts := map[string]ir.HostFacts{}
 	if program == nil {
 		return facts, nil
 	}
+	progress := newProgressLogger(progressWriter)
 	for _, host := range program.Hosts {
+		task := progress.Start(host.Name, "discover facts", "", "")
 		hostFacts, err := DiscoverHostFacts(ctx, runner, host, now)
 		if err != nil {
+			task.Done(err)
 			return nil, err
 		}
+		task.Done(nil)
 		facts[host.Name] = hostFacts
 	}
 	return facts, nil

@@ -116,6 +116,42 @@ func TestApplyWithMemoryProviderIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestApplyWritesProgress(t *testing.T) {
+	program, resourceGraph := twoFileProgramAndGraph("server1")
+	var progress bytes.Buffer
+	engine := Engine{Backend: NewMemoryBackend(), Provider: NewMemoryProvider()}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{Progress: &progress}); err != nil {
+		t.Fatal(err)
+	}
+
+	output := progress.String()
+	for _, want := range []string{
+		"dbf: server1: start lock state",
+		`dbf: server1: start create host.server1.files.file["/tmp/a"] - create file /tmp/a`,
+		`dbf: server1: done create host.server1.files.file["/tmp/a"] - create file /tmp/a`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("progress output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestProgressTaskLogsHeartbeat(t *testing.T) {
+	var output bytes.Buffer
+	progress := newProgressLogger(&output)
+	progress.interval = 10 * time.Millisecond
+
+	task := progress.Start("server1", "apply", `host.server1.files.file["/tmp/slow"]`, "write file /tmp/slow")
+	time.Sleep(25 * time.Millisecond)
+	task.Done(nil)
+
+	text := output.String()
+	if !strings.Contains(text, `dbf: server1: still apply host.server1.files.file["/tmp/slow"] - write file /tmp/slow`) {
+		t.Fatalf("progress output missing heartbeat:\n%s", text)
+	}
+}
+
 func TestApplyStateDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 	for _, tt := range []struct {
 		name    string

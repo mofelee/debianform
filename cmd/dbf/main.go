@@ -394,7 +394,7 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 				Debug:       debug,
 			})
 		} else {
-			program, runner, err := loadOnlineV2Program(context.Background(), cfg, host, &warnings)
+			program, runner, err := loadOnlineV2ProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr)
 			if err != nil {
 				return err
 			}
@@ -406,7 +406,7 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 				Backend:  v2engine.NewSSHBackend(runner),
 				Provider: v2engine.NewNativeProvider(runner),
 			}
-			onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, v2engine.Options{Host: host})
+			onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, v2engine.Options{Host: host, Progress: os.Stderr})
 			if err != nil {
 				return err
 			}
@@ -422,7 +422,7 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 		if format != "text" {
 			return fmt.Errorf("--format is only supported for v2 plan")
 		}
-		program, runner, err := loadOnlineV2Program(context.Background(), cfg, host, &warnings)
+		program, runner, err := loadOnlineV2ProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr)
 		if err != nil {
 			return err
 		}
@@ -434,7 +434,7 @@ func runV2ConfigCommand(cmd string, files []string, host string, format string, 
 			Backend:  v2engine.NewSSHBackend(runner),
 			Provider: v2engine.NewNativeProvider(runner),
 		}
-		opts := v2engine.Options{Host: host, LockTimeout: lockTimeout, Parallel: parallel}
+		opts := v2engine.Options{Host: host, LockTimeout: lockTimeout, Parallel: parallel, Progress: os.Stderr}
 		onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, opts)
 		if err != nil {
 			return err
@@ -754,12 +754,16 @@ func isRuntimeFactCompileError(err error) bool {
 }
 
 func loadOnlineV2Program(ctx context.Context, cfg *v2parser.Config, host string, warnings *[]v2ir.Warning) (*v2ir.Program, *v2engine.SSHRunner, error) {
+	return loadOnlineV2ProgramWithProgress(ctx, cfg, host, warnings, nil)
+}
+
+func loadOnlineV2ProgramWithProgress(ctx context.Context, cfg *v2parser.Config, host string, warnings *[]v2ir.Warning, progress io.Writer) (*v2ir.Program, *v2engine.SSHRunner, error) {
 	base, err := compileV2Program(cfg, host, v2merge.CompileOptions{SkipComponents: true})
 	if err != nil {
 		return nil, nil, err
 	}
 	runner := v2engine.NewSSHRunner(v2engine.HostsFromProgram(base))
-	facts, err := v2engine.DiscoverProgramFacts(ctx, runner, base, nil)
+	facts, err := v2engine.DiscoverProgramFactsWithProgress(ctx, runner, base, nil, progress)
 	if err != nil {
 		return nil, nil, err
 	}

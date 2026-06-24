@@ -49,6 +49,7 @@ dbf plan
 
 - `--offline` 不连接主机，适合快速看资源地址、desired 内容和大致变更。
 - 在线 `plan` 会连接主机、读取 state 和 observed 状态，适合 apply 前审阅真实动作。
+- 在线 `plan`、`apply` 和 `check` 会把探测/执行进度写到 stderr；plan 正文仍在 stdout。
 - `+` 是 create，`~` 是 update，`-` 是 delete，`!` 是 operation。
 
 首次离线 plan 应该显示：
@@ -108,6 +109,9 @@ dbf check
 
 - 第一段是确认前的在线 plan。
 - 持有 state lock 后，DebianForm 会重新读取 state 和 observed 状态，再打印第二段 plan 并执行。
+
+执行阶段 stderr 会显示当前 host、资源地址、动作以及长步骤心跳，例如 `start update ...`、
+`still update ...`、`done update ...`，用来判断它正在处理哪一步。
 
 成功后：
 
