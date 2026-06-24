@@ -6,6 +6,7 @@
 ## 开始使用
 
 - [Quickstart](quickstart.zh.md)：从安装到第一次 `apply/check` 的最短路径。
+- [用户手册](user-manual/README.zh.md)：由浅入深的可运行教程，覆盖常见运维任务。
 - [CLI 手册](cli.zh.md)：`validate`、`plan`、`apply`、`check`、`fmt` 和 inspect 命令。
 - [真实部署模板](realistic-deployment-example.zh.md)：一个低权限 systemd app 的完整小例子。
 

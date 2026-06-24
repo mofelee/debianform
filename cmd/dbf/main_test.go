@@ -1093,7 +1093,7 @@ case "$input" in
     printf 'web\n'
     exit 0
     ;;
-  *"'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'ps' '--format' 'json'"*)
+  *"'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'ps' '--all' '--format' 'json'"*)
     printf '[{"Name":"web","State":"exited"}]\n'
     exit 0
     ;;
@@ -1177,7 +1177,7 @@ case "$input" in
     printf 'web\n'
     exit 0
     ;;
-  *"'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'ps' '--format' 'json'"*)
+  *"'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'ps' '--all' '--format' 'json'"*)
     printf '[{"Name":"web","Service":"web","State":"running"},{"Name":"worker","Service":"worker","State":"running"}]\n'
     exit 0
     ;;

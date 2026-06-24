@@ -1444,6 +1444,9 @@ func (p NativeProvider) planUserGroupMembership(ctx context.Context, node graph.
 		return absentInSyncPlan(prior, "already absent user group membership "+user+":"+group, observed), nil
 	}
 	if !cur.exists {
+		if membershipDependsOnManagedUser(node, user) {
+			return ProviderPlan{Action: ActionCreate, Summary: "add user " + user + " to group " + group + " after creating user", Observed: observed, Ownership: ownership(prior)}, nil
+		}
 		return ProviderPlan{}, fmt.Errorf("%s: user %q does not exist; declare users.user[%q] or create it before applying group membership %q", node.Address, user, user, group)
 	}
 	if userInGroup(cur, group) {
@@ -1455,6 +1458,16 @@ func (p NativeProvider) planUserGroupMembership(ctx context.Context, node graph.
 		Observed:  observed,
 		Ownership: ownership(prior),
 	}, nil
+}
+
+func membershipDependsOnManagedUser(node graph.Node, user string) bool {
+	needle := `.users.user["` + user + `"]`
+	for _, dep := range node.DependsOn {
+		if strings.Contains(dep, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p NativeProvider) applyUserGroupMembership(ctx context.Context, step Step) (map[string]any, error) {
@@ -1684,7 +1697,7 @@ func dockerComposeProjectServicesCommand(node graph.Node) string {
 
 func dockerComposeProjectPSCommand(node graph.Node) string {
 	args := dockerComposeBaseArgs(node)
-	args = append(args, "ps", "--format", "json")
+	args = append(args, "ps", "--all", "--format", "json")
 	return strings.Join(shellQuoteArgs(args), " ") + " 2>/dev/null || true\n"
 }
 
@@ -1963,7 +1976,7 @@ func (s pathState) observed() map[string]any {
 		"is_dir": s.IsDir,
 		"owner":  s.Owner,
 		"group":  s.Group,
-		"mode":   s.Mode,
+		"mode":   displayMode(s.Mode),
 		"sha256": s.SHA256,
 	}
 }
@@ -2479,6 +2492,17 @@ func sha256Hex(data []byte) string {
 
 func normalizeMode(mode string) string {
 	return strings.TrimLeft(mode, "0")
+}
+
+func displayMode(mode string) string {
+	trimmed := strings.TrimSpace(mode)
+	if trimmed == "" {
+		return ""
+	}
+	if len(trimmed) >= 4 {
+		return trimmed
+	}
+	return strings.Repeat("0", 4-len(trimmed)) + trimmed
 }
 
 func nonEmptyLines(output string) []string {

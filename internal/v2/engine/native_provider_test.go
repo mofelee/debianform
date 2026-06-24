@@ -122,6 +122,33 @@ func TestNativeProviderWriteOnlyFileUsesVersionForPlan(t *testing.T) {
 	}
 }
 
+func TestNativeProviderObservedModeUsesFourDigitDisplay(t *testing.T) {
+	node := graph.Node{
+		Address: "host.server1.files.file[\"/etc/example.conf\"]",
+		Host:    "server1",
+		Kind:    "file",
+		Desired: map[string]any{
+			"path":      "/etc/example.conf",
+			"content":   "hello\n",
+			"owner":     "root",
+			"group":     "root",
+			"mode":      "0640",
+			"ensure":    "present",
+			"sensitive": false,
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "file\nroot\nroot\n640\nold-sha\n"}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Observed["mode"] != "0640" {
+		t.Fatalf("observed mode = %#v, want 0640", got.Observed["mode"])
+	}
+}
+
 func TestNativeProviderWriteOnlyFileApplyUsesProviderPayload(t *testing.T) {
 	node := writeOnlyFileNode("v1")
 	runner := &recordingRunner{outputs: []Result{{Stdout: "not-a-real-ephemeral-token", Stderr: "not-a-real-ephemeral-token"}}}
@@ -1083,6 +1110,23 @@ func TestNativeProviderDockerComposeProjectPlanStates(t *testing.T) {
 	}
 }
 
+func TestNativeProviderDockerComposeProjectReadsAllContainers(t *testing.T) {
+	runner := &recordingRunner{outputs: []Result{{Stdout: "web\n"}, {Stdout: `[{"Name":"web","State":"exited"}]`}}}
+	provider := NewNativeProvider(runner)
+	node := dockerComposeProjectNode("running")
+
+	_, err := provider.Plan(context.Background(), node, &v2state.Resource{Ownership: "managed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) < 2 {
+		t.Fatalf("scripts = %#v, want services and ps reads", runner.scripts)
+	}
+	if !strings.Contains(runner.scripts[1], "'ps' '--all' '--format' 'json'") {
+		t.Fatalf("compose ps command = %q, want --all json output", runner.scripts[1])
+	}
+}
+
 func TestNativeProviderDockerComposeProjectPlanOrphans(t *testing.T) {
 	runner := &recordingRunner{outputs: []Result{
 		{Stdout: "web\n"},
@@ -1310,6 +1354,21 @@ func TestNativeProviderUserGroupMembershipPlanErrorsWhenUserMissing(t *testing.T
 	_, err := provider.Plan(context.Background(), node, nil)
 	if err == nil || !strings.Contains(err.Error(), `user "deploy" does not exist`) || !strings.Contains(err.Error(), `users.user["deploy"]`) {
 		t.Fatalf("membership missing user error = %v", err)
+	}
+}
+
+func TestNativeProviderUserGroupMembershipPlansCreateWhenManagedUserDependencyIsMissing(t *testing.T) {
+	runner := &recordingRunner{outputs: []Result{{Stdout: "__ABSENT__\n"}}}
+	provider := NewNativeProvider(runner)
+	node := userGroupMembershipNode("deploy", "docker")
+	node.DependsOn = []string{`host.server1.users.user["deploy"]`, `host.server1.docker.group["docker"]`}
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("membership missing managed user action = %q, want create", got.Action)
 	}
 }
 

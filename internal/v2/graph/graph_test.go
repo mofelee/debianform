@@ -44,6 +44,10 @@ func TestCompileFoundationResourceGraphGolden(t *testing.T) {
 	if !containsString(userDeps, `host.foundation1.groups.group["deploy"]`) {
 		t.Fatalf("user deps = %#v, want deploy group dependency", userDeps)
 	}
+	directoryDeps := dependsOnFor(resourceGraph, `host.foundation1.directories.directory["/etc/myapp"]`)
+	if len(directoryDeps) != 0 {
+		t.Fatalf("root-owned directory deps = %#v, want none", directoryDeps)
+	}
 	serviceDeps := dependsOnFor(resourceGraph, `host.foundation1.services.service["myapp"]`)
 	for _, want := range []string{
 		`host.foundation1.packages.install["curl"]`,
@@ -507,6 +511,79 @@ host "docker-users1" {
 	membershipDeps := dependsOnFor(resourceGraph, `host.docker-users1.docker.user_group_membership["deploy:docker"]`)
 	if !containsString(membershipDeps, `host.docker-users1.groups.group["docker"]`) {
 		t.Fatalf("membership deps = %#v, want declared docker group", membershipDeps)
+	}
+}
+
+func TestHostOwnedPathResourcesDependOnManagedUserAndGroup(t *testing.T) {
+	resourceGraph := compileGraphInlineWithFiles(t, `
+host "server1" {
+  groups {
+    group "app" {
+      system = true
+    }
+  }
+
+  users {
+    user "app" {
+      system = true
+      group  = "app"
+      home   = "/var/lib/app"
+      shell  = "/usr/sbin/nologin"
+    }
+  }
+
+  directories {
+    directory "/var/lib/app" {
+      owner = "app"
+      group = "app"
+      mode  = "0750"
+    }
+  }
+
+  files {
+    file "/var/lib/app/config.env" {
+      owner   = "app"
+      group   = "app"
+      mode    = "0640"
+      content = "APP_ENV=prod\n"
+    }
+  }
+
+  secrets {
+    file "/var/lib/app/token" {
+      owner  = "app"
+      group  = "app"
+      mode   = "0600"
+      source = "token.txt"
+    }
+  }
+
+  systemd {
+    unit "app.service" {
+      owner   = "app"
+      group   = "app"
+      mode    = "0644"
+      content = "[Service]\nExecStart=/bin/true\n"
+    }
+  }
+}
+`, map[string]string{
+		"token.txt": "not-a-real-token\n",
+	})
+	groupAddress := `host.server1.groups.group["app"]`
+	userAddress := `host.server1.users.user["app"]`
+	for _, address := range []string{
+		`host.server1.directories.directory["/var/lib/app"]`,
+		`host.server1.files.file["/var/lib/app/config.env"]`,
+		`host.server1.secrets.file["/var/lib/app/token"]`,
+		`host.server1.systemd.unit["app.service"]`,
+	} {
+		deps := dependsOnFor(resourceGraph, address)
+		for _, want := range []string{groupAddress, userAddress} {
+			if !containsString(deps, want) {
+				t.Fatalf("%s deps = %#v, want %q", address, deps, want)
+			}
+		}
 	}
 }
 
@@ -1456,10 +1533,21 @@ func testHostFacts() map[string]ir.HostFacts {
 func compileGraphInline(t *testing.T, content string) *ResourceGraph {
 	t.Helper()
 
+	return compileGraphInlineWithFiles(t, content, nil)
+}
+
+func compileGraphInlineWithFiles(t *testing.T, content string, files map[string]string) *ResourceGraph {
+	t.Helper()
+
 	dir := t.TempDir()
 	file := filepath.Join(dir, "main.dbf.hcl")
 	if err := os.WriteFile(file, []byte(strings.TrimPrefix(content, "\n")), 0644); err != nil {
 		t.Fatal(err)
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return compileGraphFixture(t, file)
 }
