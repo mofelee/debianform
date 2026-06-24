@@ -178,6 +178,7 @@ DebianForm 管理的持久化文件，不应被解释为“恢复默认值”。
 - JSON 输出不包含 ANSI color，只包含分类字段。
 - 文本必须同时显示分类名，不能只靠颜色传达语义。
 - 红色只用于真正 destructive 或可能影响用户数据/服务可用性的动作。
+- 通用颜色、日志颜色和 CI/JSON 边界见 `docs/cli-color-output-policy.zh.md`。
 
 ## 验收标准
 
