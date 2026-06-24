@@ -65,4 +65,4 @@ unit、文件或服务状态，`check` 应输出 drift 并返回非零。
 - [CLI 文档](cli.zh.md)
 - [operations runbook](operations-runbook.zh.md)
 - [support matrix](support-matrix.zh.md)
-- [v2 systemd service units](v2-systemd-service-units.md)
+- [systemd service units](systemd-service-units.md)

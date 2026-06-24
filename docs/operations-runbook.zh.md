@@ -1,6 +1,6 @@
 # DebianForm Operations Runbook
 
-本文档覆盖 DebianForm v2 日常运维恢复流程：state lock、apply 中途失败、state 与远端不一致、
+本文档覆盖 DebianForm 日常运维恢复流程：state lock、apply 中途失败、state 与远端不一致、
 资源移除、恢复和常见故障排查。新用户第一次使用仍建议先走
 [quickstart](quickstart.zh.md)；发布操作见 [release quick runbook](release-quick-runbook.zh.md)。
 
@@ -43,6 +43,8 @@ ssh root@"$DBF_TARGET" "test -f '$DBF_LOCK' && cat '$DBF_LOCK' || true"
 ```text
 dbf: remote state does not match v2 configuration
 ```
+
+当前错误文本仍保留历史格式名；语义是远端状态和当前配置不一致。
 
 这通常表示远端状态和配置不一致，或有尚未 apply 的变更。先读 `dbf-check.txt` 里的 plan。
 

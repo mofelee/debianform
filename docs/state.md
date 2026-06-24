@@ -1,6 +1,6 @@
-# DebianForm v2 State
+# DebianForm State
 
-DebianForm v2 为每台 host 保存独立的远端 JSON state：
+DebianForm 为每台 host 保存独立的远端 JSON state：
 
 ```text
 /var/lib/debianform/state/<host>.json
@@ -35,7 +35,7 @@ state 顶层字段：
 - `facts`: 运行时探测到的主机事实，例如 `system.architecture`、`system.codename`
   和当前远端 hostname。`facts.system.hostname` 是 observed value，不等同于配置中的
   desired `system.hostname`。
-- `resources`: 以稳定 v2 address 为 key 的资源记录。
+- `resources`: 以稳定 address 为 key 的资源记录。
 
 资源记录保存：
 

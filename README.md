@@ -4,584 +4,236 @@
 
 # DebianForm
 
-DebianForm 是面向 Debian 主机的 v2 配置工具，目前处于 public preview / beta 阶段。
-CLI、v2 DSL、state 和发布产物在 stable 前仍可能出现破坏性变更；公开发布会在
-`CHANGELOG.md` 和 release notes 中记录迁移影响。
+DebianForm 是一个面向 Debian 主机的声明式配置工具：写一份 `.dbf.hcl`，先看
+`plan`，再执行 `apply`，最后用 `check` 检查漂移。
 
-当前仓库以 v2 为唯一主线：
+它把常见服务器配置变成可读、可审计、可重复的 HCL：
 
-- v2 用户语法记录在 `docs/`，设计夹具位于 `examples/v2-*.dbf.hcl`。
-- `dbf validate` 可离线解析 profile/host 合并并校验 HostSpec。
-- `dbf plan`、`dbf apply` 和 `dbf check` 已接入 v2 SSH 执行路径、runtime facts、
-  v2 state 和 observed 检测；`dbf plan --offline` 保留纯本地预览。
-- libvirt 集成测试位于 `test/integration/libvirt/`，用于在 Debian 13 VM 中验证 v2。
+- 管理文件、目录、用户、组、APT、kernel/sysctl、systemd、nftables、Docker 和 Compose。
+- 默认先生成变更计划，不先碰目标机。
+- 在线模式通过 SSH 读取目标主机事实、远端 state 和实际状态。
+- 每台 host 有独立远端 state 和 lock，避免并发 apply 打架。
+- secret 和 sensitive 内容在 plan、state、HTML/JSON 输出中脱敏。
+- `.dbf.hcl` 足够直接，适合人读，也适合 LLM 生成和修改。
 
-v2 用户层只写 `host`、`profile` 和领域块，不暴露旧式低阶资源语法。
+当前项目仍处于 public preview / beta 阶段。建议先在低风险 Debian 13 测试主机上试用；
+CLI、配置格式、state 和 plan JSON 在 stable 前仍可能调整。
 
-## 支持优先级
+## 30 秒安装
 
-- 最高优先级目标系统：Debian 13。
-- 目标主机优先支持架构：amd64。
-
-`dbf` CLI 安装在控制机或 CI runner 上，可以在 Linux 和 macOS 运行。公开发布产物覆盖
-Linux/macOS 的 amd64 和 arm64；被管理目标主机当前仍以 Debian 13 为最高优先级。
-
-## 权限模型
-
-DebianForm 管理目标主机时要求 SSH 连接使用 `root`。这是当前项目的明确边界：很多资源
-需要写 `/etc`、`/usr/local`、systemd、APT、nftables 和内核参数；如果支持非 root 用户、
-sudo、become 或细粒度最小权限，会显著增加实现和排障复杂度。项目规模有限，优先把主路径
-做可靠。
-
-因此：
-
-- `ssh.user` 只能省略或设为 `"root"`；省略时 DebianForm 仍按 root 连接。
-- 目标主机需要允许 root 通过 SSH key 登录。
-- DebianForm 不支持 sudo 提权、sudoers 管理或非 root 管理连接。
-- 服务进程仍然可以用 systemd 的 `user`/`group` 以低权限运行；这不改变管理连接必须是
-  root 的要求。
-
-## 安装和升级
-
-推荐安装方式：
+macOS 或 Linux 上推荐 Homebrew：
 
 ```bash
 brew install mofelee/debianform/dbf
-```
-
-或：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mofelee/debianform/main/scripts/install.sh | sh
-```
-
-安装后检查：
-
-```bash
 dbf version
 ```
 
-升级：
+也可以使用安装脚本：
 
 ```bash
-brew update && brew upgrade dbf
+curl -fsSL https://raw.githubusercontent.com/mofelee/debianform/main/scripts/install.sh | sh
+dbf version
 ```
 
-curl 安装的用户重新运行安装脚本即可升级；需要回滚时使用安装脚本的 `--version` 参数安装
-旧版本。
+## 5 分钟快速开始
 
-## 发布产物校验
-
-每个 GitHub Release 包含四个平台 tarball、`checksums.txt`、cosign keyless bundle
-`checksums.txt.sigstore.json`、SBOM 和 GitHub provenance attestation。
-
-下载 release 后可校验 checksum：
+准备一台低风险 Debian 13 amd64 主机，并确认控制机能用 root SSH key 登录：
 
 ```bash
-sha256sum --check checksums.txt
+export DBF_HOST=192.0.2.10
+ssh root@"$DBF_HOST" 'cat /etc/debian_version && uname -m'
 ```
 
-校验 `checksums.txt` 的 cosign keyless 签名：
-
-```bash
-cosign verify-blob \
-  --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp 'https://github.com/mofelee/debianform/.github/workflows/release.yml@refs/tags/v.*' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  checksums.txt
-```
-
-校验 GitHub provenance attestation：
-
-```bash
-gh attestation verify dbf_<tag>_linux_amd64.tar.gz --repo mofelee/debianform
-```
-
-## 兼容性
-
-旧实验配置格式已废弃，不再作为 CLI 入口或兼容目标。v2 文件必须使用 `host`、
-`profile`、`component`、`locals` 等 v2 顶层块；旧式低阶 resource DSL 需要迁移为
-v2 领域块或 component。
-DSL、CLI、state schema 和 plan JSON 的 beta/stable 兼容规则见
-[compatibility policy](docs/compatibility-policy.zh.md)。
-
-## v2 设计文档
-
-- [quickstart](docs/quickstart.zh.md)
-- [v2 requirements](docs/v2-requirements.md)
-- [v2 IR requirements](docs/v2-ir-requirements.zh.md)
-- [v2 component input requirements](docs/v2-component-input-requirements.zh.md)
-- [v2 variable and secrets](docs/v2-variable-secrets-requirements.zh.md)
-- [v2 plan format](docs/v2-plan-format.md)
-- [v2 state](docs/v2-state.md)
-- [support matrix](docs/support-matrix.zh.md)
-- [platform support strategy](docs/platform-support-strategy.zh.md)
-- [Linux Homebrew verification policy](docs/linux-homebrew-verification-policy.zh.md)
-- [compatibility policy](docs/compatibility-policy.zh.md)
-- [security model](docs/security-model.zh.md)
-- [beta feedback and triage](docs/beta-feedback-triage.zh.md)
-- [v2 systemd service units](docs/v2-systemd-service-units.md)
-- [v2 implementation plan](docs/v2-implementation-plan.zh.md)
-- [operations runbook](docs/operations-runbook.zh.md)
-- [release process](docs/release-process.zh.md)
-- [release notes template](docs/release-notes-template.md)
-- [apt repository feasibility](docs/apt-repository-feasibility.zh.md)
-- [release automation plan](docs/release-automation-plan.zh.md)
-- [release quick runbook](docs/release-quick-runbook.zh.md)
-
-## v2 示例
-
-`examples/` 中的文件是 v2 示例和设计夹具。当前已支持以下示例作为 v2 可运行样例；
-依赖本地 source/secrets 的示例需要先准备对应文件，因为 validate 会读取这些输入。
-默认 `plan` 会通过 SSH 探测 runtime facts 并读取远端状态；纯本地预览可使用
-`plan --offline`：
-
-- `examples/v2-bbr.dbf.hcl`
-- `examples/v2-apt-source-file.dbf.hcl`
-- `examples/v2-apt-repository.dbf.hcl`
-- `examples/v2-bird2.dbf.hcl`
-- `examples/v2-component-binary.dbf.hcl`（真实 apply 前需替换为上游下载物真实 sha256）
-- `examples/v2-component-inputs.dbf.hcl`
-- `examples/v2-docker-compose.dbf.hcl`（当前支持 Compose 文件写入、`docker compose config` 校验、generated systemd unit/service，以及 Compose project apply/check）
-- `examples/v2-docker-daemon.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
-- `examples/v2-docker-minimal.dbf.hcl`（当前支持 validate、HostSpec、plan、apply 和 check）
-- `examples/v2-docker-users.dbf.hcl`（当前支持 docker group 和 supplementary group membership apply/check）
-- `examples/v2-files-plan-preview.dbf.hcl`
-- `examples/v2-mihomo.dbf.hcl`
-- `examples/v2-nftables.dbf.hcl`
-- `examples/v2-plan-preview.dbf.hcl`
-- `examples/v2-profile-merge.dbf.hcl`
-- `examples/v2-realistic-systemd-app.dbf.hcl`（真实部署模板：低权限 systemd app，离线可验证）
-- `examples/v2-shadowsocks-rust.dbf.hcl`
-- `examples/v2-systemd-service.dbf.hcl`
-- `examples/v2-systemd-service-unit.dbf.hcl`
-- `examples/v2-user-group.dbf.hcl`
-- `examples/v2-variable-secret-file.dbf.hcl`
-- `examples/v2-wireguard-networkd.dbf.hcl`（真实 validate/apply 前需准备本地 `examples/secrets/wg-a.key` 和 `wg-b.key`）
-
-其他示例仍为 design-only fixture，仅用于表达设计方向，不作为第一版可运行样例：
-
-- `examples/v2-fleet.dbf.hcl`
-
-design-only fixture 在进入可运行样例前，需要拆成小型 fixture，并加入 validate 与
-golden 测试。
-
-BBR v2 离线 plan 预览示例：
-
-```bash
-dbf plan -f examples/v2-bbr.dbf.hcl --offline
-```
-
-从第一台测试主机的 root SSH 准备、第一份配置、validate、在线 plan、apply、再次 plan
-no-op 到 check 的完整路径见 [quickstart](docs/quickstart.zh.md)。
-一个更接近真实服务部署的低权限 systemd app 模板见
-[realistic deployment example](docs/realistic-deployment-example.zh.md)。
-Stale lock、apply 中途失败、drift 恢复和常见故障排查见
-[operations runbook](docs/operations-runbook.zh.md)。
-
-`-f file` 可以重复传入；传入一个或多个 `-f` 时只读取这些显式指定的文件，不传时读取当前目录所有
-`*.dbf.hcl` 并按文件名排序。
-
-```text
-Plan:
-  + host.bbr1.kernel.module["tcp_bbr"]
-    create kernel module tcp_bbr
-  + host.bbr1.kernel.sysctl["net.core.default_qdisc"]
-    create sysctl net.core.default_qdisc
-  + host.bbr1.kernel.sysctl["net.ipv4.tcp_congestion_control"]
-    create sysctl net.ipv4.tcp_congestion_control
-
-Summary: 3 create, 0 update, 0 delete, 0 no-op, 0 operations
-```
-
-结构化 plan 可用：
-
-```bash
-dbf plan -f examples/v2-bbr.dbf.hcl --format json --offline
-```
-
-开发调试时可显式显示低阶 provider address：
-
-```bash
-dbf plan -f examples/v2-bbr.dbf.hcl --format json --debug --offline
-```
-
-静态 HTML preview 可用：
-
-```bash
-dbf plan -f examples/v2-files-plan-preview.dbf.hcl --html plan.html --offline
-```
-
-领域型 component 可通过 validate 做本地语法和 HostSpec 检查：
-
-```bash
-dbf validate -f examples/v2-bird2.dbf.hcl
-```
-
-component 内可以读取 `target.system.codename` 等只读 host 视图，并展开为
-`host.<host>.components.<instance>...` 地址。
-这些 runtime facts 来自目标主机；需要完整 plan/apply 时，请使用 root SSH 可连接的
-目标主机，或用支持的本地离线样例。
-
-component input 是 component 的公开 API，支持 `description`、`default`、
-`nullable`、`sensitive`、`deprecated`、重复 `validation` block，以及
-`list(object(...))`、`map(T)`、`tuple([...])`、`optional(...)` 等结构化类型。例如：
+新建 `site.dbf.hcl`：
 
 ```hcl
-input "listeners" {
-  type = list(object({
-    name = string
-    port = number
-    tls  = optional(bool, false)
-  }))
-
-  default  = []
-  nullable = false
-
-  validation {
-    condition     = alltrue([for listener in input.listeners : listener.port >= 1 && listener.port <= 65535])
-    error_message = "Each listener.port must be between 1 and 65535."
-  }
-}
-```
-
-调用方显式传入 `deprecated` input 时，`validate`、`plan`、`apply` 会输出 warning
-但不改变退出码。`sensitive = true` 的 component input 会传播到由它派生的 file/unit
-内容；HostSpec、plan 和 state 只保留摘要或 `"<sensitive>"`，不写入明文。
-组件接口可用下面命令查看：
-
-```bash
-dbf component inspect -f examples/v2-component-inputs.dbf.hcl reverse_proxy
-```
-
-顶层 `variable` 用于 program 级外部输入。写入敏感文件时，推荐使用
-`variable + files.file`：敏感值放在 `content`，非敏感 `content_version` 负责触发
-write-only 更新。`secrets.file` 仍保留为兼容层，旧配置和 state address 不会因为新写法
-立即失效，但会输出 deprecation warning。旧 `source = "secrets/app-token"` 可迁移为
-`-var app_token=@secrets/app-token`。
-
-```bash
-dbf plan -f examples/v2-variable-secret-file.dbf.hcl --offline
-```
-
-component artifact 支持 `binary`、`file`、`archive` 和 `ca_certificate`。
-它们可以声明 `source "<architecture>"` 并由运行时探测到的
-`target.system.architecture` 选择唯一 source；无 label 的 `source {}` 表示架构无关，
-不能和带 label 的 source 混用。
-远程 URL source 必须声明 64 位 sha256，plan 会生成 download 和 install 节点；
-`ca_certificate` 变化会额外触发 `update-ca-certificates` operation。
-
-Docker v2 DSL MVP 已支持官方 Docker APT 源、默认 Docker packages、`docker.service`
-enable/start、daemon JSON、Compose 文件写入、`docker compose config` 校验、Compose
-project `running`/`stopped`/`absent` 收敛、generated systemd unit/service，以及
-`docker.users` supplementary group membership。
-`docker.package.source` 默认是 `official`，会使用 Docker 官方 APT 源并安装
-`docker-ce`、`docker-ce-cli`、`containerd.io`、`docker-buildx-plugin` 和
-`docker-compose-plugin`。也可以设置为 `debian` 使用 Debian 仓库里的 `docker.io` 和
-`docker-compose-plugin`，设置为 `none` 或 `custom` 时 DebianForm 不生成 Docker
-repository/key/package 节点，但仍可管理 daemon、service 和 Compose project。
-官方源会检测 `docker.io`、`docker-doc`、`docker-compose`、`podman-docker`、
-`containerd`、`runc` 等冲突包；`remove_conflicts = "auto"` 或 `true` 会在安装官方包前移除，
-`remove_conflicts = "false"` 会在检测到冲突时停止 plan/apply 并提示用户。
-`daemon.settings` 会以稳定 JSON 写入 `/etc/docker/daemon.json`，文件变化后 MVP 统一触发
-`systemctl restart docker.service`。DebianForm 不解析、不重写 Compose schema。
-真实 apply/check 依赖目标主机可以访问 Docker 官方 APT 源和镜像 registry：
-
-```hcl
-host "docker1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
+host "server1" {
+  ssh {
+    host = "192.0.2.10"
+    user = "root"
+    # identity_file = "~/.ssh/id_ed25519"
   }
 
-  docker {
-    enable = true
-  }
-}
-```
-
-```bash
-dbf validate -f examples/v2-docker-minimal.dbf.hcl
-dbf plan -f examples/v2-docker-minimal.dbf.hcl --offline
-dbf apply -f examples/v2-docker-minimal.dbf.hcl --auto-approve
-dbf check -f examples/v2-docker-minimal.dbf.hcl
-```
-
-```hcl
-host "docker-daemon1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
+  state {
+    path      = "/var/lib/debianform/state/server1.json"
+    lock_path = "/var/lock/debianform/state/server1.lock"
   }
 
-  docker {
-    enable = true
+  kernel {
+    modules = ["tcp_bbr"]
 
-    daemon {
-      settings = {
-        "log-driver" = "json-file"
-        "log-opts" = {
-          "max-size" = "100m"
-          "max-file" = "3"
-        }
-      }
+    sysctl = {
+      "net.core.default_qdisc"          = "fq"
+      "net.ipv4.tcp_congestion_control" = "bbr"
     }
   }
 }
 ```
 
+把 `ssh.host` 改成你的测试主机地址，然后执行：
+
 ```bash
-dbf plan -f examples/v2-docker-daemon.dbf.hcl --offline
+dbf validate -f site.dbf.hcl
+dbf plan -f site.dbf.hcl --offline
+dbf plan -f site.dbf.hcl
+dbf apply -f site.dbf.hcl
+dbf plan -f site.dbf.hcl
+dbf check -f site.dbf.hcl
 ```
 
-`docker.users` 会创建或复用 `docker` group，并把列出的用户加入 supplementary group；
-它不接管用户的 home、shell 或 uid。已登录 session 需要重新登录后才会获得新的 group 权限：
+这条路径覆盖了完整闭环：
+
+- `validate`：本地解析和校验配置，不连接主机。
+- `plan --offline`：本地预览资源地址和变更形状。
+- `plan`：通过 SSH 读取目标主机事实、远端 state 和 observed 状态。
+- `apply`：重新生成在线 plan，获取远端 lock，按资源图执行变更并写 state。
+- 第二次 `plan`：预期 no-op。
+- `check`：检查远端是否漂移；不一致时返回非零。
+
+更完整的新手教程见 [Quickstart](docs/quickstart.zh.md)。真实服务部署模板见
+[systemd app 示例](docs/realistic-deployment-example.zh.md)。
+
+## 常用命令
+
+```bash
+# 校验配置
+dbf validate -f site.dbf.hcl
+
+# 本地预览，不连接目标机
+dbf plan -f site.dbf.hcl --offline
+
+# 在线 plan，读取 facts/state/observed 状态
+dbf plan -f site.dbf.hcl
+
+# 输出机器可读 plan
+dbf plan -f site.dbf.hcl --format json
+
+# 输出静态 HTML plan
+dbf plan -f site.dbf.hcl --html plan.html
+
+# 应用变更
+dbf apply -f site.dbf.hcl
+
+# CI 或临时环境跳过确认
+dbf apply -f site.dbf.hcl --auto-approve
+
+# 检查漂移
+dbf check -f site.dbf.hcl
+
+# 格式化配置
+dbf fmt -f site.dbf.hcl
+
+# 查看 component/variable 公开输入
+dbf component inspect -f site.dbf.hcl component_name
+dbf variable inspect -f site.dbf.hcl
+```
+
+不传 `-f` 时，`dbf` 读取当前目录所有 `*.dbf.hcl` 并按文件名排序。传入一个或多个
+`-f file` 时，只读取这些显式文件，并按命令行顺序解析。
+
+## 配置模型
+
+DebianForm 的用户层只写 `host`、`profile`、`component`、`locals`、`variable` 和领域块。
+不需要写低阶 provider 资源。
+
+一个真实但仍很小的服务配置可以包含：
 
 ```hcl
-host "docker-users1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
+host "app1" {
   groups {
-    group "deploy" {
+    group "app" {
       system = true
     }
   }
 
   users {
-    user "deploy" {
-      home  = "/home/deploy"
-      shell = "/bin/bash"
-      group = "deploy"
+    user "app" {
+      system = true
+      group  = "app"
+      home   = "/var/lib/app"
+      shell  = "/usr/sbin/nologin"
     }
   }
 
-  docker {
-    enable = true
-    users  = ["deploy"]
-  }
-}
-```
-
-```bash
-dbf plan -f examples/v2-docker-users.dbf.hcl --offline
-```
-
-Compose MVP 当前只支持一个无 label 的 `file {}` block；多个 compose file 会被明确拒绝。
-在线 plan/check 会读取 `docker compose config --services` 和 `docker compose ps --format json`，
-记录 project state、service/container 摘要，并在实际 service 不属于声明配置时报告 orphan
-drift。`remove_orphans = true` 会在 `up`/`down` 时传递 `--remove-orphans`。当 `project` 名称变化时，
-apply 会先对旧 project 执行 `docker compose down`，再收敛新 project。
-
-```hcl
-host "compose1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
+  files {
+    file "/etc/app/config.env" {
+      owner   = "root"
+      group   = "app"
+      mode    = "0640"
+      content = "APP_ENV=prod\n"
+    }
   }
 
-  docker {
-    enable = true
+  systemd {
+    service_unit "app" {
+      description = "App worker"
+      run         = ["/usr/local/bin/app-worker"]
+      user        = "app"
+      group       = "app"
+      restart     = "always"
+    }
+  }
 
-    compose "app" {
-      state     = "running"
-      directory = "/opt/app"
-
-      file {
-        path = "/opt/app/compose.yaml"
-        content = <<-YAML
-          services:
-            web:
-              image: nginx:1.27-alpine
-        YAML
-      }
-
-      env_file "app" {
-        path    = "/opt/app/.env"
-        content = "TOKEN=not-a-real-preview-secret\n"
-        mode    = "0600"
-      }
-
-      after     = ["docker.service", "network-online.target"]
-      wanted_by = ["multi-user.target"]
+  services {
+    service "app" {
+      enabled = true
+      state   = "running"
     }
   }
 }
 ```
 
-```bash
-dbf plan -f examples/v2-docker-compose.dbf.hcl --offline
-```
-
-nftables 使用原生 ruleset/snippet 文件作为主路径，不提供通用 firewall 抽象。
-多个 nftables 文件变化时，同一 host 只执行一次 validate 和 activate：
-
-```hcl
-host "edge1" {
-  packages {
-    install = ["nftables"]
-  }
-
-  nftables {
-    enable = true
-
-    main {
-      content = <<-EOF
-        flush ruleset
-        include "/etc/nftables.d/*.nft"
-      EOF
-    }
-
-    file "20-services" {
-      content = "add rule inet filter input tcp dport { 22, 80, 443 } accept\n"
-    }
-  }
-}
-```
+更多可运行样例在 `examples/`。这些示例文件目前仍保留历史 `v2-` 文件名前缀，
+例如：
 
 ```bash
+dbf validate -f examples/v2-realistic-systemd-app.dbf.hcl
+dbf plan -f examples/v2-realistic-systemd-app.dbf.hcl --offline
+dbf plan -f examples/v2-docker-minimal.dbf.hcl --offline
 dbf plan -f examples/v2-nftables.dbf.hcl --offline
 ```
 
-配置格式化会原地改写目标 HCL 文件：
+## 支持边界
+
+- CLI 可运行在 Linux 和 macOS 的 amd64/arm64。
+- 被管理目标主机当前最高优先级是 Debian 13 amd64。
+- 在线 `plan`、`apply`、`check` 当前要求目标主机可用 root SSH key 登录。
+- `ssh.user` 只能省略或设置为 `"root"`；不支持 sudo、become 或非 root 管理连接。
+- 服务进程仍可以通过 systemd `user`/`group` 以低权限运行；这不改变管理连接必须是 root。
+
+平台细节见 [支持矩阵](docs/support-matrix.zh.md) 和
+[平台支持策略](docs/platform-support-strategy.zh.md)。安全边界见
+[安全模型](docs/security-model.zh.md)。
+
+## 文档索引
+
+- [Quickstart](docs/quickstart.zh.md)：从零到第一次 `apply/check`。
+- [CLI 手册](docs/cli.zh.md)：所有命令、参数、输出和限制。
+- [真实部署模板](docs/realistic-deployment-example.zh.md)：低权限 systemd app 模板。
+- [Operations Runbook](docs/operations-runbook.zh.md)：state lock、失败恢复、drift 排查。
+- [支持矩阵](docs/support-matrix.zh.md)：当前支持的系统、领域块、示例和验证覆盖。
+- [兼容性政策](docs/compatibility-policy.zh.md)：beta/stable 的兼容和迁移规则。
+- [Plan JSON 格式](docs/plan-format.md)：`dbf plan --format json` 的结构化输出。
+- [State 格式](docs/state.md)：远端 state、lock、ownership 和脱敏规则。
+- [Docs 索引](docs/README.zh.md)：所有用户文档、维护文档和归档设计稿入口。
+
+## 发布产物校验
+
+每个 GitHub Release 包含平台 tarball、`checksums.txt`、cosign keyless bundle、SBOM
+和 GitHub provenance attestation。快速校验 checksum：
 
 ```bash
-dbf fmt -f examples/v2-bbr.dbf.hcl
+sha256sum --check checksums.txt
 ```
 
-远端执行和 drift 检查：
-
-```bash
-dbf apply -f examples/v2-bbr.dbf.hcl --auto-approve
-dbf check -f examples/v2-bbr.dbf.hcl
-```
-
-上述命令需要示例中的 host 能通过 root SSH 连接，并且远端为受支持的 Debian 系统。
-`check` 在存在 create、update、delete、destroy 或 operation 时返回非零。
-
-多 host 配置可以限制 host 级并发：
-
-```bash
-dbf apply --parallel 4 --auto-approve
-```
-
-每台 host 内部仍按 ResourceGraph 的确定性顺序串行执行。
-
-systemd service unit 可以用纯文本写完整 unit，也可以用结构化 `service_unit`
-生成常见 `.service`。两者都配合 `services.service` 管理 enabled/running 状态。
-完整对比见 [v2 systemd service units](docs/v2-systemd-service-units.md)。
-
-纯文本写法：
-
-```hcl
-host "service1" {
-  files {
-    file "/etc/myapp/config.yaml" {
-      mode    = "0644"
-      content = "listen: 127.0.0.1:8080\n"
-    }
-  }
-
-  systemd {
-    unit "myapp.service" {
-      content = <<-EOF
-        [Service]
-        ExecStart=/usr/local/bin/myapp --config /etc/myapp/config.yaml
-      EOF
-    }
-  }
-
-  services {
-    service "myapp" {
-      enabled = true
-      state   = "running"
-    }
-  }
-}
-```
-
-结构化写法：
-
-```hcl
-host "service2" {
-  files {
-    file "/etc/myapp/config.yaml" {
-      mode    = "0644"
-      content = "listen: 127.0.0.1:8080\n"
-    }
-  }
-
-  systemd {
-    service_unit "myapp" {
-      description = "My App"
-      run         = ["/usr/local/bin/myapp", "--config", "/etc/myapp/config.yaml"]
-
-      working_dir   = "/var/lib/myapp"
-      restart       = "always"
-      restart_delay = "5s"
-      after         = ["network-online.target"]
-      wants         = ["network-online.target"]
-    }
-  }
-
-  services {
-    service "myapp" {
-      enabled = true
-      state   = "running"
-    }
-  }
-}
-```
-
-`files.file sensitive = true` 和兼容层 `secrets.file` 不会在 plan 中输出明文；plan 只输出
-hash、长度等摘要。新配置优先使用 `variable + files.file` 表达敏感文件来源。
-`services.service.state` 支持 `running`、`stopped`、`restarted` 和 `reloaded`。
-
-## 常见错误
-
-- `offline plan cannot resolve runtime facts`：离线 plan 遇到依赖
-  `target.system.codename` 或 `target.system.architecture` 的 component，或需要生成 Docker 官方
-  APT 源。改用 `dbf validate` 做本地检查，或对真实目标主机运行在线 plan。
-- `must declare system.architecture` / `must declare system.codename`：component 或 Docker 官方源
-  需要 runtime facts。真实主机会在线探测；纯本地 fixture 需要在 `host.system` 中显式声明。
-- component input validation 失败：错误会指向
-  `component.<name>.input["..."].validation[n]`，先修正调用方传入的 input 值。
-- object 字段类型错误：错误路径会包含嵌套字段或列表下标，例如
-  `inputs["listeners"][0].port`。
-- component URL source 缺少 sha256：远程下载物必须声明 64 位 sha256。
-- design-only fixture 无法 apply：先拆成第一版支持的小型示例，并补 validate/golden 测试。
-
-## 集成测试
-
-libvirt 集成测试会启动全新的 Debian 13 cloud VM，并执行 v2 `validate`、`apply` 和
-`check`：
-
-```bash
-make test-integration-layout
-make test-integration-case CASE=apt-source
-make test-integration-case CASE=bbr
-make test-integration-case CASE=files
-make test-integration-case CASE=docker-engine
-make test-integration-case CASE=docker-daemon
-make test-integration-case CASE=docker-compose
-make test-integration-case CASE=nftables
-make test-integration-case CASE=shadowsocks-rust
-make test-integration-case CASE=systemd-service-unit
-make test-integration
-```
+完整发布和校验流程见 [release process](docs/release-process.zh.md)。
 
 ## 开发
 
 ```bash
 make build
-make install DESTDIR=/tmp/debianform-install
 make test
-make update-golden
 ```
 
-`make test` 运行 v2 Go 测试。
-`make install` 会安装 `dbf`，并把 README、`docs/` 和 `examples/` 放入
-`$(PREFIX)/share/debianform`。
-`make update-golden` 使用 `UPDATE_GOLDEN=1` 刷新 snapshot/golden 测试输出。
+libvirt 集成测试位于 `test/integration/libvirt/`，用于在全新的 Debian VM 中验证
+`validate`、`apply`、`check` 闭环。

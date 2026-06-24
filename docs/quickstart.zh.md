@@ -82,6 +82,8 @@ dbf validate -f site.dbf.hcl
 v2 configuration is valid: 1 host(s)
 ```
 
+当前成功信息仍保留历史格式名；看到这个输出即表示当前配置校验通过。
+
 ## 5. 本地预览 plan
 
 `--offline` 不连接目标主机，适合先检查资源地址和变更形状：

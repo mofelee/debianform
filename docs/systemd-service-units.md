@@ -1,4 +1,4 @@
-# v2 systemd service units
+# systemd service units
 
 DebianForm 支持两种 `.service` unit 写法：
 

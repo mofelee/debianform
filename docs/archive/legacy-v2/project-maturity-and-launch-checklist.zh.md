@@ -51,7 +51,7 @@
 
 - [x] 支持的 Debian 版本已在 README 中说明。
 - [x] 目标主机架构优先级已在 README 中说明。
-- [x] CLI 运行平台和目标主机平台已在 README 与 [release process](release-process.zh.md) 中区分。
+- [x] CLI 运行平台和目标主机平台已在 README 与 [release process](../../release-process.zh.md) 中区分。
 - [x] v2 可运行示例已在 README 中列出。
 - [x] `examples/v2-fleet.dbf.hcl` 已标记为 design-only fixture。
 - [x] 可运行示例有 validate 测试覆盖。
@@ -76,8 +76,8 @@
 - [x] `LICENSE` 存在。
 - [x] `CHANGELOG.md` 存在。
 - [x] `SECURITY.md` 存在。
-- [x] [release process](release-process.zh.md) 存在。
-- [x] [release quick runbook](release-quick-runbook.zh.md) 存在。
+- [x] [release process](../../release-process.zh.md) 存在。
+- [x] [release quick runbook](../../release-quick-runbook.zh.md) 存在。
 - [x] `.goreleaser.yaml` 覆盖 Linux/macOS amd64/arm64。
 - [x] release tarball 包含 `dbf`、README、docs、examples、LICENSE 和 CHANGELOG。
 - [x] release workflow 会生成 `checksums.txt`。
@@ -108,15 +108,15 @@
 - [x] README 说明 checksum 校验。
 - [x] README 说明 cosign keyless bundle 校验。
 - [x] README 说明 GitHub provenance attestation 校验。
-- [x] [v2 state](v2-state.md) 说明 state 保存哪些字段。
-- [x] [v2 state](v2-state.md) 说明 secret content、sensitive input、SSH 私钥、命令日志和 lock lease 不写入 state。
-- [x] [v2 plan format](v2-plan-format.md) 说明 sensitive diff 不输出明文。
+- [x] [v2 state](../../state.md) 说明 state 保存哪些字段。
+- [x] [v2 state](../../state.md) 说明 secret content、sensitive input、SSH 私钥、命令日志和 lock lease 不写入 state。
+- [x] [v2 plan format](../../plan-format.md) 说明 sensitive diff 不输出明文。
 - [x] README 说明远程 URL artifact 必须声明 64 位 sha256。
 - [x] WireGuard integration checks 覆盖 private key 不写入 state 明文。
 - [x] 增加 `govulncheck` 或等价依赖漏洞扫描。
 - [x] 增加 Dependabot/Renovate 或等价依赖更新策略。
 - [x] README 说明 root-only SSH 执行模型，不支持 sudo/become/非 root 管理连接。
-- [x] [CLI 文档](cli.zh.md) 说明 root-only SSH 执行模型。
+- [x] [CLI 文档](../../cli.zh.md) 说明 root-only SSH 执行模型。
 - [x] [v2 requirements](v2-requirements.md) 说明 root-only 权限边界。
 - [x] 增加覆盖 text/json/html plan、stdout/stderr、state 的集中式 secret redaction 回归矩阵。
 
@@ -127,10 +127,10 @@
 - [x] README 包含升级和回滚说明。
 - [x] README 包含 `dbf version` 安装验证。
 - [x] README 包含 validate、offline plan、json plan、html plan、apply、check 的基础示例。
-- [x] [CLI 文档](cli.zh.md) 说明 `validate`、`plan`、`apply`、`check`、`fmt`、`variable inspect`、`component inspect` 和 version。
-- [x] [CLI 文档](cli.zh.md) 说明 `--host`、`--parallel` 和 `--lock-timeout`。
-- [x] [v2 state](v2-state.md) 说明 state path、lock path、ownership、lock 和 atomic write。
-- [x] [release quick runbook](release-quick-runbook.zh.md) 说明发布前、发布中、发布后和回滚流程。
+- [x] [CLI 文档](../../cli.zh.md) 说明 `validate`、`plan`、`apply`、`check`、`fmt`、`variable inspect`、`component inspect` 和 version。
+- [x] [CLI 文档](../../cli.zh.md) 说明 `--host`、`--parallel` 和 `--lock-timeout`。
+- [x] [v2 state](../../state.md) 说明 state path、lock path、ownership、lock 和 atomic write。
+- [x] [release quick runbook](../../release-quick-runbook.zh.md) 说明发布前、发布中、发布后和回滚流程。
 - [x] 新增独立 quickstart，覆盖准备 SSH 用户、写第一份配置、validate、在线 plan、apply、check。
 - [x] 新增 operations/runbook，覆盖 stale lock、apply 中途失败、state 与远端不一致、资源移除和恢复步骤。
 - [x] 新增常见故障排查文档，使用真实错误信息和修复步骤。
@@ -233,16 +233,16 @@
 ### 文档成熟度
 
 - [x] README 覆盖项目定位、安装、升级、校验、示例、基础命令和集成测试入口。
-- [x] [CLI 文档](cli.zh.md) 覆盖主要命令和参数。
+- [x] [CLI 文档](../../cli.zh.md) 覆盖主要命令和参数。
 - [x] [v2 requirements](v2-requirements.md) 和相关设计文档存在。
-- [x] [v2 state](v2-state.md) 文档存在。
-- [x] [v2 plan format](v2-plan-format.md) 文档存在。
-- [x] [support matrix](support-matrix.zh.md) 文档存在。
-- [x] [security model](security-model.zh.md) 文档存在。
-- [x] [apt repository feasibility](apt-repository-feasibility.zh.md) 文档存在。
-- [x] [platform support strategy](platform-support-strategy.zh.md) 文档存在。
-- [x] [Linux Homebrew verification policy](linux-homebrew-verification-policy.zh.md) 文档存在。
-- [x] [beta feedback and triage](beta-feedback-triage.zh.md) 文档存在。
+- [x] [v2 state](../../state.md) 文档存在。
+- [x] [v2 plan format](../../plan-format.md) 文档存在。
+- [x] [support matrix](../../support-matrix.zh.md) 文档存在。
+- [x] [security model](../../security-model.zh.md) 文档存在。
+- [x] [apt repository feasibility](../../apt-repository-feasibility.zh.md) 文档存在。
+- [x] [platform support strategy](../../platform-support-strategy.zh.md) 文档存在。
+- [x] [Linux Homebrew verification policy](../../linux-homebrew-verification-policy.zh.md) 文档存在。
+- [x] [beta feedback and triage](../../beta-feedback-triage.zh.md) 文档存在。
 - [x] 发布流程、自动化计划和快速操作手册存在。
 - [x] 面向新用户的一页 quickstart 已独立成文。
 - [x] 面向运维恢复的 runbook 已覆盖 stale lock、失败 apply、drift、资源移除和常见错误恢复。

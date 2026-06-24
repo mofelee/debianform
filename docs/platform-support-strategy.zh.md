@@ -107,7 +107,7 @@ Beta 降级为 Preview 的条件：
 - 真实用户反馈显示平台存在高风险缺陷。
 - 上游平台或依赖发生变化，导致维护成本或安全风险不可接受。
 
-Unsupported 提升到 Preview 必须先有独立需求文档或 implementation plan，不能只在 README 中增加承诺。
+Unsupported 提升到 Preview 必须先有独立设计或实现记录，不能只在 README 中增加承诺。
 
 ## Release Notes 要求
 
@@ -130,7 +130,7 @@ manual/best-effort
 
 ### Loop A: Debian 12 amd64 preview case
 
-目标：增加 Debian 12 amd64 libvirt 或真实主机 case，验证基础 v2 flow。
+目标：增加 Debian 12 amd64 libvirt 或真实主机 case，验证基础配置闭环。
 
 验收：
 

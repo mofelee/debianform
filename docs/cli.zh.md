@@ -2,8 +2,7 @@
 
 本文档说明 `dbf` 命令行工具的主要功能、可用选项和常见用法。
 
-`dbf` 读取 v2 `.dbf.hcl` 配置文件，用于校验、预览、应用和检查 Debian 主机配置。
-当前 CLI 入口只面向 v2 配置格式。
+`dbf` 读取 `.dbf.hcl` 配置文件，用于校验、预览、应用和检查 Debian 主机配置。
 
 第一次使用建议先走 [quickstart](quickstart.zh.md)，它覆盖准备 root SSH 测试主机、
 写第一份配置、`validate`、在线 `plan`、`apply`、再次 `plan` no-op 和 `check`。
@@ -52,7 +51,7 @@ dbf help
 
 ## validate
 
-`validate` 在本地解析 v2 配置、合并 profile/host/component，并校验生成的 HostSpec。
+`validate` 在本地解析配置、合并 profile/host/component，并校验生成的 HostSpec。
 它不会连接远端主机，适合在提交前或 CI 中做基础配置检查。
 
 ```bash
@@ -117,7 +116,7 @@ dbf plan -f examples/v2-bbr.dbf.hcl --format json --debug --offline
 | --- | --- | --- |
 | `-f file` | 当前目录所有 `*.dbf.hcl` | 可重复；只读取显式指定的文件。 |
 | `--host name` | 空 | 只为指定 host 生成 plan。 |
-| `--format text\|json` | `text` | 输出文本或 JSON。JSON 格式见 `v2-plan-format.md`。 |
+| `--format text\|json` | `text` | 输出文本或 JSON。JSON 格式见 [plan format](plan-format.md)。 |
 | `--html file` | 空 | 将 plan 写成静态 HTML 文件。只能用于 `plan`，且不能和 `--format json` 同时使用。 |
 | `--debug` | `false` | 在 plan 输出中显示内部 provider address。只能用于 `plan`。 |
 | `--offline` | `false` | 不进行 SSH、state 和 runtime facts 探测，只做本地 plan 预览。只能用于 `plan`。 |
@@ -194,6 +193,8 @@ dbf check -f examples/v2-bbr.dbf.hcl --host bbr1
 ```text
 dbf: remote state does not match v2 configuration
 ```
+
+当前错误文本仍保留历史格式名；语义是远端状态和当前配置不一致。
 
 `check` 不支持 `--offline`，因为它必须读取远端事实和状态。
 

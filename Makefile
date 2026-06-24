@@ -25,8 +25,8 @@ install: build
 	$(INSTALL) -d "$(DESTDIR)$(BINDIR)" "$(DESTDIR)$(DATADIR)/docs" "$(DESTDIR)$(DATADIR)/examples"
 	$(INSTALL) -m 0755 "$(BINARY)" "$(DESTDIR)$(BINDIR)/dbf"
 	$(INSTALL) -m 0644 README.md "$(DESTDIR)$(DATADIR)/README.md"
-	$(INSTALL) -m 0644 docs/*.md "$(DESTDIR)$(DATADIR)/docs/"
-	$(INSTALL) -m 0644 examples/*.dbf.hcl "$(DESTDIR)$(DATADIR)/examples/"
+	cp -R docs/. "$(DESTDIR)$(DATADIR)/docs/"
+	cp -R examples/. "$(DESTDIR)$(DATADIR)/examples/"
 
 test:
 	go test ./...

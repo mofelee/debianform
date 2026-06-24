@@ -1,13 +1,13 @@
-# DebianForm v2 Plan Format
+# DebianForm Plan Format
 
-本文档定义 v2 `dbf plan --format json` 的当前 alpha 格式。它也是终端树状 diff 和
+本文档定义 `dbf plan --format json` 的当前 alpha 格式。它也是终端树状 diff 和
 `dbf plan --html plan.html` 静态 preview 的输入模型。
 格式版本兼容性、破坏性变更规则和消费者建议见
 [compatibility policy](compatibility-policy.zh.md)。
 
-v2 plan format 的目标：
+plan format 的目标：
 
-- 稳定表达用户层 v2 地址。
+- 稳定表达用户层地址。
 - 保留字段级结构化 diff。
 - 支持文本内容行级 diff。
 - 不泄露 sensitive 明文。
@@ -85,7 +85,7 @@ run
 
 要求：
 
-- `address` 使用用户可理解的稳定 v2 地址。
+- `address` 使用用户可理解的稳定地址。
 - `provider_address` 只在 `dbf plan --debug` 时输出；普通 JSON、终端和 HTML 输出省略。
 - `source` 指向用户 DSL 的来源位置。
 - `diff` 使用 `DiffNode`。

@@ -25,7 +25,7 @@ CLI 发布产物覆盖：
 | macOS | amd64 | `dbf_<tag>_darwin_amd64.tar.gz` |
 | macOS | arm64 | `dbf_<tag>_darwin_arm64.tar.gz` |
 
-目标主机支持优先级仍以 Debian 13 为第一目标。目标主机架构优先级由 v2 runtime facts
+目标主机支持优先级仍以 Debian 13 为第一目标。目标主机架构优先级由 runtime facts
 和集成测试覆盖决定，不等同于 CLI 运行平台支持矩阵。更完整的 Debian 版本和架构策略见
 [platform support strategy](platform-support-strategy.zh.md)。
 

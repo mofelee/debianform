@@ -1,6 +1,6 @@
 # DebianForm 支持矩阵
 
-本文档把 DebianForm 当前可承诺的 CLI 平台、目标主机、v2 DSL block、domain/resource 类型和
+本文档把 DebianForm 当前可承诺的 CLI 平台、目标主机、配置 block、domain/resource 类型和
 验证覆盖放在一处。项目仍处于 public preview / beta 阶段；这里的“支持”表示当前仓库中存在实现、
 文档和自动化验证入口，不等同于 stable/GA 兼容性承诺。
 DSL、CLI、state schema 和 plan JSON 的具体兼容规则见
@@ -50,7 +50,7 @@ Linux Homebrew best-effort 规则见
 | `dbf variable inspect` | Beta | variable API JSON 输出覆盖。 |
 | `dbf version` / `--version` | Beta | release metadata 和 CLI 单测覆盖。 |
 
-## v2 顶层 DSL
+## 顶层配置 Block
 
 | Block | 当前状态 | 说明 |
 | --- | --- | --- |
@@ -58,7 +58,7 @@ Linux Homebrew best-effort 规则见
 | `locals` | Beta | 支持本地表达式和值复用。 |
 | `profile` | Beta | 支持 imports、domain block 和 assert；用于 host 配置复用。 |
 | `component` | Beta | 支持 binary/file/archive/ca_certificate/source artifact，以及 typed input 和 validation。 |
-| `host` | Beta | 当前唯一主线入口；承载 SSH、state、system 和各领域 block。 |
+| `host` | Beta | 当前主入口；承载 SSH、state、system 和各领域 block。 |
 
 ## Host Domain Blocks
 
