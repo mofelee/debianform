@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -94,6 +95,29 @@ func TestVersionFlag(t *testing.T) {
 
 	if lines := strings.Count(strings.TrimSpace(output), "\n") + 1; lines != 1 {
 		t.Fatalf("--version output has %d lines, want 1: %q", lines, output)
+	}
+}
+
+func TestHelpDocumentsImplementedFlags(t *testing.T) {
+	for _, command := range [][]string{{"help"}, {"--help"}, {"-h"}} {
+		command := command
+		t.Run(strings.Join(command, " "), func(t *testing.T) {
+			output := captureStdout(t, func() {
+				if err := run(command); err != nil {
+					t.Fatal(err)
+				}
+			})
+			for _, want := range []string{
+				"dbf validate [-f file ...] [-var name=value] [-var-file path] [--host name]",
+				"dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--offline]",
+				"dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--parallel n] [--lock-timeout duration] [--auto-approve]",
+				"dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--lock-timeout duration]",
+			} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("help output does not contain %q:\n%s", want, output)
+				}
+			}
+		})
 	}
 }
 
@@ -1289,6 +1313,13 @@ func TestREADMELocalCommandsAreCopyRunnable(t *testing.T) {
 		args []string
 	}{
 		{name: "validate-bbr", args: []string{"validate", "-f", "../../examples/v2-bbr.dbf.hcl"}},
+		{name: "validate-vars", args: []string{
+			"validate", "-f", "../../internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl",
+			"-var-file", "../../internal/v2/testdata/fixtures/v2-variable-prod.dbfvars",
+			"-var", "environment=staging",
+		}},
+		{name: "validate-realistic-systemd-app", args: []string{"validate", "-f", "../../examples/v2-realistic-systemd-app.dbf.hcl"}},
+		{name: "plan-realistic-systemd-app-offline", args: []string{"plan", "-f", "../../examples/v2-realistic-systemd-app.dbf.hcl", "--offline"}},
 		{name: "plan-bbr-offline", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"}},
 		{name: "plan-bbr-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--offline"}},
 		{name: "plan-bbr-debug-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}},
@@ -1305,6 +1336,230 @@ func TestREADMELocalCommandsAreCopyRunnable(t *testing.T) {
 					t.Fatal(err)
 				}
 			})
+		})
+	}
+}
+
+func TestDSLReferenceMarkedExamplesAreRunnable(t *testing.T) {
+	doc, err := os.ReadFile("../../docs/dsl-reference.zh.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	examples := extractDBFDocExamples(t, string(doc))
+	if len(examples) == 0 {
+		t.Fatal("no dbf-test examples found in docs/dsl-reference.zh.md")
+	}
+	for _, example := range examples {
+		t.Run(example.Name, func(t *testing.T) {
+			dir := t.TempDir()
+			config := filepath.Join(dir, "site.dbf.hcl")
+			writeTestFile(t, config, example.HCL)
+			for _, fixture := range example.Files {
+				switch fixture {
+				case "token.txt":
+					writeTestFile(t, filepath.Join(dir, fixture), "not-a-real-secret-token\n")
+				case "local-source.txt":
+					writeTestFile(t, filepath.Join(dir, fixture), "local source file\n")
+				case "template.txt":
+					writeTestFile(t, filepath.Join(dir, fixture), "message=${message}\n")
+				default:
+					t.Fatalf("unknown doc fixture %q", fixture)
+				}
+			}
+			for _, command := range example.Commands {
+				args := []string{}
+				switch command {
+				case "validate":
+					args = []string{"validate", "-f", config}
+				case "plan-offline":
+					args = []string{"plan", "-f", config, "--offline"}
+				case "variable-inspect":
+					args = []string{"variable", "inspect", "-f", config}
+				default:
+					if componentName, ok := strings.CutPrefix(command, "component-inspect:"); ok && componentName != "" {
+						args = []string{"component", "inspect", "-f", config, componentName}
+					} else {
+						t.Fatalf("unknown doc example command %q", command)
+					}
+				}
+				captureOutput(t, func() {
+					if err := run(args); err != nil {
+						t.Fatal(err)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestUserDocsHCLExamplesAreRunnable(t *testing.T) {
+	docs := []string{
+		"quickstart.zh.md",
+		"user-manual/01-first-apply.zh.md",
+		"user-manual/02-files-and-drift.zh.md",
+		"user-manual/03-users-and-ssh-keys.zh.md",
+		"user-manual/04-apt-and-packages.zh.md",
+		"user-manual/05-systemd-service.zh.md",
+		"user-manual/06-kernel-and-sysctl.zh.md",
+		"user-manual/07-nftables.zh.md",
+		"user-manual/08-docker-engine.zh.md",
+		"user-manual/09-docker-compose.zh.md",
+		"user-manual/11-components.zh.md",
+		"user-manual/12-operations.zh.md",
+	}
+	for _, docPath := range docs {
+		t.Run(docPath, func(t *testing.T) {
+			config := firstRunnableHCLBlock(t, "../../docs/"+docPath)
+			runDocConfigLocalChecks(t, config)
+		})
+	}
+}
+
+func TestUserDocsVariableExamplesAreRunnable(t *testing.T) {
+	blocks := hclCodeBlocksFromFile(t, "../../docs/user-manual/10-profiles-and-variables.zh.md")
+	if len(blocks) < 3 {
+		t.Fatalf("profiles-and-variables doc has %d hcl blocks, want at least 3", len(blocks))
+	}
+	dir := t.TempDir()
+	config := filepath.Join(dir, "site.dbf.hcl")
+	devVars := filepath.Join(dir, "dev.dbfvars")
+	prodVars := filepath.Join(dir, "prod.dbfvars")
+	writeTestFile(t, config, blocks[0])
+	writeTestFile(t, devVars, blocks[1])
+	writeTestFile(t, prodVars, blocks[2])
+
+	commands := [][]string{
+		{"validate", "-f", config},
+		{"plan", "-f", config, "--offline"},
+		{"variable", "inspect", "-f", config, "-var-file", prodVars},
+		{"plan", "-f", config, "--offline", "-var-file", devVars},
+		{"plan", "-f", config, "--offline", "-var-file", prodVars},
+		{"validate", "-f", config, "-var-file", prodVars},
+		{"plan", "-f", config, "--offline", "-var-file", prodVars, "-var", "owner=release-team"},
+	}
+	for _, args := range commands {
+		args := args
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			captureOutput(t, func() {
+				if err := run(args); err != nil {
+					t.Fatal(err)
+				}
+			})
+		})
+	}
+
+	err := run([]string{"validate", "-f", config, "-var", "environment=qa"})
+	if err == nil || !strings.Contains(err.Error(), `validation failed for variable "environment"`) {
+		t.Fatalf("invalid environment validate error = %v, want validation failure", err)
+	}
+}
+
+func TestReferenceDocsHCLExamplesAreRunnable(t *testing.T) {
+	docs := []struct {
+		path       string
+		wrapDomain bool
+	}{
+		{path: "../../docs/state.md"},
+		{path: "../../docs/operations-runbook.zh.md"},
+		{path: "../../docs/systemd-service-units.md", wrapDomain: true},
+	}
+	for _, doc := range docs {
+		blocks := hclCodeBlocksFromFile(t, doc.path)
+		if len(blocks) == 0 {
+			t.Fatalf("%s has no hcl blocks", doc.path)
+		}
+		for i, block := range blocks {
+			t.Run(filepath.Base(doc.path)+"/block-"+strconv.Itoa(i), func(t *testing.T) {
+				if doc.wrapDomain {
+					block = "host \"doc_example\" {\n" + indentHCL(block, "  ") + "}\n"
+				}
+				runDocConfigLocalChecks(t, block)
+			})
+		}
+	}
+}
+
+func TestCLIDocLocalCommandExamplesAreRunnable(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.dbf.hcl")
+	app := filepath.Join(dir, "app.dbf.hcl")
+	fmtFixture := filepath.Join(dir, "fmt.dbf.hcl")
+	writeTestFile(t, base, `
+profile "base" {
+  packages {
+    install = ["curl"]
+  }
+}
+`)
+	writeTestFile(t, app, `
+host "app" {
+  imports = [profile.base]
+}
+`)
+	writeTestFile(t, fmtFixture, `
+host "fmt1" {
+files {
+file "/tmp/fmt" {
+content = "fmt"
+}
+}
+}
+`)
+
+	htmlPath := filepath.Join(dir, "plan.html")
+	commands := []struct {
+		name string
+		args []string
+	}{
+		{name: "validate-explicit", args: []string{"validate", "-f", "../../examples/v2-bbr.dbf.hcl"}},
+		{name: "validate-repeated", args: []string{"validate", "-f", base, "-f", app}},
+		{name: "validate-host", args: []string{"validate", "-f", "../../examples/v2-bird2.dbf.hcl", "--host", "router1"}},
+		{name: "validate-vars", args: []string{
+			"validate", "-f", "../../internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl",
+			"-var-file", "../../internal/v2/testdata/fixtures/v2-variable-prod.dbfvars",
+			"-var", "environment=staging",
+		}},
+		{name: "plan-offline", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"}},
+		{name: "plan-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--offline"}},
+		{name: "plan-html", args: []string{"plan", "-f", "../../examples/v2-files-plan-preview.dbf.hcl", "--html", htmlPath, "--offline"}},
+		{name: "plan-debug-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}},
+		{name: "fmt-explicit", args: []string{"fmt", "-f", fmtFixture}},
+		{name: "component-inspect", args: []string{"component", "inspect", "-f", "../../examples/v2-component-inputs.dbf.hcl", "reverse_proxy"}},
+		{name: "variable-inspect", args: []string{"variable", "inspect", "-f", "../../examples/v2-variable-secret-file.dbf.hcl"}},
+		{name: "version", args: []string{"version"}},
+		{name: "version-flag", args: []string{"--version"}},
+		{name: "version-short-flag", args: []string{"-version"}},
+		{name: "help", args: []string{"help"}},
+		{name: "help-flag", args: []string{"--help"}},
+		{name: "help-short-flag", args: []string{"-h"}},
+	}
+	for _, command := range commands {
+		command := command
+		t.Run(command.name, func(t *testing.T) {
+			captureOutput(t, func() {
+				if err := run(command.args); err != nil {
+					t.Fatal(err)
+				}
+			})
+		})
+	}
+
+	invalidCommands := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "plan-parallel", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--parallel", "2"}, want: "--parallel is only supported for v2 apply"},
+		{name: "check-offline", args: []string{"check", "-f", "../../examples/v2-bbr.dbf.hcl", "--offline"}, want: "--offline is only supported for v2 plan"},
+		{name: "html-json", args: []string{"plan", "-f", "../../examples/v2-bbr.dbf.hcl", "--html", filepath.Join(dir, "bad.html"), "--format", "json"}, want: "--html cannot be combined with --format"},
+	}
+	for _, command := range invalidCommands {
+		command := command
+		t.Run(command.name, func(t *testing.T) {
+			err := run(command.args)
+			if err == nil || !strings.Contains(err.Error(), command.want) {
+				t.Fatalf("run(%v) error = %v, want %q", command.args, err, command.want)
+			}
 		})
 	}
 }
@@ -1430,6 +1685,153 @@ func runnableV2Examples() []string {
 		"examples/v2-user-group.dbf.hcl",
 		"examples/v2-variable-secret-file.dbf.hcl",
 	}
+}
+
+type dbfDocExample struct {
+	Name     string
+	Commands []string
+	Files    []string
+	HCL      string
+}
+
+func extractDBFDocExamples(t *testing.T, doc string) []dbfDocExample {
+	t.Helper()
+	lines := strings.Split(doc, "\n")
+	examples := []dbfDocExample{}
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if !strings.HasPrefix(line, "<!-- dbf-test:") {
+			continue
+		}
+		meta := strings.TrimSuffix(strings.TrimPrefix(line, "<!-- dbf-test:"), " -->")
+		example := dbfDocExample{Name: "example"}
+		for _, part := range strings.Split(meta, ";") {
+			key, value, ok := strings.Cut(strings.TrimSpace(part), "=")
+			if !ok {
+				t.Fatalf("invalid dbf-test metadata %q", part)
+			}
+			values := splitCSV(value)
+			switch key {
+			case "name":
+				if len(values) != 1 || values[0] == "" {
+					t.Fatalf("invalid dbf-test name %q", value)
+				}
+				example.Name = values[0]
+			case "commands":
+				example.Commands = values
+			case "files":
+				example.Files = values
+			default:
+				t.Fatalf("unknown dbf-test metadata key %q", key)
+			}
+		}
+		i++
+		for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+			i++
+		}
+		if i >= len(lines) || strings.TrimSpace(lines[i]) != "```hcl" {
+			t.Fatalf("dbf-test %q must be followed by an hcl code block", example.Name)
+		}
+		i++
+		var hcl strings.Builder
+		for i < len(lines) && strings.TrimSpace(lines[i]) != "```" {
+			hcl.WriteString(lines[i])
+			hcl.WriteByte('\n')
+			i++
+		}
+		if i >= len(lines) {
+			t.Fatalf("dbf-test %q hcl block is not closed", example.Name)
+		}
+		example.HCL = hcl.String()
+		if len(example.Commands) == 0 {
+			t.Fatalf("dbf-test %q has no commands", example.Name)
+		}
+		examples = append(examples, example)
+	}
+	return examples
+}
+
+func splitCSV(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func firstRunnableHCLBlock(t *testing.T, path string) string {
+	t.Helper()
+	for _, block := range hclCodeBlocksFromFile(t, path) {
+		if strings.Contains(block, `host "`) {
+			return block
+		}
+	}
+	t.Fatalf("%s has no hcl block containing a host", path)
+	return ""
+}
+
+func hclCodeBlocksFromFile(t *testing.T, path string) []string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(string(data), "\n")
+	blocks := []string{}
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) != "```hcl" {
+			continue
+		}
+		i++
+		var hcl strings.Builder
+		for i < len(lines) && strings.TrimSpace(lines[i]) != "```" {
+			hcl.WriteString(lines[i])
+			hcl.WriteByte('\n')
+			i++
+		}
+		if i >= len(lines) {
+			t.Fatalf("%s has an unclosed hcl block", path)
+		}
+		blocks = append(blocks, hcl.String())
+	}
+	return blocks
+}
+
+func runDocConfigLocalChecks(t *testing.T, hcl string) {
+	t.Helper()
+	dir := t.TempDir()
+	config := filepath.Join(dir, "site.dbf.hcl")
+	writeTestFile(t, config, hcl)
+	for _, args := range [][]string{
+		{"validate", "-f", config},
+		{"plan", "-f", config, "--offline"},
+	} {
+		args := args
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			captureOutput(t, func() {
+				if err := run(args); err != nil {
+					t.Fatal(err)
+				}
+			})
+		})
+	}
+}
+
+func indentHCL(hcl string, prefix string) string {
+	lines := strings.Split(hcl, "\n")
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = prefix + line
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func captureStdout(t *testing.T, fn func()) string {

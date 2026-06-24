@@ -3,6 +3,8 @@
 本文档把 DebianForm 当前可承诺的 CLI 平台、目标主机、配置 block、domain/resource 类型和
 验证覆盖放在一处。项目仍处于 public preview / beta 阶段；这里的“支持”表示当前仓库中存在实现、
 文档和自动化验证入口，不等同于 stable/GA 兼容性承诺。
+每个已实现 DSL 指令的字段、默认值、限制和可测试示例见
+[DSL reference](dsl-reference.zh.md)。
 DSL、CLI、state schema 和 plan JSON 的具体兼容规则见
 [compatibility policy](compatibility-policy.zh.md)。
 root-only SSH、权限边界、secret 处理和漏洞响应见
@@ -54,7 +56,7 @@ Linux Homebrew best-effort 规则见
 
 | Block | 当前状态 | 说明 |
 | --- | --- | --- |
-| `variable` | Beta | 支持 type/default/description/nullable/sensitive/ephemeral/const/deprecated 和 validation。 |
+| `variable` | Beta | 支持 type/default/description/nullable/sensitive/ephemeral/deprecated/validation；`const` 当前作为 metadata 输出。 |
 | `locals` | Beta | 支持本地表达式和值复用。 |
 | `profile` | Beta | 支持 imports、domain block 和 assert；用于 host 配置复用。 |
 | `component` | Beta | 支持 binary/file/archive/ca_certificate/source artifact，以及 typed input 和 validation。 |

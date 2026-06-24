@@ -25,10 +25,10 @@ deprecated component input 会输出 warning，但 warning 本身不会改变退
 ## 命令总览
 
 ```text
-dbf validate [-f file ...] [--host name]
-dbf plan     [-f file ...] [--host name] [--format text|json] [--html file] [--debug] [--offline]
-dbf apply    [-f file ...] [--host name] [--parallel n] [--lock-timeout duration] [--auto-approve]
-dbf check    [-f file ...] [--host name] [--lock-timeout duration]
+dbf validate [-f file ...] [-var name=value] [-var-file path] [--host name]
+dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--offline]
+dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--parallel n] [--lock-timeout duration] [--auto-approve]
+dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--lock-timeout duration]
 dbf fmt      [-f file ...]
 dbf variable inspect [-f file ...] [-var name=value] [-var-file path]
 dbf component inspect [-f file ...] component_name
@@ -46,8 +46,26 @@ dbf help
 | --- | --- | --- |
 | `-f file` | `validate`、`plan`、`apply`、`check`、`fmt`、`variable inspect`、`component inspect` | 可重复。传入一个或多个 `-f` 时，只读取显式指定的文件；不传时读取当前目录所有 `*.dbf.hcl`。 |
 | `--host name` | `validate`、`plan`、`apply`、`check` | 只处理指定 host。host 不存在时命令失败。 |
+| `-var name=value` | `validate`、`plan`、`apply`、`check`、`variable inspect` | 可重复；设置顶层 `variable` 的值。 |
+| `-var-file path` | `validate`、`plan`、`apply`、`check`、`variable inspect` | 可重复；从 `.dbfvars` 或 `.dbfvars.json` 文件加载变量值。 |
 
 `-f` 不会读取目录，也不会自动加载同目录的其他 `.dbf.hcl` 文件；它表示“精确使用这些显式指定的文件”，并按命令行出现顺序解析。
+
+变量值来源按低到高优先级合并：
+
+1. 环境变量 `DBF_VAR_name=value`。未知变量会被忽略，便于共享 shell 环境。
+2. 配置文件同目录的 `debianform.dbfvars`、`debianform.dbfvars.json`。
+3. 配置文件同目录按文件名排序的 `*.auto.dbfvars`、`*.auto.dbfvars.json`。
+4. 命令行中按顺序出现的 `-var-file path`。
+5. 命令行中按顺序出现的 `-var name=value`。
+
+后面的来源会覆盖前面的同名变量。自动变量文件要求本次加载的配置文件都来自同一目录；如果使用
+多个不同目录的 `-f`，请显式传 `-var-file`。
+
+`-var` 的 `value` 按变量类型解析：`string` 保留原始字符串，`number`、`bool`、`list`、`map`、
+`object`、`tuple` 等类型使用 HCL/JSON 字面值。对已声明为 `sensitive = true` 的变量，
+`-var token=@path` 会从文件读取，`-var token=@-` 会从 stdin 读取，
+`-var token=env:NAME` 会从环境变量读取；错误信息和 plan/state 不会泄露敏感来源和值。
 
 `host "<name>"` 默认通过 `ssh <name>` 连接，管理用户为 root。推荐把 `HostName`、
 `User`、`IdentityFile`、`ProxyJump`、端口等连接细节放在 `~/.ssh/config`。只有需要在
@@ -69,6 +87,9 @@ dbf help
 dbf validate
 dbf validate -f examples/v2-bbr.dbf.hcl
 dbf validate -f examples/v2-bird2.dbf.hcl --host router1
+dbf validate -f internal/v2/testdata/fixtures/v2-variable-cli.dbf.hcl \
+  -var-file internal/v2/testdata/fixtures/v2-variable-prod.dbfvars \
+  -var environment=staging
 ```
 
 成功时输出类似：
@@ -83,6 +104,8 @@ v2 configuration is valid: 1 host(s)
 | --- | --- |
 | `-f file` | 可重复；只读取显式指定的文件。 |
 | `--host name` | 只校验指定 host。 |
+| `-var name=value` | 可重复；设置顶层变量。 |
+| `-var-file path` | 可重复；加载变量文件。 |
 
 ## plan
 
@@ -128,9 +151,11 @@ dbf plan -f examples/v2-bbr.dbf.hcl --format json --debug --offline
 | `-f file` | 当前目录所有 `*.dbf.hcl` | 可重复；只读取显式指定的文件。 |
 | `--host name` | 空 | 只为指定 host 生成 plan。 |
 | `--format text\|json` | `text` | 输出文本或 JSON。JSON 格式见 [plan format](plan-format.md)。 |
-| `--html file` | 空 | 将 plan 写成静态 HTML 文件。只能用于 `plan`，且不能和 `--format json` 同时使用。 |
+| `--html file` | 空 | 将 plan 写成静态 HTML 文件。只能用于 `plan`，且不能和显式 `--format` 同时使用。 |
 | `--debug` | `false` | 在 plan 输出中显示内部 provider address。只能用于 `plan`。 |
 | `--offline` | `false` | 不进行 SSH、state 和 runtime facts 探测，只做本地 plan 预览。只能用于 `plan`。 |
+| `-var name=value` | 空 | 可重复；设置顶层变量。 |
+| `-var-file path` | 空 | 可重复；加载变量文件。 |
 
 注意事项：
 
@@ -177,6 +202,8 @@ dbf apply --parallel 4 --auto-approve
 | `--parallel n` | `1` | 最多同时 apply 的 host 数量；必须大于等于 1，只能用于 `apply`。 |
 | `--lock-timeout duration` | `5m` | 等待远端 state lock 的最长时间。使用 Go duration 格式，例如 `30s`、`2m`、`10m`。 |
 | `--auto-approve` | `false` | 跳过交互确认。 |
+| `-var name=value` | 空 | 可重复；设置顶层变量。 |
+| `-var-file path` | 空 | 可重复；加载变量文件。 |
 
 如果 plan 没有任何变更和 operation，`apply` 会输出 plan 后直接结束，不会执行确认步骤。
 每台 host 内部仍按 ResourceGraph 的确定性顺序串行执行。
@@ -197,6 +224,8 @@ dbf check -f examples/v2-bbr.dbf.hcl --host bbr1
 | `-f file` | 当前目录所有 `*.dbf.hcl` | 可重复；只读取显式指定的文件。 |
 | `--host name` | 空 | 只检查指定 host。 |
 | `--lock-timeout duration` | `5m` | 等待远端 state lock 的最长时间。 |
+| `-var name=value` | 空 | 可重复；设置顶层变量。 |
+| `-var-file path` | 空 | 可重复；加载变量文件。 |
 
 当远端状态与配置不一致，存在 create、update、delete、destroy 或 operation 时，
 `check` 返回非零退出码，并输出：
@@ -347,7 +376,7 @@ dbf -h
 | 选项 | 仅适用命令 | 说明 |
 | --- | --- | --- |
 | `--format` | `plan` | `validate`、`apply`、`check` 不支持结构化输出。 |
-| `--html` | `plan` | 不能和 `--format json` 同时使用。 |
+| `--html` | `plan` | 不能和显式 `--format` 同时使用。 |
 | `--debug` | `plan` | 用于 plan 调试输出。 |
 | `--offline` | `plan` | 离线 plan 预览。 |
 | `--parallel` | `apply` | 控制多 host apply 并发。 |

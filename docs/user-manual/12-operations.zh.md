@@ -93,7 +93,7 @@ test -s plan.html
 wrote HTML plan to plan.html
 ```
 
-HTML plan 适合在变更评审里作为附件打开。`--html` 只支持 `dbf plan`，不能和 `--format json` 同时使用。
+HTML plan 适合在变更评审里作为附件打开。`--html` 只支持 `dbf plan`，不能和显式 `--format` 同时使用。
 
 ## 执行 apply
 

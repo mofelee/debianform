@@ -815,10 +815,10 @@ func usage() {
 	fmt.Println(`dbf manages Debian hosts from .dbf.hcl files.
 
 Usage:
-  dbf validate [-f file ...] [-var name=value] [-var-file path]
-  dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug]
-  dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--parallel n] [--auto-approve]
-  dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name]
+  dbf validate [-f file ...] [-var name=value] [-var-file path] [--host name]
+  dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--offline]
+  dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--parallel n] [--lock-timeout duration] [--auto-approve]
+  dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--lock-timeout duration]
   dbf variable inspect [-f file ...] [-var name=value] [-var-file path]
   dbf component inspect [-f file ...] name
   dbf fmt      [-f file ...]

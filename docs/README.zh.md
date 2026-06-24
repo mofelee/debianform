@@ -8,11 +8,12 @@
 - [Quickstart](quickstart.zh.md)：从安装到第一次 `apply/check` 的最短路径。
 - [用户手册](user-manual/README.zh.md)：由浅入深的可运行教程，覆盖常见运维任务。
 - [CLI 手册](cli.zh.md)：`validate`、`plan`、`apply`、`check`、`fmt` 和 inspect 命令。
+- [DSL Reference](dsl-reference.zh.md)：`.dbf.hcl` 已实现指令、字段、默认值、限制和可测试示例。
 - [真实部署模板](realistic-deployment-example.zh.md)：一个低权限 systemd app 的完整小例子。
 
 ## 日常查阅
 
-- [支持矩阵](support-matrix.zh.md)：当前支持的平台、配置 block、resource 类型和示例。
+- [支持矩阵](support-matrix.zh.md)：当前支持的平台、配置 block、resource 类型和示例状态。
 - [安全模型](security-model.zh.md)：root SSH、secret 脱敏、state/lock 和漏洞响应边界。
 - [兼容性政策](compatibility-policy.zh.md)：beta/stable 的 CLI、DSL、state 和 plan JSON 兼容规则。
 - [系统如何工作](how-it-works/README.zh.md)：面向后续开发者的内部架构和实现链路系列教程。
