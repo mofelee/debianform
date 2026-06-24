@@ -20,6 +20,7 @@ import (
 	coremerge "github.com/mofelee/debianform/internal/core/merge"
 	coreparser "github.com/mofelee/debianform/internal/core/parser"
 	coreplan "github.com/mofelee/debianform/internal/core/plan"
+	"github.com/mofelee/debianform/internal/core/termstyle"
 	"github.com/mofelee/debianform/internal/version"
 )
 
@@ -344,7 +345,11 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 	if format != "text" && format != "json" {
 		return fmt.Errorf("unsupported plan format %q", format)
 	}
-	useColor, err := colorEnabled(color, os.Stdout)
+	stdoutStyle, err := outputStyle(color, os.Stdout)
+	if err != nil {
+		return err
+	}
+	stderrStyle, err := outputStyle(color, os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -408,7 +413,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 				Debug:       debug,
 			})
 		} else {
-			program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr)
+			program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr, stderrStyle)
 			if err != nil {
 				return err
 			}
@@ -420,7 +425,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 				Backend:  coreengine.NewSSHBackend(runner),
 				Provider: coreengine.NewNativeProvider(runner),
 			}
-			onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, coreengine.Options{Host: host, Progress: os.Stderr})
+			onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, coreengine.Options{Host: host, Progress: os.Stderr, ProgressStyle: stderrStyle})
 			if err != nil {
 				return err
 			}
@@ -430,13 +435,13 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 				Debug:       debug,
 			})
 		}
-		printWarnings(warnings)
-		return printPlanDocument(doc, format, htmlPath, useColor)
+		printWarningsWithStyle(warnings, stderrStyle)
+		return printPlanDocument(doc, format, htmlPath, stdoutStyle)
 	case "check", "apply":
 		if format != "text" {
 			return fmt.Errorf("--format is only supported for plan")
 		}
-		program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr)
+		program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr, stderrStyle)
 		if err != nil {
 			return err
 		}
@@ -448,7 +453,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			Backend:  coreengine.NewSSHBackend(runner),
 			Provider: coreengine.NewNativeProvider(runner),
 		}
-		opts := coreengine.Options{Host: host, LockTimeout: lockTimeout, Parallel: parallel, Progress: os.Stderr}
+		opts := coreengine.Options{Host: host, LockTimeout: lockTimeout, Parallel: parallel, Progress: os.Stderr, ProgressStyle: stderrStyle}
 		onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, opts)
 		if err != nil {
 			return err
@@ -457,8 +462,8 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			CommandFile: commandFile(files),
 			Host:        commandHost(program, host),
 		})
-		printWarnings(warnings)
-		coreplan.PrintTextWithOptions(os.Stdout, doc, coreplan.TextOptions{Color: useColor})
+		printWarningsWithStyle(warnings, stderrStyle)
+		coreplan.PrintTextWithOptions(os.Stdout, doc, coreplan.TextOptions{Color: stdoutStyle.Color, Unicode: stdoutStyle.Unicode, Background: stdoutStyle.Background})
 		if cmd == "check" {
 			if len(onlinePlan.Steps) > 0 || len(onlinePlan.Operations) > 0 {
 				return fmt.Errorf("remote state does not match configuration")
@@ -479,7 +484,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			CommandFile: commandFile(files),
 			Host:        commandHost(program, host),
 		})
-		coreplan.PrintTextWithOptions(os.Stdout, appliedDoc, coreplan.TextOptions{Color: useColor})
+		coreplan.PrintTextWithOptions(os.Stdout, appliedDoc, coreplan.TextOptions{Color: stdoutStyle.Color, Unicode: stdoutStyle.Unicode, Background: stdoutStyle.Background})
 		fmt.Println("apply complete")
 		return nil
 	default:
@@ -487,7 +492,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 	}
 }
 
-func printPlanDocument(doc coreplan.Document, format string, htmlPath string, color bool) error {
+func printPlanDocument(doc coreplan.Document, format string, htmlPath string, style termstyle.Options) error {
 	if htmlPath != "" {
 		if err := writePlanHTML(htmlPath, doc); err != nil {
 			return err
@@ -499,21 +504,22 @@ func printPlanDocument(doc coreplan.Document, format string, htmlPath string, co
 	case "json":
 		return coreplan.PrintJSON(os.Stdout, doc)
 	default:
-		coreplan.PrintTextWithOptions(os.Stdout, doc, coreplan.TextOptions{Color: color})
+		coreplan.PrintTextWithOptions(os.Stdout, doc, coreplan.TextOptions{Color: style.Color, Unicode: style.Unicode, Background: style.Background})
 		return nil
 	}
 }
 
-func colorEnabled(mode string, stdout *os.File) (bool, error) {
+func outputStyle(mode string, stream *os.File) (termstyle.Options, error) {
 	switch mode {
 	case "", "auto":
-		return shouldAutoColor(stdout), nil
+		color := shouldAutoColor(stream)
+		return termstyle.Options{Color: color, Unicode: color, Background: color}, nil
 	case "always":
-		return true, nil
+		return termstyle.Options{Color: true, Unicode: isTerminal(stream), Background: true}, nil
 	case "never":
-		return false, nil
+		return termstyle.Options{}, nil
 	default:
-		return false, fmt.Errorf("unsupported --color value %q; want auto, always, or never", mode)
+		return termstyle.Options{}, fmt.Errorf("unsupported --color value %q; want auto, always, or never", mode)
 	}
 }
 
@@ -522,6 +528,13 @@ func shouldAutoColor(stdout *os.File) bool {
 		return false
 	}
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
+		return false
+	}
+	return isTerminal(stdout)
+}
+
+func isTerminal(stdout *os.File) bool {
+	if stdout == nil {
 		return false
 	}
 	info, err := stdout.Stat()
@@ -729,12 +742,20 @@ func pathlessError(err error) string {
 }
 
 func printWarnings(warnings []coreir.Warning) {
+	printWarningsWithStyle(warnings, termstyle.Options{})
+}
+
+func printWarningsWithStyle(warnings []coreir.Warning, style termstyle.Options) {
 	for _, warning := range warnings {
+		prefix := "warning:"
+		if style.Color {
+			prefix = termstyle.Badge("WARNING", style, termstyle.Yellow, termstyle.BgYellow) + " warning:"
+		}
 		if warning.Source.File != "" {
-			fmt.Fprintf(os.Stderr, "warning: %s:%d:%s: %s\n", warning.Source.File, warning.Source.Line, warning.Source.Path, warning.Message)
+			fmt.Fprintf(os.Stderr, "%s %s:%d:%s: %s\n", prefix, warning.Source.File, warning.Source.Line, warning.Source.Path, warning.Message)
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "warning: %s\n", warning.Message)
+		fmt.Fprintf(os.Stderr, "%s %s\n", prefix, warning.Message)
 	}
 }
 
@@ -795,16 +816,16 @@ func isRuntimeFactCompileError(err error) bool {
 }
 
 func loadOnlineProgram(ctx context.Context, cfg *coreparser.Config, host string, warnings *[]coreir.Warning) (*coreir.Program, *coreengine.SSHRunner, error) {
-	return loadOnlineProgramWithProgress(ctx, cfg, host, warnings, nil)
+	return loadOnlineProgramWithProgress(ctx, cfg, host, warnings, nil, termstyle.Options{})
 }
 
-func loadOnlineProgramWithProgress(ctx context.Context, cfg *coreparser.Config, host string, warnings *[]coreir.Warning, progress io.Writer) (*coreir.Program, *coreengine.SSHRunner, error) {
+func loadOnlineProgramWithProgress(ctx context.Context, cfg *coreparser.Config, host string, warnings *[]coreir.Warning, progress io.Writer, progressStyle termstyle.Options) (*coreir.Program, *coreengine.SSHRunner, error) {
 	base, err := compileProgram(cfg, host, coremerge.CompileOptions{SkipComponents: true})
 	if err != nil {
 		return nil, nil, err
 	}
 	runner := coreengine.NewSSHRunner(coreengine.HostsFromProgram(base))
-	facts, err := coreengine.DiscoverProgramFactsWithProgress(ctx, runner, base, nil, progress)
+	facts, err := coreengine.DiscoverProgramFactsWithProgressStyle(ctx, runner, base, nil, progress, progressStyle)
 	if err != nil {
 		return nil, nil, err
 	}

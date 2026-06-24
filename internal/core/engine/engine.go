@@ -13,6 +13,7 @@ import (
 	"github.com/mofelee/debianform/internal/core/ir"
 	coreplan "github.com/mofelee/debianform/internal/core/plan"
 	corestate "github.com/mofelee/debianform/internal/core/state"
+	"github.com/mofelee/debianform/internal/core/termstyle"
 )
 
 const (
@@ -62,6 +63,7 @@ type Options struct {
 	Parallel        int
 	PerHostParallel int
 	Progress        io.Writer
+	ProgressStyle   termstyle.Options
 }
 
 type Engine struct {
@@ -103,7 +105,7 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	if err := resourceGraph.Validate(); err != nil {
 		return Plan{}, err
 	}
-	progress := newProgressLogger(opts.Progress)
+	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := hostsByName(program)
 	stateByHost := map[string]corestate.State{}
 	for _, host := range program.Hosts {
@@ -190,7 +192,7 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 }
 
 func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
-	progress := newProgressLogger(opts.Progress)
+	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := hostsByName(program)
 	for _, host := range program.Hosts {
 		if opts.Host != "" && host.Name != opts.Host {
@@ -247,7 +249,7 @@ func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts 
 	if program == nil {
 		return nil
 	}
-	progress := newProgressLogger(opts.Progress)
+	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	for _, host := range program.Hosts {
 		if opts.Host != "" && host.Name != opts.Host {
 			continue
@@ -942,7 +944,7 @@ func (e Engine) runExecutionWaves(ctx context.Context, hosts map[string]ir.HostS
 	if perHostParallel < 1 {
 		perHostParallel = 1
 	}
-	progress := newProgressLogger(opts.Progress)
+	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 
 	globalSem := make(chan struct{}, parallel)
 	hostSems := map[string]chan struct{}{}

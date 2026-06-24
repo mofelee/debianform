@@ -11,6 +11,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/core/graph"
 	"github.com/mofelee/debianform/internal/core/ir"
+	"github.com/mofelee/debianform/internal/core/termstyle"
 )
 
 const FormatVersion = "debianform.plan.alpha1"
@@ -23,7 +24,9 @@ type Options struct {
 }
 
 type TextOptions struct {
-	Color bool
+	Color      bool
+	Unicode    bool
+	Background bool
 }
 
 type Document struct {
@@ -172,13 +175,13 @@ func PrintText(w io.Writer, doc Document) {
 }
 
 func PrintTextWithOptions(w io.Writer, doc Document, opts TextOptions) {
-	renderer := textRenderer{w: w, color: opts.Color}
+	renderer := textRenderer{w: w, style: termstyle.Options{Color: opts.Color, Unicode: opts.Unicode, Background: opts.Background}}
 	renderer.print(doc)
 }
 
 type textRenderer struct {
 	w     io.Writer
-	color bool
+	style termstyle.Options
 }
 
 func (r textRenderer) print(doc Document) {
@@ -190,42 +193,35 @@ func (r textRenderer) print(doc Document) {
 		return
 	}
 	for _, change := range doc.Changes {
-		fmt.Fprintf(r.w, "  %s %s\n", r.changeSymbol(change), change.Address)
+		fmt.Fprintf(r.w, "  %s %s\n", r.changeSymbol(change), r.address(change.Address))
 		if change.Summary != "" {
-			fmt.Fprintf(r.w, "    %s\n", change.Summary)
+			fmt.Fprintf(r.w, "    %s\n", r.summary(change.Summary))
 		}
 		if source := sourceText(change.Source); source != "" {
-			fmt.Fprintf(r.w, "    source: %s\n", source)
+			fmt.Fprintf(r.w, "    %s %s\n", r.label("source:"), r.muted(source))
 		}
 		if change.ProviderAddress != "" {
-			fmt.Fprintf(r.w, "    provider: %s\n", change.ProviderAddress)
+			fmt.Fprintf(r.w, "    %s %s\n", r.label("provider:"), r.muted(change.ProviderAddress))
 		}
 		if change.DeleteBehavior != "" {
-			fmt.Fprintf(r.w, "    delete behavior: %s", r.deleteBehaviorLabel(change.DeleteBehavior))
-			if change.DeleteRisk != "" {
-				fmt.Fprintf(r.w, " (risk: %s)", change.DeleteRisk)
-			}
-			fmt.Fprintln(r.w)
-			for _, note := range change.DeleteNotes {
-				fmt.Fprintf(r.w, "    note: %s\n", note)
-			}
+			r.printDeleteBehaviorExplanation(change)
 		}
 		r.printDiffChildren(change.Diff.Children, 4)
 	}
 	for _, op := range doc.Operations {
-		fmt.Fprintf(r.w, "  %s %s\n", r.operationSymbol(op.Action), op.Address)
+		fmt.Fprintf(r.w, "  %s %s\n", r.operationSymbol(op.Action), r.address(op.Address))
 		if op.Summary != "" {
-			fmt.Fprintf(r.w, "    %s\n", op.Summary)
+			fmt.Fprintf(r.w, "    %s\n", r.summary(op.Summary))
 		}
 		if len(op.TriggeredBy) > 0 {
-			fmt.Fprintf(r.w, "    triggered_by: %s\n", strings.Join(op.TriggeredBy, ", "))
+			fmt.Fprintf(r.w, "    %s %s\n", r.label("triggered_by:"), r.muted(strings.Join(op.TriggeredBy, ", ")))
 		}
 		if op.CommandPreview != "" {
-			fmt.Fprintf(r.w, "    command: %s\n", op.CommandPreview)
+			fmt.Fprintf(r.w, "    %s %s\n", r.label("command:"), r.command(op.CommandPreview))
 		}
 	}
 	fmt.Fprintln(r.w)
-	printSummary(r.w, doc.Summary)
+	r.printSummary(doc.Summary)
 	if hasDeleteBehaviorDiagnostics(doc) {
 		fmt.Fprintln(r.w)
 		r.printDeleteBehaviorLegend()
@@ -281,6 +277,16 @@ func (r textRenderer) actionSymbol(action string) string {
 }
 
 func (r textRenderer) changeSymbol(change Change) string {
+	if r.richStyle() {
+		label := strings.ToUpper(strings.ReplaceAll(change.Action, "-", " "))
+		if label == "" {
+			label = "UNKNOWN"
+		}
+		if change.DeleteBehavior != "" {
+			return r.deleteBehaviorBadge(change.DeleteBehavior, label)
+		}
+		return r.actionBadge(change.Action, label)
+	}
 	if change.DeleteBehavior == "" {
 		return r.actionSymbol(change.Action)
 	}
@@ -288,27 +294,21 @@ func (r textRenderer) changeSymbol(change Change) string {
 }
 
 func (r textRenderer) operationSymbol(action string) string {
+	if r.richStyle() {
+		return r.actionBadge(action, "RUN")
+	}
 	return r.colorize(action, "!")
 }
 
 func (r textRenderer) colorize(action string, text string) string {
-	if !r.color {
+	if !r.style.Color {
 		return text
 	}
-	switch action {
-	case "create", "adopt":
-		return ansiGreen + text + ansiReset
-	case "update":
-		return ansiYellow + text + ansiReset
-	case "delete", "destroy":
-		return ansiRed + text + ansiReset
-	case "forget", "no-op":
-		return ansiGray + text + ansiReset
-	case "run":
-		return ansiBlue + text + ansiReset
-	default:
+	color := termstyle.ActionColor(action)
+	if color == "" {
 		return text
 	}
+	return termstyle.Apply(text, r.style, color)
 }
 
 func (r textRenderer) deleteBehaviorLabel(behavior string) string {
@@ -316,48 +316,202 @@ func (r textRenderer) deleteBehaviorLabel(behavior string) string {
 }
 
 func (r textRenderer) colorizeDeleteBehavior(behavior string, text string) string {
-	if !r.color {
+	if !r.style.Color {
 		return text
 	}
-	switch behavior {
-	case "forget":
-		return ansiGray + text + ansiReset
-	case "remove-managed-artifact":
-		return ansiYellow + text + ansiReset
-	case "restore-original":
-		return ansiBlue + text + ansiReset
-	case "destructive":
-		return ansiRed + text + ansiReset
-	case "external-side-effect":
-		return ansiMagenta + text + ansiReset
-	case "unknown":
-		return ansiYellow + text + ansiReset
+	color := termstyle.DeleteBehaviorColor(behavior)
+	if color == "" {
+		return text
+	}
+	return termstyle.Apply(text, r.style, color)
+}
+
+func (r textRenderer) richStyle() bool {
+	return r.style.Color && r.style.Background
+}
+
+func (r textRenderer) actionBadge(action string, text string) string {
+	return termstyle.Badge(text, r.style, termstyle.ActionColor(action), termstyle.ActionBackground(action))
+}
+
+func (r textRenderer) deleteBehaviorBadge(behavior string, text string) string {
+	return termstyle.Badge(text, r.style, termstyle.DeleteBehaviorColor(behavior), termstyle.DeleteBehaviorBackground(behavior))
+}
+
+func (r textRenderer) address(text string) string {
+	return termstyle.Apply(text, r.style, termstyle.Bold, termstyle.Cyan)
+}
+
+func (r textRenderer) label(text string) string {
+	return termstyle.Apply(text, r.style, termstyle.Bold, termstyle.Cyan)
+}
+
+func (r textRenderer) summary(text string) string {
+	return termstyle.Apply(text, r.style, termstyle.Bold)
+}
+
+func (r textRenderer) muted(text string) string {
+	return termstyle.Apply(text, r.style, termstyle.Gray)
+}
+
+func (r textRenderer) command(text string) string {
+	return termstyle.Apply(text, r.style, termstyle.Blue)
+}
+
+func (r textRenderer) pathLabel(text string) string {
+	return termstyle.Apply(text, r.style, termstyle.Bold, termstyle.Cyan)
+}
+
+func (r textRenderer) hunkHeader(text string) string {
+	return termstyle.Apply(text, r.style, termstyle.Cyan)
+}
+
+func (r textRenderer) sensitive(text string) string {
+	return termstyle.Apply(text, r.style, termstyle.Bold, termstyle.Magenta)
+}
+
+func (r textRenderer) diffLineText(action string, text string) string {
+	return r.colorize(action, text)
+}
+
+func (r textRenderer) scalarDiffText(node DiffNode) string {
+	switch node.Action {
+	case "create":
+		return ": " + r.diffValue("create", node.After)
+	case "delete":
+		return ": " + r.diffValue("delete", node.Before)
 	default:
-		return text
+		return ": " + r.diffValue("delete", node.Before) + " " + r.muted("->") + " " + r.diffValue("create", node.After)
 	}
+}
+
+func (r textRenderer) diffValue(action string, value any) string {
+	return r.colorize(action, formatDiffValue(value))
+}
+
+func (r textRenderer) printSummary(summary Summary) {
+	if !r.style.Color {
+		printSummary(r.w, summary)
+		return
+	}
+	fmt.Fprintf(r.w, "Summary: %s, %s, %s, %s, %s\n",
+		r.summaryPart("create", summary.Create, "create"),
+		r.summaryPart("update", summary.Update, "update"),
+		r.summaryPart("delete", summary.Delete, "delete"),
+		r.summaryPart("no-op", summary.NoOp, "no-op"),
+		r.summaryPart("run", summary.Operations, "operations"),
+	)
+}
+
+func (r textRenderer) summaryPart(action string, count int, noun string) string {
+	return r.actionBadge(action, fmt.Sprintf("%d %s", count, noun))
+}
+
+func (r textRenderer) printDeleteBehaviorExplanation(change Change) {
+	behavior := change.DeleteBehavior
+	if !r.style.Color {
+		fmt.Fprintf(r.w, "    delete behavior: %s", behavior)
+		if change.DeleteRisk != "" {
+			fmt.Fprintf(r.w, " (risk: %s)", change.DeleteRisk)
+		}
+		fmt.Fprintln(r.w)
+		fmt.Fprintf(r.w, "    meaning: %s\n", deleteBehaviorMeaning(behavior))
+		for _, note := range change.DeleteNotes {
+			fmt.Fprintf(r.w, "    note: %s\n", note)
+		}
+		if text := deleteBehaviorWillNot(behavior, change.DeleteNotes); text != "" {
+			fmt.Fprintf(r.w, "    will not: %s\n", text)
+		}
+		return
+	}
+	fmt.Fprintf(r.w, "    %s %s", r.label("delete behavior:"), r.deleteBehaviorBadge(behavior, strings.ToUpper(strings.ReplaceAll(behavior, "-", " "))))
+	if change.DeleteRisk != "" {
+		fmt.Fprintf(r.w, " %s %s", r.label("risk:"), r.riskBadge(change.DeleteRisk))
+	}
+	fmt.Fprintln(r.w)
+	fmt.Fprintf(r.w, "    %s %s\n", r.label("meaning:"), deleteBehaviorMeaning(behavior))
+	for _, note := range change.DeleteNotes {
+		fmt.Fprintf(r.w, "    %s %s\n", r.label("will do:"), note)
+	}
+	if text := deleteBehaviorWillNot(behavior, change.DeleteNotes); text != "" {
+		fmt.Fprintf(r.w, "    %s %s\n", r.label("will not:"), text)
+	}
+}
+
+func (r textRenderer) riskBadge(risk string) string {
+	switch risk {
+	case "high":
+		return termstyle.Badge(strings.ToUpper(risk), r.style, termstyle.Red, termstyle.BgRed)
+	case "medium":
+		return termstyle.Badge(strings.ToUpper(risk), r.style, termstyle.Yellow, termstyle.BgYellow)
+	case "low":
+		return termstyle.Badge(strings.ToUpper(risk), r.style, termstyle.Gray, termstyle.BgGray)
+	default:
+		return termstyle.Badge(strings.ToUpper(risk), r.style, termstyle.Yellow, termstyle.BgYellow)
+	}
+}
+
+func (r textRenderer) deleteBehaviorLegendEntry(behavior string) string {
+	return r.deleteBehaviorBadge(behavior, behavior) + "=" + deleteBehaviorMeaning(behavior)
 }
 
 func (r textRenderer) printDeleteBehaviorLegend() {
-	parts := []string{
-		r.deleteBehaviorLabel("forget"),
-		r.deleteBehaviorLabel("remove-managed-artifact"),
-		r.deleteBehaviorLabel("restore-original"),
-		r.deleteBehaviorLabel("destructive"),
-		r.deleteBehaviorLabel("external-side-effect"),
-		r.deleteBehaviorLabel("unknown"),
+	entries := []string{
+		r.deleteBehaviorLegendEntry("forget"),
+		r.deleteBehaviorLegendEntry("remove-managed-artifact"),
+		r.deleteBehaviorLegendEntry("restore-original"),
+		r.deleteBehaviorLegendEntry("destructive"),
+		r.deleteBehaviorLegendEntry("external-side-effect"),
+		r.deleteBehaviorLegendEntry("unknown"),
 	}
-	fmt.Fprintf(r.w, "Delete behavior legend: %s. See docs/delete-behavior-diagnostics-plan.zh.md.\n", strings.Join(parts, ", "))
+	fmt.Fprintf(r.w, "Delete behavior legend: %s. See docs/delete-behavior-diagnostics-plan.zh.md.\n", strings.Join(entries, "; "))
 }
 
-const (
-	ansiReset   = "\x1b[0m"
-	ansiRed     = "\x1b[31m"
-	ansiGreen   = "\x1b[32m"
-	ansiYellow  = "\x1b[33m"
-	ansiBlue    = "\x1b[34m"
-	ansiMagenta = "\x1b[35m"
-	ansiGray    = "\x1b[90m"
-)
+func deleteBehaviorMeaning(behavior string) string {
+	switch behavior {
+	case "forget":
+		return "removes only DebianForm state; it does not modify the remote server resource."
+	case "remove-managed-artifact":
+		return "removes DebianForm-managed persistent artifacts; it does not guarantee runtime state restoration."
+	case "restore-original":
+		return "attempts to restore the original content saved in DebianForm state."
+	case "destructive":
+		return "may remove user data, packages, accounts, files, directories, or service state."
+	case "external-side-effect":
+		return "may trigger side effects such as reload, restart, activate, update, or unload operations."
+	case "unknown":
+		return "the provider has not declared precise delete behavior; review conservatively."
+	default:
+		return "review the listed actions before applying."
+	}
+}
+
+func deleteBehaviorWillNot(behavior string, notes []string) string {
+	if behavior == "forget" {
+		return "modify the remote server resource."
+	}
+	if behavior == "remove-managed-artifact" {
+		for _, note := range notes {
+			if strings.Contains(note, "runtime") && strings.Contains(note, "not restored") {
+				return "restore runtime values or guess system defaults."
+			}
+		}
+		return "restore previous runtime state or unmanaged content unless the provider says so."
+	}
+	if behavior == "restore-original" {
+		return "restore anything that was not saved in DebianForm state."
+	}
+	if behavior == "destructive" {
+		return "restore removed data or previous remote state automatically."
+	}
+	if behavior == "external-side-effect" {
+		return "guarantee there is no service impact; check the listed side effects."
+	}
+	if behavior == "unknown" {
+		return "make the operation transparent; inspect the resource/provider before applying."
+	}
+	return ""
+}
 
 func printSummary(w io.Writer, summary Summary) {
 	fmt.Fprintf(w, "Summary: %d create, %d update, %d delete, %d no-op, %d operations\n",
@@ -387,7 +541,7 @@ func printDiffNode(w io.Writer, node DiffNode, indent int) {
 
 func (r textRenderer) printDiffNode(node DiffNode, indent int) {
 	padding := strings.Repeat(" ", indent)
-	label := diffPathLabel(node.Path)
+	label := r.pathLabel(diffPathLabel(node.Path))
 	switch node.Kind {
 	case "object", "map", "list", "set":
 		fmt.Fprintf(r.w, "%s%s %s\n", padding, r.actionSymbol(node.Action), label)
@@ -395,19 +549,20 @@ func (r textRenderer) printDiffNode(node DiffNode, indent int) {
 	case "text":
 		fmt.Fprintf(r.w, "%s%s %s\n", padding, r.actionSymbol(node.Action), label)
 		for _, hunk := range node.Hunks {
-			fmt.Fprintf(r.w, "%s  @@ -%d,%d +%d,%d @@\n", padding, hunk.OldStart, hunk.OldLines, hunk.NewStart, hunk.NewLines)
+			hunkHeader := fmt.Sprintf("@@ -%d,%d +%d,%d @@", hunk.OldStart, hunk.OldLines, hunk.NewStart, hunk.NewLines)
+			fmt.Fprintf(r.w, "%s  %s\n", padding, r.hunkHeader(hunkHeader))
 			for _, line := range hunk.Lines {
 				if line.Text == "" {
 					fmt.Fprintf(r.w, "%s  %s\n", padding, r.actionSymbol(line.Op))
 					continue
 				}
-				fmt.Fprintf(r.w, "%s  %s %s\n", padding, r.actionSymbol(line.Op), line.Text)
+				fmt.Fprintf(r.w, "%s  %s %s\n", padding, r.actionSymbol(line.Op), r.diffLineText(line.Op, line.Text))
 			}
 		}
 	case "sensitive":
-		fmt.Fprintf(r.w, "%s%s %s: %s\n", padding, r.actionSymbol(node.Action), label, sensitiveSummaryText(node))
+		fmt.Fprintf(r.w, "%s%s %s: %s\n", padding, r.actionSymbol(node.Action), label, r.sensitive(sensitiveSummaryText(node)))
 	default:
-		fmt.Fprintf(r.w, "%s%s %s%s\n", padding, r.actionSymbol(node.Action), label, scalarDiffText(node))
+		fmt.Fprintf(r.w, "%s%s %s%s\n", padding, r.actionSymbol(node.Action), label, r.scalarDiffText(node))
 	}
 }
 

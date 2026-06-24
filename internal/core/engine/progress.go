@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mofelee/debianform/internal/core/termstyle"
 )
 
 const defaultProgressInterval = 15 * time.Second
@@ -13,6 +15,7 @@ const defaultProgressInterval = 15 * time.Second
 type progressLogger struct {
 	w        io.Writer
 	interval time.Duration
+	style    termstyle.Options
 	mu       sync.Mutex
 }
 
@@ -28,10 +31,14 @@ type progressTask struct {
 }
 
 func newProgressLogger(w io.Writer) *progressLogger {
+	return newProgressLoggerWithStyle(w, termstyle.Options{})
+}
+
+func newProgressLoggerWithStyle(w io.Writer, style termstyle.Options) *progressLogger {
 	if w == nil {
 		return nil
 	}
-	return &progressLogger{w: w, interval: defaultProgressInterval}
+	return &progressLogger{w: w, interval: defaultProgressInterval, style: style}
 }
 
 func (p *progressLogger) Logf(format string, args ...any) {
@@ -56,7 +63,7 @@ func (p *progressLogger) Start(host, action, subject, summary string) *progressT
 		started: time.Now(),
 		done:    make(chan struct{}),
 	}
-	p.Logf("%s", task.line("start "+action, 0))
+	p.Logf("%s", task.line("start", action, 0))
 	go task.heartbeat()
 	return task
 }
@@ -67,11 +74,11 @@ func (t *progressTask) Done(err error) {
 	}
 	t.once.Do(func() {
 		close(t.done)
-		status := "done " + t.action
+		status := "done"
 		if err != nil {
-			status = "failed " + t.action
+			status = "failed"
 		}
-		t.logger.Logf("%s", t.line(status, time.Since(t.started)))
+		t.logger.Logf("%s", t.line(status, t.action, time.Since(t.started)))
 	})
 }
 
@@ -85,7 +92,7 @@ func (t *progressTask) heartbeat() {
 	for {
 		select {
 		case <-timer.C:
-			t.logger.Logf("%s", t.line("still "+t.action, time.Since(t.started)))
+			t.logger.Logf("%s", t.line("still", t.action, time.Since(t.started)))
 			timer.Reset(interval)
 		case <-t.done:
 			return
@@ -93,12 +100,15 @@ func (t *progressTask) heartbeat() {
 	}
 }
 
-func (t *progressTask) line(action string, elapsed time.Duration) string {
+func (t *progressTask) line(status string, action string, elapsed time.Duration) string {
+	if t.logger != nil && t.logger.style.Color {
+		return t.styledLine(status, action, elapsed)
+	}
 	var parts []string
 	if t.host != "" {
 		parts = append(parts, t.host+":")
 	}
-	parts = append(parts, action)
+	parts = append(parts, status+" "+action)
 	if t.subject != "" {
 		parts = append(parts, oneLineProgressText(t.subject))
 	}
@@ -109,6 +119,61 @@ func (t *progressTask) line(action string, elapsed time.Duration) string {
 		parts = append(parts, "("+formatProgressDuration(elapsed)+")")
 	}
 	return strings.Join(parts, " ")
+}
+
+func (t *progressTask) styledLine(status string, action string, elapsed time.Duration) string {
+	style := t.logger.style
+	parts := []string{progressStatusBadge(status, style)}
+	if t.host != "" {
+		parts = append(parts, termstyle.Apply(t.host+":", style, termstyle.Bold, termstyle.Cyan))
+	}
+	parts = append(parts, progressActionText(action, style))
+	if t.subject != "" {
+		parts = append(parts, termstyle.Apply(oneLineProgressText(t.subject), style, termstyle.Gray))
+	}
+	if t.summary != "" {
+		parts = append(parts, termstyle.Apply("- "+oneLineProgressText(t.summary), style, termstyle.Gray))
+	}
+	if elapsed > 0 {
+		parts = append(parts, termstyle.Apply("("+formatProgressDuration(elapsed)+")", style, termstyle.Gray))
+	}
+	return strings.Join(parts, " ")
+}
+
+func progressStatusBadge(status string, style termstyle.Options) string {
+	label := strings.ToUpper(status)
+	if style.Unicode {
+		switch status {
+		case "start":
+			label = "▶ " + label
+		case "done":
+			label = "✓ " + label
+		case "still":
+			label = "… " + label
+		case "failed":
+			label = "✕ " + label
+		}
+	}
+	switch status {
+	case "start":
+		return termstyle.Badge(label, style, termstyle.Blue, termstyle.BgBlue)
+	case "done":
+		return termstyle.Badge(label, style, termstyle.Green, termstyle.BgGreen)
+	case "still":
+		return termstyle.Badge(label, style, termstyle.Gray, termstyle.BgGray)
+	case "failed":
+		return termstyle.Badge(label, style, termstyle.Red, termstyle.BgRed)
+	default:
+		return termstyle.Badge(label, style, termstyle.Gray, termstyle.BgGray)
+	}
+}
+
+func progressActionText(action string, style termstyle.Options) string {
+	color := termstyle.ActionColor(action)
+	if color == "" {
+		color = termstyle.Bold
+	}
+	return termstyle.Apply(action, style, color)
 }
 
 func oneLineProgressText(value string) string {

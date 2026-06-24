@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/mofelee/debianform/internal/core/ir"
+	"github.com/mofelee/debianform/internal/core/termstyle"
 )
 
 func DiscoverProgramFacts(ctx context.Context, runner Runner, program *ir.Program, now func() time.Time) (map[string]ir.HostFacts, error) {
@@ -15,11 +16,15 @@ func DiscoverProgramFacts(ctx context.Context, runner Runner, program *ir.Progra
 }
 
 func DiscoverProgramFactsWithProgress(ctx context.Context, runner Runner, program *ir.Program, now func() time.Time, progressWriter io.Writer) (map[string]ir.HostFacts, error) {
+	return DiscoverProgramFactsWithProgressStyle(ctx, runner, program, now, progressWriter, termstyle.Options{})
+}
+
+func DiscoverProgramFactsWithProgressStyle(ctx context.Context, runner Runner, program *ir.Program, now func() time.Time, progressWriter io.Writer, style termstyle.Options) (map[string]ir.HostFacts, error) {
 	facts := map[string]ir.HostFacts{}
 	if program == nil {
 		return facts, nil
 	}
-	progress := newProgressLogger(progressWriter)
+	progress := newProgressLoggerWithStyle(progressWriter, style)
 	for _, host := range program.Hosts {
 		task := progress.Start(host.Name, "discover facts", "", "")
 		hostFacts, err := DiscoverHostFacts(ctx, runner, host, now)

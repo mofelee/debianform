@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	coreir "github.com/mofelee/debianform/internal/core/ir"
+	"github.com/mofelee/debianform/internal/core/termstyle"
 	"github.com/mofelee/debianform/internal/core/testassert"
 )
 
@@ -192,8 +194,14 @@ func TestPlanColorFlagControlsTextOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if !strings.Contains(colored, "\x1b[32m+\x1b[0m") {
-		t.Fatalf("--color always output missing ANSI create symbol:\n%q", colored)
+	for _, want := range []string{
+		"\x1b[1m\x1b[30m\x1b[42m CREATE \x1b[0m",
+		"\x1b[1m\x1b[36mhost.bbr1.kernel.module[\"tcp_bbr\"]\x1b[0m",
+		"\x1b[1m\x1b[30m\x1b[42m 3 create \x1b[0m",
+	} {
+		if !strings.Contains(colored, want) {
+			t.Fatalf("--color always output missing %q:\n%q", want, colored)
+		}
 	}
 
 	plain := captureStdout(t, func() {
@@ -240,6 +248,20 @@ func TestValidateRejectsColorFlag(t *testing.T) {
 	err := run([]string{"validate", "-f", "../../examples/bbr.dbf.hcl", "--color", "never"})
 	if err == nil || !strings.Contains(err.Error(), "--color is only supported for plan, apply, and check") {
 		t.Fatalf("validate --color error = %v, want unsupported color flag", err)
+	}
+}
+
+func TestPrintWarningsWithStyleKeepsWarningTextAndAddsBadge(t *testing.T) {
+	_, stderr := captureOutput(t, func() {
+		printWarningsWithStyle([]coreir.Warning{{Message: "deprecated input"}}, termstyle.Options{Color: true, Background: true})
+	})
+	for _, want := range []string{
+		"\x1b[1m\x1b[30m\x1b[43m WARNING \x1b[0m",
+		"warning: deprecated input",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("styled warning output missing %q:\n%q", want, stderr)
+		}
 	}
 }
 

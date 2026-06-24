@@ -978,6 +978,21 @@ func TestPrintTextWithColorOption(t *testing.T) {
 	if !strings.Contains(rendered, `host.server1.files.file["/tmp/delete"]`) {
 		t.Fatalf("colored text output lost address:\n%s", rendered)
 	}
+
+	var rich bytes.Buffer
+	PrintTextWithOptions(&rich, doc, TextOptions{Color: true, Background: true})
+	richRendered := rich.String()
+	for _, want := range []string{
+		"\x1b[1m\x1b[30m\x1b[42m CREATE \x1b[0m",
+		"\x1b[1m\x1b[30m\x1b[43m UPDATE \x1b[0m",
+		"\x1b[1m\x1b[97m\x1b[41m DELETE \x1b[0m",
+		"\x1b[1m\x1b[97m\x1b[44m RUN \x1b[0m",
+		"\x1b[1m\x1b[36mhost.server1.files.file[\"/tmp/delete\"]\x1b[0m",
+	} {
+		if !strings.Contains(richRendered, want) {
+			t.Fatalf("rich colored text output missing %q:\n%q", want, richRendered)
+		}
+	}
 }
 
 func TestPrintTextShowsDeleteBehaviorDiagnostics(t *testing.T) {
@@ -1008,7 +1023,9 @@ func TestPrintTextShowsDeleteBehaviorDiagnostics(t *testing.T) {
 	rendered := text.String()
 	for _, want := range []string{
 		"delete behavior: remove-managed-artifact (risk: medium)",
+		"meaning: removes DebianForm-managed persistent artifacts; it does not guarantee runtime state restoration.",
 		"note: runtime sysctl value is not restored",
+		"will not: restore runtime values or guess system defaults.",
 		"Delete behavior legend:",
 		"docs/delete-behavior-diagnostics-plan.zh.md",
 	} {
@@ -1026,6 +1043,45 @@ func TestPrintTextShowsDeleteBehaviorDiagnostics(t *testing.T) {
 	}}})
 	if strings.Contains(noDelete.String(), "Delete behavior legend:") {
 		t.Fatalf("non-delete text output showed delete behavior legend:\n%s", noDelete.String())
+	}
+}
+
+func TestPrintTextWithBackgroundColorShowsDeleteBehaviorMeaning(t *testing.T) {
+	doc := Document{
+		FormatVersion: FormatVersion,
+		GeneratedAt:   "2026-06-20T12:00:00Z",
+		Command:       Command{File: "examples/delete.dbf.hcl", Host: "server1"},
+		Summary:       Summary{Delete: 1},
+		Changes: []Change{
+			{
+				Address:        `host.server1.apt.source_file["docker"]`,
+				Action:         "forget",
+				Summary:        "forget apt source file /etc/apt/sources.list.d/docker.list",
+				DeleteBehavior: "forget",
+				DeleteNotes:    []string{"keeps the remote apt source file and removes only DebianForm state", "path: /etc/apt/sources.list.d/docker.list"},
+				DeleteRisk:     "low",
+				Diff:           BuildDiff("forget", map[string]any{"path": "/etc/apt/sources.list.d/docker.list"}, nil),
+			},
+		},
+		Diagnostics: []Diagnostic{},
+	}
+
+	var out bytes.Buffer
+	PrintTextWithOptions(&out, doc, TextOptions{Color: true, Background: true})
+	rendered := out.String()
+	for _, want := range []string{
+		"\x1b[1m\x1b[97m\x1b[100m FORGET \x1b[0m",
+		"\x1b[1m\x1b[97m\x1b[100m FORGET \x1b[0m \x1b[1m\x1b[36mrisk:\x1b[0m \x1b[1m\x1b[97m\x1b[100m LOW \x1b[0m",
+		"meaning:",
+		"removes only DebianForm state; it does not modify the remote server resource.",
+		"will do:",
+		"will not:",
+		"modify the remote server resource.",
+		"=removes only DebianForm state; it does not modify the remote server resource.",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rich delete behavior output missing %q:\n%s", want, rendered)
+		}
 	}
 }
 

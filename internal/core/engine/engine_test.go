@@ -17,6 +17,7 @@ import (
 	"github.com/mofelee/debianform/internal/core/parser"
 	coreplan "github.com/mofelee/debianform/internal/core/plan"
 	corestate "github.com/mofelee/debianform/internal/core/state"
+	"github.com/mofelee/debianform/internal/core/termstyle"
 	"github.com/mofelee/debianform/internal/core/testassert"
 )
 
@@ -152,6 +153,27 @@ func TestProgressTaskLogsHeartbeat(t *testing.T) {
 	text := output.String()
 	if !strings.Contains(text, `dbf: server1: still apply host.server1.files.file["/tmp/slow"] - write file /tmp/slow`) {
 		t.Fatalf("progress output missing heartbeat:\n%s", text)
+	}
+}
+
+func TestProgressTaskCanUseStyledStatusBadges(t *testing.T) {
+	var output bytes.Buffer
+	progress := newProgressLoggerWithStyle(&output, termstyle.Options{Color: true, Unicode: true, Background: true})
+	progress.interval = time.Hour
+
+	task := progress.Start("server1", "create", `host.server1.files.file["/tmp/a"]`, "create file /tmp/a")
+	task.Done(nil)
+
+	text := output.String()
+	for _, want := range []string{
+		"\x1b[1m\x1b[97m\x1b[44m ▶ START \x1b[0m",
+		"\x1b[1m\x1b[30m\x1b[42m ✓ DONE \x1b[0m",
+		"\x1b[1m\x1b[36mserver1:\x1b[0m",
+		"\x1b[32mcreate\x1b[0m",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("styled progress output missing %q:\n%q", want, text)
+		}
 	}
 }
 
