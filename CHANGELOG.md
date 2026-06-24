@@ -6,6 +6,14 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+## v0.1.0-beta.6
+
+- Added styled badges, richer ANSI text rendering, and optional Unicode status
+  symbols for human-readable plan, progress, and warning output.
+- Added systemd service extensions and expanded libvirt coverage for systemd
+  drop-ins, environment files, timers, sockets, path units, and tmpfiles.
+- Refreshed the runnable fleet example and README quickstart demo assets.
+
 ## v0.1.0-beta.5
 
 - Added `--color=auto|always|never` for `plan`, `apply`, and `check` text
