@@ -6,6 +6,14 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+## v0.1.0-beta.3
+
+- Added file and secret path override support for reusable components, including
+  WireGuard peer map examples.
+- Allowed repeated component instances to share directories safely when their
+  desired ownership and mode match.
+- Completed Docker source, package source, daemon config, Compose project, and
+  user membership loops with expanded libvirt coverage.
 - Added a compatibility and migration policy covering CLI/DSL compatibility,
   state schema migration rules, and plan JSON format compatibility.
 - Added a security model document covering root-only SSH, permission boundaries,
