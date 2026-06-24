@@ -6,6 +6,14 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+## v0.1.0-beta.4
+
+- Added online `plan`, `apply`, and `check` progress logging to stderr so
+  long-running SSH-backed operations expose the active host, phase, and
+  resource action without changing machine-readable stdout.
+- Added runnable coverage for CLI and DSL documentation examples, including a
+  refreshed DSL reference and support matrix wording.
+
 ## v0.1.0-beta.3
 
 - Added file and secret path override support for reusable components, including
