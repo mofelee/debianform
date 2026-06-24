@@ -109,9 +109,9 @@ func TestHelpDocumentsImplementedFlags(t *testing.T) {
 			})
 			for _, want := range []string{
 				"dbf validate [-f file ...] [-var name=value] [-var-file path] [--host name]",
-				"dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--offline]",
-				"dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--parallel n] [--lock-timeout duration] [--auto-approve]",
-				"dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--lock-timeout duration]",
+				"dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]",
+				"dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]",
+				"dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]",
 			} {
 				if !strings.Contains(output, want) {
 					t.Fatalf("help output does not contain %q:\n%s", want, output)
@@ -181,6 +181,65 @@ host "server1" {
 	want := base + "," + app
 	if doc.Command.File != want {
 		t.Fatalf("command.file = %q, want %q", doc.Command.File, want)
+	}
+}
+
+func TestPlanColorFlagControlsTextOutput(t *testing.T) {
+	fixture := "../../examples/bbr.dbf.hcl"
+
+	colored := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", fixture, "--offline", "--color", "always"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(colored, "\x1b[32m+\x1b[0m") {
+		t.Fatalf("--color always output missing ANSI create symbol:\n%q", colored)
+	}
+
+	plain := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", fixture, "--offline", "--color", "never"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if strings.Contains(plain, "\x1b[") {
+		t.Fatalf("--color never output contains ANSI:\n%q", plain)
+	}
+
+	t.Setenv("NO_COLOR", "1")
+	autoNoColor := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", fixture, "--offline"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if strings.Contains(autoNoColor, "\x1b[") {
+		t.Fatalf("NO_COLOR auto output contains ANSI:\n%q", autoNoColor)
+	}
+
+	jsonOut := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", fixture, "--offline", "--format", "json", "--color", "always"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if strings.Contains(jsonOut, "\x1b[") {
+		t.Fatalf("JSON output contains ANSI despite --color always:\n%q", jsonOut)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(jsonOut), &decoded); err != nil {
+		t.Fatalf("colored JSON plan did not parse: %v\n%s", err, jsonOut)
+	}
+}
+
+func TestPlanRejectsUnsupportedColorMode(t *testing.T) {
+	err := run([]string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--offline", "--color", "sometimes"})
+	if err == nil || !strings.Contains(err.Error(), "unsupported --color value") {
+		t.Fatalf("plan --color error = %v, want unsupported color mode", err)
+	}
+}
+
+func TestValidateRejectsColorFlag(t *testing.T) {
+	err := run([]string{"validate", "-f", "../../examples/bbr.dbf.hcl", "--color", "never"})
+	if err == nil || !strings.Contains(err.Error(), "--color is only supported for plan, apply, and check") {
+		t.Fatalf("validate --color error = %v, want unsupported color flag", err)
 	}
 }
 

@@ -26,9 +26,9 @@ deprecated component input 会输出 warning，但 warning 本身不会改变退
 
 ```text
 dbf validate [-f file ...] [-var name=value] [-var-file path] [--host name]
-dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--offline]
-dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--parallel n] [--lock-timeout duration] [--auto-approve]
-dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--lock-timeout duration]
+dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]
+dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]
+dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]
 dbf fmt      [-f file ...]
 dbf variable inspect [-f file ...] [-var name=value] [-var-file path]
 dbf component inspect [-f file ...] component_name
@@ -48,6 +48,7 @@ dbf help
 | `--host name` | `validate`、`plan`、`apply`、`check` | 只处理指定 host。host 不存在时命令失败。 |
 | `-var name=value` | `validate`、`plan`、`apply`、`check`、`variable inspect` | 可重复；设置顶层 `variable` 的值。 |
 | `-var-file path` | `validate`、`plan`、`apply`、`check`、`variable inspect` | 可重复；从 `.dbfvars` 或 `.dbfvars.json` 文件加载变量值。 |
+| `--color auto\|always\|never` | `plan`、`apply`、`check` | 控制文本输出颜色；JSON、HTML 和持久化日志不使用 ANSI。 |
 
 `-f` 不会读取目录，也不会自动加载同目录的其他 `.dbf.hcl` 文件；它表示“精确使用这些显式指定的文件”，并按命令行出现顺序解析。
 
@@ -382,6 +383,7 @@ dbf -h
 | `--format` | `plan` | `validate`、`apply`、`check` 不支持结构化输出。 |
 | `--html` | `plan` | 不能和显式 `--format` 同时使用。 |
 | `--debug` | `plan` | 用于 plan 调试输出。 |
+| `--color` | `plan`、`apply`、`check` | `auto` 只在 TTY 且未设置 `NO_COLOR` / `TERM=dumb` 时启用；`always` 强制启用；`never` 禁用。 |
 | `--offline` | `plan` | 离线 plan 预览。 |
 | `--parallel` | `apply` | 控制多 host apply 并发。 |
 | `--auto-approve` | `apply` | 跳过 apply 确认。 |

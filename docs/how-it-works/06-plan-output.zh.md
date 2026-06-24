@@ -42,10 +42,15 @@ online:
 - `Summary`
 - `Source`
 - `ProviderAddress`
+- `DeleteBehavior`
+- `DeleteNotes`
+- `DeleteRisk`
 - `Diff`
 - `LowLevelActions`
 
 `ProviderAddress` 只有在 `--debug` 时输出，用于维护 provider 映射，不是普通用户入口。
+删除行为字段只在 `delete`、`destroy`、`forget` 类动作中输出，用于让 JSON、文本和 HTML renderer
+复用同一份删除风险语义。
 
 ## Diff tree
 

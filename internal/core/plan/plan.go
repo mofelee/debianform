@@ -22,6 +22,10 @@ type Options struct {
 	Now         func() time.Time
 }
 
+type TextOptions struct {
+	Color bool
+}
+
 type Document struct {
 	FormatVersion string          `json:"format_version"`
 	GeneratedAt   string          `json:"generated_at"`
@@ -51,6 +55,9 @@ type Change struct {
 	Summary         string       `json:"summary"`
 	Source          ir.SourceRef `json:"source"`
 	ProviderAddress string       `json:"provider_address,omitempty"`
+	DeleteBehavior  string       `json:"delete_behavior,omitempty"`
+	DeleteNotes     []string     `json:"delete_notes,omitempty"`
+	DeleteRisk      string       `json:"delete_risk,omitempty"`
 	Diff            DiffNode     `json:"diff"`
 	LowLevelActions []string     `json:"low_level_actions,omitempty"`
 }
@@ -161,40 +168,68 @@ func diffForNode(node graph.Node) DiffNode {
 }
 
 func PrintText(w io.Writer, doc Document) {
-	fmt.Fprintln(w, "Plan:")
+	PrintTextWithOptions(w, doc, TextOptions{})
+}
+
+func PrintTextWithOptions(w io.Writer, doc Document, opts TextOptions) {
+	renderer := textRenderer{w: w, color: opts.Color}
+	renderer.print(doc)
+}
+
+type textRenderer struct {
+	w     io.Writer
+	color bool
+}
+
+func (r textRenderer) print(doc Document) {
+	fmt.Fprintln(r.w, "Plan:")
 	if len(doc.Changes) == 0 && len(doc.Operations) == 0 {
-		fmt.Fprintln(w, "  No changes.")
-		fmt.Fprintln(w)
-		printSummary(w, doc.Summary)
+		fmt.Fprintln(r.w, "  No changes.")
+		fmt.Fprintln(r.w)
+		printSummary(r.w, doc.Summary)
 		return
 	}
 	for _, change := range doc.Changes {
-		fmt.Fprintf(w, "  %s %s\n", actionSymbol(change.Action), change.Address)
+		fmt.Fprintf(r.w, "  %s %s\n", r.changeSymbol(change), change.Address)
 		if change.Summary != "" {
-			fmt.Fprintf(w, "    %s\n", change.Summary)
+			fmt.Fprintf(r.w, "    %s\n", change.Summary)
 		}
 		if source := sourceText(change.Source); source != "" {
-			fmt.Fprintf(w, "    source: %s\n", source)
+			fmt.Fprintf(r.w, "    source: %s\n", source)
 		}
 		if change.ProviderAddress != "" {
-			fmt.Fprintf(w, "    provider: %s\n", change.ProviderAddress)
+			fmt.Fprintf(r.w, "    provider: %s\n", change.ProviderAddress)
 		}
-		printDiffChildren(w, change.Diff.Children, 4)
+		if change.DeleteBehavior != "" {
+			fmt.Fprintf(r.w, "    delete behavior: %s", r.deleteBehaviorLabel(change.DeleteBehavior))
+			if change.DeleteRisk != "" {
+				fmt.Fprintf(r.w, " (risk: %s)", change.DeleteRisk)
+			}
+			fmt.Fprintln(r.w)
+			for _, note := range change.DeleteNotes {
+				fmt.Fprintf(r.w, "    note: %s\n", note)
+			}
+		}
+		r.printDiffChildren(change.Diff.Children, 4)
 	}
 	for _, op := range doc.Operations {
-		fmt.Fprintf(w, "  ! %s\n", op.Address)
+		fmt.Fprintf(r.w, "  %s %s\n", r.operationSymbol(op.Action), op.Address)
 		if op.Summary != "" {
-			fmt.Fprintf(w, "    %s\n", op.Summary)
+			fmt.Fprintf(r.w, "    %s\n", op.Summary)
 		}
 		if len(op.TriggeredBy) > 0 {
-			fmt.Fprintf(w, "    triggered_by: %s\n", strings.Join(op.TriggeredBy, ", "))
+			fmt.Fprintf(r.w, "    triggered_by: %s\n", strings.Join(op.TriggeredBy, ", "))
 		}
 		if op.CommandPreview != "" {
-			fmt.Fprintf(w, "    command: %s\n", op.CommandPreview)
+			fmt.Fprintf(r.w, "    command: %s\n", op.CommandPreview)
 		}
 	}
-	fmt.Fprintln(w)
-	printSummary(w, doc.Summary)
+	fmt.Fprintln(r.w)
+	printSummary(r.w, doc.Summary)
+	if hasDeleteBehaviorDiagnostics(doc) {
+		fmt.Fprintln(r.w)
+		r.printDeleteBehaviorLegend()
+	}
 }
 
 func PrintJSON(w io.Writer, doc Document) error {
@@ -219,9 +254,10 @@ func PrintHTML(w io.Writer, doc Document) error {
 		return err
 	}
 	return tmpl.Execute(w, htmlView{
-		Document: doc,
-		Hosts:    collectHosts(doc),
-		Actions:  collectActions(doc),
+		Document:           doc,
+		Hosts:              collectHosts(doc),
+		Actions:            collectActions(doc),
+		HasDeleteBehaviors: hasDeleteBehaviorDiagnostics(doc),
 	})
 }
 
@@ -240,6 +276,89 @@ func actionSymbol(action string) string {
 	}
 }
 
+func (r textRenderer) actionSymbol(action string) string {
+	return r.colorize(action, actionSymbol(action))
+}
+
+func (r textRenderer) changeSymbol(change Change) string {
+	if change.DeleteBehavior == "" {
+		return r.actionSymbol(change.Action)
+	}
+	return r.colorizeDeleteBehavior(change.DeleteBehavior, actionSymbol(change.Action))
+}
+
+func (r textRenderer) operationSymbol(action string) string {
+	return r.colorize(action, "!")
+}
+
+func (r textRenderer) colorize(action string, text string) string {
+	if !r.color {
+		return text
+	}
+	switch action {
+	case "create", "adopt":
+		return ansiGreen + text + ansiReset
+	case "update":
+		return ansiYellow + text + ansiReset
+	case "delete", "destroy":
+		return ansiRed + text + ansiReset
+	case "forget", "no-op":
+		return ansiGray + text + ansiReset
+	case "run":
+		return ansiBlue + text + ansiReset
+	default:
+		return text
+	}
+}
+
+func (r textRenderer) deleteBehaviorLabel(behavior string) string {
+	return r.colorizeDeleteBehavior(behavior, behavior)
+}
+
+func (r textRenderer) colorizeDeleteBehavior(behavior string, text string) string {
+	if !r.color {
+		return text
+	}
+	switch behavior {
+	case "forget":
+		return ansiGray + text + ansiReset
+	case "remove-managed-artifact":
+		return ansiYellow + text + ansiReset
+	case "restore-original":
+		return ansiBlue + text + ansiReset
+	case "destructive":
+		return ansiRed + text + ansiReset
+	case "external-side-effect":
+		return ansiMagenta + text + ansiReset
+	case "unknown":
+		return ansiYellow + text + ansiReset
+	default:
+		return text
+	}
+}
+
+func (r textRenderer) printDeleteBehaviorLegend() {
+	parts := []string{
+		r.deleteBehaviorLabel("forget"),
+		r.deleteBehaviorLabel("remove-managed-artifact"),
+		r.deleteBehaviorLabel("restore-original"),
+		r.deleteBehaviorLabel("destructive"),
+		r.deleteBehaviorLabel("external-side-effect"),
+		r.deleteBehaviorLabel("unknown"),
+	}
+	fmt.Fprintf(r.w, "Delete behavior legend: %s. See docs/delete-behavior-diagnostics-plan.zh.md.\n", strings.Join(parts, ", "))
+}
+
+const (
+	ansiReset   = "\x1b[0m"
+	ansiRed     = "\x1b[31m"
+	ansiGreen   = "\x1b[32m"
+	ansiYellow  = "\x1b[33m"
+	ansiBlue    = "\x1b[34m"
+	ansiMagenta = "\x1b[35m"
+	ansiGray    = "\x1b[90m"
+)
+
 func printSummary(w io.Writer, summary Summary) {
 	fmt.Fprintf(w, "Summary: %d create, %d update, %d delete, %d no-op, %d operations\n",
 		summary.Create,
@@ -256,29 +375,39 @@ func printDiffChildren(w io.Writer, children []DiffNode, indent int) {
 	}
 }
 
+func (r textRenderer) printDiffChildren(children []DiffNode, indent int) {
+	for _, child := range children {
+		r.printDiffNode(child, indent)
+	}
+}
+
 func printDiffNode(w io.Writer, node DiffNode, indent int) {
+	textRenderer{w: w}.printDiffNode(node, indent)
+}
+
+func (r textRenderer) printDiffNode(node DiffNode, indent int) {
 	padding := strings.Repeat(" ", indent)
 	label := diffPathLabel(node.Path)
 	switch node.Kind {
 	case "object", "map", "list", "set":
-		fmt.Fprintf(w, "%s%s %s\n", padding, actionSymbol(node.Action), label)
-		printDiffChildren(w, node.Children, indent+2)
+		fmt.Fprintf(r.w, "%s%s %s\n", padding, r.actionSymbol(node.Action), label)
+		r.printDiffChildren(node.Children, indent+2)
 	case "text":
-		fmt.Fprintf(w, "%s%s %s\n", padding, actionSymbol(node.Action), label)
+		fmt.Fprintf(r.w, "%s%s %s\n", padding, r.actionSymbol(node.Action), label)
 		for _, hunk := range node.Hunks {
-			fmt.Fprintf(w, "%s  @@ -%d,%d +%d,%d @@\n", padding, hunk.OldStart, hunk.OldLines, hunk.NewStart, hunk.NewLines)
+			fmt.Fprintf(r.w, "%s  @@ -%d,%d +%d,%d @@\n", padding, hunk.OldStart, hunk.OldLines, hunk.NewStart, hunk.NewLines)
 			for _, line := range hunk.Lines {
 				if line.Text == "" {
-					fmt.Fprintf(w, "%s  %s\n", padding, actionSymbol(line.Op))
+					fmt.Fprintf(r.w, "%s  %s\n", padding, r.actionSymbol(line.Op))
 					continue
 				}
-				fmt.Fprintf(w, "%s  %s %s\n", padding, actionSymbol(line.Op), line.Text)
+				fmt.Fprintf(r.w, "%s  %s %s\n", padding, r.actionSymbol(line.Op), line.Text)
 			}
 		}
 	case "sensitive":
-		fmt.Fprintf(w, "%s%s %s: %s\n", padding, actionSymbol(node.Action), label, sensitiveSummaryText(node))
+		fmt.Fprintf(r.w, "%s%s %s: %s\n", padding, r.actionSymbol(node.Action), label, sensitiveSummaryText(node))
 	default:
-		fmt.Fprintf(w, "%s%s %s%s\n", padding, actionSymbol(node.Action), label, scalarDiffText(node))
+		fmt.Fprintf(r.w, "%s%s %s%s\n", padding, r.actionSymbol(node.Action), label, scalarDiffText(node))
 	}
 }
 
@@ -286,6 +415,15 @@ func diffText(node DiffNode) string {
 	var out strings.Builder
 	printDiffChildren(&out, node.Children, 0)
 	return strings.TrimRight(out.String(), "\n")
+}
+
+func hasDeleteBehaviorDiagnostics(doc Document) bool {
+	for _, change := range doc.Changes {
+		if change.DeleteBehavior != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func diffPathLabel(path []string) string {
@@ -354,8 +492,9 @@ func sourceText(source ir.SourceRef) string {
 
 type htmlView struct {
 	Document
-	Hosts   []string
-	Actions []string
+	Hosts              []string
+	Actions            []string
+	HasDeleteBehaviors bool
 }
 
 func collectHosts(doc Document) []string {
@@ -443,6 +582,14 @@ const planHTMLTemplate = `<!doctype html>
     .action-update { color: var(--update); }
     .action-delete, .action-destroy, .action-forget { color: var(--delete); }
     .action-run { color: var(--run); }
+    .delete-behavior { display: inline-block; margin-bottom: 4px; border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .delete-behavior-forget { color: var(--muted); }
+    .delete-behavior-remove-managed-artifact, .delete-behavior-unknown { color: var(--update); }
+    .delete-behavior-restore-original { color: var(--run); }
+    .delete-behavior-destructive { color: var(--delete); }
+    .delete-behavior-external-side-effect { color: #8250df; }
+    .delete-notes { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
+    .legend { margin-top: 24px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--muted); }
     .empty { padding: 18px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--muted); }
     .hidden { display: none; }
   </style>
@@ -481,13 +628,14 @@ const planHTMLTemplate = `<!doctype html>
     <h2>Changes</h2>
     {{if .Changes}}
     <table>
-      <thead><tr><th>Action</th><th>Address</th><th>Summary</th><th>Source</th></tr></thead>
+      <thead><tr><th>Action</th><th>Address</th><th>Summary</th>{{if .HasDeleteBehaviors}}<th>Delete behavior</th>{{end}}<th>Source</th></tr></thead>
       <tbody>
       {{range .Changes}}
-        <tr data-plan-row data-action="{{.Action}}" data-host="{{hostText .Address}}" data-search="{{.Address}} {{.Summary}} {{sourceText .Source}}">
+        <tr data-plan-row data-action="{{.Action}}" data-host="{{hostText .Address}}" data-search="{{.Address}} {{.Summary}} {{.DeleteBehavior}} {{sourceText .Source}}">
           <td><span class="action action-{{.Action}}">{{actionText .Action}}</span></td>
           <td><code>{{.Address}}</code></td>
           <td>{{.Summary}}{{if .ProviderAddress}}<div class="source">provider: <code>{{.ProviderAddress}}</code></div>{{end}}{{with diffText .Diff}}<details><summary>Field diff</summary><pre>{{.}}</pre></details>{{end}}</td>
+          {{if $.HasDeleteBehaviors}}<td>{{if .DeleteBehavior}}<span class="delete-behavior delete-behavior-{{.DeleteBehavior}}">{{.DeleteBehavior}}</span>{{if .DeleteRisk}}<div class="source">risk: {{.DeleteRisk}}</div>{{end}}{{if .DeleteNotes}}<ul class="delete-notes">{{range .DeleteNotes}}<li>{{.}}</li>{{end}}</ul>{{end}}{{end}}</td>{{end}}
           <td class="source">{{sourceText .Source}}</td>
         </tr>
       {{end}}
@@ -514,6 +662,9 @@ const planHTMLTemplate = `<!doctype html>
     </table>
     {{else}}
     <div class="empty">No operations.</div>
+    {{end}}
+    {{if .HasDeleteBehaviors}}
+    <div class="legend">Delete behavior legend: <span class="delete-behavior delete-behavior-forget">forget</span> <span class="delete-behavior delete-behavior-remove-managed-artifact">remove-managed-artifact</span> <span class="delete-behavior delete-behavior-restore-original">restore-original</span> <span class="delete-behavior delete-behavior-destructive">destructive</span> <span class="delete-behavior delete-behavior-external-side-effect">external-side-effect</span> <span class="delete-behavior delete-behavior-unknown">unknown</span>. See docs/delete-behavior-diagnostics-plan.zh.md.</div>
     {{end}}
   </main>
   <script>

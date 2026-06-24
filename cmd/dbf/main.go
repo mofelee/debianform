@@ -285,6 +285,7 @@ func runConfigCommand(cmd string, args []string) error {
 	format := fs.String("format", "text", "plan output format: text or json")
 	htmlPath := fs.String("html", "", "write plan as static HTML")
 	debug := fs.Bool("debug", false, "show internal provider addresses in plan output")
+	color := fs.String("color", "auto", "colorize text output: auto, always, or never")
 	offline := fs.Bool("offline", false, "render plan without SSH, state, or runtime facts discovery")
 	parallel := fs.Int("parallel", 1, "maximum number of hosts to apply concurrently")
 	lockTimeout := fs.Duration("lock-timeout", 5*time.Minute, "state lock timeout")
@@ -297,12 +298,21 @@ func runConfigCommand(cmd string, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	colorExplicit := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "color" {
+			colorExplicit = true
+		}
+	})
+	if colorExplicit && cmd == "validate" {
+		return fmt.Errorf("--color is only supported for plan, apply, and check")
+	}
 
 	files, err := configFiles(filesFlag)
 	if err != nil {
 		return err
 	}
-	return runConfigWorkflow(cmd, files, *host, *format, *htmlPath, *debug, *offline, *parallel, *lockTimeout, *autoApprove, cliVars, cliVarFiles)
+	return runConfigWorkflow(cmd, files, *host, *format, *htmlPath, *debug, *color, *offline, *parallel, *lockTimeout, *autoApprove, cliVars, cliVarFiles)
 }
 
 type fileFlags []string
@@ -327,12 +337,16 @@ func (f *repeatedFlag) Set(value string) error {
 	return nil
 }
 
-func runConfigWorkflow(cmd string, files []string, host string, format string, htmlPath string, debug bool, offline bool, parallel int, lockTimeout time.Duration, autoApprove bool, cliVars []string, cliVarFiles []string) error {
+func runConfigWorkflow(cmd string, files []string, host string, format string, htmlPath string, debug bool, color string, offline bool, parallel int, lockTimeout time.Duration, autoApprove bool, cliVars []string, cliVarFiles []string) error {
 	if format == "" {
 		format = "text"
 	}
 	if format != "text" && format != "json" {
 		return fmt.Errorf("unsupported plan format %q", format)
+	}
+	useColor, err := colorEnabled(color, os.Stdout)
+	if err != nil {
+		return err
 	}
 	if htmlPath != "" && cmd != "plan" {
 		return fmt.Errorf("--html is only supported for plan")
@@ -417,7 +431,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			})
 		}
 		printWarnings(warnings)
-		return printPlanDocument(doc, format, htmlPath)
+		return printPlanDocument(doc, format, htmlPath, useColor)
 	case "check", "apply":
 		if format != "text" {
 			return fmt.Errorf("--format is only supported for plan")
@@ -444,7 +458,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			Host:        commandHost(program, host),
 		})
 		printWarnings(warnings)
-		coreplan.PrintText(os.Stdout, doc)
+		coreplan.PrintTextWithOptions(os.Stdout, doc, coreplan.TextOptions{Color: useColor})
 		if cmd == "check" {
 			if len(onlinePlan.Steps) > 0 || len(onlinePlan.Operations) > 0 {
 				return fmt.Errorf("remote state does not match configuration")
@@ -465,7 +479,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			CommandFile: commandFile(files),
 			Host:        commandHost(program, host),
 		})
-		coreplan.PrintText(os.Stdout, appliedDoc)
+		coreplan.PrintTextWithOptions(os.Stdout, appliedDoc, coreplan.TextOptions{Color: useColor})
 		fmt.Println("apply complete")
 		return nil
 	default:
@@ -473,7 +487,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 	}
 }
 
-func printPlanDocument(doc coreplan.Document, format string, htmlPath string) error {
+func printPlanDocument(doc coreplan.Document, format string, htmlPath string, color bool) error {
 	if htmlPath != "" {
 		if err := writePlanHTML(htmlPath, doc); err != nil {
 			return err
@@ -485,9 +499,36 @@ func printPlanDocument(doc coreplan.Document, format string, htmlPath string) er
 	case "json":
 		return coreplan.PrintJSON(os.Stdout, doc)
 	default:
-		coreplan.PrintText(os.Stdout, doc)
+		coreplan.PrintTextWithOptions(os.Stdout, doc, coreplan.TextOptions{Color: color})
 		return nil
 	}
+}
+
+func colorEnabled(mode string, stdout *os.File) (bool, error) {
+	switch mode {
+	case "", "auto":
+		return shouldAutoColor(stdout), nil
+	case "always":
+		return true, nil
+	case "never":
+		return false, nil
+	default:
+		return false, fmt.Errorf("unsupported --color value %q; want auto, always, or never", mode)
+	}
+}
+
+func shouldAutoColor(stdout *os.File) bool {
+	if stdout == nil {
+		return false
+	}
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
+		return false
+	}
+	info, err := stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 func parseConfigWithExternalValues(files []string, cliVarFiles []string, cliVars []string, opts coreparser.ParseOptions) (*coreparser.Config, error) {
@@ -820,9 +861,9 @@ func usage() {
 
 Usage:
   dbf validate [-f file ...] [-var name=value] [-var-file path] [--host name]
-  dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--offline]
-  dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--parallel n] [--lock-timeout duration] [--auto-approve]
-  dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--lock-timeout duration]
+  dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]
+  dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]
+  dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]
   dbf variable inspect [-f file ...] [-var name=value] [-var-file path]
   dbf component inspect [-f file ...] name
   dbf fmt      [-f file ...]

@@ -180,6 +180,71 @@ DebianForm 管理的持久化文件，不应被解释为“恢复默认值”。
 - 红色只用于真正 destructive 或可能影响用户数据/服务可用性的动作。
 - 通用颜色、日志颜色和 CI/JSON 边界见 `docs/cli-color-output-policy.zh.md`。
 
+## 可验证实现 Loop
+
+### Loop 1：删除行为数据模型（已实现）
+
+范围：
+
+- 在 plan change 数据中增加删除行为字段。
+- 定义分类枚举和风险级别。
+- provider/engine 不拼接颜色，只返回或推导机器可读分类和说明。
+
+验收：
+
+- JSON plan 的删除项可以读到 `delete_behavior`、`delete_notes`、`delete_risk`。
+- create/update/no-op/run 不输出删除行为字段。
+- plan format 的新增字段符合兼容性政策。
+
+### Loop 2：核心 provider 分类（已实现，仍需持续核对矩阵）
+
+范围：
+
+- 优先覆盖高频和高风险资源：`sysctl`、`apt_source_file`、`file`、`secret`、`directory`、
+  `package`、`user`、`group`、`systemd_unit`、`nftables_file`、`docker_compose_project`。
+- 对 adopted、keep、shared directory 等 forget 情况给出 `forget` 分类。
+
+验收：
+
+- BBR/sysctl 删除提示为 `remove-managed-artifact`。
+- apt source file `on_destroy = "keep"` 为 `forget`，`restore` 为 `restore-original`。
+- directory/package/user/group/docker compose project 为 `destructive`。
+- systemd/nftables 等带 reload/activate 的删除为 `external-side-effect`。
+
+### Loop 3：文本 plan/apply 提示（已实现）
+
+范围：
+
+- 在删除项下方输出 `delete behavior` 和 `note`。
+- 有删除项时在底部输出颜色图例和文档路径。
+- `NO_COLOR` 或非 TTY 下仍输出完整文本。
+
+验收：
+
+- 文本 plan 中删除项不需要看颜色也能理解行为。
+- 无删除项时不显示图例。
+- `apply` 执行前计划和执行后计划都保留删除提示。
+
+### Loop 4：HTML plan 和文档同步（部分已实现）
+
+范围：
+
+- HTML plan 渲染删除行为 badge 和图例。
+- 同步 `docs/plan-format.md`、CLI 文档和 how-it-works。
+- 补 provider 矩阵与实际实现差异。
+
+验收：
+
+- HTML 中删除行为可筛选或至少可见。
+- plan JSON 文档列出新增字段和兼容性说明。
+- 删除行为矩阵不再有“需要实现核对”的核心项。
+
+当前状态：
+
+- HTML badge 和图例已实现。
+- `docs/plan-format.md`、CLI 文档和 how-it-works 已同步。
+- provider 矩阵仍需要结合真实 provider 行为逐项核对，特别是 `service` 和目录删除默认策略。
+
 ## 验收标准
 
 - BBR 删除 plan 明确提示 sysctl 删除只清理持久化文件，不恢复运行时值。
@@ -194,5 +259,3 @@ DebianForm 管理的持久化文件，不应被解释为“恢复默认值”。
 - 当前 provider 中哪些删除行为与上表不一致，需要先核对实现。
 - `service` 删除配置时到底应该 forget、stop、disable，还是维持当前行为并提示。
 - `directory` 是否应默认从 destructive 改为更保守的 forget 或 require explicit absent。
-- plan JSON 是否需要升级 format version，还是按兼容政策作为新增字段处理。
-- HTML plan 的颜色 palette 是否应复用现有 action 色，还是新增 delete behavior badge 色。

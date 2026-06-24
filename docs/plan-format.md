@@ -78,6 +78,12 @@ run
     "path": "host.server1.nftables.file[\"20-services\"]"
   },
   "provider_address": "nftables_file.server1_20_services",
+  "delete_behavior": "external-side-effect",
+  "delete_notes": [
+    "removes nftables file",
+    "may trigger nftables validate or activate operations"
+  ],
+  "delete_risk": "high",
   "diff": {},
   "low_level_actions": []
 }
@@ -88,8 +94,16 @@ run
 - `address` 使用用户可理解的稳定地址。
 - `provider_address` 只在 `dbf plan --debug` 时输出；普通 JSON、终端和 HTML 输出省略。
 - `source` 指向用户 DSL 的来源位置。
+- `delete_behavior`、`delete_notes`、`delete_risk` 只在 `delete`、`destroy`、`forget` 类动作中输出。
 - `diff` 使用 `DiffNode`。
 - `low_level_actions` 用于解释实际会执行的底层动作，但不替代 operation node。
+
+删除行为字段：
+
+- `delete_behavior` 是机器可读分类，例如 `forget`、`remove-managed-artifact`、
+  `restore-original`、`destructive`、`external-side-effect`、`unknown`。
+- `delete_notes` 是简短说明数组，不包含 ANSI 颜色码，也不得包含 sensitive 明文。
+- `delete_risk` 是风险级别，例如 `low`、`medium`、`high`、`unknown`。
 
 ## DiffNode
 

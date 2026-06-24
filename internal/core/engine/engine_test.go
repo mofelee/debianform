@@ -126,6 +126,9 @@ func TestApplyWritesProgress(t *testing.T) {
 	}
 
 	output := progress.String()
+	if strings.Contains(output, "\x1b[") {
+		t.Fatalf("progress output contains ANSI:\n%q", output)
+	}
 	for _, want := range []string{
 		"dbf: server1: start lock state",
 		`dbf: server1: start create host.server1.files.file["/tmp/a"] - create file /tmp/a`,
@@ -982,6 +985,131 @@ host "server1" {
 	}
 }
 
+func TestDeleteDiagnosticsForPlanDocument(t *testing.T) {
+	tests := []struct {
+		name         string
+		step         Step
+		wantBehavior string
+		wantRisk     string
+		wantNote     string
+	}{
+		{
+			name: "sysctl remove managed artifact",
+			step: Step{
+				Address: "host.server1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]",
+				Action:  ActionDestroy,
+				Prior: &corestate.Resource{
+					Host:    "server1",
+					Kind:    "sysctl",
+					Desired: map[string]any{"key": "net.ipv4.tcp_congestion_control", "value": "bbr"},
+				},
+			},
+			wantBehavior: "remove-managed-artifact",
+			wantRisk:     "medium",
+			wantNote:     "runtime sysctl value is not restored",
+		},
+		{
+			name: "apt source keep forget",
+			step: Step{
+				Address: "host.server1.apt.source_file[\"main\"]",
+				Action:  ActionForget,
+				Prior: &corestate.Resource{
+					Host:    "server1",
+					Kind:    "apt_source_file",
+					Desired: map[string]any{"path": "/etc/apt/sources.list.d/main.sources", "on_destroy": "keep"},
+				},
+			},
+			wantBehavior: "forget",
+			wantRisk:     "low",
+			wantNote:     "without modifying the remote resource",
+		},
+		{
+			name: "apt source restore",
+			step: Step{
+				Address: "host.server1.apt.source_file[\"main\"]",
+				Action:  ActionDestroy,
+				Prior: &corestate.Resource{
+					Host:    "server1",
+					Kind:    "apt_source_file",
+					Desired: map[string]any{"path": "/etc/apt/sources.list.d/main.sources", "on_destroy": "restore"},
+				},
+			},
+			wantBehavior: "restore-original",
+			wantRisk:     "medium",
+			wantNote:     "restores the apt source file content",
+		},
+		{
+			name: "directory destructive",
+			step: Step{
+				Address: "host.server1.directories.directory[\"/srv/app\"]",
+				Action:  ActionDestroy,
+				Prior: &corestate.Resource{
+					Host:    "server1",
+					Kind:    "directory",
+					Desired: map[string]any{"path": "/srv/app"},
+				},
+			},
+			wantBehavior: "destructive",
+			wantRisk:     "high",
+			wantNote:     "removes directory recursively",
+		},
+		{
+			name: "systemd unit external side effect",
+			step: Step{
+				Address: "host.server1.systemd.unit[\"app.service\"]",
+				Action:  ActionDestroy,
+				Prior: &corestate.Resource{
+					Host:    "server1",
+					Kind:    "systemd_unit",
+					Desired: map[string]any{"path": "/etc/systemd/system/app.service"},
+				},
+			},
+			wantBehavior: "external-side-effect",
+			wantRisk:     "high",
+			wantNote:     "daemon-reload",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Plan{Steps: []Step{tt.step}, Summary: coreplan.Summary{Delete: 1}}.Document(coreplan.Options{})
+			if len(doc.Changes) != 1 {
+				t.Fatalf("changes = %d, want 1", len(doc.Changes))
+			}
+			change := doc.Changes[0]
+			if change.DeleteBehavior != tt.wantBehavior {
+				t.Fatalf("delete behavior = %q, want %q; change=%#v", change.DeleteBehavior, tt.wantBehavior, change)
+			}
+			if change.DeleteRisk != tt.wantRisk {
+				t.Fatalf("delete risk = %q, want %q; change=%#v", change.DeleteRisk, tt.wantRisk, change)
+			}
+			if !containsSubstring(change.DeleteNotes, tt.wantNote) {
+				t.Fatalf("delete notes = %#v, want substring %q", change.DeleteNotes, tt.wantNote)
+			}
+		})
+	}
+}
+
+func TestDeleteDiagnosticsOmittedForNonDeleteActions(t *testing.T) {
+	step := Step{
+		Address: "host.server1.files.file[\"/tmp/example\"]",
+		Action:  ActionCreate,
+		Node: graph.Node{
+			Host:    "server1",
+			Kind:    "file",
+			Desired: map[string]any{"path": "/tmp/example"},
+		},
+	}
+	doc := Plan{Steps: []Step{step}, Summary: coreplan.Summary{Create: 1}}.Document(coreplan.Options{})
+	if len(doc.Changes) != 1 {
+		t.Fatalf("changes = %d, want 1", len(doc.Changes))
+	}
+	change := doc.Changes[0]
+	if change.DeleteBehavior != "" || len(change.DeleteNotes) != 0 || change.DeleteRisk != "" {
+		t.Fatalf("non-delete change has delete diagnostics: %#v", change)
+	}
+}
+
 func fixtureProgramAndGraph(t *testing.T, fixture string) (*ir.Program, *graph.ResourceGraph) {
 	t.Helper()
 
@@ -1028,6 +1156,15 @@ func fileNode(host, path string, deps []string) graph.Node {
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSubstring(values []string, want string) bool {
+	for _, value := range values {
+		if strings.Contains(value, want) {
 			return true
 		}
 	}

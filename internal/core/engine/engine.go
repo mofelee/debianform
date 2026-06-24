@@ -335,6 +335,11 @@ func (p Plan) Document(opts coreplan.Options) coreplan.Document {
 			Source:  step.Node.Source,
 			Diff:    coreplan.BuildDiff(step.Action, before, after),
 		}
+		if diagnostic := deleteDiagnosticForStep(step); diagnostic.Behavior != "" {
+			change.DeleteBehavior = diagnostic.Behavior
+			change.DeleteNotes = diagnostic.Notes
+			change.DeleteRisk = diagnostic.Risk
+		}
 		if opts.Debug {
 			change.ProviderAddress = step.Node.ProviderAddress
 			if change.ProviderAddress == "" && step.Prior != nil {
@@ -372,6 +377,219 @@ func (p Plan) Document(opts coreplan.Options) coreplan.Document {
 		Operations:  operations,
 		Diagnostics: []coreplan.Diagnostic{},
 	}
+}
+
+type deleteDiagnostic struct {
+	Behavior string
+	Notes    []string
+	Risk     string
+}
+
+func deleteDiagnosticForStep(step Step) deleteDiagnostic {
+	if !deleteLikeAction(step.Action) {
+		return deleteDiagnostic{}
+	}
+	if step.Action == ActionForget {
+		return deleteDiagnostic{
+			Behavior: "forget",
+			Notes:    []string{"removes the resource from DebianForm state without modifying the remote resource"},
+			Risk:     "low",
+		}
+	}
+
+	kind, desired := stepDeleteKindAndDesired(step)
+	switch kind {
+	case "apt_source_file":
+		path := stringMapValue(desired, "path")
+		if aptSourceOnDestroy(desired) == "restore" {
+			return deleteDiagnostic{
+				Behavior: "restore-original",
+				Notes:    compactNotes("restores the apt source file content saved when DebianForm adopted or last managed it", "path: "+path),
+				Risk:     "medium",
+			}
+		}
+		return deleteDiagnostic{
+			Behavior: "forget",
+			Notes:    compactNotes("keeps the remote apt source file and removes only DebianForm state", "path: "+path),
+			Risk:     "low",
+		}
+	case "sysctl":
+		key := stringMapValue(desired, "key")
+		return deleteDiagnostic{
+			Behavior: "remove-managed-artifact",
+			Notes:    compactNotes("removes "+sysctlPath(key), "runtime sysctl value is not restored"),
+			Risk:     "medium",
+		}
+	case "kernel_module":
+		name := stringMapValue(desired, "name")
+		return deleteDiagnostic{
+			Behavior: "external-side-effect",
+			Notes:    compactNotes("removes "+modulePath(name), "attempts to unload the kernel module with modprobe -r"),
+			Risk:     "high",
+		}
+	case "apt_signing_key", "component_download", "component_build":
+		path := deletePathForKind(kind, desired)
+		return deleteDiagnostic{
+			Behavior: "remove-managed-artifact",
+			Notes:    compactNotes("removes DebianForm-managed artifact", "path: "+path),
+			Risk:     "medium",
+		}
+	case "systemd_unit":
+		path := stringMapValue(desired, "path")
+		return deleteDiagnostic{
+			Behavior: "external-side-effect",
+			Notes:    compactNotes("removes systemd unit file", "path: "+path, "runs systemctl daemon-reload"),
+			Risk:     "high",
+		}
+	case "nftables_file":
+		path := stringMapValue(desired, "path")
+		return deleteDiagnostic{
+			Behavior: "external-side-effect",
+			Notes:    compactNotes("removes nftables file", "path: "+path, "may trigger nftables validate or activate operations"),
+			Risk:     "high",
+		}
+	case "component_ca_certificate":
+		path := stringMapValue(desired, "path")
+		return deleteDiagnostic{
+			Behavior: "external-side-effect",
+			Notes:    compactNotes("removes CA certificate file", "path: "+path, "may trigger update-ca-certificates"),
+			Risk:     "high",
+		}
+	case "user_group_membership":
+		return deleteDiagnostic{
+			Behavior: "external-side-effect",
+			Notes:    compactNotes("removes user from supplementary group", "existing login sessions may keep old group membership"),
+			Risk:     "medium",
+		}
+	case "service":
+		name := stringMapValue(desired, "name")
+		return deleteDiagnostic{
+			Behavior: "external-side-effect",
+			Notes:    compactNotes("disables and stops the service when destroying the managed service resource", "service: "+name),
+			Risk:     "high",
+		}
+	case "docker_package_conflicts", "package", "file", "secret", "directory", "group", "user", "ssh_authorized_key", "component_binary", "component_file", "component_archive", "docker_compose_project":
+		return destructiveDeleteDiagnostic(kind, desired)
+	case "networkd_netdev", "networkd_network":
+		path := stringMapValue(desired, "path")
+		return deleteDiagnostic{
+			Behavior: "external-side-effect",
+			Notes:    compactNotes("removes systemd-networkd file", "path: "+path),
+			Risk:     "high",
+		}
+	default:
+		return deleteDiagnostic{
+			Behavior: "unknown",
+			Notes:    compactNotes("provider has not declared precise delete behavior for resource kind " + kind),
+			Risk:     "unknown",
+		}
+	}
+}
+
+func deleteLikeAction(action string) bool {
+	switch action {
+	case ActionDelete, ActionDestroy, ActionForget:
+		return true
+	default:
+		return false
+	}
+}
+
+func stepDeleteKindAndDesired(step Step) (string, map[string]any) {
+	if step.Prior != nil && (step.Action == ActionDestroy || step.Action == ActionForget) {
+		return step.Prior.Kind, step.Prior.Desired
+	}
+	return step.Node.Kind, step.Node.Desired
+}
+
+func deletePathForKind(kind string, desired map[string]any) string {
+	if kind == "component_build" {
+		return stringMapValue(desired, "output_path")
+	}
+	return stringMapValue(desired, "path")
+}
+
+func destructiveDeleteDiagnostic(kind string, desired map[string]any) deleteDiagnostic {
+	switch kind {
+	case "docker_package_conflicts":
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    []string{"removes installed Docker conflict packages and does not reinstall them later"},
+			Risk:     "high",
+		}
+	case "package":
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    compactNotes("removes package with apt-get remove", "package: "+stringMapValue(desired, "name")),
+			Risk:     "high",
+		}
+	case "file":
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    compactNotes("removes file and does not restore previous content", "path: "+stringMapValue(desired, "path")),
+			Risk:     "high",
+		}
+	case "secret":
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    compactNotes("removes secret file and does not store or restore secret plaintext", "path: "+stringMapValue(desired, "path")),
+			Risk:     "high",
+		}
+	case "directory", "component_archive":
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    compactNotes("removes directory recursively and cannot restore its contents", "path: "+stringMapValue(desired, "path")),
+			Risk:     "high",
+		}
+	case "group":
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    compactNotes("deletes group and does not restore previous membership", "group: "+stringMapValue(desired, "name")),
+			Risk:     "high",
+		}
+	case "user":
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    compactNotes("deletes user and does not restore previous account state", "user: "+stringMapValue(desired, "name")),
+			Risk:     "high",
+		}
+	case "ssh_authorized_key":
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    compactNotes("removes authorized key from the user's authorized_keys file", "user: "+stringMapValue(desired, "user")),
+			Risk:     "high",
+		}
+	case "component_binary", "component_file":
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    compactNotes("removes installed component artifact", "path: "+stringMapValue(desired, "path")),
+			Risk:     "high",
+		}
+	case "docker_compose_project":
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    compactNotes("runs docker compose down for the project", "project: "+stringMapValue(desired, "project"), "does not restore previous compose project state"),
+			Risk:     "high",
+		}
+	default:
+		return deleteDiagnostic{
+			Behavior: "destructive",
+			Notes:    compactNotes("removes remote resource managed by DebianForm", "kind: "+kind),
+			Risk:     "high",
+		}
+	}
+}
+
+func compactNotes(notes ...string) []string {
+	out := make([]string, 0, len(notes))
+	for _, note := range notes {
+		note = strings.TrimSpace(note)
+		if note == "" || strings.HasSuffix(note, ": ") || strings.HasSuffix(note, ":") {
+			continue
+		}
+		out = append(out, note)
+	}
+	return out
 }
 
 func priorResource(st corestate.State, address string) *corestate.Resource {

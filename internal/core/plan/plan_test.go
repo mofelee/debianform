@@ -917,6 +917,155 @@ func TestActionMatrixJSONAndTerminalGolden(t *testing.T) {
 	assertGolden(t, "../testdata/plan/action-matrix.golden.txt", text.String())
 }
 
+func TestPrintTextWithColorOption(t *testing.T) {
+	doc := Document{
+		FormatVersion: FormatVersion,
+		GeneratedAt:   "2026-06-20T12:00:00Z",
+		Command:       Command{File: "examples/action-matrix.dbf.hcl", Host: "server1"},
+		Summary:       Summary{Create: 1, Update: 1, Delete: 1, Operations: 1},
+		Changes: []Change{
+			{
+				Address: `host.server1.files.file["/tmp/create"]`,
+				Action:  "create",
+				Summary: "create file /tmp/create",
+				Diff:    BuildDiff("create", nil, map[string]any{"path": "/tmp/create"}),
+			},
+			{
+				Address: `host.server1.files.file["/tmp/update"]`,
+				Action:  "update",
+				Summary: "update file /tmp/update",
+				Diff: BuildDiff("update",
+					map[string]any{"content": "old\n"},
+					map[string]any{"content": "new\n"},
+				),
+			},
+			{
+				Address: `host.server1.files.file["/tmp/delete"]`,
+				Action:  "delete",
+				Summary: "delete file /tmp/delete",
+				Diff:    BuildDiff("delete", map[string]any{"path": "/tmp/delete"}, nil),
+			},
+		},
+		Operations: []OperationNode{
+			{
+				Address: "host.server1.systemd.daemon_reload",
+				Action:  "run",
+				Summary: "reload systemd manager configuration",
+			},
+		},
+		Diagnostics: []Diagnostic{},
+	}
+
+	var plain bytes.Buffer
+	PrintText(&plain, doc)
+	if strings.Contains(plain.String(), "\x1b[") {
+		t.Fatalf("plain text output contains ANSI:\n%q", plain.String())
+	}
+
+	var colored bytes.Buffer
+	PrintTextWithOptions(&colored, doc, TextOptions{Color: true})
+	rendered := colored.String()
+	for _, want := range []string{
+		"\x1b[32m+\x1b[0m",
+		"\x1b[33m~\x1b[0m",
+		"\x1b[31m-\x1b[0m",
+		"\x1b[34m!\x1b[0m",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("colored text output missing %q:\n%q", want, rendered)
+		}
+	}
+	if !strings.Contains(rendered, `host.server1.files.file["/tmp/delete"]`) {
+		t.Fatalf("colored text output lost address:\n%s", rendered)
+	}
+}
+
+func TestPrintTextShowsDeleteBehaviorDiagnostics(t *testing.T) {
+	doc := Document{
+		FormatVersion: FormatVersion,
+		GeneratedAt:   "2026-06-20T12:00:00Z",
+		Command:       Command{File: "examples/delete.dbf.hcl", Host: "server1"},
+		Summary:       Summary{Delete: 1},
+		Changes: []Change{
+			{
+				Address:        `host.server1.kernel.sysctl["net.ipv4.tcp_congestion_control"]`,
+				Action:         "destroy",
+				Summary:        "destroy sysctl host.server1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]",
+				DeleteBehavior: "remove-managed-artifact",
+				DeleteNotes: []string{
+					"removes /etc/sysctl.d/99-dbf-net_ipv4_tcp_congestion_control.conf",
+					"runtime sysctl value is not restored",
+				},
+				DeleteRisk: "medium",
+				Diff:       BuildDiff("destroy", map[string]any{"key": "net.ipv4.tcp_congestion_control"}, nil),
+			},
+		},
+		Diagnostics: []Diagnostic{},
+	}
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	rendered := text.String()
+	for _, want := range []string{
+		"delete behavior: remove-managed-artifact (risk: medium)",
+		"note: runtime sysctl value is not restored",
+		"Delete behavior legend:",
+		"docs/delete-behavior-diagnostics-plan.zh.md",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("delete behavior text missing %q:\n%s", want, rendered)
+		}
+	}
+
+	var noDelete bytes.Buffer
+	PrintText(&noDelete, Document{FormatVersion: FormatVersion, Summary: Summary{Create: 1}, Changes: []Change{{
+		Address: `host.server1.files.file["/tmp/create"]`,
+		Action:  "create",
+		Summary: "create file /tmp/create",
+		Diff:    BuildDiff("create", nil, map[string]any{"path": "/tmp/create"}),
+	}}})
+	if strings.Contains(noDelete.String(), "Delete behavior legend:") {
+		t.Fatalf("non-delete text output showed delete behavior legend:\n%s", noDelete.String())
+	}
+}
+
+func TestPrintHTMLShowsDeleteBehaviorDiagnostics(t *testing.T) {
+	doc := Document{
+		FormatVersion: FormatVersion,
+		GeneratedAt:   "2026-06-20T12:00:00Z",
+		Command:       Command{File: "examples/delete.dbf.hcl", Host: "server1"},
+		Summary:       Summary{Delete: 1},
+		Changes: []Change{
+			{
+				Address:        `host.server1.users.user["oldapp"]`,
+				Action:         "destroy",
+				Summary:        "destroy user oldapp",
+				DeleteBehavior: "destructive",
+				DeleteNotes:    []string{"deletes user and does not restore previous account state"},
+				DeleteRisk:     "high",
+				Diff:           BuildDiff("destroy", map[string]any{"name": "oldapp"}, nil),
+			},
+		},
+		Diagnostics: []Diagnostic{},
+	}
+	var out bytes.Buffer
+	if err := PrintHTML(&out, doc); err != nil {
+		t.Fatal(err)
+	}
+	html := out.String()
+	for _, want := range []string{
+		"Delete behavior",
+		"delete-behavior-destructive",
+		"deletes user and does not restore previous account state",
+		"Delete behavior legend:",
+		"docs/delete-behavior-diagnostics-plan.zh.md",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML output missing %q:\n%s", want, html)
+		}
+	}
+}
+
 func planFixture(t *testing.T, fixture string, opts Options) Document {
 	t.Helper()
 

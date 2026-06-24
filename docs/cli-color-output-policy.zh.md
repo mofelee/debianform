@@ -117,6 +117,73 @@ DebianForm 的输出同时服务两类场景：
 - 文本输出在禁用颜色时必须仍然包含符号、分类名和说明。
 - HTML plan 使用 CSS class 表示颜色语义，不复用 ANSI 逻辑。
 
+## 可验证实现 Loop
+
+### Loop 1：CLI 颜色控制基础（已实现）
+
+范围：
+
+- 新增 `--color=auto|always|never`。
+- `auto` 支持 TTY 检测、`NO_COLOR` 和 `TERM=dumb`。
+- 文本 plan renderer 通过选项决定是否输出 ANSI。
+- JSON、HTML、state、debug log 不引入 ANSI。
+
+验收：
+
+- `dbf plan --offline --color=always` 的文本输出包含 ANSI。
+- `dbf plan --offline --color=never` 的文本输出不包含 ANSI。
+- `NO_COLOR=1 dbf plan --offline` 的默认 `auto` 输出不包含 ANSI。
+- `dbf plan --offline --format json --color=always` 输出仍是无 ANSI JSON。
+- 原有无颜色 golden 不需要因为默认 `auto` 在非 TTY 中启用颜色而变化。
+
+### Loop 2：删除行为结构化字段（已实现）
+
+范围：
+
+- 在 `plan.Change` 中加入 `delete_behavior`、`delete_notes`、`delete_risk`。
+- 只在 delete/destroy/forget 类动作中输出。
+- 先覆盖 BBR/sysctl、apt source file keep/restore、file、directory、package、systemd/nftables、operation side effect 等核心路径。
+
+验收：
+
+- BBR 删除 plan JSON 包含 `delete_behavior = "remove-managed-artifact"`。
+- apt source file keep/restore 在 JSON 中分类不同。
+- 非删除动作不输出删除行为字段。
+- sensitive 内容不进入 `delete_notes`。
+
+### Loop 3：文本和 HTML 删除行为提示（已实现）
+
+范围：
+
+- 文本 plan/apply 删除项显示 `delete behavior` 和 `note`。
+- 有删除项时底部显示图例和文档路径。
+- HTML plan 增加删除行为 badge 和图例。
+
+验收：
+
+- BBR 删除文本 plan 明确提示只删除 sysctl 持久化文件，不恢复运行时值。
+- destructive、external-side-effect、restore-original、forget 在文本和 HTML 中可区分。
+- 无删除动作时不显示删除行为图例。
+
+### Loop 4：apply/check 进度颜色边界（部分已实现）
+
+范围：
+
+- `apply`/`check` 的计划输出复用 plan renderer 颜色选项。
+- 进度日志默认不大量加色；只允许 warning/error/高风险提示后续单独接入。
+
+验收：
+
+- `apply --color=never` 的计划输出无 ANSI。
+- `apply --color=always` 的计划输出有 ANSI。
+- stderr 进度日志默认无 ANSI，避免污染 CI/debug log。
+
+当前状态：
+
+- 计划输出已复用 `--color`。
+- 进度日志保持无 ANSI。
+- warning/error/高风险进度提示是否加色仍留待后续单独设计。
+
 ## 验收标准
 
 - TTY 下 `dbf plan` 能用颜色区分 create/update/delete 行。
@@ -129,7 +196,5 @@ DebianForm 的输出同时服务两类场景：
 
 ## 待定问题
 
-- 是否现在就新增全局 `--color=auto|always|never`，还是先只实现 `NO_COLOR` 和 TTY 自动检测。
 - `apply` 执行过程中的远端命令 stdout/stderr 是否应完全原样透传，还是由 DebianForm 统一去除 ANSI。
-- HTML plan 的颜色 palette 是否复用当前 action 色，还是为删除行为新增独立 badge 色。
 - Windows 终端支持是否需要额外检测，还是当前阶段只按 Unix TTY 处理。
