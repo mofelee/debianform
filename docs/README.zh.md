@@ -14,6 +14,7 @@
 - [支持矩阵](support-matrix.zh.md)：当前支持的平台、配置 block、resource 类型和示例。
 - [安全模型](security-model.zh.md)：root SSH、secret 脱敏、state/lock 和漏洞响应边界。
 - [兼容性政策](compatibility-policy.zh.md)：beta/stable 的 CLI、DSL、state 和 plan JSON 兼容规则。
+- [系统如何工作](how-it-works/README.zh.md)：面向后续开发者的内部架构和实现链路系列教程。
 - [Plan JSON 格式](plan-format.md)：`dbf plan --format json` 的结构化输出。
 - [State 格式](state.md)：远端 state、lock、ownership 和脱敏规则。
 - [systemd service units](systemd-service-units.md)：纯文本 unit 和结构化 `service_unit` 写法。
