@@ -99,7 +99,8 @@ dbf check
 - 第二次 `plan`：预期 no-op。
 - `check`：检查远端是否漂移；不一致时返回非零。
 
-更完整的新手教程见 [Quickstart](docs/quickstart.zh.md)。真实服务部署模板见
+更完整的新手教程见 [Quickstart](docs/quickstart.zh.md)，后续章节见
+[用户手册](docs/user-manual/README.zh.md)。真实服务部署模板见
 [systemd app 示例](docs/realistic-deployment-example.zh.md)。
 
 ## 常用命令
@@ -243,6 +244,7 @@ dbf plan -f examples/nftables.dbf.hcl --offline
 ## 文档索引
 
 - [Quickstart](docs/quickstart.zh.md)：从零到第一次 `apply/check`。
+- [用户手册](docs/user-manual/README.zh.md)：由浅入深的可运行教程。
 - [CLI 手册](docs/cli.zh.md)：所有命令、参数、输出和限制。
 - [真实部署模板](docs/realistic-deployment-example.zh.md)：低权限 systemd app 模板。
 - [Operations Runbook](docs/operations-runbook.zh.md)：state lock、失败恢复、drift 排查。
