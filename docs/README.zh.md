@@ -10,6 +10,7 @@
 - [CLI 手册](cli.zh.md)：`validate`、`plan`、`apply`、`check`、`fmt` 和 inspect 命令。
 - [DSL Reference](dsl-reference.zh.md)：`.dbf.hcl` 已实现指令、字段、默认值、限制和可测试示例。
 - [真实部署模板](realistic-deployment-example.zh.md)：一个低权限 systemd app 的完整小例子。
+- [README asciinema 演示录制指南](readme-asciinema-demo.zh.md)：重新生成 GitHub 首页终端演示。
 
 ## 日常查阅
 

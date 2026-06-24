@@ -19,6 +19,10 @@ DebianForm 是一个面向 Debian 主机的声明式配置工具：写一份 `.d
 当前项目仍处于 public preview / beta 阶段。建议先在低风险 Debian 13 测试主机上试用；
 CLI、配置格式、state 和 plan JSON 在 stable 前仍可能调整。
 
+<p align="center">
+  <img src="./docs/demo/debianform-quickstart.svg" alt="DebianForm quickstart terminal demo" width="820">
+</p>
+
 ## 30 秒安装
 
 macOS 或 Linux 上推荐 Homebrew：
