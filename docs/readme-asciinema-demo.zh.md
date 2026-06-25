@@ -39,7 +39,7 @@ docs/demo/render-readme-demo.sh
 - 构建临时 `dbf` 二进制，使用 `go build -buildvcs=false`，避免 README 演示里出现录制时工作区的
   `+dirty` 状态。
 - 使用 `virsh-test-host` 创建 Debian 13 临时主机。
-- 在录制外生成临时 SSH config，录屏中只展示稳定别名 `dbf-demo-host`。
+- 在录制外生成临时 SSH config，录屏中只展示稳定别名 `demo1`。
   临时 config 顶部会 `Include ~/.ssh/config`，让 `ProxyJump ks` 这类本机跳板别名仍可解析。
 - 录制本地 `dbf version`、远端 Debian 版本/架构、`validate`、在线 `plan`、真实 `apply`、
   第二次 no-op `plan` 和 `check`。
@@ -53,7 +53,7 @@ docs/demo/render-readme-demo.sh
 
 ```bash
 DBF_DEMO_DOMAIN=dbf-test-readme-demo
-DBF_DEMO_HOST_ALIAS=dbf-demo-host
+DBF_DEMO_HOST_ALIAS=demo1
 DBF_DEMO_COLS=90
 DBF_DEMO_ROWS=28
 DBF_DEMO_IDLE_TIME_LIMIT=2

@@ -7,7 +7,7 @@ SKILL_DIR="${DBF_VIRSH_TEST_HOST_DIR:-/root/.codex/skills/virsh-test-host}"
 VIRSH_HELPER="${DBF_VIRSH_TEST_HOST_HELPER:-$SKILL_DIR/scripts/virsh-test-host.sh}"
 
 DOMAIN="${DBF_DEMO_DOMAIN:-dbf-test-readme-demo}"
-ALIAS="${DBF_DEMO_HOST_ALIAS:-dbf-demo-host}"
+ALIAS="${DBF_DEMO_HOST_ALIAS:-demo1}"
 CAST_PATH="${DBF_DEMO_CAST_PATH:-$ROOT_DIR/docs/demo/debianform-quickstart.cast}"
 DBF_BIN="${DBF_DEMO_DBF_BIN:-}"
 WORK_DIR=""
