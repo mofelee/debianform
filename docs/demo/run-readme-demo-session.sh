@@ -8,13 +8,13 @@ DBF_BIN="${DBF_DEMO_DBF_BIN:?DBF_DEMO_DBF_BIN is required}"
 SSH_CONFIG="${DBF_DEMO_SSH_CONFIG:?DBF_DEMO_SSH_CONFIG is required}"
 ALIAS="${DBF_DEMO_HOST_ALIAS:-dbf-demo-host}"
 
-TYPE_DELAY="${DBF_DEMO_TYPE_DELAY:-0.018}"
-PAUSE_SHORT="${DBF_DEMO_PAUSE_SHORT:-0.35}"
-PAUSE_LONG="${DBF_DEMO_PAUSE_LONG:-0.75}"
+TYPE_DELAY="${DBF_DEMO_TYPE_DELAY:-0.045}"
+PAUSE_BEFORE_RUN="${DBF_DEMO_PAUSE_BEFORE_RUN:-1.5}"
+PAUSE_AFTER_RUN="${DBF_DEMO_PAUSE_AFTER_RUN:-2.5}"
+PAUSE_NOTE="${DBF_DEMO_PAUSE_NOTE:-1.2}"
 
 cd "$WORK_DIR"
 export DBF_SSH_CONFIG="$SSH_CONFIG"
-export NO_COLOR=1
 export TERM="${TERM:-xterm-256color}"
 SSH_BASE=(ssh -F "$SSH_CONFIG" -o BatchMode=yes -o ConnectTimeout=10)
 
@@ -34,9 +34,17 @@ run_cmd() {
   printf '\n'
   type_text "$ $display"
   printf '\n'
-  sleep "$PAUSE_SHORT"
+  sleep "$PAUSE_BEFORE_RUN"
   "$@"
-  sleep "$PAUSE_LONG"
+  sleep "$PAUSE_AFTER_RUN"
+}
+
+note() {
+  local text=$1
+  printf '\n'
+  type_text "# $text"
+  printf '\n'
+  sleep "$PAUSE_NOTE"
 }
 
 show_file() {
@@ -44,18 +52,22 @@ show_file() {
   printf '\n'
   type_text "$ sed -n '1,80p' $file"
   printf '\n'
-  sleep "$PAUSE_SHORT"
+  sleep "$PAUSE_BEFORE_RUN"
   sed -n '1,80p' "$file"
-  sleep "$PAUSE_LONG"
+  sleep "$PAUSE_AFTER_RUN"
 }
 
 printf 'DebianForm: real apply on a disposable Debian host\n'
-sleep "$PAUSE_LONG"
+sleep "$PAUSE_AFTER_RUN"
 
+note "Confirm the local dbf build."
 run_cmd "dbf version" "$DBF_BIN" version
+
+note "Confirm the target Debian host."
 run_cmd "ssh $ALIAS 'grep PRETTY_NAME /etc/os-release; dpkg --print-architecture'" \
   "${SSH_BASE[@]}" "$ALIAS" "grep '^PRETTY_NAME=' /etc/os-release; dpkg --print-architecture"
 
+note "Write one DebianForm config file."
 cat >site.dbf.hcl <<EOF
 host "demo1" {
   ssh {
@@ -83,11 +95,14 @@ EOF
 
 show_file site.dbf.hcl
 
-run_cmd "dbf validate -f site.dbf.hcl" "$DBF_BIN" validate -f site.dbf.hcl
-run_cmd "dbf plan -f site.dbf.hcl" "$DBF_BIN" plan -f site.dbf.hcl --color never
-run_cmd "dbf apply -f site.dbf.hcl --auto-approve" "$DBF_BIN" apply -f site.dbf.hcl --auto-approve --color never
-run_cmd "dbf plan -f site.dbf.hcl" "$DBF_BIN" plan -f site.dbf.hcl --color never
-run_cmd "dbf check -f site.dbf.hcl" "$DBF_BIN" check -f site.dbf.hcl --color never
+note "Preview, apply, and verify no drift."
+run_cmd "dbf validate" "$DBF_BIN" validate
+run_cmd "dbf plan" "$DBF_BIN" plan --color always
+run_cmd "dbf apply --auto-approve" "$DBF_BIN" apply --auto-approve --color always
+run_cmd "dbf plan" "$DBF_BIN" plan --color always
+run_cmd "dbf check" "$DBF_BIN" check --color always
+
+note "Confirm the managed file on the target host."
 run_cmd "ssh $ALIAS 'cat /etc/debianform-demo/message.txt'" \
   "${SSH_BASE[@]}" "$ALIAS" 'cat /etc/debianform-demo/message.txt'
 

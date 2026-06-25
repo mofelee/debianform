@@ -15,6 +15,16 @@
 录制脚本会创建并销毁一个固定名称的临时 VM：`dbf-test-readme-demo`。销毁逻辑只作用于
 这个 `dbf-test` 前缀的域名。
 
+## 录制要求
+
+- 命令前先打出简短注释行，说明下一步在做什么；注释行使用 `# ...`。
+- 打字速度必须偏慢，默认 `DBF_DEMO_TYPE_DELAY=0.045`，避免 README 动图看不清。
+- 命令敲完后先停顿，默认 `DBF_DEMO_PAUSE_BEFORE_RUN=1.5`；命令输出后也要停顿，
+  默认 `DBF_DEMO_PAUSE_AFTER_RUN=2.5`。
+- 必须保留颜色。`plan`、`apply`、`check` 使用 `--color always`，不要设置 `NO_COLOR`。
+- 录制目录里只生成一个 `site.dbf.hcl`，所以 `dbf validate/plan/apply/check` 不要带 `-f`，
+  让演示保持接近新手快速开始。
+
 ## 生成步骤
 
 在仓库根目录运行：
@@ -47,6 +57,10 @@ DBF_DEMO_HOST_ALIAS=dbf-demo-host
 DBF_DEMO_COLS=90
 DBF_DEMO_ROWS=28
 DBF_DEMO_IDLE_TIME_LIMIT=2
+DBF_DEMO_TYPE_DELAY=0.045
+DBF_DEMO_PAUSE_BEFORE_RUN=1.5
+DBF_DEMO_PAUSE_AFTER_RUN=2.5
+DBF_DEMO_PAUSE_NOTE=1.2
 DBF_TEST_POOL=vm
 DBF_TEST_NETWORK=default
 ```
@@ -63,7 +77,10 @@ DBF_TEST_NAME=dbf-test-readme-demo \
 ```bash
 asciinema cat docs/demo/debianform-quickstart.cast >/dev/null
 test -s docs/demo/debianform-quickstart.svg
-rg '192\\.168\\.|ProxyJump|IdentityFile|/root/\\.ssh' docs/demo/debianform-quickstart.cast docs/demo/debianform-quickstart.svg
+asciinema cat docs/demo/debianform-quickstart.cast | rg '# Confirm|# Write|# Preview'
+asciinema cat docs/demo/debianform-quickstart.cast | rg --fixed-strings $'\033['
+! asciinema cat docs/demo/debianform-quickstart.cast | rg --fixed-strings -- '-f site.dbf.hcl'
+! rg '192\\.168\\.|ProxyJump|IdentityFile|/root/\\.ssh' docs/demo/debianform-quickstart.cast docs/demo/debianform-quickstart.svg
 ```
 
-最后一条命令应无输出。若出现本地 IP、跳板机或私钥路径，先调整脚本再重录。
+最后两条取反检查应无输出。若出现 `-f`、本地 IP、跳板机或私钥路径，先调整脚本再重录。
