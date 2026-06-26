@@ -36,27 +36,138 @@ func TestConfigFilesLoadsAllDBFHCLInCurrentDirectory(t *testing.T) {
 }
 
 func TestConfigFilesWithExplicitFile(t *testing.T) {
-	files, err := configFiles([]string{"custom.dbf.hcl"})
+	dir := t.TempDir()
+	file := filepath.Join(dir, "custom.dbf.hcl")
+	writeTestFile(t, file, "")
+
+	files, err := configFiles([]string{file})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"custom.dbf.hcl"}
+	want := []string{file}
 	if !reflect.DeepEqual(files, want) {
 		t.Fatalf("configFiles() = %#v, want %#v", files, want)
 	}
 }
 
 func TestConfigFilesWithExplicitFiles(t *testing.T) {
-	input := []string{"base.dbf.hcl", "app.dbf.hcl"}
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.dbf.hcl")
+	app := filepath.Join(dir, "app.dbf.hcl")
+	writeTestFile(t, base, "")
+	writeTestFile(t, app, "")
+
+	input := []string{base, app}
 	files, err := configFiles(input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input[0] = "mutated.dbf.hcl"
+	input[0] = filepath.Join(dir, "mutated.dbf.hcl")
 
-	want := []string{"base.dbf.hcl", "app.dbf.hcl"}
+	want := []string{base, app}
 	if !reflect.DeepEqual(files, want) {
 		t.Fatalf("configFiles() = %#v, want %#v", files, want)
+	}
+}
+
+func TestConfigFilesWithExplicitDirectory(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, filepath.Join(dir, "20-app.dbf.hcl"), "")
+	writeTestFile(t, filepath.Join(dir, "10-base.dbf.hcl"), "")
+	writeTestFile(t, filepath.Join(dir, "notes.txt"), "")
+	subdir := filepath.Join(dir, "nested")
+	if err := os.Mkdir(subdir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(subdir, "ignored.dbf.hcl"), "")
+
+	files, err := configFiles([]string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(dir, "10-base.dbf.hcl"),
+		filepath.Join(dir, "20-app.dbf.hcl"),
+	}
+	if !reflect.DeepEqual(files, want) {
+		t.Fatalf("configFiles() = %#v, want %#v", files, want)
+	}
+}
+
+func TestConfigFilesWithDotAndParentDirectory(t *testing.T) {
+	root := t.TempDir()
+	local := filepath.Join(root, "local")
+	shared := filepath.Join(root, "shared")
+	if err := os.Mkdir(local, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(shared, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(local, "site.dbf.hcl"), "")
+	writeTestFile(t, filepath.Join(shared, "base.dbf.hcl"), "")
+	t.Chdir(local)
+
+	files, err := configFiles([]string{".", "../shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"site.dbf.hcl",
+		filepath.Join("..", "shared", "base.dbf.hcl"),
+	}
+	if !reflect.DeepEqual(files, want) {
+		t.Fatalf("configFiles() = %#v, want %#v", files, want)
+	}
+}
+
+func TestConfigFilesWithMixedFilesDirectoriesAndDeduplication(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "shared")
+	app := filepath.Join(root, "app")
+	if err := os.Mkdir(shared, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(app, 0755); err != nil {
+		t.Fatal(err)
+	}
+	sharedBase := filepath.Join(shared, "base.dbf.hcl")
+	appHost := filepath.Join(app, "host.dbf.hcl")
+	writeTestFile(t, sharedBase, "")
+	writeTestFile(t, appHost, "")
+
+	files, err := configFiles([]string{sharedBase, shared, app})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{sharedBase, appHost}
+	if !reflect.DeepEqual(files, want) {
+		t.Fatalf("configFiles() = %#v, want %#v", files, want)
+	}
+}
+
+func TestConfigFilesRejectsInvalidExplicitSources(t *testing.T) {
+	dir := t.TempDir()
+	empty := filepath.Join(dir, "empty")
+	if err := os.Mkdir(empty, 0755); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(dir, "missing.dbf.hcl")
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "empty-directory", args: []string{empty}, want: "no configuration file found in directory"},
+		{name: "missing-path", args: []string{missing}, want: "configuration source"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := configFiles(tc.args)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("configFiles(%v) error = %v, want %q", tc.args, err, tc.want)
+			}
+		})
 	}
 }
 
@@ -110,10 +221,10 @@ func TestHelpDocumentsImplementedFlags(t *testing.T) {
 				}
 			})
 			for _, want := range []string{
-				"dbf validate [-f file ...] [-var name=value] [-var-file path] [--host name]",
-				"dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]",
-				"dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]",
-				"dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]",
+				"dbf validate [-f path ...] [-var name=value] [-var-file path] [--host name]",
+				"dbf plan     [-f path ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]",
+				"dbf apply    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]",
+				"dbf check    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]",
 			} {
 				if !strings.Contains(output, want) {
 					t.Fatalf("help output does not contain %q:\n%s", want, output)
@@ -715,6 +826,140 @@ labels = {
 	}
 }
 
+func TestPlanLoadsCrossDirectoryFilesAndAutoVariableFiles(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "shared")
+	site := filepath.Join(root, "site")
+	if err := os.Mkdir(shared, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(site, 0755); err != nil {
+		t.Fatal(err)
+	}
+	sharedConfig := filepath.Join(shared, "base.dbf.hcl")
+	siteConfig := filepath.Join(site, "site.dbf.hcl")
+	writeTestFile(t, sharedConfig, `
+variable "environment" {
+  type    = string
+  default = "default"
+}
+
+profile "base" {
+  packages {
+    install = ["curl"]
+  }
+}
+`)
+	writeTestFile(t, siteConfig, `
+host "server1" {
+  imports = [profile.base]
+
+  files {
+    file "/etc/debianform/environment.txt" {
+      content = "env=${var.environment}\n"
+    }
+  }
+}
+`)
+	writeTestFile(t, filepath.Join(shared, "10.auto.dbfvars"), `
+environment = "shared"
+`)
+	writeTestFile(t, filepath.Join(site, "10.auto.dbfvars"), `
+environment = "site"
+`)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", sharedConfig, "-f", siteConfig, "--offline"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "env=site") {
+		t.Fatalf("plan output = %q, want site auto var override", output)
+	}
+
+	output = captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", siteConfig, "-f", sharedConfig, "--offline"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "env=shared") {
+		t.Fatalf("plan output = %q, want shared auto var override", output)
+	}
+}
+
+func TestPlanLoadsDirectorySourcesAndExplicitVariablesOverrideAutoFiles(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "shared")
+	site := filepath.Join(root, "site")
+	if err := os.Mkdir(shared, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(site, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(shared, "10-variables.dbf.hcl"), `
+variable "environment" {
+  type    = string
+  default = "default"
+}
+`)
+	writeTestFile(t, filepath.Join(shared, "20-profile.dbf.hcl"), `
+profile "base" {
+  packages {
+    install = ["curl"]
+  }
+}
+`)
+	writeTestFile(t, filepath.Join(site, "10-host.dbf.hcl"), `
+host "server1" {
+  imports = [profile.base]
+
+  files {
+    file "/etc/debianform/environment.txt" {
+      content = "env=${var.environment}\n"
+    }
+  }
+}
+`)
+	writeTestFile(t, filepath.Join(shared, "debianform.dbfvars"), `
+environment = "shared"
+`)
+	writeTestFile(t, filepath.Join(site, "debianform.dbfvars"), `
+environment = "site"
+`)
+	explicit := filepath.Join(root, "explicit.dbfvars")
+	writeTestFile(t, explicit, `
+environment = "explicit-file"
+`)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", shared, "-f", site, "--offline"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "env=site") {
+		t.Fatalf("plan output = %q, want directory auto var override", output)
+	}
+
+	output = captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", shared, "-f", site, "--offline", "-var-file", explicit}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "env=explicit-file") {
+		t.Fatalf("plan output = %q, want explicit var file override", output)
+	}
+
+	output = captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", shared, "-f", site, "--offline", "-var-file", explicit, "-var", "environment=cli"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "env=cli") {
+		t.Fatalf("plan output = %q, want CLI var override", output)
+	}
+}
+
 func TestVarFileUnknownVariableErrors(t *testing.T) {
 	dir := t.TempDir()
 	config := filepath.Join(dir, "main.dbf.hcl")
@@ -763,6 +1008,46 @@ func TestAutoVariableFilesOrdering(t *testing.T) {
 		filepath.Join(dir, "debianform.dbfvars.json"),
 		filepath.Join(dir, "10.auto.dbfvars.json"),
 		filepath.Join(dir, "20.auto.dbfvars"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("autoVariableFiles() = %#v, want %#v", got, want)
+	}
+}
+
+func TestAutoVariableFilesMultipleDirectories(t *testing.T) {
+	root := t.TempDir()
+	shared := filepath.Join(root, "shared")
+	site := filepath.Join(root, "site")
+	if err := os.Mkdir(shared, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(site, 0755); err != nil {
+		t.Fatal(err)
+	}
+	sharedConfig := filepath.Join(shared, "base.dbf.hcl")
+	siteA := filepath.Join(site, "10-site.dbf.hcl")
+	siteB := filepath.Join(site, "20-extra.dbf.hcl")
+	for _, path := range []string{
+		sharedConfig,
+		filepath.Join(shared, "debianform.dbfvars"),
+		filepath.Join(shared, "20.auto.dbfvars"),
+		siteA,
+		siteB,
+		filepath.Join(site, "debianform.dbfvars.json"),
+		filepath.Join(site, "10.auto.dbfvars.json"),
+	} {
+		writeTestFile(t, path, "")
+	}
+
+	got, err := autoVariableFiles([]string{siteA, sharedConfig, siteB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(site, "debianform.dbfvars.json"),
+		filepath.Join(site, "10.auto.dbfvars.json"),
+		filepath.Join(shared, "debianform.dbfvars"),
+		filepath.Join(shared, "20.auto.dbfvars"),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("autoVariableFiles() = %#v, want %#v", got, want)
@@ -1747,6 +2032,75 @@ content="c"
 	}
 	if string(data) != rawC {
 		t.Fatalf("implicit file was changed:\n%s", data)
+	}
+}
+
+func TestFmtDirectoryFormatsOnlyTopLevelConfigFiles(t *testing.T) {
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "nested")
+	if err := os.Mkdir(nested, 0755); err != nil {
+		t.Fatal(err)
+	}
+	a := filepath.Join(dir, "a.dbf.hcl")
+	b := filepath.Join(dir, "b.dbf.hcl")
+	nestedConfig := filepath.Join(nested, "nested.dbf.hcl")
+	rawA := `host "a" {
+files {
+file "/tmp/a" {
+content="a"
+}
+}
+}
+`
+	rawB := `host "b" {
+files {
+file "/tmp/b" {
+content="b"
+}
+}
+}
+`
+	rawNested := `host "nested" {
+files {
+file "/tmp/nested" {
+content="nested"
+}
+}
+}
+`
+	writeTestFile(t, a, rawA)
+	writeTestFile(t, b, rawB)
+	writeTestFile(t, nestedConfig, rawNested)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"fmt", "-f", dir}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "formatted 2 file(s)") {
+		t.Fatalf("fmt output = %q", output)
+	}
+	for _, item := range []struct {
+		path string
+		want string
+	}{
+		{path: a, want: `content = "a"`},
+		{path: b, want: `content = "b"`},
+	} {
+		data, err := os.ReadFile(item.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), item.want) {
+			t.Fatalf("%s was not formatted:\n%s", item.path, data)
+		}
+	}
+	data, err := os.ReadFile(nestedConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != rawNested {
+		t.Fatalf("nested config was changed:\n%s", data)
 	}
 }
 

@@ -97,13 +97,14 @@ CLI 层收集外部变量值，parser 层负责按变量声明解析和归一化
 
 ```text
 DBF_VAR_*
-  -> debianform.dbfvars / debianform.dbfvars.json
-  -> *.auto.dbfvars / *.auto.dbfvars.json
+  -> 每个参与配置目录的 debianform.dbfvars / debianform.dbfvars.json
+  -> 每个参与配置目录的 *.auto.dbfvars / *.auto.dbfvars.json
   -> -var-file
   -> -var
 ```
 
-`resolveVariableValues` 按这个外部列表逐项处理。同名变量后出现的值会覆盖先出现的值。
+目录顺序来自配置文件所在目录的首次出现顺序。`resolveVariableValues` 按这个外部列表逐项处理，
+同名变量后出现的值会覆盖先出现的值。
 
 如果变量没有显式值：
 

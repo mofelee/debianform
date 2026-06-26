@@ -30,6 +30,37 @@ bash -n "$ROOT_DIR/test/integration/libvirt/network.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
 bash "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
 
+load_step_source_args() {
+  local case_dir=$1
+  local step=$2
+  local default_config=$3
+  local out_name=$4
+  local -n out=$out_name
+  local source_file="$case_dir/$step.sources"
+  out=()
+  if [[ ! -f "$source_file" ]]; then
+    out=("-f" "$default_config")
+    return
+  fi
+
+  local count=0
+  local source
+  while IFS= read -r source || [[ -n "$source" ]]; do
+    source="${source%%#*}"
+    source="${source#"${source%%[![:space:]]*}"}"
+    source="${source%"${source##*[![:space:]]}"}"
+    if [[ -z "$source" ]]; then
+      continue
+    fi
+    out+=("-f" "$case_dir/$source")
+    count=$((count + 1))
+  done <"$source_file"
+  if (( count == 0 )); then
+    printf '%s: %s.sources must contain at least one source\n' "$(basename "$case_dir")" "$step" >&2
+    return 1
+  fi
+}
+
 failed=0
 case_count=0
 while IFS= read -r case_dir; do
@@ -79,7 +110,12 @@ while IFS= read -r case_dir; do
       bash -n "$case_dir/$step.drift.sh"
     fi
 
-    validation="$("$DBF_BIN" validate -f "$config")"
+    declare -a source_args=()
+    if ! load_step_source_args "$case_dir" "$step" "$config" source_args; then
+      failed=1
+      continue
+    fi
+    validation="$("$DBF_BIN" validate "${source_args[@]}")"
     printf '[layout:%s] %s\n' "$case_name" "$validation"
 
     if (( two_host == 1 )); then

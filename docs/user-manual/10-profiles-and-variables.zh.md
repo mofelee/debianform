@@ -278,12 +278,13 @@ dbf: site.dbf.hcl:5:variable["environment"].validation[0]: validation failed for
 
 常见变量来源从低到高是：
 
+- 环境变量 `DBF_VAR_name=value`。
 - `debianform.dbfvars` 和 `debianform.dbfvars.json`。
 - `*.auto.dbfvars` 和 `*.auto.dbfvars.json`。
 - 显式 `-var-file path`。
-- 环境变量 `DBF_VAR_name=value`。
 - 命令行 `-var name=value`。
 
+多目录配置时，自动变量文件按参与配置目录首次出现顺序加载；后面的目录可以覆盖前面目录的同名变量。
 本手册建议教程和 CI 中优先使用显式 `-var-file`，这样命令的输入更容易审阅。
 
 ## 本章完整命令

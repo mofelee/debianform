@@ -76,7 +76,7 @@ func runVariableInspect(args []string) error {
 	var filesFlag fileFlags
 	var cliVars repeatedFlag
 	var cliVarFiles repeatedFlag
-	fs.Var(&filesFlag, "f", "configuration file; may be repeated")
+	fs.Var(&filesFlag, "f", "configuration file or directory; may be repeated")
 	fs.Var(&cliVars, "var", "set a variable value as name=value")
 	fs.Var(&cliVarFiles, "var-file", "load variable values from a .dbfvars or .dbfvars.json file")
 	if err := fs.Parse(args); err != nil {
@@ -158,7 +158,7 @@ func runComponentInspect(args []string) error {
 	fs := flag.NewFlagSet("component inspect", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	var filesFlag fileFlags
-	fs.Var(&filesFlag, "f", "configuration file; may be repeated")
+	fs.Var(&filesFlag, "f", "configuration file or directory; may be repeated")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -244,7 +244,7 @@ func runFmt(args []string) error {
 	fs := flag.NewFlagSet("fmt", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	var filesFlag fileFlags
-	fs.Var(&filesFlag, "f", "configuration file; may be repeated")
+	fs.Var(&filesFlag, "f", "configuration file or directory; may be repeated")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -293,7 +293,7 @@ func runConfigCommand(cmd string, args []string) error {
 	autoApprove := fs.Bool("auto-approve", false, "skip apply confirmation")
 	var cliVars repeatedFlag
 	var cliVarFiles repeatedFlag
-	fs.Var(&filesFlag, "f", "configuration file; may be repeated")
+	fs.Var(&filesFlag, "f", "configuration file or directory; may be repeated")
 	fs.Var(&cliVars, "var", "set a variable value as name=value")
 	fs.Var(&cliVarFiles, "var-file", "load variable values from a .dbfvars or .dbfvars.json file")
 	if err := fs.Parse(args); err != nil {
@@ -617,19 +617,43 @@ func autoVariableFiles(files []string) ([]string, error) {
 	if len(files) == 0 {
 		return nil, nil
 	}
-	dir := filepath.Dir(files[0])
-	if dir == "" {
-		dir = "."
+	dirs, err := configFileDirs(files)
+	if err != nil {
+		return nil, err
 	}
-	for _, file := range files[1:] {
-		otherDir := filepath.Dir(file)
-		if otherDir == "" {
-			otherDir = "."
+	out := []string{}
+	for _, dir := range dirs {
+		dirFiles, err := autoVariableFilesForDir(dir)
+		if err != nil {
+			return nil, err
 		}
-		if otherDir != dir {
-			return nil, fmt.Errorf("automatic var files require configuration files from one directory; got %s and %s", dir, otherDir)
-		}
+		out = append(out, dirFiles...)
 	}
+	return out, nil
+}
+
+func configFileDirs(files []string) ([]string, error) {
+	dirs := []string{}
+	seen := map[string]bool{}
+	for _, file := range files {
+		dir := filepath.Dir(file)
+		if dir == "" {
+			dir = "."
+		}
+		key, err := canonicalPathKey(dir)
+		if err != nil {
+			return nil, err
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		dirs = append(dirs, dir)
+	}
+	return dirs, nil
+}
+
+func autoVariableFilesForDir(dir string) ([]string, error) {
 	defaultFiles := []string{}
 	for _, name := range []string{"debianform.dbfvars", "debianform.dbfvars.json"} {
 		path := filepath.Join(dir, name)
@@ -855,7 +879,7 @@ func commandHost(program *coreir.Program, host string) string {
 
 func configFiles(files []string) ([]string, error) {
 	if len(files) != 0 {
-		return append([]string(nil), files...), nil
+		return expandConfigSources(files)
 	}
 	matches, err := filepath.Glob("*.dbf.hcl")
 	if err != nil {
@@ -866,6 +890,67 @@ func configFiles(files []string) ([]string, error) {
 	}
 	sort.Strings(matches)
 	return matches, nil
+}
+
+func expandConfigSources(sources []string) ([]string, error) {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, source := range sources {
+		info, err := os.Stat(source)
+		if err != nil {
+			return nil, fmt.Errorf("configuration source %s: %w", source, err)
+		}
+		if info.IsDir() {
+			matches, err := filepath.Glob(filepath.Join(source, "*.dbf.hcl"))
+			if err != nil {
+				return nil, err
+			}
+			sort.Strings(matches)
+			if len(matches) == 0 {
+				return nil, fmt.Errorf("no configuration file found in directory %s", source)
+			}
+			for _, match := range matches {
+				var appendErr error
+				out, appendErr = appendConfigFile(out, seen, match)
+				if appendErr != nil {
+					return nil, appendErr
+				}
+			}
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("configuration source %s is not a regular file or directory", source)
+		}
+		var appendErr error
+		out, appendErr = appendConfigFile(out, seen, source)
+		if appendErr != nil {
+			return nil, appendErr
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no configuration file found")
+	}
+	return out, nil
+}
+
+func appendConfigFile(files []string, seen map[string]bool, path string) ([]string, error) {
+	key, err := canonicalPathKey(path)
+	if err != nil {
+		return nil, err
+	}
+	if seen[key] {
+		return files, nil
+	}
+	seen[key] = true
+	return append(files, path), nil
+}
+
+func canonicalPathKey(path string) (string, error) {
+	abs, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return "", err
+	}
+	return abs, nil
 }
 
 func confirmApply() bool {
@@ -881,17 +966,17 @@ func usage() {
 	fmt.Println(`dbf manages Debian hosts from .dbf.hcl files.
 
 Usage:
-  dbf validate [-f file ...] [-var name=value] [-var-file path] [--host name]
-  dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]
-  dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]
-  dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]
-  dbf variable inspect [-f file ...] [-var name=value] [-var-file path]
-  dbf component inspect [-f file ...] name
-  dbf fmt      [-f file ...]
+  dbf validate [-f path ...] [-var name=value] [-var-file path] [--host name]
+  dbf plan     [-f path ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]
+  dbf apply    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]
+  dbf check    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]
+  dbf variable inspect [-f path ...] [-var name=value] [-var-file path]
+  dbf component inspect [-f path ...] name
+  dbf fmt      [-f path ...]
   dbf version
 
 By default dbf loads all *.dbf.hcl files in the current directory, sorted by name.
-Use -f file one or more times to load only the explicitly specified file(s).`)
+Use -f path one or more times to load files or top-level *.dbf.hcl files from directories.`)
 }
 
 func writePlanHTML(path string, doc coreplan.Document) error {

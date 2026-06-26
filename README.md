@@ -143,8 +143,15 @@ dbf variable inspect
 ```
 
 不加 `-f` 时，`dbf` 会读取当前工作目录，也就是你运行命令的这个目录下所有
-`*.dbf.hcl` 文件，并按文件名排序。传入一个或多个 `-f file` 时，只读取这些显式文件，
-并按命令行顺序解析。
+`*.dbf.hcl` 文件，并按文件名排序。传入一个或多个 `-f path` 时，`path` 可以是文件或目录；
+文件按命令行顺序读取，目录会展开为该目录直属的 `*.dbf.hcl` 文件并按文件名排序，不递归读取子目录。
+
+例如：
+
+```bash
+dbf validate -f ../shared -f .
+dbf plan -f ../shared/base.dbf.hcl -f ./hosts/prod.dbf.hcl --offline
+```
 
 默认情况下，`host "<name>"` 会通过 `ssh <name>` 连接，管理用户为 root。推荐把
 `HostName`、`User`、`IdentityFile`、`ProxyJump`、端口等连接细节放在 `~/.ssh/config`。

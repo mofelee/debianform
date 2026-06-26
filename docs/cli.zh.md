@@ -12,7 +12,7 @@ Stale lock、apply 中途失败、drift 恢复和常见故障排查见
 ## 基本规则
 
 默认情况下，`dbf` 会读取当前目录中所有 `*.dbf.hcl` 文件，并按文件名排序后合并处理。
-如果只想读取一个或多个明确指定的文件，使用可重复的 `-f file`：
+如果只想读取一个或多个明确指定的文件或目录，使用可重复的 `-f path`：
 
 ```bash
 dbf validate -f examples/bbr.dbf.hcl
@@ -25,13 +25,13 @@ deprecated component input 会输出 warning，但 warning 本身不会改变退
 ## 命令总览
 
 ```text
-dbf validate [-f file ...] [-var name=value] [-var-file path] [--host name]
-dbf plan     [-f file ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]
-dbf apply    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]
-dbf check    [-f file ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]
-dbf fmt      [-f file ...]
-dbf variable inspect [-f file ...] [-var name=value] [-var-file path]
-dbf component inspect [-f file ...] component_name
+dbf validate [-f path ...] [-var name=value] [-var-file path] [--host name]
+dbf plan     [-f path ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]
+dbf apply    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]
+dbf check    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]
+dbf fmt      [-f path ...]
+dbf variable inspect [-f path ...] [-var name=value] [-var-file path]
+dbf component inspect [-f path ...] component_name
 dbf version
 dbf --version
 dbf -version
@@ -44,24 +44,30 @@ dbf help
 
 | 选项 | 适用命令 | 说明 |
 | --- | --- | --- |
-| `-f file` | `validate`、`plan`、`apply`、`check`、`fmt`、`variable inspect`、`component inspect` | 可重复。传入一个或多个 `-f` 时，只读取显式指定的文件；不传时读取当前目录所有 `*.dbf.hcl`。 |
+| `-f path` | `validate`、`plan`、`apply`、`check`、`fmt`、`variable inspect`、`component inspect` | 可重复。`path` 可以是文件或目录；目录展开为直属 `*.dbf.hcl`。不传时读取当前目录所有 `*.dbf.hcl`。 |
 | `--host name` | `validate`、`plan`、`apply`、`check` | 只处理指定 host。host 不存在时命令失败。 |
 | `-var name=value` | `validate`、`plan`、`apply`、`check`、`variable inspect` | 可重复；设置顶层 `variable` 的值。 |
 | `-var-file path` | `validate`、`plan`、`apply`、`check`、`variable inspect` | 可重复；从 `.dbfvars` 或 `.dbfvars.json` 文件加载变量值。 |
 | `--color auto\|always\|never` | `plan`、`apply`、`check` | 控制文本输出颜色；JSON、HTML 和持久化日志不使用 ANSI。 |
 
-`-f` 不会读取目录，也不会自动加载同目录的其他 `.dbf.hcl` 文件；它表示“精确使用这些显式指定的文件”，并按命令行出现顺序解析。
+传入文件时，`-f` 精确读取该文件；传入目录时，`-f` 读取该目录直属 `*.dbf.hcl` 文件并按文件名排序，
+不会递归读取子目录。多个 `-f` 会按命令行出现顺序展开和解析，重复文件只保留第一次出现。
+
+```bash
+dbf validate -f ../shared -f .
+dbf plan -f ../shared/base.dbf.hcl -f ./hosts/prod.dbf.hcl --offline
+```
 
 变量值来源按低到高优先级合并：
 
 1. 环境变量 `DBF_VAR_name=value`。未知变量会被忽略，便于共享 shell 环境。
-2. 配置文件同目录的 `debianform.dbfvars`、`debianform.dbfvars.json`。
-3. 配置文件同目录按文件名排序的 `*.auto.dbfvars`、`*.auto.dbfvars.json`。
+2. 参与配置文件所在目录的 `debianform.dbfvars`、`debianform.dbfvars.json`。
+3. 参与配置文件所在目录按文件名排序的 `*.auto.dbfvars`、`*.auto.dbfvars.json`。
 4. 命令行中按顺序出现的 `-var-file path`。
 5. 命令行中按顺序出现的 `-var name=value`。
 
-后面的来源会覆盖前面的同名变量。自动变量文件要求本次加载的配置文件都来自同一目录；如果使用
-多个不同目录的 `-f`，请显式传 `-var-file`。
+后面的来源会覆盖前面的同名变量。多个目录参与加载时，自动变量文件按配置文件所在目录首次出现顺序加载；
+后出现目录中的自动变量可以覆盖前面目录的同名变量。
 
 `-var` 的 `value` 按变量类型解析：`string` 保留原始字符串，`number`、`bool`、`list`、`map`、
 `object`、`tuple` 等类型使用 HCL/JSON 字面值。对已声明为 `sensitive = true` 的变量，
@@ -103,7 +109,7 @@ configuration is valid: 1 host(s)
 
 | 选项 | 说明 |
 | --- | --- |
-| `-f file` | 可重复；只读取显式指定的文件。 |
+| `-f path` | 可重复；读取显式指定的文件，或目录直属 `*.dbf.hcl`。 |
 | `--host name` | 只校验指定 host。 |
 | `-var name=value` | 可重复；设置顶层变量。 |
 | `-var-file path` | 可重复；加载变量文件。 |
@@ -150,7 +156,7 @@ dbf plan -f examples/bbr.dbf.hcl --format json --debug --offline
 
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `-f file` | 当前目录所有 `*.dbf.hcl` | 可重复；只读取显式指定的文件。 |
+| `-f path` | 当前目录所有 `*.dbf.hcl` | 可重复；读取显式指定的文件，或目录直属 `*.dbf.hcl`。 |
 | `--host name` | 空 | 只为指定 host 生成 plan。 |
 | `--format text\|json` | `text` | 输出文本或 JSON。JSON 格式见 [plan format](plan-format.md)。 |
 | `--html file` | 空 | 将 plan 写成静态 HTML 文件。只能用于 `plan`，且不能和显式 `--format` 同时使用。 |
@@ -200,7 +206,7 @@ dbf apply --parallel 4 --auto-approve
 
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `-f file` | 当前目录所有 `*.dbf.hcl` | 可重复；只读取显式指定的文件。 |
+| `-f path` | 当前目录所有 `*.dbf.hcl` | 可重复；读取显式指定的文件，或目录直属 `*.dbf.hcl`。 |
 | `--host name` | 空 | 只应用指定 host。 |
 | `--parallel n` | `1` | 最多同时 apply 的 host 数量；必须大于等于 1，只能用于 `apply`。 |
 | `--lock-timeout duration` | `5m` | 等待远端 state lock 的最长时间。使用 Go duration 格式，例如 `30s`、`2m`、`10m`。 |
@@ -226,7 +232,7 @@ dbf check -f examples/bbr.dbf.hcl --host bbr1
 
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `-f file` | 当前目录所有 `*.dbf.hcl` | 可重复；只读取显式指定的文件。 |
+| `-f path` | 当前目录所有 `*.dbf.hcl` | 可重复；读取显式指定的文件，或目录直属 `*.dbf.hcl`。 |
 | `--host name` | 空 | 只检查指定 host。 |
 | `--lock-timeout duration` | `5m` | 等待远端 state lock 的最长时间。 |
 | `-var name=value` | 空 | 可重复；设置顶层变量。 |
@@ -262,7 +268,7 @@ formatted 1 file(s)
 
 | 选项 | 说明 |
 | --- | --- |
-| `-f file` | 可重复；只格式化显式指定的文件。不传时格式化当前目录所有 `*.dbf.hcl`。 |
+| `-f path` | 可重复；格式化显式指定的文件，或目录直属 `*.dbf.hcl`。不传时格式化当前目录所有 `*.dbf.hcl`。 |
 
 `fmt` 会改写文件内容。对已格式化的文件再次运行会输出 `formatted 0 file(s)`。
 
@@ -305,7 +311,7 @@ dbf component inspect -f examples/component-inputs.dbf.hcl reverse_proxy
 
 | 选项/参数 | 说明 |
 | --- | --- |
-| `-f file` | 可重复；只读取显式指定的文件。不传时读取当前目录所有 `*.dbf.hcl`。 |
+| `-f path` | 可重复；读取显式指定的文件，或目录直属 `*.dbf.hcl`。不传时读取当前目录所有 `*.dbf.hcl`。 |
 | `component_name` | 要检查的 component 名称，必填且只能传一个。 |
 
 如果 input 设置了 `sensitive = true`，且默认值存在，输出中的默认值会显示为
@@ -324,7 +330,7 @@ dbf variable inspect -f examples/variable-secret-file.dbf.hcl
 
 | 选项 | 说明 |
 | --- | --- |
-| `-f file` | 可重复；只读取显式指定的文件。不传时读取当前目录所有 `*.dbf.hcl`。 |
+| `-f path` | 可重复；读取显式指定的文件，或目录直属 `*.dbf.hcl`。不传时读取当前目录所有 `*.dbf.hcl`。 |
 | `-var name=value` | 可重复；为 inspect 时的变量求值提供字面值。 |
 | `-var-file path` | 可重复；从 `.dbfvars` 或 `.dbfvars.json` 文件加载变量值。 |
 

@@ -260,6 +260,35 @@ run_hook() {
   source "$hook"
 }
 
+load_step_source_args() {
+  local step=$1
+  local default_config=$2
+  local out_name=$3
+  local -n out=$out_name
+  local source_file="$CASE_DIR/$step.sources"
+  out=()
+  if [[ ! -f "$source_file" ]]; then
+    out=("-f" "$default_config")
+    return
+  fi
+
+  local count=0
+  local source
+  while IFS= read -r source || [[ -n "$source" ]]; do
+    source="${source%%#*}"
+    source="${source#"${source%%[![:space:]]*}"}"
+    source="${source%"${source##*[![:space:]]}"}"
+    if [[ -z "$source" ]]; then
+      continue
+    fi
+    out+=("-f" "$CASE_DIR/$source")
+    count=$((count + 1))
+  done <"$source_file"
+  if (( count == 0 )); then
+    fail "$step.sources must contain at least one source"
+  fi
+}
+
 source "$SCRIPT_DIR/network.sh"
 
 mkdir -p "$CASE_WORK" "$CASE_DIR" "$LOG_DIR" "$DBF_HOME/.ssh"
@@ -419,7 +448,7 @@ if is_remote_libvirt; then
 fi
 while IFS= read -r config; do
   sed -i "s/__DBF_VM_IP__/$DBF_CONFIG_HOST/g" "$config"
-done < <(find "$CASE_DIR" -maxdepth 1 -type f -name '[0-9]*.dbf.hcl')
+done < <(find "$CASE_DIR" -maxdepth 3 -type f \( -name '*.dbf.hcl' -o -name '*.dbfvars' -o -name '*.dbfvars.json' \))
 
 declare -a CONFIGS=()
 next_step=1
@@ -440,18 +469,20 @@ for config in "${CONFIGS[@]}"; do
   CURRENT_STEP="${filename%%.dbf.hcl}"
   check_hook="$CASE_DIR/$CURRENT_STEP.check.sh"
   drift_hook="$CASE_DIR/$CURRENT_STEP.drift.sh"
+  declare -a source_args=()
+  load_step_source_args "$CURRENT_STEP" "$config" source_args
 
   if [[ ! -f "$check_hook" ]]; then
     fail "missing post-apply checks: $check_hook"
   fi
 
   log "step $CURRENT_STEP: validating $filename"
-  dbf validate -f "$config" | tee "$LOG_DIR/$CURRENT_STEP.validate.log"
+  dbf validate "${source_args[@]}" | tee "$LOG_DIR/$CURRENT_STEP.validate.log"
 
   if [[ -f "$drift_hook" ]]; then
     run_hook "$drift_hook"
     log "step $CURRENT_STEP: verifying dbf check rejects drift"
-    if dbf check -f "$config" >"$LOG_DIR/$CURRENT_STEP.drift-check.log" 2>&1; then
+    if dbf check "${source_args[@]}" >"$LOG_DIR/$CURRENT_STEP.drift-check.log" 2>&1; then
       cat "$LOG_DIR/$CURRENT_STEP.drift-check.log"
       fail "dbf check unexpectedly accepted drift for step $CURRENT_STEP"
     fi
@@ -459,10 +490,10 @@ for config in "${CONFIGS[@]}"; do
   fi
 
   log "step $CURRENT_STEP: applying"
-  dbf apply -f "$config" --auto-approve | tee "$LOG_DIR/$CURRENT_STEP.apply.log"
+  dbf apply "${source_args[@]}" --auto-approve | tee "$LOG_DIR/$CURRENT_STEP.apply.log"
 
   log "step $CURRENT_STEP: checking convergence"
-  dbf check -f "$config" | tee "$LOG_DIR/$CURRENT_STEP.check.log"
+  dbf check "${source_args[@]}" | tee "$LOG_DIR/$CURRENT_STEP.check.log"
 
   run_hook "$check_hook"
 done
