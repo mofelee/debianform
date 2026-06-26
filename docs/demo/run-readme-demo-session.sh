@@ -70,10 +70,6 @@ run_cmd "ssh $ALIAS 'grep PRETTY_NAME /etc/os-release; dpkg --print-architecture
 note "Write one DebianForm config file."
 cat >site.dbf.hcl <<EOF
 host "demo1" {
-  ssh {
-    host = "$ALIAS"
-  }
-
   directories {
     directory "/etc/debianform-demo" {
       owner = "root"
