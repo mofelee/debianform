@@ -22,8 +22,8 @@
 - [x] ResourceGraph 已支持 operation、`TriggeredBy` 和依赖调度。
 - [x] plan text/json/html 已能展示 operation 和 `triggered_by`。
 - [x] provider 已支持运行 operation 命令。
-- [ ] component 内尚无 `script` block。
-- [ ] `files.file` 尚无 `on_change` 字段。
+- [x] component 内已支持 `script` block 的 DSL 解析和 HostSpec 编译。
+- [x] `files.file` 已支持 `on_change` 的 DSL 解析和 HostSpec 编译。
 - [ ] engine 尚不能按脚本 `mode` 处理 once/each 触发上下文。
 
 ## Loop 1: DSL 解析和 IR 骨架
@@ -49,30 +49,30 @@
 
 代码：
 
-- [ ] parser 增加 `script` block 解析，限制只能出现在 component 内。
-- [ ] parser 增加 `files.file.on_change` 的 HCL traversal 解析。
-- [ ] IR 增加 `ComponentScriptSpec`，挂到 `ComponentInstanceSpec`。
-- [ ] IR 在 `ManagedFile` 上增加 `OnChange`，保存 script 名称和 source。
-- [ ] merge/buildComponentSpec 编译 component script 和 file on_change。
-- [ ] validate 校验 `on_change` 引用的 script 存在于同一个 component instance。
-- [ ] 更新 HostSpec JSON/golden，确保 script 元数据稳定输出且不泄漏敏感内容。
+- [x] parser 增加 `script` block 解析，限制只能出现在 component 内。
+- [x] parser 增加 `files.file.on_change` 的 HCL traversal 解析。
+- [x] IR 增加 `ComponentScriptSpec`，挂到 `ComponentInstanceSpec`。
+- [x] IR 在 `ManagedFile` 上增加 `OnChange`，保存 script 名称和 source。
+- [x] merge/buildComponentSpec 编译 component script 和 file on_change。
+- [x] validate 校验 `on_change` 引用的 script 存在于同一个 component instance。
+- [x] 更新 HostSpec JSON/golden，确保 script 元数据稳定输出且不泄漏敏感内容。
 
 测试：
 
-- [ ] parser 单测覆盖 component `script`、`on_change = script.reload`。
-- [ ] parser/merge 负例覆盖 host/profile 内声明 script、未知 script、非法 traversal。
-- [ ] merge 单测覆盖互斥执行体、非法 mode、空 interpreter。
-- [ ] fixture 覆盖一个 component 文件引用 script 的 HostSpec。
+- [x] parser 单测覆盖 component `script`、`on_change = script.reload`。
+- [x] parser/merge 负例覆盖 host/profile 内声明 script、未知 script、非法 traversal。
+- [x] merge 单测覆盖互斥执行体、非法 mode、空 interpreter。
+- [x] fixture 覆盖一个 component 文件引用 script 的 HostSpec。
 
 文档：
 
-- [ ] 将需求文档中本轮已实现部分同步到 DSL Reference，标记为已支持语法。
+- [x] 将需求文档中本轮已实现部分同步到 DSL Reference，标记为已支持语法。
 
 验收：
 
-- [ ] `dbf validate` 可以接受包含 component script/on_change 的配置。
-- [ ] 未知 script 引用报错并指向 `files.file.on_change`。
-- [ ] `make test` 成功。
+- [x] `dbf validate` 可以接受包含 component script/on_change 的配置。
+- [x] 未知 script 引用报错并指向 `files.file.on_change`。
+- [x] `make test` 成功。
 
 ## Loop 2: ResourceGraph operation 生成
 

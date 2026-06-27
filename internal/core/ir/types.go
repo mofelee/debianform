@@ -168,8 +168,10 @@ type ManagedFile struct {
 	Mode             string         `json:"mode"`
 	Sensitive        bool           `json:"sensitive,omitempty"`
 	Ensure           string         `json:"ensure"`
+	OnChange         string         `json:"on_change,omitempty"`
 	Lifecycle        *LifecycleSpec `json:"lifecycle,omitempty"`
 	Summary          ContentSummary `json:"summary,omitempty"`
+	OnChangeSource   *SourceRef     `json:"on_change_source,omitempty"`
 	Source           SourceRef      `json:"source,omitempty"`
 }
 
@@ -458,6 +460,7 @@ type ComponentTemplateSpec struct {
 	ArtifactType string                                 `json:"artifact_type,omitempty"`
 	Version      string                                 `json:"version,omitempty"`
 	Inputs       map[string]ComponentInputSpec          `json:"inputs,omitempty"`
+	Scripts      map[string]ComponentScriptSpec         `json:"scripts,omitempty"`
 	Sources      map[string]ComponentArtifactSourceSpec `json:"sources,omitempty"`
 	Extract      *ComponentArtifactExtractSpec          `json:"extract,omitempty"`
 	Build        *ComponentArtifactBuildSpec            `json:"build,omitempty"`
@@ -485,6 +488,17 @@ type ComponentInputValidationSpec struct {
 	MessageSource   SourceRef `json:"message_source,omitempty"`
 }
 
+type ComponentScriptSpec struct {
+	Name        string     `json:"name"`
+	Mode        string     `json:"mode"`
+	Interpreter []string   `json:"interpreter,omitempty"`
+	Run         string     `json:"run,omitempty"`
+	Content     string     `json:"content,omitempty"`
+	Commands    [][]string `json:"commands,omitempty"`
+	Sensitive   bool       `json:"sensitive,omitempty"`
+	Source      SourceRef  `json:"source,omitempty"`
+}
+
 type ComponentInputTypeSpec struct {
 	Kind       string                             `json:"kind,omitempty"`
 	Element    *ComponentInputTypeSpec            `json:"element,omitempty"`
@@ -499,25 +513,26 @@ type ComponentObjectAttrSpec struct {
 }
 
 type ComponentInstanceSpec struct {
-	Name           string                        `json:"name"`
-	Template       string                        `json:"template"`
-	InputValues    map[string]any                `json:"input_values,omitempty"`
-	ArtifactType   string                        `json:"artifact_type,omitempty"`
-	Version        string                        `json:"version,omitempty"`
-	SelectedSource *ComponentArtifactSourceSpec  `json:"selected_source,omitempty"`
-	Extract        *ComponentArtifactExtractSpec `json:"extract,omitempty"`
-	Build          *ComponentArtifactBuildSpec   `json:"build,omitempty"`
-	Install        *ComponentArtifactInstallSpec `json:"install,omitempty"`
-	APT            APTSpec                       `json:"apt"`
-	Packages       PackageSpec                   `json:"packages"`
-	Files          FileSpec                      `json:"files"`
-	Secrets        SecretSpec                    `json:"secrets"`
-	Directories    DirectorySpec                 `json:"directories"`
-	Groups         GroupSpec                     `json:"groups"`
-	Users          UserSpec                      `json:"users"`
-	Systemd        SystemdSpec                   `json:"systemd"`
-	Services       ServiceSpec                   `json:"services"`
-	Source         SourceRef                     `json:"source,omitempty"`
+	Name           string                         `json:"name"`
+	Template       string                         `json:"template"`
+	InputValues    map[string]any                 `json:"input_values,omitempty"`
+	ArtifactType   string                         `json:"artifact_type,omitempty"`
+	Version        string                         `json:"version,omitempty"`
+	Scripts        map[string]ComponentScriptSpec `json:"scripts,omitempty"`
+	SelectedSource *ComponentArtifactSourceSpec   `json:"selected_source,omitempty"`
+	Extract        *ComponentArtifactExtractSpec  `json:"extract,omitempty"`
+	Build          *ComponentArtifactBuildSpec    `json:"build,omitempty"`
+	Install        *ComponentArtifactInstallSpec  `json:"install,omitempty"`
+	APT            APTSpec                        `json:"apt"`
+	Packages       PackageSpec                    `json:"packages"`
+	Files          FileSpec                       `json:"files"`
+	Secrets        SecretSpec                     `json:"secrets"`
+	Directories    DirectorySpec                  `json:"directories"`
+	Groups         GroupSpec                      `json:"groups"`
+	Users          UserSpec                       `json:"users"`
+	Systemd        SystemdSpec                    `json:"systemd"`
+	Services       ServiceSpec                    `json:"services"`
+	Source         SourceRef                      `json:"source,omitempty"`
 }
 
 type ComponentArtifactSourceSpec struct {

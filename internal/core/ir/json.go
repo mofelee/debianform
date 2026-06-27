@@ -23,6 +23,19 @@ func (m ManagedFile) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
+type componentScriptSpecJSON ComponentScriptSpec
+
+func (s ComponentScriptSpec) MarshalJSON() ([]byte, error) {
+	out := componentScriptSpecJSON(s)
+	if s.Sensitive {
+		out.Interpreter = nil
+		out.Run = ""
+		out.Content = ""
+		out.Commands = nil
+	}
+	return json.Marshal(out)
+}
+
 type systemdUnitJSON SystemdUnit
 
 func (u SystemdUnit) MarshalJSON() ([]byte, error) {

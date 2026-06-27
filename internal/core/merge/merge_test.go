@@ -308,6 +308,50 @@ func TestCompileHostSpecJSONDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 	}
 }
 
+func TestCompileSensitiveComponentScriptRedactsHostSpecJSON(t *testing.T) {
+	program := compileInline(t, `
+component "app" {
+  input "token" {
+    type      = string
+    sensitive = true
+  }
+
+  script "reload" {
+    interpreter = ["/bin/sh", "-eu"]
+    run         = "echo ${input.token}"
+  }
+
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = script.reload
+    }
+  }
+}
+
+host "app1" {
+  component "app" {
+    source = component.app
+
+    inputs = {
+      token = "not-a-real-script-secret"
+    }
+  }
+}
+`)
+	script := program.Hosts[0].Components[0].Scripts["reload"]
+	if !script.Sensitive {
+		t.Fatalf("script sensitive = false")
+	}
+	data, err := json.MarshalIndent(program, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "not-a-real-script-secret") {
+		t.Fatalf("HostSpec JSON leaked script secret: %s", data)
+	}
+}
+
 func TestCompileStructuredServiceEnvironmentMarksUnitSensitive(t *testing.T) {
 	cfg, err := parser.ParseFiles([]string{"../testdata/fixtures/sensitive-service-environment.dbf.hcl"})
 	if err != nil {
@@ -849,6 +893,10 @@ component "tools" {
 
   install {
     path = "/usr/local/bin/tools"
+  }
+
+  script "reload" {
+    run = "systemctl reload tools-${target.system.codename}.service"
   }
 
   apt {
@@ -1617,6 +1665,259 @@ host "edge1" {
 }
 `,
 			want: `input validation can only read input.listeners`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompileComponentScriptOnChange(t *testing.T) {
+	program := compileInline(t, `
+component "app" {
+  input "service_name" {
+    type = string
+  }
+
+  script "reload" {
+    run = "systemctl reload ${input.service_name}.service"
+  }
+
+  script "reindex" {
+    mode        = "each"
+    interpreter = ["/bin/bash", "-e"]
+    commands    = [["/usr/local/bin/reindex", "/etc/app/index"]]
+  }
+
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = script.reload
+    }
+  }
+}
+
+host "app1" {
+  component "app" {
+    source = component.app
+    inputs = {
+      service_name = "app"
+    }
+  }
+}
+`)
+
+	template := program.Components["app"]
+	if _, ok := template.Scripts["reload"]; !ok {
+		t.Fatalf("template scripts = %#v", template.Scripts)
+	}
+	component := program.Hosts[0].Components[0]
+	reload := component.Scripts["reload"]
+	if reload.Mode != "once" || !reflect.DeepEqual(reload.Interpreter, []string{"/bin/sh", "-eu"}) {
+		t.Fatalf("reload defaults = %#v", reload)
+	}
+	if reload.Run != "systemctl reload app.service" {
+		t.Fatalf("reload run = %q", reload.Run)
+	}
+	reindex := component.Scripts["reindex"]
+	if reindex.Mode != "each" || !reflect.DeepEqual(reindex.Interpreter, []string{"/bin/bash", "-e"}) {
+		t.Fatalf("reindex = %#v", reindex)
+	}
+	if got := reindex.Commands[0]; !reflect.DeepEqual(got, []string{"/usr/local/bin/reindex", "/etc/app/index"}) {
+		t.Fatalf("commands = %#v", reindex.Commands)
+	}
+	file := component.Files.Files["/etc/app.conf"]
+	if file.OnChange != "reload" {
+		t.Fatalf("file on_change = %#v", file)
+	}
+	if file.OnChangeSource == nil || file.OnChangeSource.Path != `component.app.files.file["/etc/app.conf"].on_change` {
+		t.Fatalf("on_change source = %#v", file.OnChangeSource)
+	}
+}
+
+func TestCompileRejectsInvalidComponentScripts(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "unknown on_change script",
+			hcl: `
+component "app" {
+  script "reload" {
+    run = "systemctl reload app.service"
+  }
+
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = script.restart
+    }
+  }
+}
+
+host "app1" {
+  components = [component.app]
+}
+`,
+			want: `files.file.on_change references unknown script.restart`,
+		},
+		{
+			name: "host on_change",
+			hcl: `
+host "app1" {
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = script.reload
+    }
+  }
+}
+`,
+			want: `files.file.on_change is only supported inside component`,
+		},
+		{
+			name: "profile on_change",
+			hcl: `
+profile "base" {
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = script.reload
+    }
+  }
+}
+
+host "app1" {
+  imports = [profile.base]
+}
+`,
+			want: `files.file.on_change is only supported inside component`,
+		},
+		{
+			name: "script in host",
+			hcl: `
+host "app1" {
+  script "reload" {
+    run = "systemctl reload app.service"
+  }
+}
+`,
+			want: `unsupported block host.app1.script`,
+		},
+		{
+			name: "script in profile",
+			hcl: `
+profile "base" {
+  script "reload" {
+    run = "systemctl reload app.service"
+  }
+}
+
+host "app1" {
+  imports = [profile.base]
+}
+`,
+			want: `unsupported block profile.base.script`,
+		},
+		{
+			name: "missing body",
+			hcl: `
+component "app" {
+  script "reload" {
+    mode = "once"
+  }
+}
+
+host "app1" {
+  components = [component.app]
+}
+`,
+			want: `requires exactly one of run, content, or commands`,
+		},
+		{
+			name: "two bodies",
+			hcl: `
+component "app" {
+  script "reload" {
+    run     = "systemctl reload app.service"
+    content = "systemctl reload app.service"
+  }
+}
+
+host "app1" {
+  components = [component.app]
+}
+`,
+			want: `requires exactly one of run, content, or commands`,
+		},
+		{
+			name: "invalid mode",
+			hcl: `
+component "app" {
+  script "reload" {
+    mode = "always"
+    run  = "systemctl reload app.service"
+  }
+}
+
+host "app1" {
+  components = [component.app]
+}
+`,
+			want: `script mode must be once or each`,
+		},
+		{
+			name: "empty interpreter",
+			hcl: `
+component "app" {
+  script "reload" {
+    interpreter = []
+    run         = "systemctl reload app.service"
+  }
+}
+
+host "app1" {
+  components = [component.app]
+}
+`,
+			want: `script interpreter must be a non-empty string list`,
+		},
+		{
+			name: "empty command list",
+			hcl: `
+component "app" {
+  script "reload" {
+    commands = []
+  }
+}
+
+host "app1" {
+  components = [component.app]
+}
+`,
+			want: `script commands must contain at least one command`,
+		},
+		{
+			name: "empty command",
+			hcl: `
+component "app" {
+  script "reload" {
+    commands = [[]]
+  }
+}
+
+host "app1" {
+  components = [component.app]
+}
+`,
+			want: `script command must contain at least one argument`,
 		},
 	}
 	for _, tt := range tests {
@@ -2932,6 +3233,10 @@ func TestCompileComponentSourceBuildHostSpecGolden(t *testing.T) {
 
 func TestCompileComponentInputsHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/component-inputs.dbf.hcl", "../testdata/hostspec/component-inputs.golden.json")
+}
+
+func TestCompileComponentScriptOnChangeHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../testdata/fixtures/component-script-on-change.dbf.hcl", "../testdata/hostspec/component-script-on-change.golden.json")
 }
 
 func TestCompileSystemdServiceHostSpecGolden(t *testing.T) {

@@ -181,6 +181,7 @@ func componentTemplateSpecs(components map[string]parser.Component) (map[string]
 			ArtifactType: component.Type,
 			Version:      component.Version,
 			Inputs:       map[string]ir.ComponentInputSpec{},
+			Scripts:      map[string]ir.ComponentScriptSpec{},
 			Sources:      map[string]ir.ComponentArtifactSourceSpec{},
 			Source:       component.Source,
 		}
@@ -213,6 +214,19 @@ func componentTemplateSpecs(components map[string]parser.Component) (map[string]
 		}
 		if len(spec.Inputs) == 0 {
 			spec.Inputs = nil
+		}
+		for _, scriptName := range sortedKeys(component.Scripts) {
+			script := component.Scripts[scriptName]
+			if err := validateComponentScriptShape(script); err != nil {
+				return nil, err
+			}
+			spec.Scripts[scriptName] = ir.ComponentScriptSpec{
+				Name:   script.Name,
+				Source: script.Source,
+			}
+		}
+		if len(spec.Scripts) == 0 {
+			spec.Scripts = nil
 		}
 		for _, sourceName := range sortedKeys(component.Sources) {
 			source := component.Sources[sourceName]
@@ -256,6 +270,89 @@ func componentTemplateSpecs(components map[string]parser.Component) (map[string]
 		out[name] = spec
 	}
 	return out, nil
+}
+
+func componentInstanceScriptSpecs(template parser.Component, ctx parser.EvalContext) (map[string]ir.ComponentScriptSpec, error) {
+	if len(template.Scripts) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]ir.ComponentScriptSpec, len(template.Scripts))
+	for _, name := range sortedKeys(template.Scripts) {
+		script, err := parser.EvaluateComponentScript(template.Scripts[name], ctx)
+		if err != nil {
+			return nil, err
+		}
+		spec, err := componentScriptSpec(script)
+		if err != nil {
+			return nil, err
+		}
+		out[name] = spec
+	}
+	return out, nil
+}
+
+func componentScriptSpec(script parser.ComponentScript) (ir.ComponentScriptSpec, error) {
+	if err := validateComponentScriptShape(script); err != nil {
+		return ir.ComponentScriptSpec{}, err
+	}
+	mode := "once"
+	if script.ModeSet {
+		mode = script.Mode
+		if !stringIn(mode, "once", "each") {
+			return ir.ComponentScriptSpec{}, fmt.Errorf("%s:%d:%s: script mode must be once or each", script.ModeSource.File, script.ModeSource.Line, script.ModeSource.Path)
+		}
+	}
+	interpreter := []string{"/bin/sh", "-eu"}
+	if script.InterpreterSet {
+		if len(script.Interpreter) == 0 {
+			return ir.ComponentScriptSpec{}, fmt.Errorf("%s:%d:%s: script interpreter must be a non-empty string list", script.InterpreterSource.File, script.InterpreterSource.Line, script.InterpreterSource.Path)
+		}
+		for i, arg := range script.Interpreter {
+			if arg == "" {
+				return ir.ComponentScriptSpec{}, fmt.Errorf("%s:%d:%s[%d]: script interpreter entries must be non-empty strings", script.InterpreterSource.File, script.InterpreterSource.Line, script.InterpreterSource.Path, i)
+			}
+		}
+		interpreter = append([]string(nil), script.Interpreter...)
+	}
+	commands := cloneCommandMatrix(script.Commands)
+	if script.CommandsSet {
+		if len(commands) == 0 {
+			return ir.ComponentScriptSpec{}, fmt.Errorf("%s:%d:%s: script commands must contain at least one command", script.CommandsSource.File, script.CommandsSource.Line, script.CommandsSource.Path)
+		}
+		for i, command := range commands {
+			if len(command) == 0 {
+				return ir.ComponentScriptSpec{}, fmt.Errorf("%s:%d:%s[%d]: script command must contain at least one argument", script.CommandsSource.File, script.CommandsSource.Line, script.CommandsSource.Path, i)
+			}
+			for j, arg := range command {
+				if arg == "" {
+					return ir.ComponentScriptSpec{}, fmt.Errorf("%s:%d:%s[%d][%d]: script command arguments must be non-empty strings", script.CommandsSource.File, script.CommandsSource.Line, script.CommandsSource.Path, i, j)
+				}
+			}
+		}
+	}
+	return ir.ComponentScriptSpec{
+		Name:        script.Name,
+		Mode:        mode,
+		Interpreter: interpreter,
+		Run:         script.Run,
+		Content:     script.Content,
+		Commands:    commands,
+		Sensitive:   script.Sensitive,
+		Source:      script.Source,
+	}, nil
+}
+
+func validateComponentScriptShape(script parser.ComponentScript) error {
+	bodies := 0
+	for _, ok := range []bool{script.RunSet, script.ContentSet, script.CommandsSet} {
+		if ok {
+			bodies++
+		}
+	}
+	if bodies != 1 {
+		return fmt.Errorf("%s:%d:%s: component script requires exactly one of run, content, or commands", script.Source.File, script.Source.Line, script.Source.Path)
+	}
+	return nil
 }
 
 func componentInputTypeSpecToIR(spec parser.ComponentInputTypeSpec) ir.ComponentInputTypeSpec {
@@ -389,15 +486,16 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 		if err != nil {
 			return nil, err
 		}
-		raw, err := parser.ParseComponentBody(template, parser.EvalContext{
+		componentCtx := parser.EvalContext{
 			ModuleDir: template.ModuleDir,
 			Locals:    c.cfg.Locals,
 			Variables: variables,
-		})
+		}
+		raw, err := parser.ParseComponentBody(template, componentCtx)
 		if err != nil {
 			return nil, fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
-		component, err := c.buildComponentSpec(instance, raw)
+		component, err := c.buildComponentSpec(instance, template, componentCtx, raw)
 		if err != nil {
 			return nil, err
 		}
@@ -458,11 +556,12 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 		if err != nil {
 			return err
 		}
-		raw, err := parser.ParseComponentBody(template, parser.EvalContext{
+		componentCtx := parser.EvalContext{
 			ModuleDir: template.ModuleDir,
 			Locals:    c.cfg.Locals,
 			Variables: variables,
-		})
+		}
+		raw, err := parser.ParseComponentBody(template, componentCtx)
 		if err != nil {
 			if isRuntimeUnknownError(err) {
 				if install != nil {
@@ -484,8 +583,26 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 			}
 			return fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
-		component, err := c.buildComponentSpec(instance, raw)
+		component, err := c.buildComponentSpec(instance, template, componentCtx, raw)
 		if err != nil {
+			if isRuntimeUnknownError(err) {
+				if install != nil {
+					component := ir.ComponentInstanceSpec{
+						Name:         instance.Name,
+						Template:     template.Name,
+						InputValues:  inputJSON,
+						ArtifactType: template.Type,
+						Version:      template.Version,
+						Install:      install,
+						Source:       instance.Source,
+					}
+					if err := validateComponentAgainstHost(check, component); err != nil {
+						return err
+					}
+					check.Components = append(check.Components, component)
+				}
+				continue
+			}
 			return err
 		}
 		component.Template = template.Name
@@ -1508,6 +1625,9 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 		if err != nil {
 			return spec, err
 		}
+		if err := rejectHostFileOnChange(managedFiles); err != nil {
+			return spec, err
+		}
 		spec.Files.Files = managedFiles
 	}
 
@@ -1640,11 +1760,12 @@ func applyHostFacts(spec *ir.HostSpec, facts ir.HostFacts) error {
 	return nil
 }
 
-func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, raw parser.Value) (ir.ComponentInstanceSpec, error) {
+func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, template parser.Component, ctx parser.EvalContext, raw parser.Value) (ir.ComponentInstanceSpec, error) {
 	spec := ir.ComponentInstanceSpec{
 		Name:     instance.Name,
 		Template: instance.Template,
 		Source:   instance.Source,
+		Scripts:  map[string]ir.ComponentScriptSpec{},
 		APT: ir.APTSpec{
 			Repositories: map[string]ir.APTRepositorySpec{},
 			SourceFiles:  map[string]ir.APTSourceFileSpec{},
@@ -1672,6 +1793,12 @@ func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, raw par
 			Services: map[string]ir.ManagedService{},
 		},
 	}
+
+	scripts, err := componentInstanceScriptSpecs(template, ctx)
+	if err != nil {
+		return spec, err
+	}
+	spec.Scripts = scripts
 
 	if packages, ok, err := mapField(raw, "packages"); err != nil {
 		return spec, err
@@ -1706,6 +1833,9 @@ func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, raw par
 		spec.Files.Source = files.Source
 		managedFiles, err := fileSpecs(files)
 		if err != nil {
+			return spec, err
+		}
+		if err := validateFileOnChangeRefs(managedFiles, spec.Scripts); err != nil {
 			return spec, err
 		}
 		spec.Files.Files = managedFiles
@@ -2376,6 +2506,10 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 		if err != nil {
 			return nil, err
 		}
+		onChange, hasOnChange, err := stringField(item, "on_change")
+		if err != nil {
+			return nil, err
+		}
 		managed := ir.ManagedFile{
 			Path:             path,
 			Content:          content,
@@ -2387,8 +2521,13 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 			Mode:             mode,
 			Sensitive:        sensitive,
 			Ensure:           ensure,
+			OnChange:         onChange,
 			Lifecycle:        lifecycle,
 			Source:           item.Source,
+		}
+		if hasOnChange {
+			source := item.Map["on_change"].Source
+			managed.OnChangeSource = &source
 		}
 		if hasContent {
 			managed.Summary = contentSummary([]byte(content))
@@ -2402,6 +2541,44 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 		out[path] = managed
 	}
 	return out, nil
+}
+
+func rejectHostFileOnChange(files map[string]ir.ManagedFile) error {
+	for _, path := range sortedKeys(files) {
+		file := files[path]
+		if file.OnChange == "" {
+			continue
+		}
+		source := file.Source
+		if file.OnChangeSource != nil {
+			source = *file.OnChangeSource
+		}
+		if source.Path == "" {
+			source = file.Source
+		}
+		return fmt.Errorf("%s:%d:%s: files.file.on_change is only supported inside component", source.File, source.Line, source.Path)
+	}
+	return nil
+}
+
+func validateFileOnChangeRefs(files map[string]ir.ManagedFile, scripts map[string]ir.ComponentScriptSpec) error {
+	for _, path := range sortedKeys(files) {
+		file := files[path]
+		if file.OnChange == "" {
+			continue
+		}
+		if _, ok := scripts[file.OnChange]; !ok {
+			source := file.Source
+			if file.OnChangeSource != nil {
+				source = *file.OnChangeSource
+			}
+			if source.Path == "" {
+				source = file.Source
+			}
+			return fmt.Errorf("%s:%d:%s: files.file.on_change references unknown script.%s", source.File, source.Line, source.Path, file.OnChange)
+		}
+	}
+	return nil
 }
 
 func secretSpecs(secrets parser.Value) (map[string]ir.SecretFile, error) {

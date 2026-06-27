@@ -1,0 +1,159 @@
+{
+  "name": "app1",
+  "source": {
+    "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+    "line": 24,
+    "path": "host.app1"
+  },
+  "facts": {
+    "system": {}
+  },
+  "ssh": {
+    "host": "app1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+      "line": 24,
+      "path": "host.app1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/app1.json",
+    "lock_path": "/var/lock/debianform/state/app1.lock",
+    "source": {
+      "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+      "line": 24,
+      "path": "host.app1"
+    }
+  },
+  "system": {
+    "hostname": "app1",
+    "architecture": "amd64",
+    "codename": "trixie",
+    "source": {
+      "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+      "line": 25,
+      "path": "host.app1.system"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  },
+  "components": [
+    {
+      "name": "app",
+      "template": "managed_app",
+      "input_values": {
+        "service_name": "managed-app"
+      },
+      "scripts": {
+        "reload": {
+          "name": "reload",
+          "mode": "once",
+          "interpreter": [
+            "/bin/sh",
+            "-eu"
+          ],
+          "run": "systemctl reload managed-app.service",
+          "source": {
+            "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+            "line": 6,
+            "path": "component.managed_app.script[\"reload\"]"
+          }
+        }
+      },
+      "apt": {
+        "source": {}
+      },
+      "packages": {
+        "source": {}
+      },
+      "files": {
+        "files": {
+          "/etc/managed-app/config.env": {
+            "path": "/etc/managed-app/config.env",
+            "content": "LISTEN_ADDR=127.0.0.1:8080\n",
+            "owner": "root",
+            "group": "root",
+            "mode": "0644",
+            "ensure": "present",
+            "on_change": "reload",
+            "summary": {
+              "sha256": "467fe02f238d90a1534ed2d9383219a82ca29a788e76975288233c9aad83569f",
+              "bytes": 27
+            },
+            "on_change_source": {
+              "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+              "line": 19,
+              "path": "component.managed_app.files.file[\"/etc/managed-app/config.env\"].on_change"
+            },
+            "source": {
+              "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+              "line": 12,
+              "path": "component.managed_app.files.file[\"/etc/managed-app/config.env\"]"
+            }
+          }
+        },
+        "source": {
+          "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+          "line": 11,
+          "path": "component.managed_app.files"
+        }
+      },
+      "secrets": {
+        "source": {}
+      },
+      "directories": {
+        "source": {}
+      },
+      "groups": {
+        "source": {}
+      },
+      "users": {
+        "source": {}
+      },
+      "systemd": {
+        "source": {}
+      },
+      "services": {
+        "source": {}
+      },
+      "source": {
+        "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+        "line": 30,
+        "path": "host.app1.component[\"app\"]"
+      }
+    }
+  ]
+}

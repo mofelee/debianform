@@ -47,6 +47,7 @@ type Component struct {
 	ModuleDir string
 	Body      *hclsyntax.Body
 	Inputs    map[string]ComponentInput
+	Scripts   map[string]ComponentScript
 	Type      string
 	Version   string
 	Sources   map[string]ComponentArtifactSource
@@ -99,6 +100,32 @@ type ComponentInputValidation struct {
 	ConditionSource ir.SourceRef
 	Message         string
 	MessageSource   ir.SourceRef
+}
+
+type ComponentScript struct {
+	Name              string
+	Mode              string
+	Interpreter       []string
+	Run               string
+	Content           string
+	Commands          [][]string
+	Sensitive         bool
+	ModeSet           bool
+	InterpreterSet    bool
+	RunSet            bool
+	ContentSet        bool
+	CommandsSet       bool
+	ModeExpr          hcl.Expression
+	InterpreterExpr   hcl.Expression
+	RunExpr           hcl.Expression
+	ContentExpr       hcl.Expression
+	CommandsExpr      hcl.Expression
+	ModeSource        ir.SourceRef
+	InterpreterSource ir.SourceRef
+	RunSource         ir.SourceRef
+	ContentSource     ir.SourceRef
+	CommandsSource    ir.SourceRef
+	Source            ir.SourceRef
 }
 
 type ComponentArtifactSource struct {
@@ -587,6 +614,7 @@ func parseComponent(file string, block *hclsyntax.Block, ctx EvalContext) (Compo
 		ModuleDir: filepath.Dir(file),
 		Body:      block.Body,
 		Inputs:    map[string]ComponentInput{},
+		Scripts:   map[string]ComponentScript{},
 		Sources:   map[string]ComponentArtifactSource{},
 	}
 	for name, attr := range block.Body.Attributes {
@@ -618,6 +646,15 @@ func parseComponent(file string, block *hclsyntax.Block, ctx EvalContext) (Compo
 				return Component{}, fmt.Errorf("%s:%d: duplicate component input %q; first defined at %s:%d", file, input.Source.Line, input.Name, previous.Source.File, previous.Source.Line)
 			}
 			component.Inputs[input.Name] = input
+		case "script":
+			script, err := parseComponentScriptBlock(file, source.Path, child, ctx)
+			if err != nil {
+				return Component{}, err
+			}
+			if previous, exists := component.Scripts[script.Name]; exists {
+				return Component{}, fmt.Errorf("%s:%d: duplicate component script %q; first defined at %s:%d", file, script.Source.Line, script.Name, previous.Source.File, previous.Source.Line)
+			}
+			component.Scripts[script.Name] = script
 		case "source":
 			sourceBlock, err := parseComponentSourceBlock(file, source.Path, child, ctx)
 			if err != nil {
@@ -661,6 +698,46 @@ func parseComponent(file string, block *hclsyntax.Block, ctx EvalContext) (Compo
 		}
 	}
 	return component, nil
+}
+
+func parseComponentScriptBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentScript, error) {
+	if len(block.Labels) != 1 {
+		return ComponentScript{}, fmt.Errorf("%s:%d: component script block requires exactly one label", file, block.TypeRange.Start.Line)
+	}
+	name := block.Labels[0]
+	path := fmt.Sprintf("%s.script[%s]", componentPath, strconv.Quote(name))
+	if len(block.Body.Blocks) != 0 {
+		return ComponentScript{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	script := ComponentScript{Name: name, Source: ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}}
+	for attrName, attr := range block.Body.Attributes {
+		source := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + attrName}
+		switch attrName {
+		case "mode":
+			script.ModeSet = true
+			script.ModeExpr = attr.Expr
+			script.ModeSource = source
+		case "interpreter":
+			script.InterpreterSet = true
+			script.InterpreterExpr = attr.Expr
+			script.InterpreterSource = source
+		case "run":
+			script.RunSet = true
+			script.RunExpr = attr.Expr
+			script.RunSource = source
+		case "content":
+			script.ContentSet = true
+			script.ContentExpr = attr.Expr
+			script.ContentSource = source
+		case "commands":
+			script.CommandsSet = true
+			script.CommandsExpr = attr.Expr
+			script.CommandsSource = source
+		default:
+			return ComponentScript{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, attrName)
+		}
+	}
+	return script, nil
 }
 
 func parseComponentSourceBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentArtifactSource, error) {
@@ -860,8 +937,12 @@ func parseCommandMatrixAttribute(file, path string, attr *hclsyntax.Attribute, c
 	if err != nil {
 		return nil, fmt.Errorf("%s:%d: %s: %w", file, source.Line, path, err)
 	}
+	return commandMatrixFromValue(file, path, value)
+}
+
+func commandMatrixFromValue(file, path string, value Value) ([][]string, error) {
 	if !value.IsList() {
-		return nil, fmt.Errorf("%s:%d: %s must be a list of command argument lists", file, source.Line, path)
+		return nil, fmt.Errorf("%s:%d: %s must be a list of command argument lists", file, value.Source.Line, path)
 	}
 	commands := make([][]string, 0, len(value.List))
 	for i, item := range value.List {
@@ -888,8 +969,12 @@ func parseStringListAttribute(file, path string, attr *hclsyntax.Attribute, ctx 
 	if err != nil {
 		return nil, fmt.Errorf("%s:%d: %s: %w", file, source.Line, path, err)
 	}
+	return stringListFromValue(file, path, value)
+}
+
+func stringListFromValue(file, path string, value Value) ([]string, error) {
 	if !value.IsList() {
-		return nil, fmt.Errorf("%s:%d: %s must be a list of strings", file, source.Line, path)
+		return nil, fmt.Errorf("%s:%d: %s must be a list of strings", file, value.Source.Line, path)
 	}
 	out := make([]string, 0, len(value.List))
 	seen := map[string]struct{}{}
@@ -905,6 +990,95 @@ func parseStringListAttribute(file, path string, attr *hclsyntax.Attribute, ctx 
 		out = append(out, str)
 	}
 	return out, nil
+}
+
+func stringListFromValueAllowDuplicates(file, path string, value Value) ([]string, error) {
+	if !value.IsList() {
+		return nil, fmt.Errorf("%s:%d: %s must be a list of strings", file, value.Source.Line, path)
+	}
+	out := make([]string, 0, len(value.List))
+	for i, item := range value.List {
+		str, ok := item.StringValue()
+		if !ok || str == "" {
+			return nil, fmt.Errorf("%s:%d: %s[%d] must be a non-empty string", file, item.Source.Line, path, i)
+		}
+		out = append(out, str)
+	}
+	return out, nil
+}
+
+func EvaluateComponentScript(script ComponentScript, ctx EvalContext) (ComponentScript, error) {
+	out := script
+	out.Sensitive = false
+	if script.ModeSet {
+		value, err := evalComponentScriptValue(script.ModeSource, script.ModeExpr, ctx)
+		if err != nil {
+			return ComponentScript{}, err
+		}
+		str, ok := value.StringValue()
+		if !ok {
+			return ComponentScript{}, fmt.Errorf("%s:%d: %s must be a string", script.ModeSource.File, script.ModeSource.Line, script.ModeSource.Path)
+		}
+		out.Mode = str
+		out.Sensitive = out.Sensitive || value.ContainsSensitive()
+	}
+	if script.InterpreterSet {
+		value, err := evalComponentScriptValue(script.InterpreterSource, script.InterpreterExpr, ctx)
+		if err != nil {
+			return ComponentScript{}, err
+		}
+		interpreter, err := stringListFromValueAllowDuplicates(script.InterpreterSource.File, script.InterpreterSource.Path, value)
+		if err != nil {
+			return ComponentScript{}, err
+		}
+		out.Interpreter = interpreter
+		out.Sensitive = out.Sensitive || value.ContainsSensitive()
+	}
+	if script.RunSet {
+		value, err := evalComponentScriptValue(script.RunSource, script.RunExpr, ctx)
+		if err != nil {
+			return ComponentScript{}, err
+		}
+		str, ok := value.StringValue()
+		if !ok {
+			return ComponentScript{}, fmt.Errorf("%s:%d: %s must be a string", script.RunSource.File, script.RunSource.Line, script.RunSource.Path)
+		}
+		out.Run = str
+		out.Sensitive = out.Sensitive || value.ContainsSensitive()
+	}
+	if script.ContentSet {
+		value, err := evalComponentScriptValue(script.ContentSource, script.ContentExpr, ctx)
+		if err != nil {
+			return ComponentScript{}, err
+		}
+		str, ok := value.StringValue()
+		if !ok {
+			return ComponentScript{}, fmt.Errorf("%s:%d: %s must be a string", script.ContentSource.File, script.ContentSource.Line, script.ContentSource.Path)
+		}
+		out.Content = str
+		out.Sensitive = out.Sensitive || value.ContainsSensitive()
+	}
+	if script.CommandsSet {
+		value, err := evalComponentScriptValue(script.CommandsSource, script.CommandsExpr, ctx)
+		if err != nil {
+			return ComponentScript{}, err
+		}
+		commands, err := commandMatrixFromValue(script.CommandsSource.File, script.CommandsSource.Path, value)
+		if err != nil {
+			return ComponentScript{}, err
+		}
+		out.Commands = commands
+		out.Sensitive = out.Sensitive || value.ContainsSensitive()
+	}
+	return out, nil
+}
+
+func evalComponentScriptValue(source ir.SourceRef, expr hcl.Expression, ctx EvalContext) (Value, error) {
+	value, err := evalValue(expr, ctx, source)
+	if err != nil {
+		return Value{}, fmt.Errorf("%s:%d: %s: %w", source.File, source.Line, source.Path, err)
+	}
+	return value, nil
 }
 
 func parseLabeledHeader(file, typ string, block *hclsyntax.Block) (ir.SourceRef, string, error) {
@@ -1245,6 +1419,25 @@ func parseComponentTraversal(file string, expr hcl.Expression) (string, error) {
 	return attr.Name, nil
 }
 
+func parseScriptTraversal(file string, expr hcl.Expression) (string, error) {
+	traversal, diags := hcl.AbsTraversalForExpr(expr)
+	if diags.HasErrors() {
+		return "", fmt.Errorf("%s:%d: script reference must be script.<name>", file, expr.Range().Start.Line)
+	}
+	if len(traversal) != 2 {
+		return "", fmt.Errorf("%s:%d: script reference must be script.<name>", file, expr.Range().Start.Line)
+	}
+	root, ok := traversal[0].(hcl.TraverseRoot)
+	if !ok || root.Name != "script" {
+		return "", fmt.Errorf("%s:%d: script reference must be script.<name>", file, expr.Range().Start.Line)
+	}
+	attr, ok := traversal[1].(hcl.TraverseAttr)
+	if !ok || attr.Name == "" {
+		return "", fmt.Errorf("%s:%d: script reference must be script.<name>", file, expr.Range().Start.Line)
+	}
+	return attr.Name, nil
+}
+
 func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentInput, error) {
 	if len(block.Labels) != 1 {
 		return ComponentInput{}, fmt.Errorf("%s:%d: component input block requires exactly one label", file, block.TypeRange.Start.Line)
@@ -1427,7 +1620,7 @@ func ParseComponentBody(component Component, ctx EvalContext) (Value, error) {
 		switch block.Type {
 		case "input":
 			continue
-		case "source", "extract", "build", "install":
+		case "script", "source", "extract", "build", "install":
 			continue
 		case "apt", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services":
 			if len(block.Labels) != 0 {
@@ -1461,7 +1654,7 @@ func ValidateComponentBodyShape(component Component) error {
 	values := map[string]struct{}{}
 	for _, block := range component.Body.Blocks {
 		switch block.Type {
-		case "input", "source", "extract", "build", "install":
+		case "input", "script", "source", "extract", "build", "install":
 			continue
 		case "apt", "packages", "files", "secrets", "directories", "groups", "users", "systemd", "services":
 			if len(block.Labels) != 0 {
@@ -2214,6 +2407,14 @@ func parseLabeledObjectBlock(file, domain, path string, block *hclsyntax.Block, 
 			Line: attr.NameRange.Start.Line,
 			Path: path + "." + name,
 		}
+		if domain == "files" && block.Type == "file" && name == "on_change" {
+			ref, err := parseScriptTraversal(file, attr.Expr)
+			if err != nil {
+				return Value{}, err
+			}
+			values[name] = Value{Kind: KindString, String: ref, Source: attrSource}
+			continue
+		}
 		value, err := evalValue(attr.Expr, ctx, attrSource)
 		if err != nil {
 			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
@@ -2398,7 +2599,7 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 	case "packages.package":
 		return attrSet("repositories")
 	case "files.file":
-		return attrSet("path", "content", "content_version", "source", "owner", "group", "mode", "ensure", "sensitive")
+		return attrSet("path", "content", "content_version", "source", "owner", "group", "mode", "ensure", "sensitive", "on_change")
 	case "secrets.file":
 		return attrSet("path", "source", "owner", "group", "mode", "ensure")
 	case "directories.directory":

@@ -1,7 +1,8 @@
 # script / on_change 需求文档
 
-本文描述 `script` 指令和 `files.file.on_change` 的设计目标。该能力尚未实现，
-不能作为当前 DSL Reference 的已支持语法使用。分阶段实施计划见
+本文描述 `script` 指令和 `files.file.on_change` 的设计目标。当前已实现 DSL 解析、
+validate 和 HostSpec 编译；ResourceGraph operation 生成、触发语义和脚本执行仍在后续
+阶段。已支持语法见 [DSL Reference](dsl-reference.zh.md)。分阶段实施计划见
 [script / on_change 实施计划](script-on-change-implementation-plan.zh.md)。
 
 ## 核心概念

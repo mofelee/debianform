@@ -1051,6 +1051,97 @@ component "rclone" {
 	}
 }
 
+func TestParseComponentScriptAndFileOnChange(t *testing.T) {
+	file := writeConfig(t, `
+component "app" {
+  script "reload" {
+    mode        = "each"
+    interpreter = ["/bin/bash", "-e"]
+    run         = "systemctl reload app.service"
+  }
+
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = script.reload
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	component := cfg.Components["app"]
+	script := component.Scripts["reload"]
+	if script.Name != "reload" || !script.ModeSet || !script.InterpreterSet || !script.RunSet {
+		t.Fatalf("script = %#v", script)
+	}
+	if script.Source.Path != `component.app.script["reload"]` {
+		t.Fatalf("script source path = %q", script.Source.Path)
+	}
+	body, err := ParseComponentBody(component, EvalContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileBlock := body.Map["files"].Map["file"].Map["/etc/app.conf"]
+	onChange := fileBlock.Map["on_change"]
+	if onChange.String != "reload" {
+		t.Fatalf("on_change = %#v", onChange)
+	}
+	if onChange.Source.Path != `component.app.files.file["/etc/app.conf"].on_change` {
+		t.Fatalf("on_change source path = %q", onChange.Source.Path)
+	}
+}
+
+func TestParseRejectsInvalidFileOnChangeTraversal(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+	}{
+		{
+			name: "string",
+			hcl: `
+component "app" {
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = "reload"
+    }
+  }
+}
+`,
+		},
+		{
+			name: "wrong root",
+			hcl: `
+component "app" {
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = component.reload
+    }
+  }
+}
+`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := writeConfig(t, tt.hcl)
+			cfg, err := ParseFiles([]string{file})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = ParseComponentBody(cfg.Components["app"], EvalContext{})
+			if err == nil || !strings.Contains(err.Error(), "script reference must be script.<name>") {
+				t.Fatalf("ParseComponentBody error = %v, want script traversal error", err)
+			}
+		})
+	}
+}
+
 func TestParseLifecycleBlock(t *testing.T) {
 	file := writeConfig(t, `
 host "web1" {

@@ -162,6 +162,7 @@ func fileSpecToCty(spec ir.FileSpec) cty.Value {
 			"sensitive":   cty.BoolVal(item.Sensitive),
 			"ensure":      cty.StringVal(item.Ensure),
 			"source_path": cty.StringVal(item.SourcePath),
+			"on_change":   cty.StringVal(item.OnChange),
 		})
 	}
 	return cty.ObjectVal(map[string]cty.Value{"files": objectOrEmpty(files)})
