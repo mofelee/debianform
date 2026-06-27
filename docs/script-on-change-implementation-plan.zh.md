@@ -207,7 +207,7 @@ host.<host>.components.<instance>.script["<name>"]
 - [x] once/each 与需求文档一致。
 - [x] `make test` 成功。
 
-## Loop 5: 示例、文档和集成验收
+## Loop 5: 示例、文档和集成验收（已实现）
 
 目标：把能力收口成用户可读、可验证、可维护的完整交付。
 
@@ -220,31 +220,31 @@ host.<host>.components.<instance>.script["<name>"]
 
 代码：
 
-- [ ] 新增 `examples/component-script-on-change.dbf.hcl`。
-- [ ] 新增 `test/integration/libvirt/cases/script-on-change/`。
-- [ ] 如有必要，更新 inspect 输出，让 component 公开 API 中能看到相关 input。
+- [x] 新增 `examples/component-script-on-change.dbf.hcl`。
+- [x] 新增 `test/integration/libvirt/cases/script-on-change/`。
+- [x] 如有必要，更新 inspect 输出，让 component 公开 API 中能看到相关 input。
 
 测试：
 
-- [ ] `dbf validate -f examples/component-script-on-change.dbf.hcl` 成功。
-- [ ] `dbf plan -f examples/component-script-on-change.dbf.hcl --offline` 输出预期 operation。
-- [ ] `make test` 成功。
-- [ ] `make test-integration-layout` 成功。
-- [ ] libvirt case 在 Debian 13 amd64 上通过。
+- [x] `dbf validate -f examples/component-script-on-change.dbf.hcl` 成功。
+- [x] `dbf plan -f examples/component-script-on-change.dbf.hcl --offline` 输出预期 operation。
+- [x] `make test` 成功。
+- [x] `make test-integration-layout` 成功。
+- [x] libvirt case 在 Debian 13 amd64 上通过。
 
 文档：
 
-- [ ] DSL Reference 从"设计目标"迁移到"已实现语法"。
-- [ ] README 可选加入短例子或链接到示例。
-- [ ] `docs/script-on-change-requirements.zh.md` 标记已实现部分，保留后续问题。
-- [ ] `docs/README.zh.md` 将链接从"设计中的需求"移动到合适的日常查阅或 DSL 相关位置。
+- [x] DSL Reference 从"设计目标"迁移到"已实现语法"。
+- [x] README 可选加入短例子或链接到示例。
+- [x] `docs/script-on-change-requirements.zh.md` 标记已实现部分，保留后续问题。
+- [x] `docs/README.zh.md` 将链接从"设计中的需求"移动到合适的日常查阅或 DSL 相关位置。
 
 验收：
 
-- [ ] 用户可以通过 component 封装文件变更后的 reload/restart 操作。
-- [ ] host 只需要挂载 component 并传 input，不需要知道内部 script 细节。
-- [ ] plan/apply/check 输出与现有 operation 风格一致。
-- [ ] `make test` 和相关集成检查通过。
+- [x] 用户可以通过 component 封装文件变更后的 reload/restart 操作。
+- [x] host 只需要挂载 component 并传 input，不需要知道内部 script 细节。
+- [x] plan/apply/check 输出与现有 operation 风格一致。
+- [x] `make test` 和相关集成检查通过。
 
 ## 后续扩展
 

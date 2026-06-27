@@ -177,6 +177,8 @@ DebianForm 的用户层只写 `host`、`profile`、`component`、`locals`、`var
 - `component` 是可传参的复用部署单元，用来封装一组资源、公开 typed input，并可选择
   声明 artifact 下载、构建和安装。component 只有被 host 挂载后才会展开；它没有 host
   的完整语义，也不会独立执行。
+- `script` / `on_change` 是 component 的内部运行生命周期：component 可以声明文件变更后
+  需要执行的 reload/restart/activate 脚本，host 只负责挂载 component 和传入 input。
 
 一份 `.dbf.hcl` 可以把复用、主机事实、包、文件、systemd、服务和断言放在同一个
 声明式模型里。下面是常用语法速查；完整可运行版见

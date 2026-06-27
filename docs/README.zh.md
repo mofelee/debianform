@@ -21,12 +21,12 @@
 - [Plan JSON 格式](plan-format.md)：`dbf plan --format json` 的结构化输出。
 - [State 格式](state.md)：远端 state、lock、ownership 和脱敏规则。
 - [systemd service units](systemd-service-units.md)：纯文本 unit 和结构化 `service_unit` 写法。
+- [script / on_change](script-on-change-requirements.zh.md)：component 内部文件变更后的 script 钩子语义。
 - [CLI 颜色输出和日志策略](cli-color-output-policy.zh.md)：终端颜色、日志颜色、CI 和 JSON 输出边界。
 - [删除行为提示设计稿](delete-behavior-diagnostics-plan.zh.md)：plan/apply 删除提示、颜色和行为矩阵。
 
 ## 设计中的需求
 
-- [script / on_change 需求文档](script-on-change-requirements.zh.md)：component 内部变更钩子的设计目标和示例。
 - [script / on_change 实施计划](script-on-change-implementation-plan.zh.md)：把变更钩子拆成可执行开发循环。
 
 ## 运维排障

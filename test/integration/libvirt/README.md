@@ -19,6 +19,7 @@ make test-integration-case CASE=files
 make test-integration-case CASE=multi-directory
 make test-integration-case CASE=nftables
 make test-integration-case CASE=shadowsocks-rust
+make test-integration-case CASE=script-on-change
 make test-integration-case CASE=systemd-service-unit
 make test-integration-case CASE=wireguard
 ```

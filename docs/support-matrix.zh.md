@@ -140,6 +140,7 @@ Linux Homebrew best-effort 规则见
 | Component artifact `source` | Beta | source build workflow。 |
 | Component input type system | Beta | primitive、list/map/set/object/tuple/optional。 |
 | Component input validation | Beta | 当前 input 自校验和受限函数集合。 |
+| Component script/on_change | Beta | component 内文件变更触发 script，支持 `once` / `each` 和触发上下文环境变量。 |
 | Sensitive input propagation | Beta | 派生 file/unit content 在 plan/state 中脱敏。 |
 | Top-level variable | Beta | CLI var、var file、auto var file、env var、validation。 |
 | Ephemeral variable | Beta | 不写入 state；结构性字段限制。 |
@@ -156,6 +157,7 @@ Linux Homebrew best-effort 规则见
 | `examples/component-binary.dbf.hcl` | Beta | binary artifact，真实 apply 前需替换 sha256。 |
 | `examples/component-source-build.dbf.hcl` | Beta | source build component。 |
 | `examples/component-inputs.dbf.hcl` | Beta | typed input、validation、sensitive。 |
+| `examples/component-script-on-change.dbf.hcl` | Beta | component 内 `files.file.on_change` 触发 script operation。 |
 | `examples/docker-*.dbf.hcl` | Beta | Docker minimal、daemon、Compose、users、package source。 |
 | `examples/fleet.dbf.hcl` | Preview | 当前语法速查，覆盖 profile/component/host、systemd timer/resolved/journald、Docker、nftables 等组合用法。 |
 | `examples/nftables.dbf.hcl` | Beta | nftables validate/activate。 |
@@ -165,6 +167,7 @@ Linux Homebrew best-effort 规则见
 | `examples/variable-secret-file.dbf.hcl` | Beta | variable + sensitive file 写入。 |
 | `examples/wireguard-networkd.dbf.hcl` | Preview | WireGuard networkd component，多 peer 和多 interface 复用，需准备本地 secrets。 |
 | `test/integration/libvirt/cases/systemd-extensions` | Preview | `service_config`、timer enable/state 和实际触发、resolved/journald drop-in、漂移修复和删除。 |
+| `test/integration/libvirt/cases/script-on-change` | Beta | component file 变更触发 script、no-op 不重复触发、配置更新再次触发。 |
 | `test/integration/libvirt/cases/*` | Beta | Debian 13 VM 上 validate/apply/check/drift/remove/restore 覆盖。 |
 
 ## 当前不支持或尚未承诺
