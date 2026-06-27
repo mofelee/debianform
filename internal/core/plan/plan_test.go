@@ -504,6 +504,36 @@ func TestComponentInputsPlanJSONGolden(t *testing.T) {
 	testassert.NoSecretLeak(t, "component input plan text", text.String())
 }
 
+func TestComponentScriptOnChangePlanGoldens(t *testing.T) {
+	doc := planFixture(t, "../testdata/fixtures/component-script-on-change.dbf.hcl", Options{
+		CommandFile: "../testdata/fixtures/component-script-on-change.dbf.hcl",
+		Host:        "app1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/component-script-on-change.golden.json", got)
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	assertGolden(t, "../testdata/plan/component-script-on-change.golden.txt", text.String())
+
+	if doc.Summary.Create != 1 {
+		t.Fatalf("create count = %d, want 1", doc.Summary.Create)
+	}
+	if doc.Summary.Operations != 1 {
+		t.Fatalf("operations = %d, want 1", doc.Summary.Operations)
+	}
+	if !hasOperation(doc, `host.app1.components.app.script["reload"]`) {
+		t.Fatalf("script operation missing: %#v", doc.Operations)
+	}
+}
+
 func TestSensitiveServiceEnvironmentPlanDoesNotLeak(t *testing.T) {
 	doc := planFixture(t, "../testdata/fixtures/sensitive-service-environment.dbf.hcl", Options{
 		CommandFile: "../testdata/fixtures/sensitive-service-environment.dbf.hcl",

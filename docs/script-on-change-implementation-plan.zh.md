@@ -98,28 +98,28 @@ host.<host>.components.<instance>.script["<name>"]
 
 代码：
 
-- [ ] graph 编译 component file 时收集 script triggers。
-- [ ] graph 为 script 生成 operation，挂载 source、summary、mode、preview。
-- [ ] graph validate 确认 operation trigger 地址存在。
-- [ ] plan text/json/html 能展示 script operation 和 triggered_by。
-- [ ] ResourceGraph JSON 不展开完整脚本执行体，避免 plan 噪声和泄漏面扩大。
+- [x] graph 编译 component file 时收集 script triggers。
+- [x] graph 为 script 生成 operation，挂载 source、summary、mode、preview。
+- [x] graph validate 确认 operation trigger 地址存在。
+- [x] plan text/json/html 能展示 script operation 和 triggered_by。
+- [x] ResourceGraph JSON 不展开完整脚本执行体，避免 plan 噪声和泄漏面扩大。
 
 测试：
 
-- [ ] graph 单测覆盖 component script operation 地址、依赖和 triggered_by。
-- [ ] plan golden 覆盖 script operation 的 text/json 输出。
-- [ ] 负例覆盖没有任何 file 引用的 script 是否不生成 operation，或按设计生成 no-op 元数据。
+- [x] graph 单测覆盖 component script operation 地址、依赖和 triggered_by。
+- [x] plan golden 覆盖 script operation 的 text/json 输出。
+- [x] 负例覆盖没有任何 file 引用的 script 不生成 operation。
 
 文档：
 
-- [ ] 更新需求文档中的 Plan 展示为实际输出格式。
-- [ ] DSL Reference 增加最小可运行示例，使用 `dbf plan --offline` 验证地址形状。
+- [x] 更新需求文档中的 Plan 展示为实际输出格式。
+- [x] DSL Reference 增加最小可运行示例，使用 `dbf plan --offline` 验证地址形状。
 
 验收：
 
-- [ ] `dbf plan --offline` 可看到 script operation。
-- [ ] operation 只显示短 preview，不展开完整脚本内容。
-- [ ] `make test` 成功。
+- [x] `dbf plan --offline` 可看到 script operation。
+- [x] operation 只显示短 preview，不展开完整脚本内容。
+- [x] `make test` 成功。
 
 ## Loop 3: 执行载荷和 NativeProvider 运行
 

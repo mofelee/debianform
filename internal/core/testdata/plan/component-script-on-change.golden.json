@@ -1,0 +1,170 @@
+{
+  "format_version": "debianform.plan.alpha1",
+  "generated_at": "2026-06-20T12:00:00Z",
+  "command": {
+    "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+    "host": "app1"
+  },
+  "summary": {
+    "create": 1,
+    "update": 0,
+    "delete": 0,
+    "no_op": 0,
+    "operations": 1
+  },
+  "changes": [
+    {
+      "address": "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]",
+      "action": "create",
+      "summary": "create file /etc/managed-app/config.env",
+      "source": {
+        "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+        "line": 12,
+        "path": "component.managed_app.files.file[\"/etc/managed-app/config.env\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "component"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "app"
+          },
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 1,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "LISTEN_ADDR=127.0.0.1:8080"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/managed-app/config.env"
+          },
+          {
+            "path": [
+              "sensitive"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": false
+          },
+          {
+            "path": [
+              "summary"
+            ],
+            "kind": "map",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "summary",
+                  "bytes"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": 27
+              },
+              {
+                "path": [
+                  "summary",
+                  "sha256"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "467fe02f238d90a1534ed2d9383219a82ca29a788e76975288233c9aad83569f"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.app1.components.app.script[\"reload\"]",
+      "action": "run",
+      "summary": "run component script reload",
+      "depends_on": [
+        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]"
+      ],
+      "triggered_by": [
+        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]"
+      ],
+      "command_preview": "script reload (once)",
+      "source": {
+        "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+        "line": 6,
+        "path": "component.managed_app.script[\"reload\"]"
+      }
+    }
+  ],
+  "diagnostics": []
+}

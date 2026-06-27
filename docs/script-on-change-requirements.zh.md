@@ -1,7 +1,7 @@
 # script / on_change 需求文档
 
 本文描述 `script` 指令和 `files.file.on_change` 的设计目标。当前已实现 DSL 解析、
-validate 和 HostSpec 编译；ResourceGraph operation 生成、触发语义和脚本执行仍在后续
+validate、HostSpec 编译和 ResourceGraph/plan operation 展示；触发语义和脚本执行仍在后续
 阶段。已支持语法见 [DSL Reference](dsl-reference.zh.md)。分阶段实施计划见
 [script / on_change 实施计划](script-on-change-implementation-plan.zh.md)。
 
@@ -229,15 +229,17 @@ host.app1.components.app.script["reload"]
 
 ## Plan 展示
 
-plan 应展示短摘要，不直接展开完整脚本内容：
+plan 当前展示短摘要，不直接展开完整脚本内容：
 
 ```text
-run host.app1.components.app.script["reload"]
+  ! host.app1.components.app.script["reload"]
+    run component script reload
     triggered_by: host.app1.components.app.files.file["/etc/managed-app/config.env"]
     command: script reload (once)
 ```
 
-完整脚本内容进入执行载荷，不应作为普通 `command_preview` 展开到 text/html plan 中。
+当前 ResourceGraph/plan 只保存短 `command_preview`。完整脚本执行载荷会在后续执行阶段实现，
+不应展开到 text/html plan 中。
 
 ## 待确认问题
 

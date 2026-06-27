@@ -1,0 +1,23 @@
+Plan:
+  + host.app1.components.app.files.file["/etc/managed-app/config.env"]
+    create file /etc/managed-app/config.env
+    source: ../testdata/fixtures/component-script-on-change.dbf.hcl:12:component.managed_app.files.file["/etc/managed-app/config.env"]
+    + component: "app"
+    + content
+      @@ -1,0 +1,1 @@
+      + LISTEN_ADDR=127.0.0.1:8080
+    + ensure: "present"
+    + group: "root"
+    + mode: "0644"
+    + owner: "root"
+    + path: "/etc/managed-app/config.env"
+    + sensitive: false
+    + summary
+      + summary.bytes: 27
+      + summary.sha256: "467fe02f238d90a1534ed2d9383219a82ca29a788e76975288233c9aad83569f"
+  ! host.app1.components.app.script["reload"]
+    run component script reload
+    triggered_by: host.app1.components.app.files.file["/etc/managed-app/config.env"]
+    command: script reload (once)
+
+Summary: 1 create, 0 update, 0 delete, 0 no-op, 1 operations

@@ -1027,6 +1027,56 @@ func TestCompileComponentInputsResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileComponentScriptOnChangeResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/component-script-on-change.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/component-script-on-change.golden.json", got)
+
+	fileAddress := `host.app1.components.app.files.file["/etc/managed-app/config.env"]`
+	scriptAddress := `host.app1.components.app.script["reload"]`
+	if node := nodeFor(resourceGraph, fileAddress); node == nil {
+		t.Fatalf("component file node %s was not found", fileAddress)
+	}
+	operation := operationFor(resourceGraph, scriptAddress)
+	if operation == nil {
+		t.Fatalf("script operation %s was not found", scriptAddress)
+	}
+	if operation.CommandPreview != "script reload (once)" {
+		t.Fatalf("command preview = %q", operation.CommandPreview)
+	}
+	if !containsString(operation.TriggeredBy, fileAddress) || !containsString(operation.DependsOn, fileAddress) {
+		t.Fatalf("script operation deps=%#v triggered_by=%#v, want %q", operation.DependsOn, operation.TriggeredBy, fileAddress)
+	}
+}
+
+func TestCompileComponentScriptWithoutOnChangeDoesNotGenerateOperation(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+component "app" {
+  script "unused" {
+    run = "systemctl reload app.service"
+  }
+
+  files {
+    file "/etc/app.conf" {
+      content = "managed"
+    }
+  }
+}
+
+host "app1" {
+  components = [component.app]
+}
+`)
+	if operationFor(resourceGraph, `host.app1.components.app.script["unused"]`) != nil {
+		t.Fatalf("unused component script generated operation: %#v", resourceGraph.Operations)
+	}
+}
+
 func TestResourceGraphDesiredDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 	for _, tt := range []struct {
 		name    string

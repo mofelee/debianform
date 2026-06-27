@@ -899,6 +899,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		})
 	}
 
+	componentScriptTriggers := map[string]map[string][]string{}
 	for _, component := range host.Components {
 		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
 		for _, path := range sortedKeys(component.Files.Files) {
@@ -930,6 +931,37 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				ProviderType:    "file",
 				ProviderAddress: "file." + providerName(host.Name, component.Name, item.Path),
 				ProviderPayload: payload,
+			})
+			if item.OnChange != "" {
+				triggers, ok := componentScriptTriggers[component.Name]
+				if !ok {
+					triggers = map[string][]string{}
+					componentScriptTriggers[component.Name] = triggers
+				}
+				triggers[item.OnChange] = append(triggers[item.OnChange], address)
+			}
+		}
+	}
+	for _, component := range host.Components {
+		triggers := componentScriptTriggers[component.Name]
+		if len(triggers) == 0 {
+			continue
+		}
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, name := range sortedKeys(triggers) {
+			script, ok := component.Scripts[name]
+			if !ok {
+				continue
+			}
+			triggeredBy := dedupeStrings(triggers[name])
+			operations = append(operations, Operation{
+				Address:        fmt.Sprintf("%s.script[%s]", componentPrefix, strconv.Quote(name)),
+				Action:         "run",
+				Summary:        "run component script " + name,
+				DependsOn:      append([]string(nil), triggeredBy...),
+				TriggeredBy:    append([]string(nil), triggeredBy...),
+				CommandPreview: "script " + name + " (" + script.Mode + ")",
+				Source:         script.Source,
 			})
 		}
 	}

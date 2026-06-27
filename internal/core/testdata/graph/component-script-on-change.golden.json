@@ -1,0 +1,64 @@
+{
+  "nodes": [
+    {
+      "host": "app1",
+      "address": "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]",
+      "kind": "file",
+      "summary": "create file /etc/managed-app/config.env",
+      "source": {
+        "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+        "line": 12,
+        "path": "component.managed_app.files.file[\"/etc/managed-app/config.env\"]"
+      },
+      "desired": {
+        "component": "app",
+        "content": "LISTEN_ADDR=127.0.0.1:8080\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/managed-app/config.env",
+        "sensitive": false,
+        "summary": {
+          "sha256": "467fe02f238d90a1534ed2d9383219a82ca29a788e76975288233c9aad83569f",
+          "bytes": 27
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.app1_app__etc_managed_app_config_env",
+      "provider_payload": {
+        "component": "app",
+        "content": "LISTEN_ADDR=127.0.0.1:8080\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/managed-app/config.env",
+        "sensitive": false,
+        "summary": {
+          "sha256": "467fe02f238d90a1534ed2d9383219a82ca29a788e76975288233c9aad83569f",
+          "bytes": 27
+        }
+      }
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.app1.components.app.script[\"reload\"]",
+      "action": "run",
+      "summary": "run component script reload",
+      "depends_on": [
+        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]"
+      ],
+      "triggered_by": [
+        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]"
+      ],
+      "command_preview": "script reload (once)",
+      "source": {
+        "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+        "line": 6,
+        "path": "component.managed_app.script[\"reload\"]"
+      }
+    }
+  ]
+}
