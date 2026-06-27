@@ -24,6 +24,10 @@
 - [CLI 颜色输出和日志策略](cli-color-output-policy.zh.md)：终端颜色、日志颜色、CI 和 JSON 输出边界。
 - [删除行为提示设计稿](delete-behavior-diagnostics-plan.zh.md)：plan/apply 删除提示、颜色和行为矩阵。
 
+## 设计中的需求
+
+- [script / on_change 需求文档](script-on-change-requirements.zh.md)：component 内部变更钩子的设计目标和示例。
+
 ## 运维排障
 
 - [Operations Runbook](operations-runbook.zh.md)：stale lock、apply 中断、drift、资源恢复和常见错误。

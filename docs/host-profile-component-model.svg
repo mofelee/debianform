@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="420" viewBox="0 0 980 420" role="img" aria-labelledby="title desc">
+  <title id="title">DebianForm host profile component model</title>
+  <desc id="desc">Profiles provide reusable base configuration, components provide parameterized deploy units, and hosts are the final execution units for plan apply and check.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3f5669"/>
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .panel { fill: #ffffff; stroke: #c9d5df; stroke-width: 2; rx: 8; }
+      .host { fill: #fff7ed; stroke: #d97706; }
+      .profile { fill: #ecfeff; stroke: #0891b2; }
+      .component { fill: #f0fdf4; stroke: #16a34a; }
+      .output { fill: #f5f3ff; stroke: #7c3aed; }
+      .title { font: 700 20px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #17212b; }
+      .label { font: 700 18px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #17212b; }
+      .text { font: 15px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #324454; }
+      .small { font: 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #526576; }
+      .code { font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #17212b; }
+      .arrow { stroke: #3f5669; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .dashed { stroke-dasharray: 8 6; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="980" height="420"/>
+  <text class="title" x="40" y="44">DebianForm 配置模型</text>
+  <text class="small" x="40" y="68">profile 提供基础配置，component 提供可传参部署单元，host 是最终执行边界。</text>
+
+  <rect class="panel profile" x="50" y="110" width="250" height="110" rx="8"/>
+  <text class="label" x="78" y="145">profile</text>
+  <text class="text" x="78" y="174">不可传参的基础配置片段</text>
+  <text class="small" x="78" y="198">imports 先合并，host 后覆盖</text>
+
+  <rect class="panel component" x="50" y="260" width="250" height="115" rx="8"/>
+  <text class="label" x="78" y="295">component</text>
+  <text class="text" x="78" y="324">可传参的复用部署单元</text>
+  <text class="small" x="78" y="348">input + resources + artifact</text>
+
+  <rect class="panel host" x="395" y="130" width="260" height="210" rx="8"/>
+  <text class="label" x="423" y="166">host</text>
+  <text class="text" x="423" y="197">最终执行单元</text>
+  <text class="small" x="423" y="225">组合 profile 和 component</text>
+  <text class="small" x="423" y="250">拥有 SSH / state / lock</text>
+  <text class="small" x="423" y="275">生成最终 HostSpec</text>
+  <text class="code" x="423" y="308">host "app1" { ... }</text>
+
+  <rect class="panel output" x="755" y="148" width="175" height="168" rx="8"/>
+  <text class="label" x="786" y="185">执行</text>
+  <text class="text" x="786" y="216">plan</text>
+  <text class="text" x="786" y="245">apply</text>
+  <text class="text" x="786" y="274">check</text>
+
+  <path class="arrow" d="M 300 165 C 340 165 350 192 392 206"/>
+  <text class="small" x="323" y="154">import</text>
+
+  <path class="arrow" d="M 300 318 C 342 318 352 281 392 268"/>
+  <text class="small" x="322" y="337">mount + inputs</text>
+
+  <path class="arrow" d="M 655 235 C 696 235 711 232 752 232"/>
+  <text class="small" x="681" y="220">ResourceGraph</text>
+
+  <path class="arrow dashed" d="M 525 340 C 525 376 292 392 175 376"/>
+  <text class="small" x="326" y="391">component 不独立执行</text>
+
+  <path class="arrow dashed" d="M 525 130 C 525 92 292 84 175 110"/>
+  <text class="small" x="330" y="96">profile 不独立执行</text>
+</svg>

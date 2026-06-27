@@ -163,6 +163,21 @@ dbf plan -f ../shared/base.dbf.hcl -f ./hosts/prod.dbf.hcl --offline
 DebianForm 的用户层只写 `host`、`profile`、`component`、`locals`、`variable` 和领域块。
 不需要写低阶 provider 资源。
 
+这几个顶层概念的边界是：
+
+<p align="center">
+  <img src="./docs/host-profile-component-model.svg" alt="DebianForm host profile component model" width="820">
+</p>
+
+- `host` 是最终执行单元。`plan`、`apply`、`check` 都以 host 为目标；每台 host 有自己的
+  SSH 连接、远端 state 和 lock。
+- `profile` 是不可传参的基础配置片段，用来沉淀可复用的主机配置。profile 可以被
+  profile 或 host import；被 import 的内容先合并，当前 profile/host 后合并并覆盖
+  同名字段。
+- `component` 是可传参的复用部署单元，用来封装一组资源、公开 typed input，并可选择
+  声明 artifact 下载、构建和安装。component 只有被 host 挂载后才会展开；它没有 host
+  的完整语义，也不会独立执行。
+
 一份 `.dbf.hcl` 可以把复用、主机事实、包、文件、systemd、服务和断言放在同一个
 声明式模型里。下面是常用语法速查；完整可运行版见
 [`examples/fleet.dbf.hcl`](examples/fleet.dbf.hcl)。
