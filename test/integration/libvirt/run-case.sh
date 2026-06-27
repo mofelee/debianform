@@ -184,12 +184,74 @@ assert_remote() {
   fi
 }
 
+assert_remote_eventually() {
+  local description=$1
+  local command=$2
+  local timeout="${3:-60}"
+  local interval="${4:-2}"
+  local deadline=$((SECONDS + timeout))
+
+  ASSERTION_COUNT=$((ASSERTION_COUNT + 1))
+  log "ASSERT $ASSERTION_COUNT: $description"
+  while (( SECONDS < deadline )); do
+    if ssh_vm "$command" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$interval"
+  done
+
+  log "ASSERT $ASSERTION_COUNT: final failure output for: $description"
+  ssh_vm "$command" || true
+  fail "$description did not pass within ${timeout}s"
+}
+
+collect_guest_diagnostics() {
+  if [[ -z "$VM_IP" || ! -f "$DBF_HOME/.ssh/config" ]]; then
+    return
+  fi
+
+  local guest_dir="$ARTIFACT_DIR/guest"
+  mkdir -p "$guest_dir"
+  ssh_vm "set +e; hostnamectl; printf '\n'; uname -a; printf '\n'; uptime; printf '\n'; cat /etc/os-release" >"$guest_dir/system.txt" 2>&1 || true
+  ssh_vm "systemctl --failed --no-pager --full" >"$guest_dir/systemctl-failed.txt" 2>&1 || true
+  ssh_vm "systemctl list-units --all --no-pager --full 'debianform*' 'dbf*' '*docker*'" >"$guest_dir/systemd-units.txt" 2>&1 || true
+  ssh_vm "journalctl --no-pager -n 500" >"$guest_dir/journal.log" 2>&1 || true
+  ssh_vm "journalctl -u docker.service --no-pager -n 300" >"$guest_dir/docker.service.log" 2>&1 || true
+  ssh_vm "set +e
+for unit_path in /etc/systemd/system/debianform*.service /etc/systemd/system/dbf*.service; do
+  test -e \"\$unit_path\" || continue
+  unit=\"\$(basename \"\$unit_path\")\"
+  printf '===== %s status =====\n' \"\$unit\"
+  systemctl status --no-pager --full \"\$unit\"
+  printf '\n===== %s journal =====\n' \"\$unit\"
+  journalctl -u \"\$unit\" --no-pager -n 300
+  printf '\n'
+done" >"$guest_dir/managed-services.log" 2>&1 || true
+  ssh_vm "set +e
+if command -v docker >/dev/null 2>&1; then
+  docker version
+  printf '\n===== docker info =====\n'
+  docker info
+  printf '\n===== docker compose version =====\n'
+  docker compose version
+  printf '\n===== docker compose projects =====\n'
+  docker compose ls --all
+  printf '\n===== docker containers =====\n'
+  docker ps -a --no-trunc
+  printf '\n===== docker images =====\n'
+  docker images
+  printf '\n===== recent docker events =====\n'
+  timeout 10s docker events --since 20m
+fi" >"$guest_dir/docker.log" 2>&1 || true
+}
+
 collect_diagnostics() {
   mkdir -p "$ARTIFACT_DIR"
   virsh_system list --all >"$ARTIFACT_DIR/virsh-list.txt" 2>&1 || true
   virsh_system net-list --all >"$ARTIFACT_DIR/virsh-net-list.txt" 2>&1 || true
   virsh_system dumpxml "$VM_NAME" >"$ARTIFACT_DIR/domain.xml" 2>&1 || true
   virsh_system domifaddr "$VM_NAME" --source lease >"$ARTIFACT_DIR/domifaddr.txt" 2>&1 || true
+  collect_guest_diagnostics
   if is_remote_libvirt; then
     ssh "$REMOTE_HYPERVISOR" "journalctl -u libvirtd --no-pager -n 300" >"$ARTIFACT_DIR/libvirtd.log" 2>&1 || true
     ssh "$REMOTE_HYPERVISOR" "cat /var/log/libvirt/qemu/$VM_NAME.log" >"$ARTIFACT_DIR/qemu.log" 2>&1 || true

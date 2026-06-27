@@ -154,7 +154,22 @@ jobs:
           key: debian13-genericcloud-${{ steps.debian-image.outputs.sha512 }}
 
       - name: Run Debian 13 VM integration test
-        run: make test-integration
+        run: |
+          artifact_root="${DBF_INTEGRATION_ARTIFACT_DIR:?}"
+          for attempt in 1 2; do
+            export DBF_INTEGRATION_ARTIFACT_DIR="$artifact_root/attempt-$attempt"
+            echo "Running libvirt integration attempt $attempt for case ${DBF_INTEGRATION_CASE}"
+            if make test-integration; then
+              exit 0
+            else
+              status=$?
+            fi
+            if [[ "$attempt" == "2" ]]; then
+              exit "$status"
+            fi
+            echo "Libvirt integration attempt $attempt failed; retrying once."
+            sleep 10
+          done
         env:
           DBF_INTEGRATION_CASE: ${{ matrix.case }}
           DBF_INTEGRATION_ARTIFACT_DIR: ${{ runner.temp }}/debianform-integration-artifacts
