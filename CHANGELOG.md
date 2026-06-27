@@ -6,6 +6,15 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+## v0.1.0-beta.7
+
+- Added support for passing directories to repeated `-f` flags, expanding each
+  directory into its local `.dbf.hcl` files.
+- Added per-directory auto variable loading so directory-expanded configs can
+  use colocated `.auto.dbfvars` files consistently.
+- Added multi-directory libvirt coverage and refreshed the quickstart demo
+  recording.
+
 ## v0.1.0-beta.6
 
 - Added styled badges, richer ANSI text rendering, and optional Unicode status
