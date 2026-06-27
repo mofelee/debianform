@@ -6,6 +6,14 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+## v0.1.0-beta.8
+
+- Added component `script` operations with `on_change` trigger modes so
+  components can run custom hooks when managed inputs change.
+- Added graph and engine support for planning and executing component script
+  operations.
+- Added script/on_change examples and implementation documentation.
+
 ## v0.1.0-beta.7
 
 - Added support for passing directories to repeated `-f` flags, expanding each
