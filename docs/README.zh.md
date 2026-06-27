@@ -27,6 +27,7 @@
 ## 设计中的需求
 
 - [script / on_change 需求文档](script-on-change-requirements.zh.md)：component 内部变更钩子的设计目标和示例。
+- [script / on_change 实施计划](script-on-change-implementation-plan.zh.md)：把变更钩子拆成可执行开发循环。
 
 ## 运维排障
 
