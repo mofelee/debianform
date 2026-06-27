@@ -81,6 +81,7 @@
         "reload": {
           "name": "reload",
           "mode": "once",
+          "body": "run",
           "interpreter": [
             "/bin/sh",
             "-eu"

@@ -491,6 +491,7 @@ type ComponentInputValidationSpec struct {
 type ComponentScriptSpec struct {
 	Name        string     `json:"name"`
 	Mode        string     `json:"mode"`
+	Body        string     `json:"body,omitempty"`
 	Interpreter []string   `json:"interpreter,omitempty"`
 	Run         string     `json:"run,omitempty"`
 	Content     string     `json:"content,omitempty"`

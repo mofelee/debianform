@@ -715,6 +715,28 @@ func TestDockerComposeMemoryApplyIncludesSystemdUnitAndService(t *testing.T) {
 	}
 }
 
+func TestComponentScriptOnChangeOperationRunsAfterFileChange(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../testdata/fixtures/component-script-on-change.dbf.hcl")
+	provider := NewMemoryProvider()
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	plan, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fileAddress := `host.app1.components.app.files.file["/etc/managed-app/config.env"]`
+	scriptAddress := `host.app1.components.app.script["reload"]`
+	if !hasStepAction(plan, fileAddress, ActionCreate) {
+		t.Fatalf("apply plan missing component file create: %#v", plan.Steps)
+	}
+	if len(plan.Operations) != 1 || plan.Operations[0].Operation.Address != scriptAddress {
+		t.Fatalf("apply operations = %#v, want script reload", plan.Operations)
+	}
+	if !containsString(provider.Operations, scriptAddress) {
+		t.Fatalf("provider operations = %#v, want script reload", provider.Operations)
+	}
+}
+
 func TestDockerComposeMemoryCheckDetectsStoppedProjectDrift(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/docker-compose.dbf.hcl")
 	provider := NewMemoryProvider()

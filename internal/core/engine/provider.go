@@ -220,6 +220,9 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 }
 
 func (p NativeProvider) RunOperation(ctx context.Context, operation graph.Operation) error {
+	if operation.ScriptPayload != nil {
+		return p.runScriptOperation(ctx, operation)
+	}
 	if operation.CommandPreview == "" {
 		return nil
 	}
@@ -229,6 +232,68 @@ func (p NativeProvider) RunOperation(ctx context.Context, operation graph.Operat
 	}
 	_, err := p.Runner.RunCommand(ctx, host, operation.CommandPreview)
 	return err
+}
+
+func (p NativeProvider) runScriptOperation(ctx context.Context, operation graph.Operation) error {
+	host := hostFromAddress(operation.Address)
+	if host == "" {
+		return fmt.Errorf("cannot infer host from operation address %s", operation.Address)
+	}
+	payload := operation.ScriptPayload
+	if payload == nil {
+		return nil
+	}
+	interpreter := append([]string(nil), payload.Interpreter...)
+	if len(interpreter) == 0 {
+		return fmt.Errorf("%s script payload requires interpreter", operation.Address)
+	}
+	for i, arg := range interpreter {
+		if arg == "" {
+			return fmt.Errorf("%s script payload interpreter[%d] must be non-empty", operation.Address, i)
+		}
+	}
+	script, err := scriptPayloadContent(operation.Address, payload)
+	if err != nil {
+		return err
+	}
+	remoteCommand := strings.Join(shellQuoteArgs(interpreter), " ")
+	_, err = p.Runner.RunInput(ctx, host, remoteCommand, strings.NewReader(script))
+	return err
+}
+
+func scriptPayloadContent(address string, payload *graph.ScriptPayload) (string, error) {
+	if payload == nil {
+		return "", nil
+	}
+	switch payload.Kind {
+	case "run":
+		return payload.Run + "\n", nil
+	case "content":
+		return payload.Content, nil
+	case "commands":
+		return scriptPayloadCommands(address, payload.Commands)
+	default:
+		return "", fmt.Errorf("%s script payload kind must be run, content, or commands", address)
+	}
+}
+
+func scriptPayloadCommands(address string, commands [][]string) (string, error) {
+	if len(commands) == 0 {
+		return "", fmt.Errorf("%s script payload commands must contain at least one command", address)
+	}
+	lines := make([]string, 0, len(commands))
+	for i, command := range commands {
+		if len(command) == 0 {
+			return "", fmt.Errorf("%s script payload command[%d] must contain at least one argument", address, i)
+		}
+		for j, arg := range command {
+			if arg == "" {
+				return "", fmt.Errorf("%s script payload command[%d][%d] must be non-empty", address, i, j)
+			}
+		}
+		lines = append(lines, strings.Join(shellQuoteArgs(command), " "))
+	}
+	return strings.Join(lines, "\n") + "\n", nil
 }
 
 func (p NativeProvider) planFileLike(ctx context.Context, node graph.Node, prior *corestate.Resource) (ProviderPlan, error) {

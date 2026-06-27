@@ -627,7 +627,7 @@ host "app1" {
 
 | 字段 | 必填 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `mode` | 否 | `"once"` | `"once"` 或 `"each"`。当前仅作为元数据编译。 |
+| `mode` | 否 | `"once"` | `"once"` 或 `"each"`。当前 apply 仍按 operation 运行一次；`each` 拆分语义后续实现。 |
 | `interpreter` | 否 | `["/bin/sh", "-eu"]` | 非空 string list。 |
 | `run` | 三选一 | 无 | 单条脚本命令字符串。 |
 | `content` | 三选一 | 无 | 多行脚本文本。 |
@@ -637,8 +637,9 @@ host "app1" {
 求值上下文里的 `input.<name>`、`var.<name>` 和 `target`。`host` / `profile` 不能声明
 `script`，也不能使用 `files.file.on_change`。
 
-当前实现范围是 DSL 解析、validate、HostSpec 编译和 ResourceGraph/plan operation 展示；
-`mode = "once"` / `"each"` 的实际触发语义和脚本执行仍属于后续实现。
+当前实现范围是 DSL 解析、validate、HostSpec 编译、ResourceGraph/plan operation 展示和
+apply 脚本执行。完整脚本内容作为内部执行载荷传给 provider，不会出现在 plan text/json/html
+中。`mode = "each"` 的拆分执行和 `DBF_TRIGGER_*` 运行时上下文仍属于后续实现。
 
 ## 综合示例
 

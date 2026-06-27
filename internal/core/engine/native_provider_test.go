@@ -1064,6 +1064,109 @@ func TestNativeProviderDockerComposeValidateOperation(t *testing.T) {
 	}
 }
 
+func TestNativeProviderComponentScriptRunOperation(t *testing.T) {
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+	operation := graph.Operation{
+		Address: `host.app1.components.app.script["reload"]`,
+		Action:  "run",
+		ScriptPayload: &graph.ScriptPayload{
+			Name:        "reload",
+			Mode:        "once",
+			Kind:        "run",
+			Interpreter: []string{"/bin/bash", "-e"},
+			Run:         "systemctl reload app.service",
+		},
+	}
+
+	if err := provider.RunOperation(context.Background(), operation); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 1 || runner.scripts[0] != "'/bin/bash' '-e'" {
+		t.Fatalf("script interpreter command = %#v, want bash -e", runner.scripts)
+	}
+	if len(runner.inputs) != 1 || runner.inputs[0] != "systemctl reload app.service\n" {
+		t.Fatalf("script input = %#v, want run body with newline", runner.inputs)
+	}
+}
+
+func TestNativeProviderComponentScriptContentOperation(t *testing.T) {
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+	operation := graph.Operation{
+		Address: `host.app1.components.app.script["reload"]`,
+		Action:  "run",
+		ScriptPayload: &graph.ScriptPayload{
+			Name:        "reload",
+			Mode:        "once",
+			Kind:        "content",
+			Interpreter: []string{"/bin/sh", "-eu"},
+			Content:     "printf '%s\\n' ready\n",
+		},
+	}
+
+	if err := provider.RunOperation(context.Background(), operation); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 1 || runner.scripts[0] != "'/bin/sh' '-eu'" {
+		t.Fatalf("script interpreter command = %#v, want sh -eu", runner.scripts)
+	}
+	if len(runner.inputs) != 1 || runner.inputs[0] != "printf '%s\\n' ready\n" {
+		t.Fatalf("script input = %#v, want content body unchanged", runner.inputs)
+	}
+}
+
+func TestNativeProviderComponentScriptCommandsOperation(t *testing.T) {
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+	operation := graph.Operation{
+		Address: `host.app1.components.app.script["reload"]`,
+		Action:  "run",
+		ScriptPayload: &graph.ScriptPayload{
+			Name:        "reload",
+			Mode:        "once",
+			Kind:        "commands",
+			Interpreter: []string{"/bin/sh", "-eu"},
+			Commands: [][]string{
+				{"systemctl", "reload", "app.service"},
+				{"printf", "owner's value"},
+			},
+		},
+	}
+
+	if err := provider.RunOperation(context.Background(), operation); err != nil {
+		t.Fatal(err)
+	}
+	want := "'systemctl' 'reload' 'app.service'\n'printf' 'owner'\"'\"'s value'\n"
+	if len(runner.inputs) != 1 || runner.inputs[0] != want {
+		t.Fatalf("script commands input = %#v, want %q", runner.inputs, want)
+	}
+}
+
+func TestNativeProviderComponentScriptOperationFailure(t *testing.T) {
+	runner := &recordingRunner{errors: []error{errors.New("script failed")}}
+	provider := NewNativeProvider(runner)
+	operation := graph.Operation{
+		Address: `host.app1.components.app.script["reload"]`,
+		Action:  "run",
+		ScriptPayload: &graph.ScriptPayload{
+			Name:        "reload",
+			Mode:        "once",
+			Kind:        "run",
+			Interpreter: []string{"/bin/sh", "-eu"},
+			Run:         "exit 1",
+		},
+	}
+
+	err := provider.RunOperation(context.Background(), operation)
+	if err == nil {
+		t.Fatal("script operation succeeded, want injected runner failure")
+	}
+	if !strings.Contains(err.Error(), "script failed") {
+		t.Fatalf("script operation error = %v, want runner error", err)
+	}
+}
+
 func TestNativeProviderDockerComposeDaemonReloadOperation(t *testing.T) {
 	runner := &recordingRunner{}
 	provider := NewNativeProvider(runner)

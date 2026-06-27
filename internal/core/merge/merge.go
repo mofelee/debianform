@@ -333,6 +333,7 @@ func componentScriptSpec(script parser.ComponentScript) (ir.ComponentScriptSpec,
 	return ir.ComponentScriptSpec{
 		Name:        script.Name,
 		Mode:        mode,
+		Body:        componentScriptBody(script),
 		Interpreter: interpreter,
 		Run:         script.Run,
 		Content:     script.Content,
@@ -340,6 +341,19 @@ func componentScriptSpec(script parser.ComponentScript) (ir.ComponentScriptSpec,
 		Sensitive:   script.Sensitive,
 		Source:      script.Source,
 	}, nil
+}
+
+func componentScriptBody(script parser.ComponentScript) string {
+	switch {
+	case script.RunSet:
+		return "run"
+	case script.ContentSet:
+		return "content"
+	case script.CommandsSet:
+		return "commands"
+	default:
+		return ""
+	}
 }
 
 func validateComponentScriptShape(script parser.ComponentScript) error {

@@ -1077,6 +1077,43 @@ host "app1" {
 	}
 }
 
+func TestComponentScriptPayloadStaysOutOfResourceGraphJSON(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+component "app" {
+  script "reload" {
+    run = "printf '%s\n' not-a-real-script-secret"
+  }
+
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = script.reload
+    }
+  }
+}
+
+host "app1" {
+  components = [component.app]
+}
+`)
+	operation := operationFor(resourceGraph, `host.app1.components.app.script["reload"]`)
+	if operation == nil || operation.ScriptPayload == nil {
+		t.Fatalf("script operation payload missing: %#v", resourceGraph.Operations)
+	}
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Contains(text, "not-a-real-script-secret") || strings.Contains(text, "script_payload") {
+		t.Fatalf("ResourceGraph JSON exposed script payload:\n%s", text)
+	}
+	if !strings.Contains(text, `"command_preview": "script reload (once)"`) {
+		t.Fatalf("ResourceGraph JSON missing script preview:\n%s", text)
+	}
+}
+
 func TestResourceGraphDesiredDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 	for _, tt := range []struct {
 		name    string

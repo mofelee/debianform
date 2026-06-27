@@ -52,13 +52,24 @@ func nodeSensitive(n Node) bool {
 }
 
 type Operation struct {
-	Address        string       `json:"address"`
-	Action         string       `json:"action"`
-	Summary        string       `json:"summary"`
-	DependsOn      []string     `json:"depends_on,omitempty"`
-	TriggeredBy    []string     `json:"triggered_by,omitempty"`
-	CommandPreview string       `json:"command_preview,omitempty"`
-	Source         ir.SourceRef `json:"source,omitempty"`
+	Address        string         `json:"address"`
+	Action         string         `json:"action"`
+	Summary        string         `json:"summary"`
+	DependsOn      []string       `json:"depends_on,omitempty"`
+	TriggeredBy    []string       `json:"triggered_by,omitempty"`
+	CommandPreview string         `json:"command_preview,omitempty"`
+	ScriptPayload  *ScriptPayload `json:"-"`
+	Source         ir.SourceRef   `json:"source,omitempty"`
+}
+
+type ScriptPayload struct {
+	Name        string
+	Mode        string
+	Kind        string
+	Interpreter []string
+	Run         string
+	Content     string
+	Commands    [][]string
 }
 
 func Compile(program *ir.Program) (*ResourceGraph, error) {
@@ -961,7 +972,16 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				DependsOn:      append([]string(nil), triggeredBy...),
 				TriggeredBy:    append([]string(nil), triggeredBy...),
 				CommandPreview: "script " + name + " (" + script.Mode + ")",
-				Source:         script.Source,
+				ScriptPayload: &ScriptPayload{
+					Name:        script.Name,
+					Mode:        script.Mode,
+					Kind:        scriptPayloadKind(script),
+					Interpreter: append([]string(nil), script.Interpreter...),
+					Run:         script.Run,
+					Content:     script.Content,
+					Commands:    cloneCommandMatrix(script.Commands),
+				},
+				Source: script.Source,
 			})
 		}
 	}
@@ -1620,6 +1640,20 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		return operations[i].Address < operations[j].Address
 	})
 	return nodes, operations, nil
+}
+
+func scriptPayloadKind(script ir.ComponentScriptSpec) string {
+	if script.Body != "" {
+		return script.Body
+	}
+	switch {
+	case len(script.Commands) > 0:
+		return "commands"
+	case script.Content != "":
+		return "content"
+	default:
+		return "run"
+	}
 }
 
 var providerNamePattern = regexp.MustCompile(`[^a-zA-Z0-9_]+`)

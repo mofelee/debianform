@@ -1,8 +1,9 @@
 # script / on_change 需求文档
 
 本文描述 `script` 指令和 `files.file.on_change` 的设计目标。当前已实现 DSL 解析、
-validate、HostSpec 编译和 ResourceGraph/plan operation 展示；触发语义和脚本执行仍在后续
-阶段。已支持语法见 [DSL Reference](dsl-reference.zh.md)。分阶段实施计划见
+validate、HostSpec 编译、ResourceGraph/plan operation 展示，以及 apply 阶段的脚本执行。
+`mode = "each"` 的拆分执行和运行时触发上下文仍在后续阶段。已支持语法见
+[DSL Reference](dsl-reference.zh.md)。分阶段实施计划见
 [script / on_change 实施计划](script-on-change-implementation-plan.zh.md)。
 
 ## 核心概念
@@ -238,8 +239,8 @@ plan 当前展示短摘要，不直接展开完整脚本内容：
     command: script reload (once)
 ```
 
-当前 ResourceGraph/plan 只保存短 `command_preview`。完整脚本执行载荷会在后续执行阶段实现，
-不应展开到 text/html plan 中。
+当前 ResourceGraph/plan 只输出短 `command_preview`。完整脚本执行载荷只保存在进程内的
+operation 内部字段中，用于 apply 执行，不属于 plan text/json/html 的公共接口。
 
 ## 待确认问题
 

@@ -121,7 +121,7 @@ host.<host>.components.<instance>.script["<name>"]
 - [x] operation 只显示短 preview，不展开完整脚本内容。
 - [x] `make test` 成功。
 
-## Loop 3: 执行载荷和 NativeProvider 运行
+## Loop 3: 执行载荷和 NativeProvider 运行（已实现）
 
 目标：让 script operation 在 apply 中真正执行，并保持 plan 展示简洁。
 
@@ -141,28 +141,28 @@ host.<host>.components.<instance>.script["<name>"]
 
 代码：
 
-- [ ] graph.Operation 增加不在普通 plan 展示中展开的 script payload。
-- [ ] Operation JSON redaction/省略策略明确，避免脚本文本污染 plan JSON。
-- [ ] NativeProvider.RunOperation 支持 script payload。
-- [ ] SSH runner 使用 `RunInput` 或等效方式把脚本文本交给自定义 interpreter。
-- [ ] commands 模式使用现有 shell quote 规则生成安全脚本文本。
+- [x] graph.Operation 增加不在普通 plan 展示中展开的 script payload。
+- [x] Operation JSON redaction/省略策略明确，避免脚本文本污染 plan JSON。
+- [x] NativeProvider.RunOperation 支持 script payload。
+- [x] SSH runner 使用 `RunInput` 或等效方式把脚本文本交给自定义 interpreter。
+- [x] commands 模式使用现有 shell quote 规则生成安全脚本文本。
 
 测试：
 
-- [ ] NativeProvider 单测覆盖 run/content/commands 三种执行体。
-- [ ] 失败路径测试覆盖非零退出返回错误。
-- [ ] redaction 测试覆盖 sensitive file content 不进入 operation preview/plan。
-- [ ] engine 单测覆盖 script operation 被触发后调用 provider。
+- [x] NativeProvider 单测覆盖 run/content/commands 三种执行体。
+- [x] 失败路径测试覆盖非零退出返回错误。
+- [x] redaction 测试覆盖 script payload 不进入 operation preview/plan。
+- [x] engine 单测覆盖 script operation 被触发后调用 provider。
 
 文档：
 
-- [ ] 更新需求文档，明确执行载荷不属于 plan 公共接口。
+- [x] 更新需求文档，明确执行载荷不属于 plan 公共接口。
 
 验收：
 
-- [ ] apply 时脚本能在文件变更后执行。
-- [ ] plan text/json/html 不展示完整脚本内容。
-- [ ] `make test` 成功。
+- [x] apply 时脚本能在文件变更后执行。
+- [x] plan text/json/html 不展示完整脚本内容。
+- [x] `make test` 成功。
 
 ## Loop 4: once/each 触发语义和环境变量
 
