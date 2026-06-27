@@ -164,7 +164,7 @@ host.<host>.components.<instance>.script["<name>"]
 - [x] plan text/json/html 不展示完整脚本内容。
 - [x] `make test` 成功。
 
-## Loop 4: once/each 触发语义和环境变量
+## Loop 4: once/each 触发语义和环境变量（已实现）
 
 目标：实现 `mode = "once"` 与 `mode = "each"` 的最终语义，并向脚本注入触发上下文。
 
@@ -183,29 +183,29 @@ host.<host>.components.<instance>.script["<name>"]
 
 代码：
 
-- [ ] engine.OperationStep 携带实际触发源地址和路径。
-- [ ] operationSteps 对 `each` 按实际触发源拆分 step。
-- [ ] execution item 地址对 `each` step 保持唯一，避免同一 operation 多 step 覆盖结果。
-- [ ] NativeProvider 执行 script 前注入环境变量。
-- [ ] `once` 多触发时环境变量列表使用换行分隔。
-- [ ] scheduler 保持脚本在触发文件之后执行。
+- [x] engine.OperationStep 携带实际触发源地址和路径。
+- [x] operationSteps 对 `each` 按实际触发源拆分 step。
+- [x] execution item 地址对 `each` step 保持唯一，避免同一 operation 多 step 覆盖结果。
+- [x] NativeProvider 执行 script 前注入环境变量。
+- [x] `once` 多触发时环境变量列表使用换行分隔。
+- [x] scheduler 保持脚本在触发文件之后执行。
 
 测试：
 
-- [ ] engine 单测覆盖一个 once script 被两个文件触发只运行一次。
-- [ ] engine 单测覆盖一个 each script 被两个文件触发运行两次。
-- [ ] NativeProvider 单测覆盖环境变量内容。
-- [ ] plan JSON/text 覆盖 each 拆分后的稳定地址或展示格式。
+- [x] engine 单测覆盖一个 once script 被两个文件触发只运行一次。
+- [x] engine 单测覆盖一个 each script 被两个文件触发运行两次。
+- [x] NativeProvider 单测覆盖环境变量内容。
+- [x] plan JSON/text 覆盖 each 拆分后的稳定地址或展示格式。
 
 文档：
 
-- [ ] DSL Reference 记录 once/each 语义和环境变量。
-- [ ] 用户手册或示例补充 each 的适用场景。
+- [x] DSL Reference 记录 once/each 语义和环境变量。
+- [x] 用户手册或示例补充 each 的适用场景。
 
 验收：
 
-- [ ] once/each 与需求文档一致。
-- [ ] `make test` 成功。
+- [x] once/each 与需求文档一致。
+- [x] `make test` 成功。
 
 ## Loop 5: 示例、文档和集成验收
 

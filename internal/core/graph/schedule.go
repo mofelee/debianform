@@ -49,6 +49,10 @@ func (g *ResourceGraph) ActiveWaves(active map[string]bool) ([][]ScheduleItem, e
 	return g.scheduleWaves(active)
 }
 
+func (g *ResourceGraph) ActiveWavesWithAliases(active map[string]bool, aliases map[string]string, aliasDependsOn map[string][]string) ([][]ScheduleItem, error) {
+	return g.scheduleWavesWithAliases(active, aliases, aliasDependsOn)
+}
+
 func SafeParallelKind(kind string) bool {
 	switch kind {
 	case "file", "secret", "systemd_unit", "nftables_file",
@@ -63,6 +67,10 @@ func SafeParallelKind(kind string) bool {
 }
 
 func (g *ResourceGraph) scheduleWaves(active map[string]bool) ([][]ScheduleItem, error) {
+	return g.scheduleWavesWithAliases(active, nil, nil)
+}
+
+func (g *ResourceGraph) scheduleWavesWithAliases(active map[string]bool, aliases map[string]string, aliasDependsOn map[string][]string) ([][]ScheduleItem, error) {
 	entries, err := g.scheduleEntries()
 	if err != nil {
 		return nil, err
@@ -77,7 +85,7 @@ func (g *ResourceGraph) scheduleWaves(active map[string]bool) ([][]ScheduleItem,
 			if !enabled {
 				continue
 			}
-			if _, ok := entries[address]; !ok {
+			if _, ok := scheduleEntryForActiveAddress(entries, aliases, address); !ok {
 				return nil, fmt.Errorf("active resource graph address %q does not exist", address)
 			}
 		}
@@ -85,11 +93,31 @@ func (g *ResourceGraph) scheduleWaves(active map[string]bool) ([][]ScheduleItem,
 
 	indegree := map[string]int{}
 	dependents := map[string][]string{}
-	for address, entry := range entries {
+	activeEntries := map[string]scheduleEntry{}
+	if useAll {
+		activeEntries = entries
+	} else {
+		for address, enabled := range active {
+			if !enabled {
+				continue
+			}
+			entry, ok := scheduleEntryForActiveAddress(entries, aliases, address)
+			if !ok {
+				return nil, fmt.Errorf("active resource graph address %q does not exist", address)
+			}
+			entry.item.Address = address
+			if deps, ok := aliasDependsOn[address]; ok {
+				entry.dependsOn = dedupeStrings(deps)
+			}
+			entry.dependsOn = activeDependenciesWithAliases(entry.dependsOn, active, aliases, false)
+			activeEntries[address] = entry
+		}
+	}
+	for address, entry := range activeEntries {
 		if !useAll && !active[address] {
 			continue
 		}
-		activeDeps := activeDependencies(entry.dependsOn, active, useAll)
+		activeDeps := activeDependenciesWithAliases(entry.dependsOn, active, aliases, useAll)
 		indegree[address] = len(activeDeps)
 		for _, dep := range activeDeps {
 			dependents[dep] = append(dependents[dep], address)
@@ -99,7 +127,7 @@ func (g *ResourceGraph) scheduleWaves(active map[string]bool) ([][]ScheduleItem,
 		return nil, nil
 	}
 
-	ready := sortedReady(indegree, entries)
+	ready := sortedReady(indegree, activeEntries)
 	var waves [][]ScheduleItem
 	emitted := 0
 	for len(ready) > 0 {
@@ -108,8 +136,11 @@ func (g *ResourceGraph) scheduleWaves(active map[string]bool) ([][]ScheduleItem,
 		wave := make([]ScheduleItem, 0, len(waveAddresses))
 		for _, address := range waveAddresses {
 			entry := entries[address]
+			if !useAll {
+				entry = activeEntries[address]
+			}
 			item := entry.item
-			item.DependsOn = activeDependencies(entry.dependsOn, active, useAll)
+			item.DependsOn = activeDependenciesWithAliases(entry.dependsOn, active, aliases, useAll)
 			wave = append(wave, item)
 			emitted++
 			for _, dependent := range dependents[address] {
@@ -121,7 +152,7 @@ func (g *ResourceGraph) scheduleWaves(active map[string]bool) ([][]ScheduleItem,
 		}
 		sortScheduleItems(wave)
 		waves = append(waves, wave)
-		sortAddressesByOrder(ready, entries)
+		sortAddressesByOrder(ready, activeEntries)
 	}
 	if emitted != len(indegree) {
 		return nil, fmt.Errorf("resource graph dependency cycle detected")
@@ -239,6 +270,38 @@ func activeDependencies(deps []string, active map[string]bool, useAll bool) []st
 		}
 	}
 	return out
+}
+
+func scheduleEntryForActiveAddress(entries map[string]scheduleEntry, aliases map[string]string, address string) (scheduleEntry, bool) {
+	if entry, ok := entries[address]; ok {
+		return entry, true
+	}
+	if aliases != nil {
+		if base := aliases[address]; base != "" {
+			entry, ok := entries[base]
+			return entry, ok
+		}
+	}
+	return scheduleEntry{}, false
+}
+
+func activeDependenciesWithAliases(deps []string, active map[string]bool, aliases map[string]string, useAll bool) []string {
+	if useAll {
+		return activeDependencies(deps, active, true)
+	}
+	out := make([]string, 0, len(deps))
+	for _, dep := range deps {
+		if active[dep] {
+			out = append(out, dep)
+			continue
+		}
+		for alias, base := range aliases {
+			if base == dep && active[alias] {
+				out = append(out, alias)
+			}
+		}
+	}
+	return dedupeStrings(out)
 }
 
 func sortedReady(indegree map[string]int, entries map[string]scheduleEntry) []string {

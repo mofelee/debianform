@@ -627,7 +627,7 @@ host "app1" {
 
 | 字段 | 必填 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `mode` | 否 | `"once"` | `"once"` 或 `"each"`。当前 apply 仍按 operation 运行一次；`each` 拆分语义后续实现。 |
+| `mode` | 否 | `"once"` | `"once"` 或 `"each"`。 |
 | `interpreter` | 否 | `["/bin/sh", "-eu"]` | 非空 string list。 |
 | `run` | 三选一 | 无 | 单条脚本命令字符串。 |
 | `content` | 三选一 | 无 | 多行脚本文本。 |
@@ -637,9 +637,31 @@ host "app1" {
 求值上下文里的 `input.<name>`、`var.<name>` 和 `target`。`host` / `profile` 不能声明
 `script`，也不能使用 `files.file.on_change`。
 
-当前实现范围是 DSL 解析、validate、HostSpec 编译、ResourceGraph/plan operation 展示和
-apply 脚本执行。完整脚本内容作为内部执行载荷传给 provider，不会出现在 plan text/json/html
-中。`mode = "each"` 的拆分执行和 `DBF_TRIGGER_*` 运行时上下文仍属于后续实现。
+当前实现范围是 DSL 解析、validate、HostSpec 编译、ResourceGraph/plan operation 展示、
+apply 脚本执行、`once` / `each` 触发语义和运行时触发上下文。完整脚本内容作为内部执行载荷
+传给 provider，不会出现在 plan text/json/html 中。
+
+`mode = "once"` 时，同一轮 apply 中同一个 script 被多个实际变更文件触发也只运行一次。
+`mode = "each"` 时，每个实际变更文件各运行一次；online plan 会为每个触发源显示唯一的
+operation 地址，形如：
+
+```text
+host.app1.components.app.script["reload"].trigger["host.app1.components.app.files.file[\"/etc/app.conf\"]"]
+```
+
+脚本执行时会注入这些环境变量：
+
+| 环境变量 | 说明 |
+| --- | --- |
+| `DBF_SCRIPT_NAME` | script 名称。 |
+| `DBF_COMPONENT_NAME` | component instance 名称。 |
+| `DBF_TRIGGER_ADDRESS` | 当前触发资源地址；`each` 模式下总是单个地址。 |
+| `DBF_TRIGGER_PATH` | 当前触发文件路径；`each` 模式下总是单个路径。 |
+| `DBF_TRIGGER_ADDRESSES` | 当前 script 本轮触发地址列表，换行分隔。 |
+| `DBF_TRIGGER_PATHS` | 当前 script 本轮触发文件路径列表，换行分隔。 |
+
+如果脚本需要对每个文件单独处理，使用 `mode = "each"` 并读取 `DBF_TRIGGER_PATH`；如果只是
+reload/restart 服务，通常使用默认的 `mode = "once"`。
 
 ## 综合示例
 

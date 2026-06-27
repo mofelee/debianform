@@ -85,6 +85,64 @@ func TestResourceGraphActiveWavesIgnoreInactiveDependencies(t *testing.T) {
 	}
 }
 
+func TestResourceGraphActiveWavesWithOperationAliases(t *testing.T) {
+	baseOperation := `host.server1.components.app.script["reload"]`
+	firstFile := `host.server1.components.app.files.file["/tmp/a"]`
+	secondFile := `host.server1.components.app.files.file["/tmp/b"]`
+	firstAlias := baseOperation + `.trigger["` + firstFile + `"]`
+	secondAlias := baseOperation + `.trigger["` + secondFile + `"]`
+	resourceGraph := &ResourceGraph{
+		Nodes: []Node{
+			{Address: firstFile, Host: "server1", Kind: "file"},
+			{Address: secondFile, Host: "server1", Kind: "file"},
+		},
+		Operations: []Operation{
+			{
+				Address:     baseOperation,
+				DependsOn:   []string{firstFile, secondFile},
+				TriggeredBy: []string{firstFile, secondFile},
+			},
+		},
+	}
+
+	waves, err := resourceGraph.ActiveWavesWithAliases(
+		map[string]bool{
+			firstFile:   true,
+			secondFile:  true,
+			firstAlias:  true,
+			secondAlias: true,
+		},
+		map[string]string{
+			firstAlias:  baseOperation,
+			secondAlias: baseOperation,
+		},
+		map[string][]string{
+			firstAlias:  []string{firstFile},
+			secondAlias: []string{secondFile},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := waveAddresses(waves)
+	want := [][]string{
+		{firstFile, secondFile},
+		{firstAlias, secondAlias},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("active alias waves = %#v, want %#v", got, want)
+	}
+	wantDeps := map[string][]string{
+		firstAlias:  []string{firstFile},
+		secondAlias: []string{secondFile},
+	}
+	for _, item := range waves[1] {
+		if !reflect.DeepEqual(item.DependsOn, wantDeps[item.Address]) {
+			t.Fatalf("alias item %s deps = %#v, want %#v", item.Address, item.DependsOn, wantDeps[item.Address])
+		}
+	}
+}
+
 func TestResourceGraphRejectsDuplicateAddress(t *testing.T) {
 	resourceGraph := &ResourceGraph{
 		Nodes: []Node{
@@ -184,4 +242,13 @@ func waveAddresses(waves [][]ScheduleItem) [][]string {
 		out = append(out, addresses)
 	}
 	return out
+}
+
+func containsScheduleString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

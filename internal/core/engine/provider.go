@@ -256,9 +256,43 @@ func (p NativeProvider) runScriptOperation(ctx context.Context, operation graph.
 	if err != nil {
 		return err
 	}
-	remoteCommand := strings.Join(shellQuoteArgs(interpreter), " ")
+	remoteCommand := scriptEnvironmentPrefix(payload) + strings.Join(shellQuoteArgs(interpreter), " ")
 	_, err = p.Runner.RunInput(ctx, host, remoteCommand, strings.NewReader(script))
 	return err
+}
+
+func scriptEnvironmentPrefix(payload *graph.ScriptPayload) string {
+	if payload == nil {
+		return ""
+	}
+	env := map[string]string{
+		"DBF_SCRIPT_NAME":       payload.Name,
+		"DBF_COMPONENT_NAME":    payload.ComponentName,
+		"DBF_TRIGGER_ADDRESS":   firstString(payload.TriggerAddresses),
+		"DBF_TRIGGER_PATH":      firstString(payload.TriggerPaths),
+		"DBF_TRIGGER_ADDRESSES": strings.Join(payload.TriggerAddresses, "\n"),
+		"DBF_TRIGGER_PATHS":     strings.Join(payload.TriggerPaths, "\n"),
+	}
+	keys := []string{
+		"DBF_SCRIPT_NAME",
+		"DBF_COMPONENT_NAME",
+		"DBF_TRIGGER_ADDRESS",
+		"DBF_TRIGGER_PATH",
+		"DBF_TRIGGER_ADDRESSES",
+		"DBF_TRIGGER_PATHS",
+	}
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+shellQuote(env[key]))
+	}
+	return strings.Join(parts, " ") + " "
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }
 
 func scriptPayloadContent(address string, payload *graph.ScriptPayload) (string, error) {

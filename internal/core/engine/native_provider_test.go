@@ -1082,7 +1082,7 @@ func TestNativeProviderComponentScriptRunOperation(t *testing.T) {
 	if err := provider.RunOperation(context.Background(), operation); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.scripts) != 1 || runner.scripts[0] != "'/bin/bash' '-e'" {
+	if len(runner.scripts) != 1 || !strings.HasSuffix(runner.scripts[0], "'/bin/bash' '-e'") {
 		t.Fatalf("script interpreter command = %#v, want bash -e", runner.scripts)
 	}
 	if len(runner.inputs) != 1 || runner.inputs[0] != "systemctl reload app.service\n" {
@@ -1108,7 +1108,7 @@ func TestNativeProviderComponentScriptContentOperation(t *testing.T) {
 	if err := provider.RunOperation(context.Background(), operation); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.scripts) != 1 || runner.scripts[0] != "'/bin/sh' '-eu'" {
+	if len(runner.scripts) != 1 || !strings.HasSuffix(runner.scripts[0], "'/bin/sh' '-eu'") {
 		t.Fatalf("script interpreter command = %#v, want sh -eu", runner.scripts)
 	}
 	if len(runner.inputs) != 1 || runner.inputs[0] != "printf '%s\\n' ready\n" {
@@ -1140,6 +1140,48 @@ func TestNativeProviderComponentScriptCommandsOperation(t *testing.T) {
 	want := "'systemctl' 'reload' 'app.service'\n'printf' 'owner'\"'\"'s value'\n"
 	if len(runner.inputs) != 1 || runner.inputs[0] != want {
 		t.Fatalf("script commands input = %#v, want %q", runner.inputs, want)
+	}
+}
+
+func TestNativeProviderComponentScriptOperationEnvironment(t *testing.T) {
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+	operation := graph.Operation{
+		Address: `host.app1.components.app.script["reload"]`,
+		Action:  "run",
+		ScriptPayload: &graph.ScriptPayload{
+			Name:          "reload",
+			ComponentName: "app",
+			Mode:          "once",
+			Kind:          "run",
+			Interpreter:   []string{"/bin/sh", "-eu"},
+			Run:           "systemctl reload app.service",
+			TriggerAddresses: []string{
+				`host.app1.components.app.files.file["/etc/app.conf"]`,
+				`host.app1.components.app.files.file["/etc/app.d/extra.conf"]`,
+			},
+			TriggerPaths: []string{"/etc/app.conf", "/etc/app.d/extra.conf"},
+		},
+	}
+
+	if err := provider.RunOperation(context.Background(), operation); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 1 {
+		t.Fatalf("scripts = %#v, want one command", runner.scripts)
+	}
+	command := runner.scripts[0]
+	for _, want := range []string{
+		"DBF_SCRIPT_NAME='reload'",
+		"DBF_COMPONENT_NAME='app'",
+		"DBF_TRIGGER_ADDRESS='host.app1.components.app.files.file[\"/etc/app.conf\"]'",
+		"DBF_TRIGGER_PATH='/etc/app.conf'",
+		"DBF_TRIGGER_ADDRESSES='host.app1.components.app.files.file[\"/etc/app.conf\"]\nhost.app1.components.app.files.file[\"/etc/app.d/extra.conf\"]'",
+		"DBF_TRIGGER_PATHS='/etc/app.conf\n/etc/app.d/extra.conf'",
+	} {
+		if !strings.Contains(command, want) {
+			t.Fatalf("script environment command missing %q:\n%s", want, command)
+		}
 	}
 }
 

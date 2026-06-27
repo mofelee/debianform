@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -91,8 +92,11 @@ type Step struct {
 }
 
 type OperationStep struct {
-	Action    string
-	Operation graph.Operation
+	Address          string
+	Action           string
+	Operation        graph.Operation
+	TriggerAddresses []string
+	TriggerPaths     []string
 }
 
 func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
@@ -180,7 +184,7 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 		return Plan{}, err
 	}
 	steps = append(steps, orphaned...)
-	operations := operationSteps(resourceGraph.Operations, changed, opts)
+	operations := operationSteps(resourceGraph.Operations, changed, stepByAddress(steps), opts)
 	sortSteps(steps)
 	sortOperationSteps(operations)
 
@@ -353,8 +357,12 @@ func (p Plan) Document(opts coreplan.Options) coreplan.Document {
 	operations := make([]coreplan.OperationNode, 0, len(p.Operations))
 	for _, step := range p.Operations {
 		op := step.Operation
+		address := step.Address
+		if address == "" {
+			address = op.Address
+		}
 		operations = append(operations, coreplan.OperationNode{
-			Address:        op.Address,
+			Address:        address,
 			Action:         op.Action,
 			Summary:        op.Summary,
 			DependsOn:      op.DependsOn,
@@ -670,20 +678,81 @@ func sameDirectoryDesired(a, b map[string]any) bool {
 	return true
 }
 
-func operationSteps(operations []graph.Operation, changed map[string]struct{}, opts Options) []OperationStep {
+func stepByAddress(steps []Step) map[string]Step {
+	out := make(map[string]Step, len(steps))
+	for _, step := range steps {
+		out[step.Address] = step
+	}
+	return out
+}
+
+func operationSteps(operations []graph.Operation, changed map[string]struct{}, steps map[string]Step, opts Options) []OperationStep {
 	var out []OperationStep
 	for _, op := range operations {
 		if opts.Host != "" && !strings.HasPrefix(op.Address, "host."+opts.Host+".") {
 			continue
 		}
+		var triggered []string
+		var triggerPaths []string
 		for _, trigger := range op.TriggeredBy {
 			if _, ok := changed[trigger]; ok {
-				out = append(out, OperationStep{Action: ActionRun, Operation: op})
-				break
+				triggered = append(triggered, trigger)
+				triggerPaths = append(triggerPaths, operationTriggerPath(steps[trigger]))
 			}
 		}
+		if len(triggered) == 0 {
+			continue
+		}
+		mode := ""
+		if op.ScriptPayload != nil {
+			mode = op.ScriptPayload.Mode
+		}
+		if mode == "each" {
+			for i, trigger := range triggered {
+				out = append(out, OperationStep{
+					Address:          operationEachAddress(op.Address, trigger),
+					Action:           ActionRun,
+					Operation:        operationForTriggers(op, []string{trigger}),
+					TriggerAddresses: []string{trigger},
+					TriggerPaths:     []string{triggerPaths[i]},
+				})
+			}
+			continue
+		}
+		out = append(out, OperationStep{
+			Address:          op.Address,
+			Action:           ActionRun,
+			Operation:        operationForTriggers(op, triggered),
+			TriggerAddresses: triggered,
+			TriggerPaths:     triggerPaths,
+		})
 	}
 	return out
+}
+
+func operationForTriggers(op graph.Operation, triggers []string) graph.Operation {
+	out := op
+	out.DependsOn = append([]string(nil), triggers...)
+	out.TriggeredBy = append([]string(nil), triggers...)
+	return out
+}
+
+func operationEachAddress(address, trigger string) string {
+	return address + ".trigger[" + strconv.Quote(trigger) + "]"
+}
+
+func operationTriggerPath(step Step) string {
+	if step.Node.Desired != nil {
+		if path, ok := step.Node.Desired["path"].(string); ok {
+			return path
+		}
+	}
+	if step.Prior != nil && step.Prior.Desired != nil {
+		if path, ok := step.Prior.Desired["path"].(string); ok {
+			return path
+		}
+	}
+	return ""
 }
 
 func summarize(steps []Step, operations []OperationStep, noOp int) coreplan.Summary {
@@ -808,7 +877,15 @@ func sortSteps(steps []Step) {
 
 func sortOperationSteps(steps []OperationStep) {
 	sort.SliceStable(steps, func(i, j int) bool {
-		return steps[i].Operation.Address < steps[j].Operation.Address
+		left := steps[i].Address
+		if left == "" {
+			left = steps[i].Operation.Address
+		}
+		right := steps[j].Address
+		if right == "" {
+			right = steps[j].Operation.Address
+		}
+		return left < right
 	})
 }
 
@@ -843,7 +920,7 @@ type executionItem struct {
 	safeParallel bool
 	dependsOn    []string
 	step         Step
-	operation    graph.Operation
+	operation    OperationStep
 }
 
 func activeStepMap(plan Plan) map[string]Step {
@@ -854,10 +931,15 @@ func activeStepMap(plan Plan) map[string]Step {
 	return out
 }
 
-func activeOperationMap(plan Plan) map[string]graph.Operation {
-	out := map[string]graph.Operation{}
+func activeOperationMap(plan Plan) map[string]OperationStep {
+	out := map[string]OperationStep{}
 	for _, step := range plan.Operations {
-		out[step.Operation.Address] = step.Operation
+		address := step.Address
+		if address == "" {
+			address = step.Operation.Address
+		}
+		step.Address = address
+		out[address] = step
 	}
 	return out
 }
@@ -883,11 +965,17 @@ func executionWaves(resourceGraph *graph.ResourceGraph, plan Plan) ([][]executio
 			orphanSteps = append(orphanSteps, step)
 		}
 	}
-	for address := range activeOps {
+	aliases := map[string]string{}
+	aliasDependsOn := map[string][]string{}
+	for address, step := range activeOps {
 		activeAddresses[address] = true
+		if address != step.Operation.Address {
+			aliases[address] = step.Operation.Address
+			aliasDependsOn[address] = append([]string(nil), step.Operation.DependsOn...)
+		}
 	}
 
-	scheduled, err := resourceGraph.ActiveWaves(activeAddresses)
+	scheduled, err := resourceGraph.ActiveWavesWithAliases(activeAddresses, aliases, aliasDependsOn)
 	if err != nil {
 		return nil, err
 	}
@@ -910,13 +998,13 @@ func executionWaves(resourceGraph *graph.ResourceGraph, plan Plan) ([][]executio
 		wave := make([]executionItem, 0, len(scheduledWave))
 		for _, item := range scheduledWave {
 			if item.Operation {
-				op := activeOps[item.Address]
+				opStep := activeOps[item.Address]
 				wave = append(wave, executionItem{
 					kind:      "operation",
 					address:   item.Address,
 					host:      item.Host,
 					dependsOn: item.DependsOn,
-					operation: op,
+					operation: opStep,
 				})
 				continue
 			}
@@ -1045,16 +1133,28 @@ func (e Engine) executeItem(ctx context.Context, hosts map[string]ir.HostSpec, s
 		task.Done(err)
 		return err
 	case "operation":
-		task := progress.Start(item.host, "run", item.operation.Address, item.operation.Summary)
-		err := e.Provider.RunOperation(ctx, item.operation)
+		operation := operationWithStepContext(item.operation)
+		task := progress.Start(item.host, "run", item.address, operation.Summary)
+		err := e.Provider.RunOperation(ctx, operation)
 		task.Done(err)
 		if err != nil {
-			return fmt.Errorf("%s failed: %w", item.operation.Address, err)
+			return fmt.Errorf("%s failed: %w", item.address, err)
 		}
 		return nil
 	default:
 		return fmt.Errorf("%s has unsupported execution item kind %q", item.address, item.kind)
 	}
+}
+
+func operationWithStepContext(step OperationStep) graph.Operation {
+	operation := step.Operation
+	if operation.ScriptPayload != nil {
+		payload := *operation.ScriptPayload
+		payload.TriggerAddresses = append([]string(nil), step.TriggerAddresses...)
+		payload.TriggerPaths = append([]string(nil), step.TriggerPaths...)
+		operation.ScriptPayload = &payload
+	}
+	return operation
 }
 
 func (e Engine) executeResourceStep(ctx context.Context, hosts map[string]ir.HostSpec, states map[string]corestate.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, step Step) error {

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -737,6 +739,101 @@ func TestComponentScriptOnChangeOperationRunsAfterFileChange(t *testing.T) {
 	}
 }
 
+func TestComponentScriptOnceRunsOnceForMultipleChangedFiles(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, componentScriptModeFixture("once")))
+	provider := &recordingOperationProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	plan, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptAddress := `host.app1.components.app.script["reload"]`
+	if len(plan.Operations) != 1 || plan.Operations[0].Address != scriptAddress {
+		t.Fatalf("once operations = %#v, want one script operation", plan.Operations)
+	}
+	payloads := provider.ScriptPayloads[scriptAddress]
+	if len(payloads) != 1 {
+		t.Fatalf("once script payloads = %#v, want one run", payloads)
+	}
+	if strings.Join(payloads[0].TriggerPaths, "\n") != "/etc/app.conf\n/etc/app.extra" {
+		t.Fatalf("once trigger paths = %#v, want both paths", payloads[0].TriggerPaths)
+	}
+}
+
+func TestComponentScriptEachRunsForEveryChangedFile(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, componentScriptModeFixture("each")))
+	provider := &recordingOperationProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	plan, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseAddress := `host.app1.components.app.script["reload"]`
+	if len(plan.Operations) != 2 {
+		t.Fatalf("each operations = %#v, want two script operations", plan.Operations)
+	}
+	for _, op := range plan.Operations {
+		if op.Address == baseAddress || !strings.HasPrefix(op.Address, baseAddress+`.trigger[`) {
+			t.Fatalf("each operation address = %q, want unique trigger address", op.Address)
+		}
+	}
+	payloads := provider.ScriptPayloads[baseAddress]
+	if len(payloads) != 2 {
+		t.Fatalf("each script payloads = %#v, want two runs", payloads)
+	}
+	gotPaths := []string{strings.Join(payloads[0].TriggerPaths, "\n"), strings.Join(payloads[1].TriggerPaths, "\n")}
+	sort.Strings(gotPaths)
+	wantPaths := []string{"/etc/app.conf", "/etc/app.extra"}
+	if !reflect.DeepEqual(gotPaths, wantPaths) {
+		t.Fatalf("each trigger paths = %#v, want %#v", gotPaths, wantPaths)
+	}
+	for _, payload := range payloads {
+		if len(payload.TriggerAddresses) != 1 || len(payload.TriggerPaths) != 1 {
+			t.Fatalf("each payload should have one trigger: %#v", payload)
+		}
+	}
+}
+
+func TestComponentScriptEachPlanDocumentUsesStableTriggerAddresses(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, componentScriptModeFixture("each")))
+	engine := Engine{Backend: NewMemoryBackend(), Provider: NewMemoryProvider()}
+
+	plan, err := engine.Plan(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := plan.Document(coreplan.Options{
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	if doc.Summary.Operations != 2 || len(doc.Operations) != 2 {
+		t.Fatalf("plan document operations = %#v, want two", doc.Operations)
+	}
+	for _, op := range doc.Operations {
+		if len(op.TriggeredBy) != 1 || len(op.DependsOn) != 1 || op.TriggeredBy[0] != op.DependsOn[0] {
+			t.Fatalf("each operation deps/triggers = %#v/%#v, want one matching trigger", op.DependsOn, op.TriggeredBy)
+		}
+		if !strings.Contains(op.Address, ".trigger["+fmt.Sprintf("%q", op.TriggeredBy[0])+"]") {
+			t.Fatalf("each operation address = %q, trigger = %q", op.Address, op.TriggeredBy[0])
+		}
+	}
+	var text bytes.Buffer
+	coreplan.PrintText(&text, doc)
+	rendered := text.String()
+	for _, want := range []string{
+		`host.app1.components.app.script["reload"].trigger["host.app1.components.app.files.file[\"/etc/app.conf\"]"]`,
+		`host.app1.components.app.script["reload"].trigger["host.app1.components.app.files.file[\"/etc/app.extra\"]"]`,
+		`command: script reload (each)`,
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("plan text missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
 func TestDockerComposeMemoryCheckDetectsStoppedProjectDrift(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, "../../../examples/docker-compose.dbf.hcl")
 	provider := NewMemoryProvider()
@@ -1197,6 +1294,43 @@ func fileNode(host, path string, deps []string) graph.Node {
 	}
 }
 
+func componentScriptModeFixture(mode string) string {
+	return fmt.Sprintf(`
+component "managed_app" {
+  script "reload" {
+    mode = %q
+    run  = "systemctl reload app.service"
+  }
+
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = script.reload
+    }
+
+    file "/etc/app.extra" {
+      content   = "managed"
+      on_change = script.reload
+    }
+  }
+}
+
+host "app1" {
+  component "app" {
+    source = component.managed_app
+  }
+}
+`, mode)
+}
+
+func cloneCommandMatrix(in [][]string) [][]string {
+	out := make([][]string, len(in))
+	for i := range in {
+		out[i] = append([]string(nil), in[i]...)
+	}
+	return out
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
@@ -1275,6 +1409,26 @@ func (p *recordingPayloadProvider) Apply(ctx context.Context, step Step) (map[st
 	}
 	p.Payloads[step.Address] = cloneMap(step.Node.ProviderPayload)
 	return p.MemoryProvider.Apply(ctx, step)
+}
+
+type recordingOperationProvider struct {
+	*MemoryProvider
+	ScriptPayloads map[string][]graph.ScriptPayload
+}
+
+func (p *recordingOperationProvider) RunOperation(ctx context.Context, operation graph.Operation) error {
+	if p.ScriptPayloads == nil {
+		p.ScriptPayloads = map[string][]graph.ScriptPayload{}
+	}
+	if operation.ScriptPayload != nil {
+		payload := *operation.ScriptPayload
+		payload.Interpreter = append([]string(nil), payload.Interpreter...)
+		payload.Commands = cloneCommandMatrix(payload.Commands)
+		payload.TriggerAddresses = append([]string(nil), payload.TriggerAddresses...)
+		payload.TriggerPaths = append([]string(nil), payload.TriggerPaths...)
+		p.ScriptPayloads[operation.Address] = append(p.ScriptPayloads[operation.Address], payload)
+	}
+	return p.MemoryProvider.RunOperation(ctx, operation)
 }
 
 type concurrencyProvider struct {

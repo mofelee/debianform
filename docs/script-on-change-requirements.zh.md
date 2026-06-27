@@ -1,8 +1,8 @@
 # script / on_change 需求文档
 
 本文描述 `script` 指令和 `files.file.on_change` 的设计目标。当前已实现 DSL 解析、
-validate、HostSpec 编译、ResourceGraph/plan operation 展示，以及 apply 阶段的脚本执行。
-`mode = "each"` 的拆分执行和运行时触发上下文仍在后续阶段。已支持语法见
+validate、HostSpec 编译、ResourceGraph/plan operation 展示、apply 阶段脚本执行、
+`mode = "once"` / `"each"` 触发语义，以及运行时触发上下文注入。已支持语法见
 [DSL Reference](dsl-reference.zh.md)。分阶段实施计划见
 [script / on_change 实施计划](script-on-change-implementation-plan.zh.md)。
 

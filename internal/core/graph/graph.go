@@ -63,13 +63,16 @@ type Operation struct {
 }
 
 type ScriptPayload struct {
-	Name        string
-	Mode        string
-	Kind        string
-	Interpreter []string
-	Run         string
-	Content     string
-	Commands    [][]string
+	Name             string
+	ComponentName    string
+	Mode             string
+	Kind             string
+	Interpreter      []string
+	Run              string
+	Content          string
+	Commands         [][]string
+	TriggerAddresses []string
+	TriggerPaths     []string
 }
 
 func Compile(program *ir.Program) (*ResourceGraph, error) {
@@ -973,13 +976,14 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				TriggeredBy:    append([]string(nil), triggeredBy...),
 				CommandPreview: "script " + name + " (" + script.Mode + ")",
 				ScriptPayload: &ScriptPayload{
-					Name:        script.Name,
-					Mode:        script.Mode,
-					Kind:        scriptPayloadKind(script),
-					Interpreter: append([]string(nil), script.Interpreter...),
-					Run:         script.Run,
-					Content:     script.Content,
-					Commands:    cloneCommandMatrix(script.Commands),
+					Name:          script.Name,
+					ComponentName: component.Name,
+					Mode:          script.Mode,
+					Kind:          scriptPayloadKind(script),
+					Interpreter:   append([]string(nil), script.Interpreter...),
+					Run:           script.Run,
+					Content:       script.Content,
+					Commands:      cloneCommandMatrix(script.Commands),
 				},
 				Source: script.Source,
 			})
