@@ -424,6 +424,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			if err != nil {
 				return err
 			}
+			defer runner.Close(context.Background())
 			resourceGraph, err := coregraph.Compile(program)
 			if err != nil {
 				return err
@@ -452,6 +453,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 		if err != nil {
 			return err
 		}
+		defer runner.Close(context.Background())
 		resourceGraph, err := coregraph.Compile(program)
 		if err != nil {
 			return err

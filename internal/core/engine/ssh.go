@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,6 +37,11 @@ type Runner interface {
 
 type SSHRunner struct {
 	hosts map[string]Host
+
+	controlMu     sync.Mutex
+	controlDir    string
+	controlConfig string
+	controlErr    error
 
 	initialAuthMu        sync.Mutex
 	initialAuthRunning   bool
@@ -171,6 +177,11 @@ func (r *SSHRunner) RunCommand(ctx context.Context, host, remoteCommand string) 
 }
 
 func (r *SSHRunner) SSHArgs(host string) []string {
+	args, target := r.sshArgsAndTarget(host)
+	return append(args, target)
+}
+
+func (r *SSHRunner) sshArgsAndTarget(host string) ([]string, string) {
 	resolved := r.resolve(host)
 	user := resolved.User
 	if user == "" {
@@ -181,7 +192,7 @@ func (r *SSHRunner) SSHArgs(host string) []string {
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-l", user,
 	}
-	if config := os.Getenv("DBF_SSH_CONFIG"); config != "" {
+	if config := r.sshConfigPath(); config != "" {
 		args = append([]string{"-F", config}, args...)
 	}
 	if resolved.Port != 0 && resolved.Port != 22 {
@@ -194,8 +205,109 @@ func (r *SSHRunner) SSHArgs(host string) []string {
 	if resolved.Address != "" {
 		target = resolved.Address
 	}
-	args = append(args, target)
-	return args
+	return args, target
+}
+
+func (r *SSHRunner) Close(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	r.controlMu.Lock()
+	dir := r.controlDir
+	r.controlMu.Unlock()
+	if dir == "" {
+		return nil
+	}
+
+	var firstErr error
+	for _, host := range r.closeHosts() {
+		args, target := r.sshArgsAndTarget(host.Name)
+		args = append(args, "-O", "exit", target)
+		cmd := exec.CommandContext(ctx, "ssh", args...)
+		if err := cmd.Run(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if err := os.RemoveAll(dir); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
+}
+
+func (r *SSHRunner) closeHosts() []Host {
+	if r == nil || r.hosts == nil {
+		return nil
+	}
+	hosts := make([]Host, 0, len(r.hosts))
+	for _, host := range r.hosts {
+		hosts = append(hosts, host)
+	}
+	return hosts
+}
+
+func (r *SSHRunner) sshConfigPath() string {
+	if config := r.controlMasterConfig(); config != "" {
+		return config
+	}
+	if config := os.Getenv("DBF_SSH_CONFIG"); config != "" {
+		return config
+	}
+	return ""
+}
+
+func (r *SSHRunner) controlMasterConfig() string {
+	if r == nil || os.Getenv("DBF_SSH_CONTROL_MASTER") == "0" {
+		return ""
+	}
+	r.controlMu.Lock()
+	defer r.controlMu.Unlock()
+	if r.controlConfig != "" {
+		return r.controlConfig
+	}
+	if r.controlErr != nil {
+		return ""
+	}
+	dir, err := os.MkdirTemp("", "dbf-ssh-*")
+	if err != nil {
+		r.controlErr = err
+		return ""
+	}
+	if err := os.Chmod(dir, 0700); err != nil {
+		_ = os.RemoveAll(dir)
+		r.controlErr = err
+		return ""
+	}
+	configPath := filepath.Join(dir, "config")
+	controlPath := filepath.Join(dir, "cm-%C")
+	content := sshControlConfig(controlPath, os.Getenv("DBF_SSH_CONFIG"))
+	if err := os.WriteFile(configPath, []byte(content), 0600); err != nil {
+		_ = os.RemoveAll(dir)
+		r.controlErr = err
+		return ""
+	}
+	r.controlDir = dir
+	r.controlConfig = configPath
+	return configPath
+}
+
+func sshControlConfig(controlPath, userConfig string) string {
+	var b strings.Builder
+	b.WriteString("Host *\n")
+	b.WriteString("\tControlMaster auto\n")
+	b.WriteString("\tControlPersist 10m\n")
+	b.WriteString("\tControlPath ")
+	b.WriteString(controlPath)
+	b.WriteString("\n")
+	b.WriteString("\tBatchMode yes\n")
+	if userConfig != "" {
+		b.WriteString("Include ")
+		b.WriteString(userConfig)
+		b.WriteString("\n")
+	} else {
+		b.WriteString("Include ~/.ssh/config\n")
+		b.WriteString("Include /etc/ssh/ssh_config\n")
+	}
+	return b.String()
 }
 
 func (r *SSHRunner) resolve(host string) Host {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -110,4 +111,81 @@ cat
 	if strings.TrimSpace(string(data)) != "2" {
 		t.Fatalf("post-auth max concurrency = %q, want 2", strings.TrimSpace(string(data)))
 	}
+}
+
+func TestSSHRunnerUsesControlMasterConfigByDefault(t *testing.T) {
+	t.Setenv("DBF_SSH_CONFIG", "/tmp/debianform-user-ssh-config")
+	runner := NewSSHRunner(map[string]Host{
+		"server1": {Address: "server1"},
+	})
+
+	args := runner.SSHArgs("server1")
+	config := sshArgValue(t, args, "-F")
+	if config == "/tmp/debianform-user-ssh-config" {
+		t.Fatalf("ssh args used user config directly, want wrapper config: %#v", args)
+	}
+	data, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		"ControlMaster auto",
+		"ControlPersist 10m",
+		"ControlPath ",
+		"BatchMode yes",
+		"Include /tmp/debianform-user-ssh-config",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("control config missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestSSHRunnerControlMasterCanBeDisabled(t *testing.T) {
+	t.Setenv("DBF_SSH_CONTROL_MASTER", "0")
+	t.Setenv("DBF_SSH_CONFIG", "/tmp/debianform-user-ssh-config")
+	runner := NewSSHRunner(map[string]Host{
+		"server1": {Address: "server1"},
+	})
+
+	args := runner.SSHArgs("server1")
+	if got := sshArgValue(t, args, "-F"); got != "/tmp/debianform-user-ssh-config" {
+		t.Fatalf("ssh config = %q, want user config when control master is disabled; args=%#v", got, args)
+	}
+}
+
+func TestSSHRunnerCloseRemovesControlMasterDirectory(t *testing.T) {
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "bin")
+	if err := os.Mkdir(fakeBin, 0755); err != nil {
+		t.Fatal(err)
+	}
+	sshPath := filepath.Join(fakeBin, "ssh")
+	if err := os.WriteFile(sshPath, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	runner := NewSSHRunner(map[string]Host{
+		"server1": {Address: "server1"},
+	})
+	args := runner.SSHArgs("server1")
+	config := sshArgValue(t, args, "-F")
+	controlDir := filepath.Dir(config)
+
+	if err := runner.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(controlDir); !os.IsNotExist(err) {
+		t.Fatalf("control dir stat error = %v, want removed", err)
+	}
+}
+
+func sshArgValue(t *testing.T, args []string, flag string) string {
+	t.Helper()
+	idx := slices.Index(args, flag)
+	if idx < 0 || idx+1 >= len(args) {
+		t.Fatalf("ssh args missing %s value: %#v", flag, args)
+	}
+	return args[idx+1]
 }

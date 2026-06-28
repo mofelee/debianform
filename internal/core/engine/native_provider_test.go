@@ -1796,15 +1796,22 @@ func TestSSHRunnerExpandsHomeIdentityFile(t *testing.T) {
 	t.Fatalf("ssh args %q do not contain expanded identity file %q", strings.Join(args, " "), want)
 }
 
-func TestSSHRunnerUsesConfiguredSSHConfig(t *testing.T) {
+func TestSSHRunnerIncludesConfiguredSSHConfig(t *testing.T) {
 	t.Setenv("DBF_SSH_CONFIG", "/tmp/debianform-ssh-config")
 	runner := NewSSHRunner(map[string]Host{
 		"server1": {Address: "server1"},
 	})
 
 	args := runner.SSHArgs("server1")
-	if len(args) < 2 || args[0] != "-F" || args[1] != "/tmp/debianform-ssh-config" {
-		t.Fatalf("ssh args = %#v, want -F DBF_SSH_CONFIG prefix", args)
+	if len(args) < 2 || args[0] != "-F" || args[1] == "/tmp/debianform-ssh-config" {
+		t.Fatalf("ssh args = %#v, want -F wrapper config prefix", args)
+	}
+	data, err := os.ReadFile(args[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "Include /tmp/debianform-ssh-config") {
+		t.Fatalf("ssh wrapper config does not include DBF_SSH_CONFIG:\n%s", string(data))
 	}
 }
 
