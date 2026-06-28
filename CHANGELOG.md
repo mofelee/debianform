@@ -6,6 +6,19 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+## v0.2.0-alpha.1
+
+- Added parallel host planning and bulk host inspection paths for faster
+  multi-host online runs.
+- Applied `--parallel` to fact discovery and disabled interactive SSH prompts
+  during noninteractive runs.
+- Added SSH ControlMaster multiplexing with short control path directories and
+  cleanup to improve repeated SSH command performance.
+- Fixed SSH execution to preserve the provided `PATH`, serialize initial auth
+  setup, and detect virtual providers more reliably.
+- Added APT virtual package libvirt coverage and made libvirt retry behavior
+  more resilient.
+
 ## v0.1.0-beta.8
 
 - Added component `script` operations with `on_change` trigger modes so
