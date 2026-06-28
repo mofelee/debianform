@@ -188,6 +188,40 @@ func TestSSHRunErrorIncludesTroubleshootingHint(t *testing.T) {
 	}
 }
 
+func TestNonInteractiveSSHEnvWrapsChildSSH(t *testing.T) {
+	base := []string{"PATH=/usr/bin", "DISPLAY=:0", "SSH_ASKPASS=/usr/bin/askpass"}
+	env, cleanup := nonInteractiveSSHEnv(base, "/usr/bin/ssh")
+	defer cleanup()
+
+	if got := envValue(env, "SSH_ASKPASS"); got != "/bin/false" {
+		t.Fatalf("SSH_ASKPASS = %q, want /bin/false", got)
+	}
+	if got := envValue(env, "SSH_ASKPASS_REQUIRE"); got != "never" {
+		t.Fatalf("SSH_ASKPASS_REQUIRE = %q, want never", got)
+	}
+	path := envValue(env, "PATH")
+	if path == "" || path == "/usr/bin" {
+		t.Fatalf("PATH = %q, want wrapper prefix", path)
+	}
+	wrapper := filepath.Join(strings.Split(path, string(os.PathListSeparator))[0], "ssh")
+	data, err := os.ReadFile(wrapper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		"exec '/usr/bin/ssh'",
+		"-o BatchMode=yes",
+		"-o NumberOfPasswordPrompts=0",
+		"-o PasswordAuthentication=no",
+		"-o KbdInteractiveAuthentication=no",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("proxy ssh wrapper missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestSSHRunnerUsesShortControlPathWithLongTMPDIR(t *testing.T) {
 	t.Setenv("TMPDIR", "/var/folders/ct/pk5nt9t52bj6njgkdf6y2dq00000gn/T/")
 	runner := NewSSHRunner(map[string]Host{

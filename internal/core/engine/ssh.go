@@ -416,7 +416,7 @@ func nonInteractiveSSHEnv(base []string, sshPath string) ([]string, func()) {
 		_ = os.RemoveAll(dir)
 		return env, func() {}
 	}
-	path := os.Getenv("PATH")
+	path := envValue(env, "PATH")
 	if path == "" {
 		path = dir
 	} else {
@@ -424,6 +424,16 @@ func nonInteractiveSSHEnv(base []string, sshPath string) ([]string, func()) {
 	}
 	env = setEnvValue(env, "PATH", path)
 	return env, func() { _ = os.RemoveAll(dir) }
+}
+
+func envValue(env []string, key string) string {
+	prefix := key + "="
+	for _, item := range env {
+		if strings.HasPrefix(item, prefix) {
+			return strings.TrimPrefix(item, prefix)
+		}
+	}
+	return ""
 }
 
 func setEnvValue(env []string, key, value string) []string {
