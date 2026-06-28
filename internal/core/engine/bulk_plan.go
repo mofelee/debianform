@@ -199,27 +199,7 @@ if [ -f %s ]; then base64 < %s | tr -d '\n'; echo; else echo ''; fi
 }
 
 func bulkPackageInstallStateScript(name string) string {
-	return `set -eu
-target=` + shellQuote(name) + `
-if dpkg-query -W -f='${binary:Package}\t${Status}\n' "$target" 2>/dev/null | awk -F '\t' '$2 ~ /^install ok installed$/ { found = $1 } END { if (found != "") { print "package\t" found; exit 0 }; exit 1 }'; then
-  exit 0
-fi
-dpkg-query -W -f='${binary:Package}\t${Status}\t${Provides}\n' 2>/dev/null | awk -F '\t' -v target="$target" '
-$2 ~ /^install ok installed$/ {
-  n = split($3, provides, /, */)
-  for (i = 1; i <= n; i++) {
-    provide = provides[i]
-    sub(/[[:space:]]*\(.*/, "", provide)
-    sub(/[[:space:]]*:.*/, "", provide)
-    gsub(/^[[:space:]]+|[[:space:]]+$/, "", provide)
-    if (provide == target) {
-      found = $1
-    }
-  }
-}
-END { if (found != "") print "provider\t" found }
-' || true
-`
+	return packageInstallStateScript(name)
 }
 
 func bulkInstalledPackagesScript(packages []string) string {

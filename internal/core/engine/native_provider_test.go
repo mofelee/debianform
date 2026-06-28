@@ -651,6 +651,35 @@ func TestNativeProviderPackagePlanUsesInstalledProviderForVirtualPackage(t *test
 	}
 }
 
+func TestNativeProviderPackagePlanTreatsDifferentBinaryPackageAsVirtualProvider(t *testing.T) {
+	node := graph.Node{
+		Address: `host.server1.packages.install["dnsutils"]`,
+		Host:    "server1",
+		Kind:    "package",
+		Desired: map[string]any{
+			"name":   "dnsutils",
+			"ensure": "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "provider\tbind9-dnsutils\n"}}}
+	provider := NewNativeProvider(runner)
+	prior := &corestate.Resource{Ownership: "managed", DesiredDigest: corestate.DesiredDigest(node.Desired)}
+
+	got, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionNoOp {
+		t.Fatalf("virtual package action = %q, want no-op; observed=%#v", got.Action, got.Observed)
+	}
+	if got.Observed["package"] != "bind9-dnsutils" || got.Observed["virtual"] != true {
+		t.Fatalf("virtual package observed = %#v, want bind9-dnsutils virtual provider", got.Observed)
+	}
+	if !strings.Contains(runner.scripts[0], `pkg == target || base == target`) {
+		t.Fatalf("package detection should distinguish target packages from providers:\n%s", runner.scripts[0])
+	}
+}
+
 func TestNativeProviderPackagePlanCreatesWhenNeitherPackageNorProviderInstalled(t *testing.T) {
 	node := graph.Node{
 		Address: `host.server1.packages.install["dnsutils"]`,

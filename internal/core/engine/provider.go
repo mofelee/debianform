@@ -1249,10 +1249,23 @@ func (s packageInstallState) observed() map[string]any {
 	return observed
 }
 
-func (p NativeProvider) packageInstallState(ctx context.Context, host, name string) (packageInstallState, error) {
-	script := `set -eu
+func packageInstallStateScript(name string) string {
+	return `set -eu
 target=` + shellQuote(name) + `
-if dpkg-query -W -f='${binary:Package}\t${Status}\n' "$target" 2>/dev/null | awk -F '\t' '$2 ~ /^install ok installed$/ { found = $1 } END { if (found != "") { print "package\t" found; exit 0 }; exit 1 }'; then
+if dpkg-query -W -f='${binary:Package}\t${Status}\n' "$target" 2>/dev/null | awk -F '\t' -v target="$target" '
+$2 ~ /^install ok installed$/ {
+  pkg = $1
+  base = pkg
+  sub(/:.*/, "", base)
+  if (pkg == target || base == target) {
+    print "package\t" pkg
+  } else {
+    print "provider\t" pkg
+  }
+  found = 1
+}
+END { exit found ? 0 : 1 }
+'; then
   exit 0
 fi
 dpkg-query -W -f='${binary:Package}\t${Status}\t${Provides}\n' 2>/dev/null | awk -F '\t' -v target="$target" '
@@ -1271,7 +1284,10 @@ $2 ~ /^install ok installed$/ {
 END { if (found != "") print "provider\t" found }
 ' || true
 `
-	result, err := p.Runner.Run(ctx, host, script)
+}
+
+func (p NativeProvider) packageInstallState(ctx context.Context, host, name string) (packageInstallState, error) {
+	result, err := p.Runner.Run(ctx, host, packageInstallStateScript(name))
 	if err != nil {
 		return packageInstallState{}, err
 	}
