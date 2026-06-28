@@ -140,6 +140,52 @@ func TestSSHRunnerUsesControlMasterConfigByDefault(t *testing.T) {
 			t.Fatalf("control config missing %q:\n%s", want, text)
 		}
 	}
+	controlPath := sshControlPathFromConfig(t, text)
+	if !strings.HasPrefix(controlPath, "/tmp/dbfssh-") {
+		t.Fatalf("control path = %q, want short /tmp path", controlPath)
+	}
+	if got := sshControlPathExpandedLen(controlPath); got > sshControlPathMaxBytes {
+		t.Fatalf("expanded control path length = %d, want <= %d: %s", got, sshControlPathMaxBytes, controlPath)
+	}
+}
+
+func TestSSHRunnerUsesShortControlPathWithLongTMPDIR(t *testing.T) {
+	t.Setenv("TMPDIR", "/var/folders/ct/pk5nt9t52bj6njgkdf6y2dq00000gn/T/")
+	runner := NewSSHRunner(map[string]Host{
+		"server1": {Address: "server1"},
+	})
+
+	args := runner.SSHArgs("server1")
+	config := sshArgValue(t, args, "-F")
+	data, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controlPath := sshControlPathFromConfig(t, string(data))
+	if strings.HasPrefix(controlPath, "/var/folders/") {
+		t.Fatalf("control path used long TMPDIR: %q", controlPath)
+	}
+	if got := sshControlPathExpandedLen(controlPath); got > sshControlPathMaxBytes {
+		t.Fatalf("expanded control path length = %d, want <= %d: %s", got, sshControlPathMaxBytes, controlPath)
+	}
+}
+
+func TestSSHRunnerSkipsOverlongConfiguredControlDir(t *testing.T) {
+	base := t.TempDir()
+	longDir := filepath.Join(base, strings.Repeat("x", 90))
+	if err := os.Mkdir(longDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DBF_SSH_CONTROL_DIR", longDir)
+	t.Setenv("DBF_SSH_CONFIG", "/tmp/debianform-user-ssh-config")
+	runner := NewSSHRunner(map[string]Host{
+		"server1": {Address: "server1"},
+	})
+
+	args := runner.SSHArgs("server1")
+	if got := sshArgValue(t, args, "-F"); got != "/tmp/debianform-user-ssh-config" {
+		t.Fatalf("ssh config = %q, want fallback to user config when control dir is too long; args=%#v", got, args)
+	}
 }
 
 func TestSSHRunnerControlMasterCanBeDisabled(t *testing.T) {
@@ -188,4 +234,16 @@ func sshArgValue(t *testing.T, args []string, flag string) string {
 		t.Fatalf("ssh args missing %s value: %#v", flag, args)
 	}
 	return args[idx+1]
+}
+
+func sshControlPathFromConfig(t *testing.T, config string) string {
+	t.Helper()
+	for _, line := range strings.Split(config, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "ControlPath ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "ControlPath "))
+		}
+	}
+	t.Fatalf("control config missing ControlPath:\n%s", config)
+	return ""
 }

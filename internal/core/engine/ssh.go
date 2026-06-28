@@ -16,6 +16,11 @@ import (
 	"github.com/mofelee/debianform/internal/core/ir"
 )
 
+const (
+	sshControlPathMaxBytes = 103
+	sshControlHashBytes    = 40
+)
+
 type Host struct {
 	Name         string
 	Address      string
@@ -267,18 +272,13 @@ func (r *SSHRunner) controlMasterConfig() string {
 	if r.controlErr != nil {
 		return ""
 	}
-	dir, err := os.MkdirTemp("", "dbf-ssh-*")
+	dir, err := makeSSHControlDir()
 	if err != nil {
 		r.controlErr = err
 		return ""
 	}
-	if err := os.Chmod(dir, 0700); err != nil {
-		_ = os.RemoveAll(dir)
-		r.controlErr = err
-		return ""
-	}
 	configPath := filepath.Join(dir, "config")
-	controlPath := filepath.Join(dir, "cm-%C")
+	controlPath := filepath.Join(dir, "%C")
 	content := sshControlConfig(controlPath, os.Getenv("DBF_SSH_CONFIG"))
 	if err := os.WriteFile(configPath, []byte(content), 0600); err != nil {
 		_ = os.RemoveAll(dir)
@@ -288,6 +288,45 @@ func (r *SSHRunner) controlMasterConfig() string {
 	r.controlDir = dir
 	r.controlConfig = configPath
 	return configPath
+}
+
+func makeSSHControlDir() (string, error) {
+	for _, root := range sshControlDirCandidates() {
+		dir, err := os.MkdirTemp(root, "dbfssh-*")
+		if err != nil {
+			continue
+		}
+		if err := os.Chmod(dir, 0700); err != nil {
+			_ = os.RemoveAll(dir)
+			continue
+		}
+		if sshControlPathFits(filepath.Join(dir, "%C")) {
+			return dir, nil
+		}
+		_ = os.RemoveAll(dir)
+	}
+	return "", fmt.Errorf("no usable short SSH ControlPath directory")
+}
+
+func sshControlDirCandidates() []string {
+	var candidates []string
+	if dir := os.Getenv("DBF_SSH_CONTROL_DIR"); dir != "" {
+		candidates = append(candidates, dir)
+		return candidates
+	}
+	candidates = append(candidates, "/tmp")
+	if temp := os.TempDir(); temp != "" && temp != "/tmp" {
+		candidates = append(candidates, temp)
+	}
+	return candidates
+}
+
+func sshControlPathFits(path string) bool {
+	return sshControlPathExpandedLen(path) <= sshControlPathMaxBytes
+}
+
+func sshControlPathExpandedLen(path string) int {
+	return len(strings.ReplaceAll(path, "%C", strings.Repeat("0", sshControlHashBytes)))
 }
 
 func sshControlConfig(controlPath, userConfig string) string {
