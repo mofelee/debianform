@@ -134,6 +134,9 @@ func TestSSHRunnerUsesControlMasterConfigByDefault(t *testing.T) {
 		"ControlPersist 10m",
 		"ControlPath ",
 		"BatchMode yes",
+		"NumberOfPasswordPrompts 0",
+		"PasswordAuthentication no",
+		"KbdInteractiveAuthentication no",
 		"Include /tmp/debianform-user-ssh-config",
 	} {
 		if !strings.Contains(text, want) {
@@ -146,6 +149,42 @@ func TestSSHRunnerUsesControlMasterConfigByDefault(t *testing.T) {
 	}
 	if got := sshControlPathExpandedLen(controlPath); got > sshControlPathMaxBytes {
 		t.Fatalf("expanded control path length = %d, want <= %d: %s", got, sshControlPathMaxBytes, controlPath)
+	}
+}
+
+func TestSSHRunnerUsesNonInteractiveAuthOptions(t *testing.T) {
+	runner := NewSSHRunner(map[string]Host{
+		"server1": {Address: "server1"},
+	})
+
+	args := runner.SSHArgs("server1")
+	for _, want := range []string{
+		"BatchMode=yes",
+		"NumberOfPasswordPrompts=0",
+		"PasswordAuthentication=no",
+		"KbdInteractiveAuthentication=no",
+	} {
+		if !hasSSHOption(args, want) {
+			t.Fatalf("ssh args missing -o %s: %#v", want, args)
+		}
+	}
+}
+
+func TestSSHRunErrorIncludesTroubleshootingHint(t *testing.T) {
+	err := sshRunError("server1", Result{Stderr: "Permission denied (publickey)"}, fmt.Errorf("exit status 255"))
+	if err == nil {
+		t.Fatal("sshRunError returned nil")
+	}
+	text := err.Error()
+	for _, want := range []string{
+		"Permission denied (publickey)",
+		"check root SSH key/agent",
+		"ProxyCommand/ProxyJump",
+		"non-interactive login",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("ssh error missing %q:\n%s", want, text)
+		}
 	}
 }
 
@@ -234,6 +273,15 @@ func sshArgValue(t *testing.T, args []string, flag string) string {
 		t.Fatalf("ssh args missing %s value: %#v", flag, args)
 	}
 	return args[idx+1]
+}
+
+func hasSSHOption(args []string, value string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "-o" && args[i+1] == value {
+			return true
+		}
+	}
+	return false
 }
 
 func sshControlPathFromConfig(t *testing.T, config string) string {

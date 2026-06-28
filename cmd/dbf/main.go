@@ -420,7 +420,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 				Debug:       debug,
 			})
 		} else {
-			program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr, stderrStyle)
+			program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr, stderrStyle, 0)
 			if err != nil {
 				return err
 			}
@@ -449,7 +449,11 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 		if format != "text" {
 			return fmt.Errorf("--format is only supported for plan")
 		}
-		program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr, stderrStyle)
+		factsParallel := 0
+		if cmd == "apply" {
+			factsParallel = parallel
+		}
+		program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr, stderrStyle, factsParallel)
 		if err != nil {
 			return err
 		}
@@ -849,16 +853,16 @@ func isRuntimeFactCompileError(err error) bool {
 }
 
 func loadOnlineProgram(ctx context.Context, cfg *coreparser.Config, host string, warnings *[]coreir.Warning) (*coreir.Program, *coreengine.SSHRunner, error) {
-	return loadOnlineProgramWithProgress(ctx, cfg, host, warnings, nil, termstyle.Options{})
+	return loadOnlineProgramWithProgress(ctx, cfg, host, warnings, nil, termstyle.Options{}, 0)
 }
 
-func loadOnlineProgramWithProgress(ctx context.Context, cfg *coreparser.Config, host string, warnings *[]coreir.Warning, progress io.Writer, progressStyle termstyle.Options) (*coreir.Program, *coreengine.SSHRunner, error) {
+func loadOnlineProgramWithProgress(ctx context.Context, cfg *coreparser.Config, host string, warnings *[]coreir.Warning, progress io.Writer, progressStyle termstyle.Options, factsParallel int) (*coreir.Program, *coreengine.SSHRunner, error) {
 	base, err := compileProgram(cfg, host, coremerge.CompileOptions{SkipComponents: true})
 	if err != nil {
 		return nil, nil, err
 	}
 	runner := coreengine.NewSSHRunner(coreengine.HostsFromProgram(base))
-	facts, err := coreengine.DiscoverProgramFactsWithProgressStyle(ctx, runner, base, nil, progress, progressStyle)
+	facts, err := coreengine.DiscoverProgramFactsWithOptions(ctx, runner, base, nil, progress, progressStyle, coreengine.DiscoverProgramFactsOptions{Parallel: factsParallel})
 	if err != nil {
 		return nil, nil, err
 	}

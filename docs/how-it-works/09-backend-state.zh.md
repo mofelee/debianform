@@ -39,12 +39,17 @@ ir.Program
 
 - 默认 user 是 root。
 - `BatchMode=yes`，避免交互。
+- `NumberOfPasswordPrompts=0`、`PasswordAuthentication=no` 和
+  `KbdInteractiveAuthentication=no`，避免密码和 askpass fallback。
 - `StrictHostKeyChecking=accept-new`。
 - `DBF_SSH_CONFIG` 可指定 ssh config 文件。
 - 非 22 端口会加 `-p`。
 - identity file 支持 `~` 展开。
 
 DebianForm 把复杂连接细节交给 OpenSSH 和 ssh config，项目内只做必要覆盖。
+如果 SSH config 使用 `ProxyCommand ssh ...` 手写内层 ssh，建议在内层命令也显式加
+`-o BatchMode=yes -o NumberOfPasswordPrompts=0 -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no`，
+或优先使用 `ProxyJump`。
 
 ## Backend 接口
 

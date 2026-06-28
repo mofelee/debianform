@@ -268,11 +268,19 @@ Permission denied (publickey)
 处理：
 
 ```bash
-ssh -vvv root@"$DBF_TARGET" true
+ssh -vvv \
+  -o BatchMode=yes \
+  -o NumberOfPasswordPrompts=0 \
+  -o PasswordAuthentication=no \
+  -o KbdInteractiveAuthentication=no \
+  root@"$DBF_TARGET" true
 ```
 
-确认网络、端口、root SSH key、`ssh.identity_file` 和目标主机 `sshd_config`。DebianForm 当前不支持
-sudo、become 或非 root 管理连接。
+确认网络、端口、root SSH key、agent、`ssh.identity_file`、`ProxyCommand`/`ProxyJump`
+和目标主机 `sshd_config`。如果跳板配置使用 `ProxyCommand ssh jump ...`，内层 ssh 也要加
+`-o BatchMode=yes -o NumberOfPasswordPrompts=0 -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no`，
+否则可能进入密码或 askpass fallback。
+DebianForm 当前不支持 sudo、become 或非 root 管理连接。
 
 ### 权限不足
 

@@ -86,7 +86,11 @@ func (r *SSHRunner) runSSH(ctx context.Context, host string, args []string, inpu
 	if err != nil {
 		return Result{}, err
 	}
-	cmd := exec.CommandContext(ctx, "ssh", args...)
+	sshPath := sshExecutable()
+	cmd := exec.CommandContext(ctx, sshPath, args...)
+	env, cleanup := nonInteractiveSSHEnv(os.Environ(), sshPath)
+	defer cleanup()
+	cmd.Env = env
 	cmd.Stdin = input
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -169,7 +173,12 @@ func sshRunError(host string, result Result, err error) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf("ssh %s failed: %w: %s", host, err, strings.TrimSpace(result.Stderr))
+	stderr := strings.TrimSpace(result.Stderr)
+	hint := "check root SSH key/agent, SSH config ProxyCommand/ProxyJump, jump host access, and non-interactive login"
+	if stderr == "" {
+		return fmt.Errorf("ssh %s failed: %w; hint: %s", host, err, hint)
+	}
+	return fmt.Errorf("ssh %s failed: %w: %s\nhint: %s", host, err, stderr, hint)
 }
 
 func (r *SSHRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (Result, error) {
@@ -194,6 +203,9 @@ func (r *SSHRunner) sshArgsAndTarget(host string) ([]string, string) {
 	}
 	args := []string{
 		"-o", "BatchMode=yes",
+		"-o", "NumberOfPasswordPrompts=0",
+		"-o", "PasswordAuthentication=no",
+		"-o", "KbdInteractiveAuthentication=no",
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-l", user,
 	}
@@ -338,6 +350,9 @@ func sshControlConfig(controlPath, userConfig string) string {
 	b.WriteString(controlPath)
 	b.WriteString("\n")
 	b.WriteString("\tBatchMode yes\n")
+	b.WriteString("\tNumberOfPasswordPrompts 0\n")
+	b.WriteString("\tPasswordAuthentication no\n")
+	b.WriteString("\tKbdInteractiveAuthentication no\n")
 	if userConfig != "" {
 		b.WriteString("Include ")
 		b.WriteString(userConfig)
@@ -364,6 +379,71 @@ func shellQuote(s string) string {
 		return "''"
 	}
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func sshExecutable() string {
+	path, err := exec.LookPath("ssh")
+	if err != nil {
+		return "ssh"
+	}
+	if filepath.IsAbs(path) {
+		return path
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	return abs
+}
+
+func nonInteractiveSSHEnv(base []string, sshPath string) ([]string, func()) {
+	env := setEnvValue(base, "SSH_ASKPASS", "/bin/false")
+	env = setEnvValue(env, "SSH_ASKPASS_REQUIRE", "never")
+	env = setEnvValue(env, "DISPLAY", "")
+
+	dir, err := os.MkdirTemp("", "dbfssh-proxy-*")
+	if err != nil {
+		return env, func() {}
+	}
+	wrapper := filepath.Join(dir, "ssh")
+	script := "#!/bin/sh\nexec " + shellQuote(sshPath) +
+		" -o BatchMode=yes" +
+		" -o NumberOfPasswordPrompts=0" +
+		" -o PasswordAuthentication=no" +
+		" -o KbdInteractiveAuthentication=no" +
+		" \"$@\"\n"
+	if err := os.WriteFile(wrapper, []byte(script), 0700); err != nil {
+		_ = os.RemoveAll(dir)
+		return env, func() {}
+	}
+	path := os.Getenv("PATH")
+	if path == "" {
+		path = dir
+	} else {
+		path = dir + string(os.PathListSeparator) + path
+	}
+	env = setEnvValue(env, "PATH", path)
+	return env, func() { _ = os.RemoveAll(dir) }
+}
+
+func setEnvValue(env []string, key, value string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env)+1)
+	replaced := false
+	for _, item := range env {
+		if strings.HasPrefix(item, prefix) {
+			if !replaced {
+				out = append(out, prefix+value)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, item)
+	}
+	if !replaced {
+		out = append(out, prefix+value)
+	}
+	return out
 }
 
 func expandHome(path string) string {

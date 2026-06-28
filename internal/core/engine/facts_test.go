@@ -9,6 +9,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/core/graph"
 	"github.com/mofelee/debianform/internal/core/ir"
+	"github.com/mofelee/debianform/internal/core/termstyle"
 )
 
 func TestDiscoverHostFacts(t *testing.T) {
@@ -43,6 +44,28 @@ func TestDiscoverProgramFactsRunsHostsInParallel(t *testing.T) {
 	}
 	if runner.maxActive < 2 {
 		t.Fatalf("max concurrent discoveries = %d, want hosts in parallel", runner.maxActive)
+	}
+}
+
+func TestDiscoverProgramFactsHonorsParallelLimit(t *testing.T) {
+	runner := &concurrencyFactRunner{}
+	program := &ir.Program{Hosts: []ir.HostSpec{
+		{Name: "server1"},
+		{Name: "server2"},
+		{Name: "server3"},
+	}}
+
+	facts, err := DiscoverProgramFactsWithOptions(context.Background(), runner, program, func() time.Time {
+		return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	}, nil, termstyle.Options{}, DiscoverProgramFactsOptions{Parallel: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(facts) != 3 {
+		t.Fatalf("facts = %#v, want 3 hosts", facts)
+	}
+	if runner.maxActive != 1 {
+		t.Fatalf("max concurrent discoveries = %d, want 1", runner.maxActive)
 	}
 }
 

@@ -12,6 +12,10 @@ import (
 	"github.com/mofelee/debianform/internal/core/termstyle"
 )
 
+type DiscoverProgramFactsOptions struct {
+	Parallel int
+}
+
 func DiscoverProgramFacts(ctx context.Context, runner Runner, program *ir.Program, now func() time.Time) (map[string]ir.HostFacts, error) {
 	return DiscoverProgramFactsWithProgress(ctx, runner, program, now, nil)
 }
@@ -21,6 +25,10 @@ func DiscoverProgramFactsWithProgress(ctx context.Context, runner Runner, progra
 }
 
 func DiscoverProgramFactsWithProgressStyle(ctx context.Context, runner Runner, program *ir.Program, now func() time.Time, progressWriter io.Writer, style termstyle.Options) (map[string]ir.HostFacts, error) {
+	return DiscoverProgramFactsWithOptions(ctx, runner, program, now, progressWriter, style, DiscoverProgramFactsOptions{})
+}
+
+func DiscoverProgramFactsWithOptions(ctx context.Context, runner Runner, program *ir.Program, now func() time.Time, progressWriter io.Writer, style termstyle.Options, opts DiscoverProgramFactsOptions) (map[string]ir.HostFacts, error) {
 	facts := map[string]ir.HostFacts{}
 	if program == nil {
 		return facts, nil
@@ -28,34 +36,60 @@ func DiscoverProgramFactsWithProgressStyle(ctx context.Context, runner Runner, p
 	progress := newProgressLoggerWithStyle(progressWriter, style)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	parallel := opts.Parallel
+	if parallel < 1 {
+		parallel = len(program.Hosts)
+	}
+	if parallel < 1 {
+		parallel = 1
+	}
+	if parallel > len(program.Hosts) {
+		parallel = len(program.Hosts)
+	}
+
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(program.Hosts))
-	for _, host := range program.Hosts {
-		host := host
+	hostCh := make(chan ir.HostSpec)
+	for i := 0; i < parallel; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			task := progress.Start(host.Name, "discover facts", "", "")
-			hostFacts, err := DiscoverHostFacts(ctx, runner, host, now)
-			if err != nil {
-				task.Done(err)
-				errCh <- err
-				cancel()
-				return
+			for host := range hostCh {
+				task := progress.Start(host.Name, "discover facts", "", "")
+				hostFacts, err := DiscoverHostFacts(ctx, runner, host, now)
+				if err != nil {
+					task.Done(err)
+					errCh <- err
+					cancel()
+					continue
+				}
+				task.Done(nil)
+				mu.Lock()
+				facts[host.Name] = hostFacts
+				mu.Unlock()
 			}
-			task.Done(nil)
-			mu.Lock()
-			facts[host.Name] = hostFacts
-			mu.Unlock()
 		}()
 	}
+sendHosts:
+	for _, host := range program.Hosts {
+		select {
+		case <-ctx.Done():
+			break sendHosts
+		case hostCh <- host:
+		}
+	}
+	close(hostCh)
 	wg.Wait()
 	close(errCh)
 	for err := range errCh {
 		if err != nil {
 			return nil, err
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	return facts, nil
 }
