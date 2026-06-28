@@ -6,6 +6,16 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+## v0.2.0-alpha.2
+
+- Limited default online SSH host concurrency to 4 across fact discovery,
+  state locking/reads, host inspection, and apply phases, while keeping
+  `--parallel` available for explicit tuning.
+- Allowed later hosts to retry the initial SSH/auth path after an earlier host
+  fails authentication, instead of caching the first auth failure globally.
+- Documented the new apply concurrency default and 1Password/agent-heavy SSH
+  troubleshooting guidance.
+
 ## v0.2.0-alpha.1
 
 - Added parallel host planning and bulk host inspection paths for faster
