@@ -47,6 +47,27 @@ func TestDiscoverProgramFactsRunsHostsInParallel(t *testing.T) {
 	}
 }
 
+func TestDiscoverProgramFactsDefaultParallelLimit(t *testing.T) {
+	runner := &concurrencyFactRunner{}
+	program := &ir.Program{Hosts: make([]ir.HostSpec, 8)}
+	for i := range program.Hosts {
+		program.Hosts[i] = ir.HostSpec{Name: "server" + string(rune('1'+i))}
+	}
+
+	facts, err := DiscoverProgramFacts(context.Background(), runner, program, func() time.Time {
+		return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(facts) != 8 {
+		t.Fatalf("facts = %#v, want 8 hosts", facts)
+	}
+	if runner.maxActive != defaultHostParallel() {
+		t.Fatalf("max concurrent discoveries = %d, want default %d", runner.maxActive, defaultHostParallel())
+	}
+}
+
 func TestDiscoverProgramFactsHonorsParallelLimit(t *testing.T) {
 	runner := &concurrencyFactRunner{}
 	program := &ir.Program{Hosts: []ir.HostSpec{

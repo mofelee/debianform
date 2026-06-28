@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -37,16 +38,7 @@ func DiscoverProgramFactsWithOptions(ctx context.Context, runner Runner, program
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	parallel := opts.Parallel
-	if parallel < 1 {
-		parallel = len(program.Hosts)
-	}
-	if parallel < 1 {
-		parallel = 1
-	}
-	if parallel > len(program.Hosts) {
-		parallel = len(program.Hosts)
-	}
+	parallel := boundedHostParallel(opts.Parallel, len(program.Hosts))
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -61,7 +53,9 @@ func DiscoverProgramFactsWithOptions(ctx context.Context, runner Runner, program
 				hostFacts, err := DiscoverHostFacts(ctx, runner, host, now)
 				if err != nil {
 					task.Done(err)
-					errCh <- err
+					if !isContextCancellation(err) {
+						errCh <- err
+					}
 					cancel()
 					continue
 				}
@@ -92,6 +86,30 @@ sendHosts:
 		return nil, err
 	}
 	return facts, nil
+}
+
+func defaultHostParallel() int {
+	return 4
+}
+
+func boundedHostParallel(parallel int, hostCount int) int {
+	if hostCount < 1 {
+		return 1
+	}
+	if parallel < 1 {
+		parallel = defaultHostParallel()
+	}
+	if parallel < 1 {
+		parallel = 1
+	}
+	if parallel > hostCount {
+		parallel = hostCount
+	}
+	return parallel
+}
+
+func isContextCancellation(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func DiscoverHostFacts(ctx context.Context, runner Runner, host ir.HostSpec, now func() time.Time) (ir.HostFacts, error) {

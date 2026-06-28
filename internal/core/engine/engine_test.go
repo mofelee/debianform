@@ -1002,6 +1002,51 @@ func TestPlanReadsStateAndInspectsHostsInParallel(t *testing.T) {
 	}
 }
 
+func TestPlanHonorsDefaultHostParallelLimit(t *testing.T) {
+	program := &ir.Program{Hosts: make([]ir.HostSpec, 8)}
+	resourceGraph := &graph.ResourceGraph{Nodes: make([]graph.Node, 0, 8)}
+	for i := range program.Hosts {
+		name := fmt.Sprintf("server%d", i+1)
+		program.Hosts[i] = ir.HostSpec{Name: name}
+		resourceGraph.Nodes = append(resourceGraph.Nodes, fileNode(name, "/tmp/"+name, nil))
+	}
+	backend := &concurrencyBackend{Backend: NewMemoryBackend()}
+	provider := &hostPlanningConcurrencyProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	if _, err := engine.Plan(context.Background(), program, resourceGraph, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if backend.maxReadActive != defaultHostParallel() {
+		t.Fatalf("max concurrent state reads = %d, want default %d", backend.maxReadActive, defaultHostParallel())
+	}
+	if provider.maxPlanHostActive != defaultHostParallel() {
+		t.Fatalf("max concurrent host plans = %d, want default %d", provider.maxPlanHostActive, defaultHostParallel())
+	}
+}
+
+func TestPlanHonorsExplicitHostParallelLimit(t *testing.T) {
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}, {Name: "server2"}, {Name: "server3"}}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{
+		fileNode("server1", "/tmp/server1", nil),
+		fileNode("server2", "/tmp/server2", nil),
+		fileNode("server3", "/tmp/server3", nil),
+	}}
+	backend := &concurrencyBackend{Backend: NewMemoryBackend()}
+	provider := &hostPlanningConcurrencyProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	if _, err := engine.Plan(context.Background(), program, resourceGraph, Options{Parallel: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if backend.maxReadActive != 1 {
+		t.Fatalf("max concurrent state reads = %d, want 1", backend.maxReadActive)
+	}
+	if provider.maxPlanHostActive != 1 {
+		t.Fatalf("max concurrent host plans = %d, want 1", provider.maxPlanHostActive)
+	}
+}
+
 func TestApplyHonorsDefaultPerHostSerialExecution(t *testing.T) {
 	program, resourceGraph := twoFileProgramAndGraph("server1")
 	provider := &concurrencyProvider{MemoryProvider: NewMemoryProvider()}

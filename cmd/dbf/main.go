@@ -288,7 +288,7 @@ func runConfigCommand(cmd string, args []string) error {
 	debug := fs.Bool("debug", false, "show internal provider addresses in plan output")
 	color := fs.String("color", "auto", "colorize text output: auto, always, or never")
 	offline := fs.Bool("offline", false, "render plan without SSH, state, or runtime facts discovery")
-	parallel := fs.Int("parallel", 0, "maximum number of hosts to apply concurrently; 0 means auto")
+	parallel := fs.Int("parallel", 0, "maximum number of hosts for apply SSH phases; default 4")
 	lockTimeout := fs.Duration("lock-timeout", 5*time.Minute, "state lock timeout")
 	autoApprove := fs.Bool("auto-approve", false, "skip apply confirmation")
 	var cliVars repeatedFlag

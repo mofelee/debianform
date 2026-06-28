@@ -113,6 +113,50 @@ cat
 	}
 }
 
+func TestSSHRunnerDoesNotCacheInitialAuthFailure(t *testing.T) {
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "bin")
+	if err := os.Mkdir(fakeBin, 0755); err != nil {
+		t.Fatal(err)
+	}
+	sshPath := filepath.Join(fakeBin, "ssh")
+	script := `#!/bin/sh
+case " $* " in
+  *" bad sh -s "*)
+    echo "bad host denied" >&2
+    exit 255
+    ;;
+  *" good sh -s "*)
+    cat
+    exit 0
+    ;;
+esac
+echo "unexpected args: $*" >&2
+exit 2
+`
+	if err := os.WriteFile(sshPath, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	runner := NewSSHRunner(map[string]Host{
+		"bad":  {Address: "bad"},
+		"good": {Address: "good"},
+	})
+
+	_, err := runner.Run(context.Background(), "bad", "true\n")
+	if err == nil {
+		t.Fatal("bad host unexpectedly succeeded")
+	}
+	if text := err.Error(); !strings.Contains(text, "ssh bad failed") || !strings.Contains(text, "bad host denied") {
+		t.Fatalf("bad host error = %v, want host-local ssh failure", err)
+	}
+
+	if _, err := runner.Run(context.Background(), "good", "true\n"); err != nil {
+		t.Fatalf("good host inherited bad initial auth failure: %v", err)
+	}
+}
+
 func TestSSHRunnerUsesControlMasterConfigByDefault(t *testing.T) {
 	t.Setenv("DBF_SSH_CONFIG", "/tmp/debianform-user-ssh-config")
 	runner := NewSSHRunner(map[string]Host{

@@ -202,13 +202,15 @@ dbf apply -f examples/bbr.dbf.hcl --auto-approve
 dbf apply --parallel 4 --auto-approve
 ```
 
+未显式设置 `--parallel` 时，在线 SSH 阶段默认最多同时处理 4 台 host。
+
 选项：
 
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `-f path` | 当前目录所有 `*.dbf.hcl` | 可重复；读取显式指定的文件，或目录直属 `*.dbf.hcl`。 |
 | `--host name` | 空 | 只应用指定 host。 |
-| `--parallel n` | auto | 最多同时进行 facts discovery 和 apply 的 host 数量；必须大于等于 1，只能用于 `apply`。 |
+| `--parallel n` | `4` | 最多同时进行远端 SSH 阶段的 host 数量，包括 facts discovery、lock/read state、inspect 和 apply；必须大于等于 1，只能用于 `apply`。 |
 | `--lock-timeout duration` | `5m` | 等待远端 state lock 的最长时间。使用 Go duration 格式，例如 `30s`、`2m`、`10m`。 |
 | `--auto-approve` | `false` | 跳过交互确认。 |
 | `-var name=value` | 空 | 可重复；设置顶层变量。 |
@@ -391,7 +393,7 @@ dbf -h
 | `--debug` | `plan` | 用于 plan 调试输出。 |
 | `--color` | `plan`、`apply`、`check` | `auto` 只在 TTY 且未设置 `NO_COLOR` / `TERM=dumb` 时启用；`always` 强制启用；`never` 禁用。 |
 | `--offline` | `plan` | 离线 plan 预览。 |
-| `--parallel` | `apply` | 控制多 host facts discovery 和 apply 并发。 |
+| `--parallel` | `apply` | 控制多 host 在线 SSH 阶段并发。 |
 | `--auto-approve` | `apply` | 跳过 apply 确认。 |
 | `--lock-timeout` | `apply`、`check` | 在线执行等待远端 state lock 的超时时间。 |
 

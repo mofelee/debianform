@@ -51,7 +51,6 @@ type SSHRunner struct {
 	initialAuthMu        sync.Mutex
 	initialAuthRunning   bool
 	initialAuthSucceeded bool
-	initialAuthErr       error
 	initialAuthWait      chan struct{}
 }
 
@@ -113,11 +112,6 @@ func (r *SSHRunner) acquireInitialAuthSlot(ctx context.Context) (func(bool, erro
 			r.initialAuthMu.Unlock()
 			return func(bool, error) {}, nil
 		}
-		if r.initialAuthErr != nil {
-			err := r.initialAuthErr
-			r.initialAuthMu.Unlock()
-			return nil, err
-		}
 		if !r.initialAuthRunning {
 			r.initialAuthRunning = true
 			if r.initialAuthWait == nil {
@@ -145,8 +139,6 @@ func (r *SSHRunner) releaseInitialAuthSlot(reachedRemote bool, runErr error) {
 	r.initialAuthMu.Lock()
 	if reachedRemote {
 		r.initialAuthSucceeded = true
-	} else if runErr != nil {
-		r.initialAuthErr = fmt.Errorf("initial ssh connection failed: %w", runErr)
 	}
 	r.initialAuthRunning = false
 	wait := r.initialAuthWait

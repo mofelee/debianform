@@ -280,6 +280,9 @@ ssh -vvv \
 和目标主机 `sshd_config`。如果跳板配置使用 `ProxyCommand ssh jump ...`，内层 ssh 也要加
 `-o BatchMode=yes -o NumberOfPasswordPrompts=0 -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no`，
 否则可能进入密码或 askpass fallback。
+如果使用 1Password SSH agent 或需要桌面授权的 agent，且多 host apply 一次弹出多次授权请求，
+先用 `dbf apply --parallel 1 ...` 验证；稳定后再逐步调高。推荐在 `~/.ssh/config` 的具体
+Host 条目中配置 `IdentityFile` 和 `IdentitiesOnly yes`，减少 agent 为每台主机尝试过多 key。
 DebianForm 当前不支持 sudo、become 或非 root 管理连接。
 
 ### 权限不足

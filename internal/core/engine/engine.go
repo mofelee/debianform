@@ -121,7 +121,8 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := hostsByName(program)
 	selectedHosts := selectedProgramHosts(program, opts)
-	stateByHost, err := e.readStates(ctx, selectedHosts, progress)
+	parallel := boundedHostParallel(opts.Parallel, len(selectedHosts))
+	stateByHost, err := e.readStates(ctx, selectedHosts, parallel, progress)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -149,7 +150,7 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 		priorsByHost[host.Name][node.Address] = prior
 	}
 
-	providerPlans, err := e.planNodes(ctx, selectedHosts, nodes, nodesByHost, priorsByHost, progress)
+	providerPlans, err := e.planNodes(ctx, selectedHosts, parallel, nodes, nodesByHost, priorsByHost, progress)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -207,10 +208,10 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	}, nil
 }
 
-func (e Engine) planNodes(ctx context.Context, hosts []ir.HostSpec, nodes []planRequest, nodesByHost map[string][]graph.Node, priorsByHost map[string]map[string]*corestate.Resource, progress *progressLogger) (map[string]ProviderPlan, error) {
+func (e Engine) planNodes(ctx context.Context, hosts []ir.HostSpec, parallel int, nodes []planRequest, nodesByHost map[string][]graph.Node, priorsByHost map[string]map[string]*corestate.Resource, progress *progressLogger) (map[string]ProviderPlan, error) {
 	plans := map[string]ProviderPlan{}
 	if planner, ok := e.Provider.(HostPlanner); ok {
-		return e.planNodesByHost(ctx, hosts, planner, nodesByHost, priorsByHost, progress)
+		return e.planNodesByHost(ctx, hosts, parallel, planner, nodesByHost, priorsByHost, progress)
 	}
 	for _, item := range nodes {
 		node := item.node
@@ -232,18 +233,16 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := hostsByName(program)
 	selectedHosts := selectedProgramHosts(program, opts)
-	locks, err := e.lockHosts(ctx, selectedHosts, opts, progress)
+	parallel := boundedHostParallel(opts.Parallel, len(selectedHosts))
+	locks, err := e.lockHosts(ctx, selectedHosts, parallel, opts, progress)
 	if err != nil {
 		return Plan{}, err
 	}
 	defer unlockHosts(ctx, locks)
 
 	applyOpts := opts
-	if applyOpts.Parallel < 1 && opts.Host == "" {
-		applyOpts.Parallel = len(selectedHosts)
-		if applyOpts.Parallel < 1 {
-			applyOpts.Parallel = 1
-		}
+	if applyOpts.Parallel < 1 {
+		applyOpts.Parallel = parallel
 	}
 	if err := e.persistHostFacts(ctx, program, applyOpts); err != nil {
 		return Plan{}, err
@@ -257,7 +256,7 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		return plan, nil
 	}
 
-	states, err := e.readStates(ctx, selectedHosts, progress)
+	states, err := e.readStates(ctx, selectedHosts, applyOpts.Parallel, progress)
 	if err != nil {
 		return plan, err
 	}
@@ -278,13 +277,7 @@ func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts 
 	}
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := selectedProgramHosts(program, opts)
-	parallel := opts.Parallel
-	if parallel < 1 {
-		parallel = len(hosts)
-		if parallel < 1 {
-			parallel = 1
-		}
-	}
+	parallel := boundedHostParallel(opts.Parallel, len(hosts))
 	return runHosts(ctx, hosts, parallel, func(ctx context.Context, host ir.HostSpec) error {
 		if !hasHostFacts(host.Facts) {
 			return nil
@@ -328,10 +321,10 @@ func selectedProgramHosts(program *ir.Program, opts Options) []ir.HostSpec {
 	return hosts
 }
 
-func (e Engine) readStates(ctx context.Context, hosts []ir.HostSpec, progress *progressLogger) (map[string]corestate.State, error) {
+func (e Engine) readStates(ctx context.Context, hosts []ir.HostSpec, parallel int, progress *progressLogger) (map[string]corestate.State, error) {
 	states := map[string]corestate.State{}
 	var mu sync.Mutex
-	err := runHosts(ctx, hosts, len(hosts), func(ctx context.Context, host ir.HostSpec) error {
+	err := runHosts(ctx, hosts, parallel, func(ctx context.Context, host ir.HostSpec) error {
 		task := progress.Start(host.Name, "read state", "", "")
 		st, err := e.Backend.Read(ctx, host)
 		if err != nil {
@@ -351,10 +344,10 @@ func (e Engine) readStates(ctx context.Context, hosts []ir.HostSpec, progress *p
 	return states, nil
 }
 
-func (e Engine) planNodesByHost(ctx context.Context, hosts []ir.HostSpec, planner HostPlanner, nodesByHost map[string][]graph.Node, priorsByHost map[string]map[string]*corestate.Resource, progress *progressLogger) (map[string]ProviderPlan, error) {
+func (e Engine) planNodesByHost(ctx context.Context, hosts []ir.HostSpec, parallel int, planner HostPlanner, nodesByHost map[string][]graph.Node, priorsByHost map[string]map[string]*corestate.Resource, progress *progressLogger) (map[string]ProviderPlan, error) {
 	plans := map[string]ProviderPlan{}
 	var mu sync.Mutex
-	err := runHosts(ctx, hosts, len(hosts), func(ctx context.Context, host ir.HostSpec) error {
+	err := runHosts(ctx, hosts, parallel, func(ctx context.Context, host ir.HostSpec) error {
 		nodes := nodesByHost[host.Name]
 		if len(nodes) == 0 {
 			return nil
@@ -384,10 +377,10 @@ type heldLock struct {
 	lock Lock
 }
 
-func (e Engine) lockHosts(ctx context.Context, hosts []ir.HostSpec, opts Options, progress *progressLogger) ([]heldLock, error) {
+func (e Engine) lockHosts(ctx context.Context, hosts []ir.HostSpec, parallel int, opts Options, progress *progressLogger) ([]heldLock, error) {
 	locks := make([]heldLock, 0, len(hosts))
 	var mu sync.Mutex
-	err := runHosts(ctx, hosts, len(hosts), func(ctx context.Context, host ir.HostSpec) error {
+	err := runHosts(ctx, hosts, parallel, func(ctx context.Context, host ir.HostSpec) error {
 		task := progress.Start(host.Name, "lock state", "", "")
 		lock, err := e.Backend.Lock(ctx, host, opts.LockTimeout)
 		if err != nil {
