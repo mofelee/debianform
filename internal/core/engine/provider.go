@@ -1173,20 +1173,26 @@ func (p NativeProvider) applyDirectory(ctx context.Context, step Step) (map[stri
 
 func (p NativeProvider) planPackage(ctx context.Context, node graph.Node, prior *corestate.Resource) (ProviderPlan, error) {
 	name := stringDesired(node, "name")
-	result, err := p.Runner.Run(ctx, node.Host, "dpkg-query -W -f='${Status}\\t${Version}\\n' "+shellQuote(name)+" 2>/dev/null || true\n")
+	state, err := p.packageInstallState(ctx, node.Host, name)
 	if err != nil {
 		return ProviderPlan{}, err
 	}
-	installed := strings.Contains(result.Stdout, "install ok installed")
-	observed := map[string]any{"installed": installed}
+	observed := state.observed()
 	if ensureAbsent(node) {
-		if installed {
+		if state.Installed && !state.Virtual {
 			return ProviderPlan{Action: ActionDelete, Summary: "remove package " + name, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		if state.Virtual {
+			observed["installed"] = false
+			observed["satisfied_by"] = state.Package
 		}
 		return absentInSyncPlan(prior, "already absent package "+name, observed), nil
 	}
-	if !installed {
+	if !state.Installed {
 		return ProviderPlan{Action: ActionCreate, Summary: "install package " + name, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if state.Virtual && state.Package != "" {
+		return inSyncPlan(node, prior, "no changes for package "+name+" provided by "+state.Package, observed), nil
 	}
 	return inSyncPlan(node, prior, "no changes for package "+name, observed), nil
 }
@@ -1211,7 +1217,84 @@ func (p NativeProvider) applyPackage(ctx context.Context, step Step) (map[string
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"installed": !ensureAbsent(step.Node), "desired_digest": corestate.DesiredDigest(step.Node.Desired)}, nil
+	if ensureAbsent(step.Node) || step.Action == ActionDelete {
+		return map[string]any{"installed": false, "desired_digest": corestate.DesiredDigest(step.Node.Desired)}, nil
+	}
+	state, err := p.packageInstallState(ctx, step.Node.Host, name)
+	if err != nil {
+		return nil, err
+	}
+	if !state.Installed {
+		return nil, fmt.Errorf("%s: package %s was installed but no installed package or provider could be verified", step.Address, name)
+	}
+	observed := state.observed()
+	observed["desired_digest"] = corestate.DesiredDigest(step.Node.Desired)
+	return observed, nil
+}
+
+type packageInstallState struct {
+	Installed bool
+	Package   string
+	Virtual   bool
+}
+
+func (s packageInstallState) observed() map[string]any {
+	observed := map[string]any{"installed": s.Installed}
+	if s.Package != "" {
+		observed["package"] = s.Package
+	}
+	if s.Virtual {
+		observed["virtual"] = true
+	}
+	return observed
+}
+
+func (p NativeProvider) packageInstallState(ctx context.Context, host, name string) (packageInstallState, error) {
+	script := `set -eu
+target=` + shellQuote(name) + `
+if dpkg-query -W -f='${binary:Package}\t${Status}\n' "$target" 2>/dev/null | awk -F '\t' '$2 ~ /^install ok installed$/ { found = $1 } END { if (found != "") { print "package\t" found; exit 0 }; exit 1 }'; then
+  exit 0
+fi
+dpkg-query -W -f='${binary:Package}\t${Status}\t${Provides}\n' 2>/dev/null | awk -F '\t' -v target="$target" '
+$2 ~ /^install ok installed$/ {
+  n = split($3, provides, /, */)
+  for (i = 1; i <= n; i++) {
+    provide = provides[i]
+    sub(/[[:space:]]*\(.*/, "", provide)
+    sub(/[[:space:]]*:.*/, "", provide)
+    gsub(/^[[:space:]]+|[[:space:]]+$/, "", provide)
+    if (provide == target) {
+      found = $1
+    }
+  }
+}
+END { if (found != "") print "provider\t" found }
+' || true
+`
+	result, err := p.Runner.Run(ctx, host, script)
+	if err != nil {
+		return packageInstallState{}, err
+	}
+	for _, line := range strings.Split(result.Stdout, "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) < 2 {
+			continue
+		}
+		switch fields[0] {
+		case "package":
+			provider := strings.TrimSpace(fields[1])
+			if provider == "" {
+				provider = name
+			}
+			return packageInstallState{Installed: true, Package: provider}, nil
+		case "provider":
+			provider := strings.TrimSpace(fields[1])
+			if provider != "" {
+				return packageInstallState{Installed: true, Package: provider, Virtual: true}, nil
+			}
+		}
+	}
+	return packageInstallState{Installed: false}, nil
 }
 
 func (p NativeProvider) planDockerPackageConflicts(ctx context.Context, node graph.Node, prior *corestate.Resource) (ProviderPlan, error) {

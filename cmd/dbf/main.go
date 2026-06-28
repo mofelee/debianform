@@ -288,7 +288,7 @@ func runConfigCommand(cmd string, args []string) error {
 	debug := fs.Bool("debug", false, "show internal provider addresses in plan output")
 	color := fs.String("color", "auto", "colorize text output: auto, always, or never")
 	offline := fs.Bool("offline", false, "render plan without SSH, state, or runtime facts discovery")
-	parallel := fs.Int("parallel", 1, "maximum number of hosts to apply concurrently")
+	parallel := fs.Int("parallel", 0, "maximum number of hosts to apply concurrently; 0 means auto")
 	lockTimeout := fs.Duration("lock-timeout", 5*time.Minute, "state lock timeout")
 	autoApprove := fs.Bool("auto-approve", false, "skip apply confirmation")
 	var cliVars repeatedFlag
@@ -300,13 +300,20 @@ func runConfigCommand(cmd string, args []string) error {
 		return err
 	}
 	colorExplicit := false
+	parallelExplicit := false
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "color" {
 			colorExplicit = true
 		}
+		if f.Name == "parallel" {
+			parallelExplicit = true
+		}
 	})
 	if colorExplicit && cmd == "validate" {
 		return fmt.Errorf("--color is only supported for plan, apply, and check")
+	}
+	if parallelExplicit && *parallel < 1 {
+		return fmt.Errorf("--parallel must be at least 1")
 	}
 
 	files, err := configFiles(filesFlag)
@@ -365,10 +372,10 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 	if offline && cmd != "plan" {
 		return fmt.Errorf("--offline is only supported for plan")
 	}
-	if parallel < 1 {
+	if parallel < 0 {
 		return fmt.Errorf("--parallel must be at least 1")
 	}
-	if parallel != 1 && cmd != "apply" {
+	if parallel > 0 && cmd != "apply" {
 		return fmt.Errorf("--parallel is only supported for apply")
 	}
 

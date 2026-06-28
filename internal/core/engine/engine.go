@@ -45,11 +45,20 @@ type Provider interface {
 	RunOperation(ctx context.Context, operation graph.Operation) error
 }
 
+type HostPlanner interface {
+	PlanHost(ctx context.Context, host ir.HostSpec, nodes []graph.Node, priors map[string]*corestate.Resource) (map[string]ProviderPlan, error)
+}
+
 type ProviderPlan struct {
 	Action    string
 	Summary   string
 	Observed  map[string]any
 	Ownership string
+}
+
+type planRequest struct {
+	node  graph.Node
+	order int
 }
 
 type Observed struct {
@@ -111,26 +120,16 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	}
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := hostsByName(program)
-	stateByHost := map[string]corestate.State{}
-	for _, host := range program.Hosts {
-		if opts.Host != "" && host.Name != opts.Host {
-			continue
-		}
-		task := progress.Start(host.Name, "read state", "", "")
-		st, err := e.Backend.Read(ctx, host)
-		if err != nil {
-			task.Done(err)
-			return Plan{}, err
-		}
-		task.Done(nil)
-		corestate.Normalize(&st, host.Name)
-		stateByHost[host.Name] = st
+	selectedHosts := selectedProgramHosts(program, opts)
+	stateByHost, err := e.readStates(ctx, selectedHosts, progress)
+	if err != nil {
+		return Plan{}, err
 	}
 
 	desired := map[string]graph.Node{}
-	changed := map[string]struct{}{}
-	steps := []Step{}
-	noOp := 0
+	var nodes []planRequest
+	nodesByHost := map[string][]graph.Node{}
+	priorsByHost := map[string]map[string]*corestate.Resource{}
 	for order, node := range resourceGraph.Nodes {
 		if opts.Host != "" && node.Host != opts.Host {
 			continue
@@ -142,13 +141,25 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 		}
 		st := stateByHost[host.Name]
 		prior := priorResource(st, node.Address)
-		task := progress.Start(node.Host, "inspect", node.Address, node.Summary)
-		providerPlan, err := e.Provider.Plan(ctx, node, prior)
-		if err != nil {
-			task.Done(err)
-			return Plan{}, err
+		nodes = append(nodes, planRequest{node: node, order: order})
+		nodesByHost[host.Name] = append(nodesByHost[host.Name], node)
+		if priorsByHost[host.Name] == nil {
+			priorsByHost[host.Name] = map[string]*corestate.Resource{}
 		}
-		task.Done(nil)
+		priorsByHost[host.Name][node.Address] = prior
+	}
+
+	providerPlans, err := e.planNodes(ctx, selectedHosts, nodes, nodesByHost, priorsByHost, progress)
+	if err != nil {
+		return Plan{}, err
+	}
+
+	changed := map[string]struct{}{}
+	steps := []Step{}
+	noOp := 0
+	for _, item := range nodes {
+		node := item.node
+		providerPlan := providerPlans[node.Address]
 		if providerPlan.Action == "" {
 			providerPlan.Action = ActionNoOp
 		}
@@ -158,6 +169,7 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 		if destroysResource(providerPlan.Action) && preventsDestroy(node.Lifecycle) {
 			return Plan{}, preventDestroyError(node.Address, node.Kind, node.Lifecycle)
 		}
+		prior := priorsByHost[node.Host][node.Address]
 		step := Step{
 			Address:   node.Address,
 			Host:      node.Host,
@@ -167,7 +179,7 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 			Prior:     prior,
 			Observed:  providerPlan.Observed,
 			Ownership: providerPlan.Ownership,
-			Order:     order,
+			Order:     item.order,
 		}
 		if step.Action == ActionNoOp {
 			noOp++
@@ -195,27 +207,49 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	}, nil
 }
 
+func (e Engine) planNodes(ctx context.Context, hosts []ir.HostSpec, nodes []planRequest, nodesByHost map[string][]graph.Node, priorsByHost map[string]map[string]*corestate.Resource, progress *progressLogger) (map[string]ProviderPlan, error) {
+	plans := map[string]ProviderPlan{}
+	if planner, ok := e.Provider.(HostPlanner); ok {
+		return e.planNodesByHost(ctx, hosts, planner, nodesByHost, priorsByHost, progress)
+	}
+	for _, item := range nodes {
+		node := item.node
+		priors := priorsByHost[node.Host]
+		prior := priors[node.Address]
+		task := progress.Start(node.Host, "inspect", node.Address, node.Summary)
+		providerPlan, err := e.Provider.Plan(ctx, node, prior)
+		if err != nil {
+			task.Done(err)
+			return nil, err
+		}
+		task.Done(nil)
+		plans[node.Address] = providerPlan
+	}
+	return plans, nil
+}
+
 func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := hostsByName(program)
-	for _, host := range program.Hosts {
-		if opts.Host != "" && host.Name != opts.Host {
-			continue
-		}
-		task := progress.Start(host.Name, "lock state", "", "")
-		lock, err := e.Backend.Lock(ctx, host, opts.LockTimeout)
-		if err != nil {
-			task.Done(err)
-			return Plan{}, err
-		}
-		task.Done(nil)
-		defer lock.Unlock(ctx)
+	selectedHosts := selectedProgramHosts(program, opts)
+	locks, err := e.lockHosts(ctx, selectedHosts, opts, progress)
+	if err != nil {
+		return Plan{}, err
 	}
-	if err := e.persistHostFacts(ctx, program, opts); err != nil {
+	defer unlockHosts(ctx, locks)
+
+	applyOpts := opts
+	if applyOpts.Parallel < 1 && opts.Host == "" {
+		applyOpts.Parallel = len(selectedHosts)
+		if applyOpts.Parallel < 1 {
+			applyOpts.Parallel = 1
+		}
+	}
+	if err := e.persistHostFacts(ctx, program, applyOpts); err != nil {
 		return Plan{}, err
 	}
 
-	plan, err := e.Plan(ctx, program, resourceGraph, opts)
+	plan, err := e.Plan(ctx, program, resourceGraph, applyOpts)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -223,27 +257,16 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		return plan, nil
 	}
 
-	states := map[string]corestate.State{}
-	for name, host := range hosts {
-		if opts.Host != "" && name != opts.Host {
-			continue
-		}
-		task := progress.Start(host.Name, "read state", "", "")
-		st, err := e.Backend.Read(ctx, host)
-		if err != nil {
-			task.Done(err)
-			return plan, err
-		}
-		task.Done(nil)
-		corestate.Normalize(&st, host.Name)
-		states[name] = st
+	states, err := e.readStates(ctx, selectedHosts, progress)
+	if err != nil {
+		return plan, err
 	}
 
 	waves, err := executionWaves(resourceGraph, plan)
 	if err != nil {
 		return plan, err
 	}
-	if err := e.runExecutionWaves(ctx, hosts, states, waves, opts); err != nil {
+	if err := e.runExecutionWaves(ctx, hosts, states, waves, applyOpts); err != nil {
 		return plan, err
 	}
 	return plan, nil
@@ -254,12 +277,17 @@ func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts 
 		return nil
 	}
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
-	for _, host := range program.Hosts {
-		if opts.Host != "" && host.Name != opts.Host {
-			continue
+	hosts := selectedProgramHosts(program, opts)
+	parallel := opts.Parallel
+	if parallel < 1 {
+		parallel = len(hosts)
+		if parallel < 1 {
+			parallel = 1
 		}
+	}
+	return runHosts(ctx, hosts, parallel, func(ctx context.Context, host ir.HostSpec) error {
 		if !hasHostFacts(host.Facts) {
-			continue
+			return nil
 		}
 		task := progress.Start(host.Name, "persist facts", "", "")
 		st, err := e.Backend.Read(ctx, host)
@@ -275,8 +303,8 @@ func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts 
 			return err
 		}
 		task.Done(nil)
-	}
-	return nil
+		return nil
+	})
 }
 
 func hasHostFacts(facts ir.HostFacts) bool {
@@ -284,6 +312,159 @@ func hasHostFacts(facts ir.HostFacts) bool {
 		facts.System.Architecture != "" ||
 		facts.System.Codename != "" ||
 		facts.System.DetectedAt != ""
+}
+
+func selectedProgramHosts(program *ir.Program, opts Options) []ir.HostSpec {
+	if program == nil {
+		return nil
+	}
+	hosts := make([]ir.HostSpec, 0, len(program.Hosts))
+	for _, host := range program.Hosts {
+		if opts.Host != "" && host.Name != opts.Host {
+			continue
+		}
+		hosts = append(hosts, host)
+	}
+	return hosts
+}
+
+func (e Engine) readStates(ctx context.Context, hosts []ir.HostSpec, progress *progressLogger) (map[string]corestate.State, error) {
+	states := map[string]corestate.State{}
+	var mu sync.Mutex
+	err := runHosts(ctx, hosts, len(hosts), func(ctx context.Context, host ir.HostSpec) error {
+		task := progress.Start(host.Name, "read state", "", "")
+		st, err := e.Backend.Read(ctx, host)
+		if err != nil {
+			task.Done(err)
+			return err
+		}
+		task.Done(nil)
+		corestate.Normalize(&st, host.Name)
+		mu.Lock()
+		states[host.Name] = st
+		mu.Unlock()
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return states, nil
+}
+
+func (e Engine) planNodesByHost(ctx context.Context, hosts []ir.HostSpec, planner HostPlanner, nodesByHost map[string][]graph.Node, priorsByHost map[string]map[string]*corestate.Resource, progress *progressLogger) (map[string]ProviderPlan, error) {
+	plans := map[string]ProviderPlan{}
+	var mu sync.Mutex
+	err := runHosts(ctx, hosts, len(hosts), func(ctx context.Context, host ir.HostSpec) error {
+		nodes := nodesByHost[host.Name]
+		if len(nodes) == 0 {
+			return nil
+		}
+		task := progress.Start(host.Name, "inspect", fmt.Sprintf("%d resource(s)", len(nodes)), "")
+		hostPlans, err := planner.PlanHost(ctx, host, nodes, priorsByHost[host.Name])
+		if err != nil {
+			task.Done(err)
+			return err
+		}
+		task.Done(nil)
+		mu.Lock()
+		for address, plan := range hostPlans {
+			plans[address] = plan
+		}
+		mu.Unlock()
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return plans, nil
+}
+
+type heldLock struct {
+	host ir.HostSpec
+	lock Lock
+}
+
+func (e Engine) lockHosts(ctx context.Context, hosts []ir.HostSpec, opts Options, progress *progressLogger) ([]heldLock, error) {
+	locks := make([]heldLock, 0, len(hosts))
+	var mu sync.Mutex
+	err := runHosts(ctx, hosts, len(hosts), func(ctx context.Context, host ir.HostSpec) error {
+		task := progress.Start(host.Name, "lock state", "", "")
+		lock, err := e.Backend.Lock(ctx, host, opts.LockTimeout)
+		if err != nil {
+			task.Done(err)
+			return err
+		}
+		task.Done(nil)
+		mu.Lock()
+		locks = append(locks, heldLock{host: host, lock: lock})
+		mu.Unlock()
+		return nil
+	})
+	if err != nil {
+		unlockHosts(ctx, locks)
+		return nil, err
+	}
+	return locks, nil
+}
+
+func unlockHosts(ctx context.Context, locks []heldLock) error {
+	var firstErr error
+	for i := len(locks) - 1; i >= 0; i-- {
+		if err := locks[i].lock.Unlock(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func runHosts(ctx context.Context, hosts []ir.HostSpec, parallel int, fn func(context.Context, ir.HostSpec) error) error {
+	if len(hosts) == 0 {
+		return nil
+	}
+	if parallel < 1 {
+		parallel = len(hosts)
+	}
+	if parallel > len(hosts) {
+		parallel = len(hosts)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	hostCh := make(chan ir.HostSpec)
+	errCh := make(chan error, len(hosts))
+	var wg sync.WaitGroup
+	for i := 0; i < parallel; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for host := range hostCh {
+				if err := fn(ctx, host); err != nil {
+					errCh <- err
+					cancel()
+				}
+			}
+		}()
+	}
+sendHosts:
+	for _, host := range hosts {
+		select {
+		case <-ctx.Done():
+			break sendHosts
+		case hostCh <- host:
+		}
+	}
+	close(hostCh)
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (e Engine) now() time.Time {

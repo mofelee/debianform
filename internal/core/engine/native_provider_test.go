@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/mofelee/debianform/internal/core/graph"
@@ -20,6 +22,37 @@ type recordingRunner struct {
 	errors  []error
 	scripts []string
 	inputs  []string
+}
+
+type countingLocalRunner struct {
+	mu      sync.Mutex
+	scripts []string
+}
+
+func (r *countingLocalRunner) Run(ctx context.Context, host, script string) (Result, error) {
+	r.mu.Lock()
+	r.scripts = append(r.scripts, script)
+	r.mu.Unlock()
+	cmd := exec.CommandContext(ctx, "sh", "-s")
+	cmd.Stdin = strings.NewReader(script)
+	var stdout strings.Builder
+	var stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	result := Result{Stdout: stdout.String(), Stderr: stderr.String()}
+	if err != nil {
+		return result, fmt.Errorf("local shell failed: %w: %s", err, strings.TrimSpace(result.Stderr))
+	}
+	return result, nil
+}
+
+func (r *countingLocalRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (Result, error) {
+	return Result{}, fmt.Errorf("unexpected RunInput")
+}
+
+func (r *countingLocalRunner) RunCommand(ctx context.Context, host, remoteCommand string) (Result, error) {
+	return r.Run(ctx, host, remoteCommand+"\n")
 }
 
 func (r *recordingRunner) Run(ctx context.Context, host, script string) (Result, error) {
@@ -147,6 +180,68 @@ func TestNativeProviderObservedModeUsesFourDigitDisplay(t *testing.T) {
 	if got.Observed["mode"] != "0640" {
 		t.Fatalf("observed mode = %#v, want 0640", got.Observed["mode"])
 	}
+}
+
+func TestNativeProviderPlanHostBulkInspectsMultipleFilesWithOneRun(t *testing.T) {
+	dir := t.TempDir()
+	fileA := filepath.Join(dir, "a.txt")
+	fileB := filepath.Join(dir, "b.txt")
+	if err := os.WriteFile(fileA, []byte("a"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fileB, []byte("b"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	owner, group := currentUserAndGroup(t)
+	nodes := []graph.Node{
+		{
+			Address: `host.server1.files.file["a"]`,
+			Host:    "server1",
+			Kind:    "file",
+			Desired: map[string]any{"path": fileA, "content": "a", "owner": owner, "group": group, "mode": "0644"},
+		},
+		{
+			Address: `host.server1.files.file["b"]`,
+			Host:    "server1",
+			Kind:    "file",
+			Desired: map[string]any{"path": fileB, "content": "new", "owner": owner, "group": group, "mode": "0644"},
+		},
+	}
+	runner := &countingLocalRunner{}
+	provider := NewNativeProvider(runner)
+
+	plans, err := provider.PlanHost(context.Background(), testBackendHost(t), nodes, map[string]*corestate.Resource{
+		nodes[0].Address: {Ownership: "managed", DesiredDigest: corestate.DesiredDigest(nodes[0].Desired)},
+		nodes[1].Address: {Ownership: "managed", DesiredDigest: corestate.DesiredDigest(nodes[1].Desired)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 1 {
+		t.Fatalf("runner calls = %d, want one bulk call", len(runner.scripts))
+	}
+	if !strings.Contains(runner.scripts[0], bulkPlanPrefix) {
+		t.Fatalf("bulk script missing protocol marker:\n%s", runner.scripts[0])
+	}
+	if plans[nodes[0].Address].Action != ActionNoOp {
+		t.Fatalf("file a action = %q, want no-op; observed=%#v", plans[nodes[0].Address].Action, plans[nodes[0].Address].Observed)
+	}
+	if plans[nodes[1].Address].Action != ActionUpdate {
+		t.Fatalf("file b action = %q, want update; observed=%#v", plans[nodes[1].Address].Action, plans[nodes[1].Address].Observed)
+	}
+}
+
+func currentUserAndGroup(t *testing.T) (string, string) {
+	t.Helper()
+	owner, err := exec.Command("id", "-un").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	group, err := exec.Command("id", "-gn").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(owner)), strings.TrimSpace(string(group))
 }
 
 func TestNativeProviderWriteOnlyFileApplyUsesProviderPayload(t *testing.T) {
@@ -503,13 +598,13 @@ func TestNativeProviderPackageInstallRefreshesMissingAPTCache(t *testing.T) {
 			"ensure": "present",
 		},
 	}
-	runner := &recordingRunner{}
+	runner := &recordingRunner{outputs: []Result{{Stdout: ""}, {Stdout: "package\tnftables\n"}}}
 	provider := NewNativeProvider(runner)
 
 	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
 		t.Fatal(err)
 	}
-	applied := runner.scripts[len(runner.scripts)-1]
+	applied := runner.scripts[0]
 	for _, want := range []string{
 		"apt-cache policy 'nftables'",
 		"apt-get update",
@@ -524,6 +619,113 @@ func TestNativeProviderPackageInstallRefreshesMissingAPTCache(t *testing.T) {
 	}
 }
 
+func TestNativeProviderPackagePlanUsesInstalledProviderForVirtualPackage(t *testing.T) {
+	node := graph.Node{
+		Address: `host.server1.packages.install["dnsutils"]`,
+		Host:    "server1",
+		Kind:    "package",
+		Desired: map[string]any{
+			"name":   "dnsutils",
+			"ensure": "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "provider\tbind9-dnsutils\n"}}}
+	provider := NewNativeProvider(runner)
+	prior := &corestate.Resource{Ownership: "managed", DesiredDigest: corestate.DesiredDigest(node.Desired)}
+
+	got, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionNoOp {
+		t.Fatalf("virtual package action = %q, want no-op; observed=%#v", got.Action, got.Observed)
+	}
+	if got.Observed["installed"] != true || got.Observed["package"] != "bind9-dnsutils" || got.Observed["virtual"] != true {
+		t.Fatalf("virtual package observed = %#v, want installed provider", got.Observed)
+	}
+	if !strings.Contains(got.Summary, "provided by bind9-dnsutils") {
+		t.Fatalf("virtual package summary = %q, want provider detail", got.Summary)
+	}
+	if !strings.Contains(runner.scripts[0], "${Provides}") {
+		t.Fatalf("package detection should inspect Provides:\n%s", runner.scripts[0])
+	}
+}
+
+func TestNativeProviderPackagePlanCreatesWhenNeitherPackageNorProviderInstalled(t *testing.T) {
+	node := graph.Node{
+		Address: `host.server1.packages.install["dnsutils"]`,
+		Host:    "server1",
+		Kind:    "package",
+		Desired: map[string]any{
+			"name":   "dnsutils",
+			"ensure": "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: ""}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing virtual package action = %q, want create; observed=%#v", got.Action, got.Observed)
+	}
+	if got.Observed["installed"] != false {
+		t.Fatalf("missing virtual package observed = %#v, want installed=false", got.Observed)
+	}
+}
+
+func TestNativeProviderPackageAbsentDoesNotRemoveVirtualProvider(t *testing.T) {
+	node := graph.Node{
+		Address: `host.server1.packages.install["dnsutils"]`,
+		Host:    "server1",
+		Kind:    "package",
+		Desired: map[string]any{
+			"name":   "dnsutils",
+			"ensure": "absent",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "provider\tbind9-dnsutils\n"}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionNoOp {
+		t.Fatalf("absent virtual package action = %q, want no-op; observed=%#v", got.Action, got.Observed)
+	}
+	if got.Observed["installed"] != false || got.Observed["satisfied_by"] != "bind9-dnsutils" {
+		t.Fatalf("absent virtual package observed = %#v, want absent with satisfied_by provider", got.Observed)
+	}
+}
+
+func TestNativeProviderPackageApplyRecordsVirtualProvider(t *testing.T) {
+	node := graph.Node{
+		Address: `host.server1.packages.install["dnsutils"]`,
+		Host:    "server1",
+		Kind:    "package",
+		Desired: map[string]any{
+			"name":   "dnsutils",
+			"ensure": "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: ""}, {Stdout: "provider\tbind9-dnsutils\n"}}}
+	provider := NewNativeProvider(runner)
+
+	observed, err := provider.Apply(context.Background(), Step{Address: node.Address, Node: node, Action: ActionCreate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observed["installed"] != true || observed["package"] != "bind9-dnsutils" || observed["virtual"] != true {
+		t.Fatalf("apply observed = %#v, want virtual provider", observed)
+	}
+	if observed["desired_digest"] != corestate.DesiredDigest(node.Desired) {
+		t.Fatalf("apply observed desired digest = %#v, want current digest", observed["desired_digest"])
+	}
+}
+
 func TestNativeProviderDockerPackageApplyScript(t *testing.T) {
 	node := graph.Node{
 		Address: `host.docker1.docker.package["docker-ce"]`,
@@ -535,7 +737,7 @@ func TestNativeProviderDockerPackageApplyScript(t *testing.T) {
 			"repositories": []string{"docker-official"},
 		},
 	}
-	runner := &recordingRunner{outputs: []Result{{Stdout: ""}}}
+	runner := &recordingRunner{outputs: []Result{{Stdout: ""}, {Stdout: ""}, {Stdout: "package\tdocker-ce\n"}}}
 	provider := NewNativeProvider(runner)
 
 	got, err := provider.Plan(context.Background(), node, nil)
@@ -548,7 +750,7 @@ func TestNativeProviderDockerPackageApplyScript(t *testing.T) {
 	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
 		t.Fatal(err)
 	}
-	applied := runner.scripts[len(runner.scripts)-1]
+	applied := runner.scripts[1]
 	for _, want := range []string{
 		"apt-cache policy 'docker-ce'",
 		"apt-get update",

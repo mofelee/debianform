@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,6 +25,24 @@ func TestDiscoverHostFacts(t *testing.T) {
 	}
 	if system.DetectedAt != "2026-06-20T12:00:00Z" {
 		t.Fatalf("detected_at = %q", system.DetectedAt)
+	}
+}
+
+func TestDiscoverProgramFactsRunsHostsInParallel(t *testing.T) {
+	runner := &concurrencyFactRunner{}
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}, {Name: "server2"}}}
+
+	facts, err := DiscoverProgramFacts(context.Background(), runner, program, func() time.Time {
+		return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(facts) != 2 {
+		t.Fatalf("facts = %#v, want 2 hosts", facts)
+	}
+	if runner.maxActive < 2 {
+		t.Fatalf("max concurrent discoveries = %d, want hosts in parallel", runner.maxActive)
 	}
 }
 
@@ -65,5 +84,41 @@ func (r factRunner) RunInput(ctx context.Context, host, remoteCommand string, in
 }
 
 func (r factRunner) RunCommand(ctx context.Context, host, remoteCommand string) (Result, error) {
+	return r.Run(ctx, host, remoteCommand)
+}
+
+type concurrencyFactRunner struct {
+	mu        sync.Mutex
+	active    int
+	maxActive int
+}
+
+func (r *concurrencyFactRunner) Run(ctx context.Context, host, script string) (Result, error) {
+	r.mu.Lock()
+	r.active++
+	if r.active > r.maxActive {
+		r.maxActive = r.active
+	}
+	r.mu.Unlock()
+
+	defer func() {
+		r.mu.Lock()
+		r.active--
+		r.mu.Unlock()
+	}()
+
+	select {
+	case <-time.After(100 * time.Millisecond):
+	case <-ctx.Done():
+		return Result{}, ctx.Err()
+	}
+	return Result{Stdout: "hostname=" + host + "\narchitecture=amd64\ncodename=trixie\n"}, nil
+}
+
+func (r *concurrencyFactRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (Result, error) {
+	return r.Run(ctx, host, remoteCommand)
+}
+
+func (r *concurrencyFactRunner) RunCommand(ctx context.Context, host, remoteCommand string) (Result, error) {
 	return r.Run(ctx, host, remoteCommand)
 }

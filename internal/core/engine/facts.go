@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mofelee/debianform/internal/core/ir"
@@ -25,15 +26,36 @@ func DiscoverProgramFactsWithProgressStyle(ctx context.Context, runner Runner, p
 		return facts, nil
 	}
 	progress := newProgressLoggerWithStyle(progressWriter, style)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(program.Hosts))
 	for _, host := range program.Hosts {
-		task := progress.Start(host.Name, "discover facts", "", "")
-		hostFacts, err := DiscoverHostFacts(ctx, runner, host, now)
+		host := host
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			task := progress.Start(host.Name, "discover facts", "", "")
+			hostFacts, err := DiscoverHostFacts(ctx, runner, host, now)
+			if err != nil {
+				task.Done(err)
+				errCh <- err
+				cancel()
+				return
+			}
+			task.Done(nil)
+			mu.Lock()
+			facts[host.Name] = hostFacts
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
 		if err != nil {
-			task.Done(err)
 			return nil, err
 		}
-		task.Done(nil)
-		facts[host.Name] = hostFacts
 	}
 	return facts, nil
 }

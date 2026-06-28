@@ -981,6 +981,27 @@ host "server1" {
 	}
 }
 
+func TestPlanReadsStateAndInspectsHostsInParallel(t *testing.T) {
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}, {Name: "server2"}}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{
+		fileNode("server1", "/tmp/server1", nil),
+		fileNode("server2", "/tmp/server2", nil),
+	}}
+	backend := &concurrencyBackend{Backend: NewMemoryBackend()}
+	provider := &hostPlanningConcurrencyProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	if _, err := engine.Plan(context.Background(), program, resourceGraph, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if backend.maxReadActive < 2 {
+		t.Fatalf("max concurrent state reads = %d, want cross-host reads in parallel", backend.maxReadActive)
+	}
+	if provider.maxPlanHostActive < 2 {
+		t.Fatalf("max concurrent host plans = %d, want cross-host inspect in parallel", provider.maxPlanHostActive)
+	}
+}
+
 func TestApplyHonorsDefaultPerHostSerialExecution(t *testing.T) {
 	program, resourceGraph := twoFileProgramAndGraph("server1")
 	provider := &concurrencyProvider{MemoryProvider: NewMemoryProvider()}
@@ -1458,4 +1479,74 @@ func (p *concurrencyProvider) Apply(ctx context.Context, step Step) (map[string]
 		return nil, ctx.Err()
 	}
 	return p.MemoryProvider.Apply(ctx, step)
+}
+
+type concurrencyBackend struct {
+	Backend       Backend
+	mu            sync.Mutex
+	active        int
+	maxReadActive int
+}
+
+func (b *concurrencyBackend) Read(ctx context.Context, host ir.HostSpec) (corestate.State, error) {
+	b.mu.Lock()
+	b.active++
+	if b.active > b.maxReadActive {
+		b.maxReadActive = b.active
+	}
+	b.mu.Unlock()
+
+	defer func() {
+		b.mu.Lock()
+		b.active--
+		b.mu.Unlock()
+	}()
+
+	select {
+	case <-time.After(100 * time.Millisecond):
+	case <-ctx.Done():
+		return corestate.State{}, ctx.Err()
+	}
+	return b.Backend.Read(ctx, host)
+}
+
+func (b *concurrencyBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) error {
+	return b.Backend.Write(ctx, host, st)
+}
+
+func (b *concurrencyBackend) Lock(ctx context.Context, host ir.HostSpec, timeout time.Duration) (Lock, error) {
+	return b.Backend.Lock(ctx, host, timeout)
+}
+
+type hostPlanningConcurrencyProvider struct {
+	*MemoryProvider
+	mu                sync.Mutex
+	active            int
+	maxPlanHostActive int
+}
+
+func (p *hostPlanningConcurrencyProvider) PlanHost(ctx context.Context, host ir.HostSpec, nodes []graph.Node, priors map[string]*corestate.Resource) (map[string]ProviderPlan, error) {
+	p.mu.Lock()
+	p.active++
+	if p.active > p.maxPlanHostActive {
+		p.maxPlanHostActive = p.active
+	}
+	p.mu.Unlock()
+
+	defer func() {
+		p.mu.Lock()
+		p.active--
+		p.mu.Unlock()
+	}()
+
+	select {
+	case <-time.After(100 * time.Millisecond):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	out := make(map[string]ProviderPlan, len(nodes))
+	for _, node := range nodes {
+		out[node.Address] = Compare(node, priors[node.Address], Observed{Exists: false})
+	}
+	return out, nil
 }

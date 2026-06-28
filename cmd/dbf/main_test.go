@@ -1410,6 +1410,26 @@ case "$input" in
   *"dpkg-query"*"docker.io"*"podman-docker"*"runc"*)
     exit 0
     ;;
+  *"target='docker-ce'"*)
+    printf 'package\tdocker-ce\n'
+    exit 0
+    ;;
+  *"target='docker-ce-cli'"*)
+    printf 'package\tdocker-ce-cli\n'
+    exit 0
+    ;;
+  *"target='containerd.io'"*)
+    printf 'package\tcontainerd.io\n'
+    exit 0
+    ;;
+  *"target='docker-buildx-plugin'"*)
+    printf 'package\tdocker-buildx-plugin\n'
+    exit 0
+    ;;
+  *"target='docker-compose-plugin'"*)
+    printf 'package\tdocker-compose-plugin\n'
+    exit 0
+    ;;
   *"dpkg-query"*"docker-ce"*|*"dpkg-query"*"docker-ce-cli"*|*"dpkg-query"*"containerd.io"*|*"dpkg-query"*"docker-buildx-plugin"*|*"dpkg-query"*"docker-compose-plugin"*)
     printf 'install ok installed\t1.0\n'
     exit 0
@@ -1461,6 +1481,26 @@ case "$input" in
     exit 0
     ;;
   *"dpkg-query"*"docker.io"*"podman-docker"*"runc"*)
+    exit 0
+    ;;
+  *"target='docker-ce'"*)
+    printf 'package\tdocker-ce\n'
+    exit 0
+    ;;
+  *"target='docker-ce-cli'"*)
+    printf 'package\tdocker-ce-cli\n'
+    exit 0
+    ;;
+  *"target='containerd.io'"*)
+    printf 'package\tcontainerd.io\n'
+    exit 0
+    ;;
+  *"target='docker-buildx-plugin'"*)
+    printf 'package\tdocker-buildx-plugin\n'
+    exit 0
+    ;;
+  *"target='docker-compose-plugin'"*)
+    printf 'package\tdocker-compose-plugin\n'
     exit 0
     ;;
   *"dpkg-query"*"docker-ce"*|*"dpkg-query"*"docker-ce-cli"*|*"dpkg-query"*"containerd.io"*|*"dpkg-query"*"docker-buildx-plugin"*|*"dpkg-query"*"docker-compose-plugin"*)
@@ -1545,6 +1585,26 @@ case "$input" in
     exit 0
     ;;
   *"dpkg-query"*"docker.io"*"podman-docker"*"runc"*)
+    exit 0
+    ;;
+  *"target='docker-ce'"*)
+    printf 'package\tdocker-ce\n'
+    exit 0
+    ;;
+  *"target='docker-ce-cli'"*)
+    printf 'package\tdocker-ce-cli\n'
+    exit 0
+    ;;
+  *"target='containerd.io'"*)
+    printf 'package\tcontainerd.io\n'
+    exit 0
+    ;;
+  *"target='docker-buildx-plugin'"*)
+    printf 'package\tdocker-buildx-plugin\n'
+    exit 0
+    ;;
+  *"target='docker-compose-plugin'"*)
+    printf 'package\tdocker-compose-plugin\n'
     exit 0
     ;;
   *"dpkg-query"*"docker-ce"*|*"dpkg-query"*"docker-ce-cli"*|*"dpkg-query"*"containerd.io"*|*"dpkg-query"*"docker-buildx-plugin"*|*"dpkg-query"*"docker-compose-plugin"*)
