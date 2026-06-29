@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -215,7 +216,7 @@ func TestSSHRunnerUsesNonInteractiveAuthOptions(t *testing.T) {
 }
 
 func TestSSHRunErrorIncludesTroubleshootingHint(t *testing.T) {
-	err := sshRunError("server1", Result{Stderr: "Permission denied (publickey)"}, fmt.Errorf("exit status 255"))
+	err := sshRunError("server1", Result{Stderr: "Permission denied (publickey)"}, commandExitError(t, 255))
 	if err == nil {
 		t.Fatal("sshRunError returned nil")
 	}
@@ -230,6 +231,40 @@ func TestSSHRunErrorIncludesTroubleshootingHint(t *testing.T) {
 			t.Fatalf("ssh error missing %q:\n%s", want, text)
 		}
 	}
+}
+
+func TestSSHRunErrorOmitsTroubleshootingHintForRemoteCommandFailure(t *testing.T) {
+	err := sshRunError("server1", Result{Stderr: "service failed"}, commandExitError(t, 1))
+	if err == nil {
+		t.Fatal("sshRunError returned nil")
+	}
+	text := err.Error()
+	for _, want := range []string{
+		"remote command on server1 failed",
+		"service failed",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("remote command error missing %q:\n%s", want, text)
+		}
+	}
+	for _, notWant := range []string{
+		"check root SSH key/agent",
+		"ProxyCommand/ProxyJump",
+		"non-interactive login",
+	} {
+		if strings.Contains(text, notWant) {
+			t.Fatalf("remote command error contains SSH troubleshooting hint %q:\n%s", notWant, text)
+		}
+	}
+}
+
+func commandExitError(t *testing.T, code int) error {
+	t.Helper()
+	err := exec.Command("sh", "-c", fmt.Sprintf("exit %d", code)).Run()
+	if err == nil {
+		t.Fatalf("command unexpectedly succeeded, want exit %d", code)
+	}
+	return err
 }
 
 func TestNonInteractiveSSHEnvWrapsChildSSH(t *testing.T) {

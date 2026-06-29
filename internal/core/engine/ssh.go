@@ -153,12 +153,16 @@ func sshCommandReachedRemote(err error) bool {
 	if err == nil {
 		return true
 	}
+	code, ok := sshExitCode(err)
+	return ok && code >= 0 && code != 255
+}
+
+func sshExitCode(err error) (int, bool) {
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		code := exitErr.ExitCode()
-		return code >= 0 && code != 255
+		return exitErr.ExitCode(), true
 	}
-	return false
+	return 0, false
 }
 
 func sshRunError(host string, result Result, err error) error {
@@ -166,6 +170,18 @@ func sshRunError(host string, result Result, err error) error {
 		return nil
 	}
 	stderr := strings.TrimSpace(result.Stderr)
+	if sshCommandReachedRemote(err) {
+		if stderr == "" {
+			return fmt.Errorf("remote command on %s failed: %w", host, err)
+		}
+		return fmt.Errorf("remote command on %s failed: %w: %s", host, err, stderr)
+	}
+	if code, ok := sshExitCode(err); !ok || code != 255 {
+		if stderr == "" {
+			return fmt.Errorf("ssh %s failed: %w", host, err)
+		}
+		return fmt.Errorf("ssh %s failed: %w: %s", host, err, stderr)
+	}
 	hint := "check root SSH key/agent, SSH config ProxyCommand/ProxyJump, jump host access, and non-interactive login"
 	if stderr == "" {
 		return fmt.Errorf("ssh %s failed: %w; hint: %s", host, err, hint)
