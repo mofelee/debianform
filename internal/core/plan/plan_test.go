@@ -1057,11 +1057,16 @@ func TestPrintTextShowsDeleteBehaviorDiagnostics(t *testing.T) {
 		"note: runtime sysctl value is not restored",
 		"will not: restore runtime values or guess system defaults.",
 		"Delete behavior legend:",
+		"  - remove-managed-artifact = removes DebianForm-managed persistent artifacts; it does not guarantee runtime state restoration.",
+		"  - unknown = the provider has not declared precise delete behavior; review conservatively.",
 		"docs/delete-behavior-diagnostics-plan.zh.md",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("delete behavior text missing %q:\n%s", want, rendered)
 		}
+	}
+	if strings.Contains(rendered, "Delete behavior legend: forget") {
+		t.Fatalf("delete behavior legend should be multiline:\n%s", rendered)
 	}
 
 	var noDelete bytes.Buffer
@@ -1107,7 +1112,7 @@ func TestPrintTextWithBackgroundColorShowsDeleteBehaviorMeaning(t *testing.T) {
 		"will do:",
 		"will not:",
 		"modify the remote server resource.",
-		"=removes only DebianForm state; it does not modify the remote server resource.",
+		" = removes only DebianForm state; it does not modify the remote server resource.",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rich delete behavior output missing %q:\n%s", want, rendered)

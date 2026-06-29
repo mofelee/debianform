@@ -452,7 +452,7 @@ func (r textRenderer) riskBadge(risk string) string {
 }
 
 func (r textRenderer) deleteBehaviorLegendEntry(behavior string) string {
-	return r.deleteBehaviorBadge(behavior, behavior) + "=" + deleteBehaviorMeaning(behavior)
+	return r.deleteBehaviorBadge(behavior, behavior) + " = " + deleteBehaviorMeaning(behavior)
 }
 
 func (r textRenderer) printDeleteBehaviorLegend() {
@@ -464,7 +464,11 @@ func (r textRenderer) printDeleteBehaviorLegend() {
 		r.deleteBehaviorLegendEntry("external-side-effect"),
 		r.deleteBehaviorLegendEntry("unknown"),
 	}
-	fmt.Fprintf(r.w, "Delete behavior legend: %s. See docs/delete-behavior-diagnostics-plan.zh.md.\n", strings.Join(entries, "; "))
+	fmt.Fprintln(r.w, "Delete behavior legend:")
+	for _, entry := range entries {
+		fmt.Fprintf(r.w, "  - %s\n", entry)
+	}
+	fmt.Fprintln(r.w, "See docs/delete-behavior-diagnostics-plan.zh.md.")
 }
 
 func deleteBehaviorMeaning(behavior string) string {
