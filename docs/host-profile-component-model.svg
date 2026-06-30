@@ -1,67 +1,132 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="980" height="420" viewBox="0 0 980 420" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="640" viewBox="0 0 1120 640" role="img" aria-labelledby="title desc">
   <title id="title">DebianForm host profile component model</title>
-  <desc id="desc">Profiles provide reusable base configuration, components provide parameterized deploy units, and hosts are the final execution units for plan apply and check.</desc>
+  <desc id="desc">Variables and locals feed reusable profiles and components. Profiles are imported and merged into hosts, components are mounted with inputs and instantiated inside hosts, and only hosts compile to HostSpec, ResourceGraph, plan, apply, and check execution.</desc>
   <defs>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3f5669"/>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#0f766e"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#b45309"/>
+    </marker>
+    <marker id="arrow-slate" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#475569"/>
     </marker>
     <style>
-      .bg { fill: #f8fafc; }
-      .panel { fill: #ffffff; stroke: #c9d5df; stroke-width: 2; rx: 8; }
-      .host { fill: #fff7ed; stroke: #d97706; }
-      .profile { fill: #ecfeff; stroke: #0891b2; }
-      .component { fill: #f0fdf4; stroke: #16a34a; }
-      .output { fill: #f5f3ff; stroke: #7c3aed; }
-      .title { font: 700 20px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #17212b; }
-      .label { font: 700 18px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #17212b; }
-      .text { font: 15px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #324454; }
-      .small { font: 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #526576; }
-      .code { font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #17212b; }
-      .arrow { stroke: #3f5669; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
-      .dashed { stroke-dasharray: 8 6; }
+      .page { fill: #f8fafc; }
+      .band { fill: #eef6f9; stroke: #cbd5e1; stroke-width: 1.5; rx: 10; }
+      .section-title { font: 700 16px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .title { font: 700 26px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .subtitle { font: 16px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
+      .card { fill: #ffffff; stroke-width: 2; rx: 8; }
+      .input { stroke: #64748b; }
+      .profile { stroke: #2563eb; fill: #eff6ff; }
+      .component { stroke: #0f766e; fill: #ecfdf5; }
+      .host { stroke: #b45309; fill: #fff7ed; }
+      .runtime { stroke: #7c3aed; fill: #f5f3ff; }
+      .label { font: 700 20px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .subhead { font: 700 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .body { font: 15px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .small { font: 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; }
+      .code { font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #0f172a; }
+      .badge-text { font: 700 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #ffffff; }
+      .blue-line { stroke: #2563eb; stroke-width: 3; fill: none; marker-end: url(#arrow-blue); }
+      .teal-line { stroke: #0f766e; stroke-width: 3; fill: none; marker-end: url(#arrow-teal); }
+      .amber-line { stroke: #b45309; stroke-width: 3; fill: none; marker-end: url(#arrow-amber); }
+      .slate-line { stroke: #475569; stroke-width: 2.5; fill: none; marker-end: url(#arrow-slate); }
+      .soft-line { stroke: #94a3b8; stroke-width: 2; fill: none; stroke-dasharray: 7 7; marker-end: url(#arrow-slate); }
+      .dash { stroke-dasharray: 8 7; }
+      .note { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 7; }
     </style>
   </defs>
 
-  <rect class="bg" x="0" y="0" width="980" height="420"/>
-  <text class="title" x="40" y="44">DebianForm 配置模型</text>
-  <text class="small" x="40" y="68">profile 提供基础配置，component 提供可传参部署单元，host 是最终执行边界。</text>
+  <rect class="page" x="0" y="0" width="1120" height="640"/>
 
-  <rect class="panel profile" x="50" y="110" width="250" height="110" rx="8"/>
-  <text class="label" x="78" y="145">profile</text>
-  <text class="text" x="78" y="174">不可传参的基础配置片段</text>
-  <text class="small" x="78" y="198">imports 先合并，host 后覆盖</text>
+  <text class="title" x="44" y="48">DebianForm 配置模型</text>
+  <text class="subtitle" x="44" y="76">复用定义本身不会执行；它们被合并或实例化到每台 host，最终由 host 生成资源图并执行。</text>
 
-  <rect class="panel component" x="50" y="260" width="250" height="115" rx="8"/>
-  <text class="label" x="78" y="295">component</text>
-  <text class="text" x="78" y="324">可传参的复用部署单元</text>
-  <text class="small" x="78" y="348">input + resources + artifact</text>
+  <rect class="band" x="34" y="106" width="290" height="458" rx="10"/>
+  <text class="section-title" x="54" y="136">全局输入与复用定义</text>
 
-  <rect class="panel host" x="395" y="130" width="260" height="210" rx="8"/>
-  <text class="label" x="423" y="166">host</text>
-  <text class="text" x="423" y="197">最终执行单元</text>
-  <text class="small" x="423" y="225">组合 profile 和 component</text>
-  <text class="small" x="423" y="250">拥有 SSH / state / lock</text>
-  <text class="small" x="423" y="275">生成最终 HostSpec</text>
-  <text class="code" x="423" y="308">host "app1" { ... }</text>
+  <rect class="card input" x="58" y="158" width="242" height="82" rx="8"/>
+  <text class="label" x="80" y="190">locals / variable</text>
+  <text class="body" x="80" y="216">表达式输入、环境参数</text>
+  <text class="small" x="80" y="235">可被 profile / component / host 引用</text>
 
-  <rect class="panel output" x="755" y="148" width="175" height="168" rx="8"/>
-  <text class="label" x="786" y="185">执行</text>
-  <text class="text" x="786" y="216">plan</text>
-  <text class="text" x="786" y="245">apply</text>
-  <text class="text" x="786" y="274">check</text>
+  <rect class="card profile" x="58" y="276" width="242" height="122" rx="8"/>
+  <rect x="80" y="296" width="60" height="22" rx="5" fill="#2563eb"/>
+  <text class="badge-text" x="92" y="312">merge</text>
+  <text class="label" x="80" y="346">profile</text>
+  <text class="body" x="80" y="372">不可传参的基础配置片段</text>
+  <text class="small" x="80" y="393">import 顺序在前，当前 block 后覆盖</text>
+  <text class="small" x="80" y="413">不会独立 plan / apply / check</text>
 
-  <path class="arrow" d="M 300 165 C 340 165 350 192 392 206"/>
-  <text class="small" x="323" y="154">import</text>
+  <rect class="card component" x="58" y="436" width="242" height="120" rx="8"/>
+  <rect x="80" y="456" width="72" height="22" rx="5" fill="#0f766e"/>
+  <text class="badge-text" x="92" y="472">template</text>
+  <text class="label" x="80" y="506">component</text>
+  <text class="body" x="80" y="532">可传参的部署模板</text>
+  <text class="small" x="80" y="553">被 host 挂载后才展开资源</text>
 
-  <path class="arrow" d="M 300 318 C 342 318 352 281 392 268"/>
-  <text class="small" x="322" y="337">mount + inputs</text>
+  <rect class="band" x="388" y="106" width="344" height="458" rx="10"/>
+  <text class="section-title" x="408" y="136">每台 host 的编译边界</text>
 
-  <path class="arrow" d="M 655 235 C 696 235 711 232 752 232"/>
-  <text class="small" x="681" y="220">ResourceGraph</text>
+  <rect class="card host" x="420" y="166" width="280" height="292" rx="8"/>
+  <text class="label" x="448" y="202">host &quot;app1&quot;</text>
+  <text class="body" x="448" y="232">最终执行单元</text>
 
-  <path class="arrow dashed" d="M 525 340 C 525 376 292 392 175 376"/>
-  <text class="small" x="326" y="391">component 不独立执行</text>
+  <rect class="note" x="448" y="254" width="224" height="48" rx="7"/>
+  <text class="subhead" x="464" y="276">1. 合并 profile</text>
+  <text class="small" x="464" y="294">map 合并，list 追加，标量覆盖</text>
 
-  <path class="arrow dashed" d="M 525 130 C 525 92 292 84 175 110"/>
-  <text class="small" x="330" y="96">profile 不独立执行</text>
+  <rect class="note" x="448" y="318" width="224" height="54" rx="7"/>
+  <text class="subhead" x="464" y="341">2. 挂载 component</text>
+  <text class="small" x="464" y="359">传入 typed inputs，按 target 展开</text>
+
+  <rect class="note" x="448" y="388" width="224" height="44" rx="7"/>
+  <text class="subhead" x="464" y="410">3. 得到 HostSpec</text>
+  <text class="small" x="464" y="428">包含 host 资源和 component 资源</text>
+
+  <text class="small" x="446" y="486">每台 host 拥有自己的 SSH、facts、state 和 lock。</text>
+  <text class="code" x="446" y="512">host.app1.components.web...</text>
+
+  <rect class="band" x="788" y="106" width="296" height="458" rx="10"/>
+  <text class="section-title" x="808" y="136">生成计划与执行</text>
+
+  <rect class="card runtime" x="820" y="170" width="232" height="70" rx="8"/>
+  <text class="label" x="846" y="202">ResourceGraph</text>
+  <text class="small" x="846" y="224">资源节点 + 依赖</text>
+  <text class="small" x="946" y="224">operation 触发</text>
+
+  <rect class="card runtime" x="820" y="282" width="232" height="112" rx="8"/>
+  <text class="label" x="846" y="316">plan / check</text>
+  <text class="body" x="846" y="345">读取 state 和 observed 状态</text>
+  <text class="small" x="846" y="369">计算 create / update / delete / no-op</text>
+
+  <rect class="card runtime" x="820" y="436" width="232" height="78" rx="8"/>
+  <text class="label" x="846" y="470">apply</text>
+  <text class="body" x="846" y="496">持锁后按依赖执行并写回 state</text>
+
+  <path class="soft-line" d="M 300 199 C 342 199 356 204 400 214"/>
+  <text class="small" x="318" y="188">表达式引用</text>
+
+  <path class="blue-line" d="M 300 332 C 350 332 366 291 420 278"/>
+  <text class="small" x="325" y="322" fill="#2563eb">imports</text>
+  <text class="small" x="319" y="341" fill="#2563eb">先合并，再由 host 覆盖</text>
+
+  <path class="teal-line" d="M 300 496 C 352 496 366 353 420 348"/>
+  <text class="small" x="314" y="482" fill="#0f766e">mount + inputs</text>
+  <text class="small" x="314" y="501" fill="#0f766e">实例化为 host 内资源</text>
+
+  <path class="amber-line" d="M 700 310 C 744 310 764 220 820 205"/>
+  <text class="small" x="731" y="286" fill="#b45309">HostSpec</text>
+
+  <path class="slate-line" d="M 936 240 L 936 280"/>
+  <path class="slate-line" d="M 936 394 L 936 434"/>
+
+  <rect class="note" x="408" y="532" width="304" height="52" rx="7"/>
+  <text class="small" x="430" y="556">script / on_change 属于 component 内部生命周期，</text>
+  <text class="small" x="430" y="575">由资源变化触发为 operation。</text>
 </svg>
