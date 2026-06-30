@@ -493,6 +493,7 @@ type ComponentScriptSpec struct {
 	Mode        string     `json:"mode"`
 	Body        string     `json:"body,omitempty"`
 	Interpreter []string   `json:"interpreter,omitempty"`
+	Outputs     []string   `json:"outputs,omitempty"`
 	Run         string     `json:"run,omitempty"`
 	Content     string     `json:"content,omitempty"`
 	Commands    [][]string `json:"commands,omitempty"`

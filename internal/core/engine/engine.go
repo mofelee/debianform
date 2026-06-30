@@ -42,7 +42,7 @@ type Provider interface {
 	Plan(ctx context.Context, node graph.Node, prior *corestate.Resource) (ProviderPlan, error)
 	Apply(ctx context.Context, step Step) (map[string]any, error)
 	Destroy(ctx context.Context, step Step) error
-	RunOperation(ctx context.Context, operation graph.Operation) error
+	RunOperation(ctx context.Context, operation graph.Operation) (OperationResult, error)
 }
 
 type HostPlanner interface {
@@ -106,6 +106,10 @@ type OperationStep struct {
 	Operation        graph.Operation
 	TriggerAddresses []string
 	TriggerPaths     []string
+}
+
+type OperationResult struct {
+	Outputs map[string]map[string]any
 }
 
 func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
@@ -822,7 +826,8 @@ func orphanSteps(states map[string]corestate.State, desired map[string]graph.Nod
 }
 
 func forgetOrphan(prior corestate.Resource) bool {
-	return prior.Kind == "apt_source_file" && stringMapValue(prior.Desired, "on_destroy") == "keep"
+	return prior.Kind == "component_script_output" ||
+		prior.Kind == "apt_source_file" && stringMapValue(prior.Desired, "on_destroy") == "keep"
 }
 
 func desiredStillManagesOrphan(host string, prior corestate.Resource, desired map[string]graph.Node) bool {
@@ -1309,15 +1314,99 @@ func (e Engine) executeItem(ctx context.Context, hosts map[string]ir.HostSpec, s
 	case "operation":
 		operation := operationWithStepContext(item.operation)
 		task := progress.Start(item.host, "run", item.address, operation.Summary)
-		err := e.Provider.RunOperation(ctx, operation)
+		result, err := e.Provider.RunOperation(ctx, operation)
 		task.Done(err)
 		if err != nil {
+			return fmt.Errorf("%s failed: %w", item.address, err)
+		}
+		if err := e.recordOperationOutputs(ctx, hosts, states, statesLock, stateLocks, item.operation, result); err != nil {
 			return fmt.Errorf("%s failed: %w", item.address, err)
 		}
 		return nil
 	default:
 		return fmt.Errorf("%s has unsupported execution item kind %q", item.address, item.kind)
 	}
+}
+
+func (e Engine) recordOperationOutputs(ctx context.Context, hosts map[string]ir.HostSpec, states map[string]corestate.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, step OperationStep, result OperationResult) error {
+	if len(result.Outputs) == 0 {
+		return nil
+	}
+	hostName := hostFromAddress(step.Operation.Address)
+	host, ok := hosts[hostName]
+	if !ok {
+		return fmt.Errorf("%s references unknown host %q", step.Address, hostName)
+	}
+	now := e.now().UTC().Format(time.RFC3339)
+	lock := stateLocks[host.Name]
+	lock.Lock()
+	defer lock.Unlock()
+
+	statesLock.Lock()
+	st := states[host.Name]
+	statesLock.Unlock()
+	for address, observed := range result.Outputs {
+		if observed == nil {
+			observed = map[string]any{}
+		}
+		node, ok := scriptOutputNodeForOperation(step.Operation, address)
+		if !ok {
+			node = graph.Node{
+				Host:            host.Name,
+				Address:         address,
+				Kind:            "component_script_output",
+				Desired:         map[string]any{"path": stringMapValue(observed, "path")},
+				ProviderType:    "component_script_output",
+				ProviderAddress: "component_script_output." + address,
+			}
+		}
+		st.Resources[address] = resourceStateForStep(Step{
+			Address:   address,
+			Host:      host.Name,
+			Action:    ActionUpdate,
+			Node:      node,
+			Observed:  observed,
+			Ownership: "managed",
+		}, observed, now)
+	}
+	if err := e.Backend.Write(ctx, host, st); err != nil {
+		return err
+	}
+	statesLock.Lock()
+	states[host.Name] = st
+	statesLock.Unlock()
+	return nil
+}
+
+func scriptOutputNodeForOperation(operation graph.Operation, address string) (graph.Node, bool) {
+	payload := operation.ScriptPayload
+	if payload == nil {
+		return graph.Node{}, false
+	}
+	for _, output := range payload.Outputs {
+		if output.Address != address {
+			continue
+		}
+		desired := map[string]any{
+			"path":      output.Path,
+			"component": payload.ComponentName,
+			"script":    payload.Name,
+		}
+		if output.ScriptDigest != "" {
+			desired["script_digest"] = output.ScriptDigest
+		}
+		hostName := hostFromAddress(operation.Address)
+		return graph.Node{
+			Host:            hostName,
+			Address:         address,
+			Kind:            "component_script_output",
+			Source:          operation.Source,
+			Desired:         desired,
+			ProviderType:    "component_script_output",
+			ProviderAddress: output.ProviderAddress,
+		}, true
+	}
+	return graph.Node{}, false
 }
 
 func operationWithStepContext(step OperationStep) graph.Operation {
@@ -1364,6 +1453,9 @@ func (e Engine) executeResourceStep(ctx context.Context, hosts map[string]ir.Hos
 	statesLock.Unlock()
 	switch step.Action {
 	case ActionCreate, ActionUpdate:
+		if step.Node.Kind == "component_script_output" {
+			return nil
+		}
 		if observed == nil {
 			observed = step.Observed
 		}

@@ -4,8 +4,9 @@ component "managed_app" {
   }
 
   script "reload" {
-    mode = "once"
-    run  = "systemctl reload ${input.service_name}.service"
+    mode    = "once"
+    outputs = ["/etc/managed-app/rendered.env"]
+    run     = "cp /etc/managed-app/config.env /etc/managed-app/rendered.env && systemctl reload ${input.service_name}.service"
   }
 
   files {

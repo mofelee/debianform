@@ -29,6 +29,7 @@ func (s ComponentScriptSpec) MarshalJSON() ([]byte, error) {
 	out := componentScriptSpecJSON(s)
 	if s.Sensitive {
 		out.Interpreter = nil
+		out.Outputs = nil
 		out.Run = ""
 		out.Content = ""
 		out.Commands = nil

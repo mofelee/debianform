@@ -601,7 +601,8 @@ component "managed_app" {
   script "reload" {
     mode        = "once"
     interpreter = ["/bin/sh", "-eu"]
-    run         = "systemctl reload ${input.service_name}.service"
+    outputs     = ["/etc/managed-app/rendered.env"]
+    run         = "cp /etc/managed-app/config.env /etc/managed-app/rendered.env && systemctl reload ${input.service_name}.service"
   }
 
   files {
@@ -629,6 +630,7 @@ host "app1" {
 | --- | --- | --- | --- |
 | `mode` | 否 | `"once"` | `"once"` 或 `"each"`。 |
 | `interpreter` | 否 | `["/bin/sh", "-eu"]` | 非空 string list。 |
+| `outputs` | 否 | `[]` | 脚本生成的普通文件路径列表；必须是绝对路径。 |
 | `run` | 三选一 | 无 | 单条脚本命令字符串。 |
 | `content` | 三选一 | 无 | 多行脚本文本。 |
 | `commands` | 三选一 | 无 | 命令矩阵，例如 `[["systemctl", "reload", "app.service"]]`。 |
@@ -638,8 +640,12 @@ host "app1" {
 `script`，也不能使用 `files.file.on_change`。
 
 当前实现范围是 DSL 解析、validate、HostSpec 编译、ResourceGraph/plan operation 展示、
-apply 脚本执行、`once` / `each` 触发语义和运行时触发上下文。完整脚本内容作为内部执行载荷
-传给 provider，不会出现在 plan text/json/html 中。
+apply 脚本执行、`once` / `each` 触发语义、运行时触发上下文，以及 `outputs` 文件漂移检测。
+完整脚本内容作为内部执行载荷传给 provider，不会出现在 plan text/json/html 中。
+
+声明 `outputs` 后，apply 会在脚本执行完成后记录输出文件 hash；后续 check/plan 会在输出缺失、
+变成目录、hash 漂移或脚本声明变化时重新触发该 script。`outputs` 只声明脚本副作用的检查边界，
+不会让 DebianForm 直接写入或删除这些输出文件。
 
 `mode = "once"` 时，同一轮 apply 中同一个 script 被多个实际变更文件触发也只运行一次。
 `mode = "each"` 时，每个实际变更文件各运行一次；online plan 会为每个触发源显示唯一的

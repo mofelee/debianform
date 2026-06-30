@@ -523,8 +523,8 @@ func TestComponentScriptOnChangePlanGoldens(t *testing.T) {
 	PrintText(&text, doc)
 	assertGolden(t, "../testdata/plan/component-script-on-change.golden.txt", text.String())
 
-	if doc.Summary.Create != 1 {
-		t.Fatalf("create count = %d, want 1", doc.Summary.Create)
+	if doc.Summary.Create != 2 {
+		t.Fatalf("create count = %d, want 2", doc.Summary.Create)
 	}
 	if doc.Summary.Operations != 1 {
 		t.Fatalf("operations = %d, want 1", doc.Summary.Operations)

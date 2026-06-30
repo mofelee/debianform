@@ -314,6 +314,22 @@ func componentScriptSpec(script parser.ComponentScript) (ir.ComponentScriptSpec,
 		}
 		interpreter = append([]string(nil), script.Interpreter...)
 	}
+	outputs := append([]string(nil), script.Outputs...)
+	if script.OutputsSet {
+		if len(outputs) == 0 {
+			return ir.ComponentScriptSpec{}, fmt.Errorf("%s:%d:%s: script outputs must contain at least one path", script.OutputsSource.File, script.OutputsSource.Line, script.OutputsSource.Path)
+		}
+		seen := map[string]struct{}{}
+		for i, path := range outputs {
+			if path == "" || !filepath.IsAbs(path) {
+				return ir.ComponentScriptSpec{}, fmt.Errorf("%s:%d:%s[%d]: script output path must be absolute and non-empty", script.OutputsSource.File, script.OutputsSource.Line, script.OutputsSource.Path, i)
+			}
+			if _, ok := seen[path]; ok {
+				return ir.ComponentScriptSpec{}, fmt.Errorf("%s:%d:%s[%d]: duplicate script output path %q", script.OutputsSource.File, script.OutputsSource.Line, script.OutputsSource.Path, i, path)
+			}
+			seen[path] = struct{}{}
+		}
+	}
 	commands := cloneCommandMatrix(script.Commands)
 	if script.CommandsSet {
 		if len(commands) == 0 {
@@ -335,6 +351,7 @@ func componentScriptSpec(script parser.ComponentScript) (ir.ComponentScriptSpec,
 		Mode:        mode,
 		Body:        componentScriptBody(script),
 		Interpreter: interpreter,
+		Outputs:     outputs,
 		Run:         script.Run,
 		Content:     script.Content,
 		Commands:    commands,

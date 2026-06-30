@@ -1685,7 +1685,8 @@ component "app" {
   }
 
   script "reload" {
-    run = "systemctl reload ${input.service_name}.service"
+    outputs = ["/etc/app.rendered"]
+    run     = "systemctl reload ${input.service_name}.service"
   }
 
   script "reindex" {
@@ -1723,6 +1724,9 @@ host "app1" {
 	}
 	if reload.Run != "systemctl reload app.service" {
 		t.Fatalf("reload run = %q", reload.Run)
+	}
+	if !reflect.DeepEqual(reload.Outputs, []string{"/etc/app.rendered"}) {
+		t.Fatalf("reload outputs = %#v", reload.Outputs)
 	}
 	reindex := component.Scripts["reindex"]
 	if reindex.Mode != "each" || !reflect.DeepEqual(reindex.Interpreter, []string{"/bin/bash", "-e"}) {
@@ -1888,6 +1892,22 @@ host "app1" {
 }
 `,
 			want: `script interpreter must be a non-empty string list`,
+		},
+		{
+			name: "relative output",
+			hcl: `
+component "app" {
+  script "render" {
+    outputs = ["tmp/app.conf"]
+    run     = "cp input output"
+  }
+}
+
+host "app1" {
+  components = [component.app]
+}
+`,
+			want: `script output path must be absolute and non-empty`,
 		},
 		{
 			name: "empty command list",

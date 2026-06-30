@@ -2,7 +2,7 @@
   "name": "app1",
   "source": {
     "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-    "line": 24,
+    "line": 25,
     "path": "host.app1"
   },
   "facts": {
@@ -14,7 +14,7 @@
     "user": "root",
     "source": {
       "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-      "line": 24,
+      "line": 25,
       "path": "host.app1"
     }
   },
@@ -23,7 +23,7 @@
     "lock_path": "/var/lock/debianform/state/app1.lock",
     "source": {
       "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-      "line": 24,
+      "line": 25,
       "path": "host.app1"
     }
   },
@@ -33,7 +33,7 @@
     "codename": "trixie",
     "source": {
       "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-      "line": 25,
+      "line": 26,
       "path": "host.app1.system"
     }
   },
@@ -86,7 +86,10 @@
             "/bin/sh",
             "-eu"
           ],
-          "run": "systemctl reload managed-app.service",
+          "outputs": [
+            "/etc/managed-app/rendered.env"
+          ],
+          "run": "cp /etc/managed-app/config.env /etc/managed-app/rendered.env \u0026\u0026 systemctl reload managed-app.service",
           "source": {
             "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
             "line": 6,
@@ -116,19 +119,19 @@
             },
             "on_change_source": {
               "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-              "line": 19,
+              "line": 20,
               "path": "component.managed_app.files.file[\"/etc/managed-app/config.env\"].on_change"
             },
             "source": {
               "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-              "line": 12,
+              "line": 13,
               "path": "component.managed_app.files.file[\"/etc/managed-app/config.env\"]"
             }
           }
         },
         "source": {
           "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-          "line": 11,
+          "line": 12,
           "path": "component.managed_app.files"
         }
       },
@@ -152,7 +155,7 @@
       },
       "source": {
         "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-        "line": 30,
+        "line": 31,
         "path": "host.app1.component[\"app\"]"
       }
     }

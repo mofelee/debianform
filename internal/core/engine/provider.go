@@ -45,6 +45,8 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *corest
 		return p.planComponentFile(ctx, node, prior)
 	case "component_archive":
 		return p.planComponentArchive(ctx, node, prior)
+	case "component_script_output":
+		return p.planComponentScriptOutput(ctx, node, prior)
 	case "directory":
 		return p.planDirectory(ctx, node, prior)
 	case "package":
@@ -92,6 +94,8 @@ func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, e
 		return p.applyComponentFile(ctx, step)
 	case "component_archive":
 		return p.applyComponentArchive(ctx, step)
+	case "component_script_output":
+		return p.applyComponentScriptOutput(ctx, step)
 	case "directory":
 		return p.applyDirectory(ctx, step)
 	case "package":
@@ -132,6 +136,8 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 		return p.removePath(ctx, host, stringMapValue(desired, "output_path"), false)
 	case "file", "secret", "nftables_file", "networkd_netdev", "networkd_network", "apt_signing_key", "component_download", "component_binary", "component_file", "component_ca_certificate":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), false)
+	case "component_script_output":
+		return nil
 	case "component_archive":
 		return p.removeDirectory(ctx, host, stringMapValue(desired, "path"))
 	case "systemd_unit":
@@ -219,46 +225,73 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 	}
 }
 
-func (p NativeProvider) RunOperation(ctx context.Context, operation graph.Operation) error {
+func (p NativeProvider) RunOperation(ctx context.Context, operation graph.Operation) (OperationResult, error) {
 	if operation.ScriptPayload != nil {
 		return p.runScriptOperation(ctx, operation)
 	}
 	if operation.CommandPreview == "" {
-		return nil
+		return OperationResult{}, nil
 	}
 	host := hostFromAddress(operation.Address)
 	if host == "" {
-		return fmt.Errorf("cannot infer host from operation address %s", operation.Address)
+		return OperationResult{}, fmt.Errorf("cannot infer host from operation address %s", operation.Address)
 	}
 	_, err := p.Runner.RunCommand(ctx, host, operation.CommandPreview)
-	return err
+	return OperationResult{}, err
 }
 
-func (p NativeProvider) runScriptOperation(ctx context.Context, operation graph.Operation) error {
+func (p NativeProvider) runScriptOperation(ctx context.Context, operation graph.Operation) (OperationResult, error) {
 	host := hostFromAddress(operation.Address)
 	if host == "" {
-		return fmt.Errorf("cannot infer host from operation address %s", operation.Address)
+		return OperationResult{}, fmt.Errorf("cannot infer host from operation address %s", operation.Address)
 	}
 	payload := operation.ScriptPayload
 	if payload == nil {
-		return nil
+		return OperationResult{}, nil
 	}
 	interpreter := append([]string(nil), payload.Interpreter...)
 	if len(interpreter) == 0 {
-		return fmt.Errorf("%s script payload requires interpreter", operation.Address)
+		return OperationResult{}, fmt.Errorf("%s script payload requires interpreter", operation.Address)
 	}
 	for i, arg := range interpreter {
 		if arg == "" {
-			return fmt.Errorf("%s script payload interpreter[%d] must be non-empty", operation.Address, i)
+			return OperationResult{}, fmt.Errorf("%s script payload interpreter[%d] must be non-empty", operation.Address, i)
 		}
 	}
 	script, err := scriptPayloadContent(operation.Address, payload)
 	if err != nil {
-		return err
+		return OperationResult{}, err
 	}
 	remoteCommand := scriptEnvironmentPrefix(payload) + strings.Join(shellQuoteArgs(interpreter), " ")
 	_, err = p.Runner.RunInput(ctx, host, remoteCommand, strings.NewReader(script))
-	return err
+	if err != nil {
+		return OperationResult{}, err
+	}
+	outputs, err := p.readScriptOutputs(ctx, host, payload.Outputs)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	return OperationResult{Outputs: outputs}, nil
+}
+
+func (p NativeProvider) readScriptOutputs(ctx context.Context, host string, outputs []graph.ScriptOutputPayload) (map[string]map[string]any, error) {
+	if len(outputs) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]map[string]any, len(outputs))
+	for _, output := range outputs {
+		current, err := p.readPath(ctx, host, output.Path)
+		if err != nil {
+			return nil, err
+		}
+		observed := current.observed()
+		observed["path"] = output.Path
+		if !current.Exists || current.IsDir || current.SHA256 == "" {
+			return nil, fmt.Errorf("script output %s was not created as a regular file", output.Path)
+		}
+		out[output.Address] = observed
+	}
+	return out, nil
 }
 
 func scriptEnvironmentPrefix(payload *graph.ScriptPayload) string {
@@ -943,6 +976,50 @@ func (p NativeProvider) applyComponentArchive(ctx context.Context, step Step) (m
 	}
 	observed := current.observed()
 	observed["desired_digest"] = corestate.DesiredDigest(step.Node.Desired)
+	return observed, nil
+}
+
+func (p NativeProvider) planComponentScriptOutput(ctx context.Context, node graph.Node, prior *corestate.Resource) (ProviderPlan, error) {
+	path := stringDesired(node, "path")
+	current, err := p.readPath(ctx, node.Host, path)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	if !current.Exists {
+		action := ActionUpdate
+		if prior == nil {
+			action = ActionCreate
+		}
+		return ProviderPlan{Action: action, Summary: "run script to create output " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if current.IsDir {
+		return ProviderPlan{Action: ActionUpdate, Summary: "run script to repair output " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if prior == nil {
+		return ProviderPlan{Action: ActionUpdate, Summary: "refresh script output state " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if prior.DesiredDigest != "" && prior.DesiredDigest != corestate.DesiredDigest(node.Desired) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "refresh script output " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	wantSHA := stringMapValue(prior.Observed, "sha256")
+	if wantSHA == "" {
+		return ProviderPlan{Action: ActionUpdate, Summary: "refresh script output state " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if current.SHA256 != wantSHA {
+		return ProviderPlan{Action: ActionUpdate, Summary: "repair script output drift " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for script output "+path, observed), nil
+}
+
+func (p NativeProvider) applyComponentScriptOutput(ctx context.Context, step Step) (map[string]any, error) {
+	path := stringDesired(step.Node, "path")
+	observed := cloneMap(step.Observed)
+	if observed == nil {
+		observed = map[string]any{}
+	}
+	observed["path"] = path
+	observed["pending_script"] = true
 	return observed, nil
 }
 

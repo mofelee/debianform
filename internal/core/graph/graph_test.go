@@ -1038,9 +1038,15 @@ func TestCompileComponentScriptOnChangeResourceGraphGolden(t *testing.T) {
 	assertGolden(t, "../testdata/graph/component-script-on-change.golden.json", got)
 
 	fileAddress := `host.app1.components.app.files.file["/etc/managed-app/config.env"]`
+	outputAddress := `host.app1.components.app.script["reload"].outputs["/etc/managed-app/rendered.env"]`
 	scriptAddress := `host.app1.components.app.script["reload"]`
 	if node := nodeFor(resourceGraph, fileAddress); node == nil {
 		t.Fatalf("component file node %s was not found", fileAddress)
+	}
+	if node := nodeFor(resourceGraph, outputAddress); node == nil {
+		t.Fatalf("component script output node %s was not found", outputAddress)
+	} else if node.Desired["script_digest"] == "" {
+		t.Fatalf("component script output missing script digest: %#v", node.Desired)
 	}
 	operation := operationFor(resourceGraph, scriptAddress)
 	if operation == nil {
@@ -1049,8 +1055,10 @@ func TestCompileComponentScriptOnChangeResourceGraphGolden(t *testing.T) {
 	if operation.CommandPreview != "script reload (once)" {
 		t.Fatalf("command preview = %q", operation.CommandPreview)
 	}
-	if !containsString(operation.TriggeredBy, fileAddress) || !containsString(operation.DependsOn, fileAddress) {
-		t.Fatalf("script operation deps=%#v triggered_by=%#v, want %q", operation.DependsOn, operation.TriggeredBy, fileAddress)
+	for _, want := range []string{fileAddress, outputAddress} {
+		if !containsString(operation.TriggeredBy, want) || !containsString(operation.DependsOn, want) {
+			t.Fatalf("script operation deps=%#v triggered_by=%#v, want %q", operation.DependsOn, operation.TriggeredBy, want)
+		}
 	}
 }
 

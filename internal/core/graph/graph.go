@@ -68,11 +68,19 @@ type ScriptPayload struct {
 	Mode             string
 	Kind             string
 	Interpreter      []string
+	Outputs          []ScriptOutputPayload
 	Run              string
 	Content          string
 	Commands         [][]string
 	TriggerAddresses []string
 	TriggerPaths     []string
+}
+
+type ScriptOutputPayload struct {
+	Address         string
+	Path            string
+	ScriptDigest    string
+	ProviderAddress string
 }
 
 func Compile(program *ir.Program) (*ResourceGraph, error) {
@@ -968,6 +976,31 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				continue
 			}
 			triggeredBy := dedupeStrings(triggers[name])
+			outputs := scriptOutputPayloads(host.Name, component.Name, name, script)
+			for _, output := range outputs {
+				desired := map[string]any{
+					"path":      output.Path,
+					"component": component.Name,
+					"script":    name,
+				}
+				if output.ScriptDigest != "" {
+					desired["script_digest"] = output.ScriptDigest
+				}
+				nodes = append(nodes, Node{
+					Host:            host.Name,
+					Address:         output.Address,
+					Kind:            "component_script_output",
+					Summary:         "check script output " + output.Path,
+					Source:          script.Source,
+					Desired:         desired,
+					DependsOn:       append([]string(nil), triggeredBy...),
+					ProviderType:    "component_script_output",
+					ProviderAddress: output.ProviderAddress,
+					ProviderPayload: desired,
+				})
+				triggeredBy = append(triggeredBy, output.Address)
+			}
+			triggeredBy = dedupeStrings(triggeredBy)
 			operations = append(operations, Operation{
 				Address:        fmt.Sprintf("%s.script[%s]", componentPrefix, strconv.Quote(name)),
 				Action:         "run",
@@ -981,6 +1014,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 					Mode:          script.Mode,
 					Kind:          scriptPayloadKind(script),
 					Interpreter:   append([]string(nil), script.Interpreter...),
+					Outputs:       outputs,
 					Run:           script.Run,
 					Content:       script.Content,
 					Commands:      cloneCommandMatrix(script.Commands),
@@ -1644,6 +1678,42 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		return operations[i].Address < operations[j].Address
 	})
 	return nodes, operations, nil
+}
+
+func scriptOutputPayloads(hostName, componentName, scriptName string, script ir.ComponentScriptSpec) []ScriptOutputPayload {
+	paths := script.Outputs
+	if len(paths) == 0 {
+		return nil
+	}
+	out := make([]ScriptOutputPayload, 0, len(paths))
+	componentPrefix := fmt.Sprintf("host.%s.components.%s", hostName, componentName)
+	digest := componentScriptDigest(script)
+	for _, path := range paths {
+		out = append(out, ScriptOutputPayload{
+			Address:         fmt.Sprintf("%s.script[%s].outputs[%s]", componentPrefix, strconv.Quote(scriptName), strconv.Quote(path)),
+			Path:            path,
+			ScriptDigest:    digest,
+			ProviderAddress: "component_script_output." + providerName(hostName, componentName, scriptName, path),
+		})
+	}
+	return out
+}
+
+func componentScriptDigest(script ir.ComponentScriptSpec) string {
+	data, err := json.Marshal(map[string]any{
+		"name":        script.Name,
+		"mode":        script.Mode,
+		"body":        script.Body,
+		"interpreter": script.Interpreter,
+		"run":         script.Run,
+		"content":     script.Content,
+		"commands":    script.Commands,
+	})
+	if err != nil {
+		return shortHash(script.Name + "\x00" + script.Run + "\x00" + script.Content)
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 func scriptPayloadKind(script ir.ComponentScriptSpec) string {

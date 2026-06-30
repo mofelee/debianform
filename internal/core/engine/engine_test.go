@@ -739,6 +739,87 @@ func TestComponentScriptOnChangeOperationRunsAfterFileChange(t *testing.T) {
 	}
 }
 
+func TestComponentScriptOutputsTriggerOperationAndRecordState(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../testdata/fixtures/component-script-on-change.dbf.hcl")
+	backend := NewMemoryBackend()
+	provider := &recordingOperationProvider{MemoryProvider: NewMemoryProvider(), OutputSHA: "rendered-sha"}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	plan, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outputAddress := `host.app1.components.app.script["reload"].outputs["/etc/managed-app/rendered.env"]`
+	scriptAddress := `host.app1.components.app.script["reload"]`
+	if !hasStepAction(plan, outputAddress, ActionCreate) {
+		t.Fatalf("apply plan missing script output refresh: %#v", plan.Steps)
+	}
+	if len(plan.Operations) != 1 || plan.Operations[0].Operation.Address != scriptAddress {
+		t.Fatalf("apply operations = %#v, want script reload", plan.Operations)
+	}
+	st, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, ok := st.Resources[outputAddress]
+	if !ok {
+		t.Fatalf("script output state missing from %#v", st.Resources)
+	}
+	if output.Kind != "component_script_output" || output.Observed["sha256"] != "rendered-sha" {
+		t.Fatalf("script output state = %#v", output)
+	}
+	payloads := provider.ScriptPayloads[scriptAddress]
+	if len(payloads) != 1 || len(payloads[0].Outputs) != 1 || payloads[0].Outputs[0].Path != "/etc/managed-app/rendered.env" {
+		t.Fatalf("script payload outputs = %#v", payloads)
+	}
+}
+
+func TestComponentScriptOutputDriftRerunsOperation(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, "../testdata/fixtures/component-script-on-change.dbf.hcl")
+	backend := NewMemoryBackend()
+	outputAddress := `host.app1.components.app.script["reload"].outputs["/etc/managed-app/rendered.env"]`
+	scriptAddress := `host.app1.components.app.script["reload"]`
+	backend.states["app1"] = corestate.State{
+		Version: corestate.Version,
+		Host:    "app1",
+		Resources: map[string]corestate.Resource{
+			outputAddress: {
+				Host:          "app1",
+				Kind:          "component_script_output",
+				Ownership:     "managed",
+				Desired:       map[string]any{"path": "/etc/managed-app/rendered.env", "component": "app", "script": "reload"},
+				DesiredDigest: corestate.DesiredDigest(map[string]any{"path": "/etc/managed-app/rendered.env", "component": "app", "script": "reload"}),
+				Observed:      map[string]any{"exists": true, "is_dir": false, "sha256": "old-sha", "path": "/etc/managed-app/rendered.env"},
+			},
+		},
+	}
+	provider := &recordingOperationProvider{MemoryProvider: NewMemoryProvider(), OutputSHA: "new-sha"}
+	provider.Observed[outputAddress] = Observed{
+		Exists:        true,
+		DesiredDigest: "old-sha",
+		Values:        map[string]any{"exists": true, "is_dir": false, "sha256": "drifted-sha", "path": "/etc/managed-app/rendered.env"},
+	}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	plan, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasStepAction(plan, outputAddress, ActionUpdate) {
+		t.Fatalf("drift plan missing script output update: %#v", plan.Steps)
+	}
+	if len(plan.Operations) != 1 || plan.Operations[0].Operation.Address != scriptAddress {
+		t.Fatalf("drift operations = %#v, want script rerun", plan.Operations)
+	}
+	st, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Resources[outputAddress].Observed["sha256"]; got != "new-sha" {
+		t.Fatalf("script output sha after rerun = %#v, want new-sha", got)
+	}
+}
+
 func TestComponentScriptOnceRunsOnceForMultipleChangedFiles(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, componentScriptModeFixture("once")))
 	provider := &recordingOperationProvider{MemoryProvider: NewMemoryProvider()}
@@ -1480,9 +1561,10 @@ func (p *recordingPayloadProvider) Apply(ctx context.Context, step Step) (map[st
 type recordingOperationProvider struct {
 	*MemoryProvider
 	ScriptPayloads map[string][]graph.ScriptPayload
+	OutputSHA      string
 }
 
-func (p *recordingOperationProvider) RunOperation(ctx context.Context, operation graph.Operation) error {
+func (p *recordingOperationProvider) RunOperation(ctx context.Context, operation graph.Operation) (OperationResult, error) {
 	if p.ScriptPayloads == nil {
 		p.ScriptPayloads = map[string][]graph.ScriptPayload{}
 	}
@@ -1494,7 +1576,24 @@ func (p *recordingOperationProvider) RunOperation(ctx context.Context, operation
 		payload.TriggerPaths = append([]string(nil), payload.TriggerPaths...)
 		p.ScriptPayloads[operation.Address] = append(p.ScriptPayloads[operation.Address], payload)
 	}
-	return p.MemoryProvider.RunOperation(ctx, operation)
+	result, err := p.MemoryProvider.RunOperation(ctx, operation)
+	if err != nil || operation.ScriptPayload == nil || len(operation.ScriptPayload.Outputs) == 0 {
+		return result, err
+	}
+	sha := p.OutputSHA
+	if sha == "" {
+		sha = "recorded-sha"
+	}
+	result.Outputs = map[string]map[string]any{}
+	for _, output := range operation.ScriptPayload.Outputs {
+		result.Outputs[output.Address] = map[string]any{
+			"exists": true,
+			"is_dir": false,
+			"sha256": sha,
+			"path":   output.Path,
+		}
+	}
+	return result, nil
 }
 
 type concurrencyProvider struct {

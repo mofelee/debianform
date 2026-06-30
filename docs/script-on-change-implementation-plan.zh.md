@@ -24,7 +24,8 @@
 - [x] provider 已支持运行 operation 命令。
 - [x] component 内已支持 `script` block 的 DSL 解析和 HostSpec 编译。
 - [x] `files.file` 已支持 `on_change` 的 DSL 解析和 HostSpec 编译。
-- [ ] engine 尚不能按脚本 `mode` 处理 once/each 触发上下文。
+- [x] engine 已支持脚本 `mode` 的 once/each 触发上下文。
+- [x] component `script.outputs` 已支持脚本生成文件的 hash 记录和漂移触发。
 
 ## Loop 1: DSL 解析和 IR 骨架
 
@@ -35,7 +36,7 @@
 
 - `component` 内新增 `script "<name>" { ... }`。
 - `files.file` 新增 `on_change = script.<name>`。
-- `script` 字段支持 `mode`、`interpreter`、`run`、`content`、`commands`。
+- `script` 字段支持 `mode`、`interpreter`、`outputs`、`run`、`content`、`commands`。
 - `run`、`content`、`commands` 互斥且必须三选一。
 - `mode` 仅允许 `"once"` / `"each"`，默认 `"once"`。
 - `interpreter` 默认 `["/bin/sh", "-eu"]`，必须是非空 string list。

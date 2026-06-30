@@ -1287,7 +1287,7 @@ func TestNativeProviderDockerComposeValidateOperation(t *testing.T) {
 		CommandPreview: "docker compose -p app -f /opt/app/compose.yaml config",
 	}
 
-	if err := provider.RunOperation(context.Background(), operation); err != nil {
+	if _, err := provider.RunOperation(context.Background(), operation); err != nil {
 		t.Fatal(err)
 	}
 	if len(runner.scripts) != 1 || runner.scripts[0] != operation.CommandPreview {
@@ -1310,7 +1310,7 @@ func TestNativeProviderComponentScriptRunOperation(t *testing.T) {
 		},
 	}
 
-	if err := provider.RunOperation(context.Background(), operation); err != nil {
+	if _, err := provider.RunOperation(context.Background(), operation); err != nil {
 		t.Fatal(err)
 	}
 	if len(runner.scripts) != 1 || !strings.HasSuffix(runner.scripts[0], "'/bin/bash' '-e'") {
@@ -1336,7 +1336,7 @@ func TestNativeProviderComponentScriptContentOperation(t *testing.T) {
 		},
 	}
 
-	if err := provider.RunOperation(context.Background(), operation); err != nil {
+	if _, err := provider.RunOperation(context.Background(), operation); err != nil {
 		t.Fatal(err)
 	}
 	if len(runner.scripts) != 1 || !strings.HasSuffix(runner.scripts[0], "'/bin/sh' '-eu'") {
@@ -1365,7 +1365,7 @@ func TestNativeProviderComponentScriptCommandsOperation(t *testing.T) {
 		},
 	}
 
-	if err := provider.RunOperation(context.Background(), operation); err != nil {
+	if _, err := provider.RunOperation(context.Background(), operation); err != nil {
 		t.Fatal(err)
 	}
 	want := "'systemctl' 'reload' 'app.service'\n'printf' 'owner'\"'\"'s value'\n"
@@ -1395,7 +1395,7 @@ func TestNativeProviderComponentScriptOperationEnvironment(t *testing.T) {
 		},
 	}
 
-	if err := provider.RunOperation(context.Background(), operation); err != nil {
+	if _, err := provider.RunOperation(context.Background(), operation); err != nil {
 		t.Fatal(err)
 	}
 	if len(runner.scripts) != 1 {
@@ -1416,6 +1416,70 @@ func TestNativeProviderComponentScriptOperationEnvironment(t *testing.T) {
 	}
 }
 
+func TestNativeProviderComponentScriptOperationRecordsOutputs(t *testing.T) {
+	runner := &recordingRunner{outputs: []Result{
+		{},
+		{Stdout: "file\nroot\nroot\n644\nrendered-sha\n"},
+	}}
+	provider := NewNativeProvider(runner)
+	outputAddress := `host.app1.components.app.script["render"].outputs["/tmp/rendered.conf"]`
+	operation := graph.Operation{
+		Address: `host.app1.components.app.script["render"]`,
+		Action:  "run",
+		ScriptPayload: &graph.ScriptPayload{
+			Name:          "render",
+			ComponentName: "app",
+			Mode:          "once",
+			Kind:          "run",
+			Interpreter:   []string{"/bin/sh", "-eu"},
+			Run:           "cp /tmp/source.conf /tmp/rendered.conf",
+			Outputs: []graph.ScriptOutputPayload{{
+				Address: outputAddress,
+				Path:    "/tmp/rendered.conf",
+			}},
+		},
+	}
+
+	result, err := provider.RunOperation(context.Background(), operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := result.Outputs[outputAddress]
+	if output["sha256"] != "rendered-sha" || output["path"] != "/tmp/rendered.conf" || output["exists"] != true {
+		t.Fatalf("operation outputs = %#v", result.Outputs)
+	}
+	if len(runner.scripts) != 2 || len(runner.inputs) != 1 {
+		t.Fatalf("runner calls scripts=%#v inputs=%#v", runner.scripts, runner.inputs)
+	}
+}
+
+func TestNativeProviderComponentScriptOutputPlanDetectsDrift(t *testing.T) {
+	node := graph.Node{
+		Address: `host.app1.components.app.script["render"].outputs["/tmp/rendered.conf"]`,
+		Host:    "app1",
+		Kind:    "component_script_output",
+		Desired: map[string]any{
+			"path":      "/tmp/rendered.conf",
+			"component": "app",
+			"script":    "render",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "file\nroot\nroot\n644\ndrifted-sha\n"}}}
+	provider := NewNativeProvider(runner)
+	prior := &corestate.Resource{
+		Ownership: "managed",
+		Observed:  map[string]any{"sha256": "old-sha"},
+	}
+
+	got, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionUpdate || !strings.Contains(got.Summary, "repair script output drift") {
+		t.Fatalf("script output plan = %#v, want update drift", got)
+	}
+}
+
 func TestNativeProviderComponentScriptOperationFailure(t *testing.T) {
 	runner := &recordingRunner{errors: []error{errors.New("script failed")}}
 	provider := NewNativeProvider(runner)
@@ -1431,7 +1495,7 @@ func TestNativeProviderComponentScriptOperationFailure(t *testing.T) {
 		},
 	}
 
-	err := provider.RunOperation(context.Background(), operation)
+	_, err := provider.RunOperation(context.Background(), operation)
 	if err == nil {
 		t.Fatal("script operation succeeded, want injected runner failure")
 	}
@@ -1449,7 +1513,7 @@ func TestNativeProviderDockerComposeDaemonReloadOperation(t *testing.T) {
 		CommandPreview: "systemctl daemon-reload",
 	}
 
-	if err := provider.RunOperation(context.Background(), operation); err != nil {
+	if _, err := provider.RunOperation(context.Background(), operation); err != nil {
 		t.Fatal(err)
 	}
 	if len(runner.scripts) != 1 || runner.scripts[0] != operation.CommandPreview {

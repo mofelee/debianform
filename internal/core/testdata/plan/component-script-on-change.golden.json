@@ -6,7 +6,7 @@
     "host": "app1"
   },
   "summary": {
-    "create": 1,
+    "create": 2,
     "update": 0,
     "delete": 0,
     "no_op": 0,
@@ -19,7 +19,7 @@
       "summary": "create file /etc/managed-app/config.env",
       "source": {
         "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-        "line": 12,
+        "line": 13,
         "path": "component.managed_app.files.file[\"/etc/managed-app/config.env\"]"
       },
       "diff": {
@@ -145,6 +145,60 @@
           }
         ]
       }
+    },
+    {
+      "address": "host.app1.components.app.script[\"reload\"].outputs[\"/etc/managed-app/rendered.env\"]",
+      "action": "create",
+      "summary": "check script output /etc/managed-app/rendered.env",
+      "source": {
+        "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+        "line": 6,
+        "path": "component.managed_app.script[\"reload\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "component"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "app"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/managed-app/rendered.env"
+          },
+          {
+            "path": [
+              "script"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "reload"
+          },
+          {
+            "path": [
+              "script_digest"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0951895a12ee063087d297b63985fa6762bf0fba17a8b9623e53fbcbf04743c1"
+          }
+        ]
+      }
     }
   ],
   "operations": [
@@ -153,10 +207,12 @@
       "action": "run",
       "summary": "run component script reload",
       "depends_on": [
-        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]"
+        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]",
+        "host.app1.components.app.script[\"reload\"].outputs[\"/etc/managed-app/rendered.env\"]"
       ],
       "triggered_by": [
-        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]"
+        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]",
+        "host.app1.components.app.script[\"reload\"].outputs[\"/etc/managed-app/rendered.env\"]"
       ],
       "command_preview": "script reload (once)",
       "source": {

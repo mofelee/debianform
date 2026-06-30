@@ -145,11 +145,11 @@ func (p *MemoryProvider) Destroy(ctx context.Context, step Step) error {
 	return nil
 }
 
-func (p *MemoryProvider) RunOperation(ctx context.Context, operation graph.Operation) error {
+func (p *MemoryProvider) RunOperation(ctx context.Context, operation graph.Operation) (OperationResult, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.Operations = append(p.Operations, operation.Address)
-	return nil
+	return OperationResult{}, nil
 }
 
 func cloneState(st corestate.State) corestate.State {

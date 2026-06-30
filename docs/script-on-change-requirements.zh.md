@@ -77,6 +77,7 @@ on-change 操作；如果需要多步行为，脚本内部负责组织。
 | --- | --- | --- | --- |
 | `mode` | 否 | `"once"` | `"once"` 或 `"each"`。 |
 | `interpreter` | 否 | `["/bin/sh", "-eu"]` | 执行脚本内容的解释器和参数。 |
+| `outputs` | 否 | `[]` | 脚本生成的普通文件绝对路径列表，用于 check/plan 漂移检测。 |
 | `run` | 三选一 | 无 | 单条 shell 命令字符串。 |
 | `content` | 三选一 | 无 | 多行脚本文本。 |
 | `commands` | 三选一 | 无 | 命令矩阵，例如 `[["systemctl", "reload", "app.service"]]`。 |
@@ -102,6 +103,15 @@ on-change 操作；如果需要多步行为，脚本内部负责组织。
 - 适合脚本需要按文件路径处理的场景，例如对每个生成文件单独执行校验或导入。
 
 脚本执行失败时 apply 失败。失败语义沿用现有 operation 的严格模型，不做 warn-only。
+
+## 输出文件
+
+`outputs` 用于把脚本副作用纳入 DebianForm 状态模型。每个 output 必须是绝对路径，并且脚本执行后
+必须存在为普通文件。DebianForm 会在脚本成功后记录 output 的 SHA256；后续 check/plan 如果发现
+output 缺失、变成目录、hash 与上次记录不一致，或脚本声明本身变化，会重新触发该 script。
+
+`outputs` 不表示 DebianForm 直接写入这些文件，也不在移除声明时删除远端 output；它只定义脚本输出
+的检查和重新收敛边界。
 
 ## 运行时上下文
 

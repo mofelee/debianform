@@ -125,7 +125,7 @@ func bulkPlanNodeScripts(node graph.Node) ([]string, error) {
 		return []string{bulkReadPathScript(stringDesired(node, "path"))}, nil
 	case "apt_source_file":
 		return []string{bulkReadPathWithContentScript(stringDesired(node, "path"))}, nil
-	case "apt_signing_key", "component_download", "component_binary", "component_file", "component_ca_certificate", "directory":
+	case "apt_signing_key", "component_download", "component_binary", "component_file", "component_ca_certificate", "component_script_output", "directory":
 		return []string{bulkReadPathScript(stringDesired(node, "path"))}, nil
 	case "component_build":
 		return []string{bulkReadPathScript(stringDesired(node, "output_path"))}, nil

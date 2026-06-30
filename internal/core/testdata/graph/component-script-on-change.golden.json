@@ -7,7 +7,7 @@
       "summary": "create file /etc/managed-app/config.env",
       "source": {
         "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-        "line": 12,
+        "line": 13,
         "path": "component.managed_app.files.file[\"/etc/managed-app/config.env\"]"
       },
       "desired": {
@@ -40,6 +40,34 @@
           "bytes": 27
         }
       }
+    },
+    {
+      "host": "app1",
+      "address": "host.app1.components.app.script[\"reload\"].outputs[\"/etc/managed-app/rendered.env\"]",
+      "kind": "component_script_output",
+      "summary": "check script output /etc/managed-app/rendered.env",
+      "source": {
+        "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+        "line": 6,
+        "path": "component.managed_app.script[\"reload\"]"
+      },
+      "desired": {
+        "component": "app",
+        "path": "/etc/managed-app/rendered.env",
+        "script": "reload",
+        "script_digest": "0951895a12ee063087d297b63985fa6762bf0fba17a8b9623e53fbcbf04743c1"
+      },
+      "provider_type": "component_script_output",
+      "provider_address": "component_script_output.app1_app_reload__etc_managed_app_rendered_env",
+      "provider_payload": {
+        "component": "app",
+        "path": "/etc/managed-app/rendered.env",
+        "script": "reload",
+        "script_digest": "0951895a12ee063087d297b63985fa6762bf0fba17a8b9623e53fbcbf04743c1"
+      },
+      "depends_on": [
+        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]"
+      ]
     }
   ],
   "operations": [
@@ -48,10 +76,12 @@
       "action": "run",
       "summary": "run component script reload",
       "depends_on": [
-        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]"
+        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]",
+        "host.app1.components.app.script[\"reload\"].outputs[\"/etc/managed-app/rendered.env\"]"
       ],
       "triggered_by": [
-        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]"
+        "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]",
+        "host.app1.components.app.script[\"reload\"].outputs[\"/etc/managed-app/rendered.env\"]"
       ],
       "command_preview": "script reload (once)",
       "source": {

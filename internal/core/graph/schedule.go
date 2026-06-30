@@ -59,7 +59,7 @@ func SafeParallelKind(kind string) bool {
 		"networkd_netdev", "networkd_network",
 		"directory",
 		"component_download", "component_build", "component_binary", "component_file",
-		"component_ca_certificate", "component_archive":
+		"component_ca_certificate", "component_archive", "component_script_output":
 		return true
 	default:
 		return false

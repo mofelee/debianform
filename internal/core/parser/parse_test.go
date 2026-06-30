@@ -1057,6 +1057,7 @@ component "app" {
   script "reload" {
     mode        = "each"
     interpreter = ["/bin/bash", "-e"]
+    outputs     = ["/etc/app.rendered"]
     run         = "systemctl reload app.service"
   }
 
@@ -1075,8 +1076,15 @@ component "app" {
 	}
 	component := cfg.Components["app"]
 	script := component.Scripts["reload"]
-	if script.Name != "reload" || !script.ModeSet || !script.InterpreterSet || !script.RunSet {
+	if script.Name != "reload" || !script.ModeSet || !script.InterpreterSet || !script.OutputsSet || !script.RunSet {
 		t.Fatalf("script = %#v", script)
+	}
+	evaluated, err := EvaluateComponentScript(script, EvalContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(evaluated.Outputs, []string{"/etc/app.rendered"}) {
+		t.Fatalf("script outputs = %#v", evaluated.Outputs)
 	}
 	if script.Source.Path != `component.app.script["reload"]` {
 		t.Fatalf("script source path = %q", script.Source.Path)

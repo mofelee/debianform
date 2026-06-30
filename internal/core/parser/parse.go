@@ -106,22 +106,26 @@ type ComponentScript struct {
 	Name              string
 	Mode              string
 	Interpreter       []string
+	Outputs           []string
 	Run               string
 	Content           string
 	Commands          [][]string
 	Sensitive         bool
 	ModeSet           bool
 	InterpreterSet    bool
+	OutputsSet        bool
 	RunSet            bool
 	ContentSet        bool
 	CommandsSet       bool
 	ModeExpr          hcl.Expression
 	InterpreterExpr   hcl.Expression
+	OutputsExpr       hcl.Expression
 	RunExpr           hcl.Expression
 	ContentExpr       hcl.Expression
 	CommandsExpr      hcl.Expression
 	ModeSource        ir.SourceRef
 	InterpreterSource ir.SourceRef
+	OutputsSource     ir.SourceRef
 	RunSource         ir.SourceRef
 	ContentSource     ir.SourceRef
 	CommandsSource    ir.SourceRef
@@ -721,6 +725,10 @@ func parseComponentScriptBlock(file, componentPath string, block *hclsyntax.Bloc
 			script.InterpreterSet = true
 			script.InterpreterExpr = attr.Expr
 			script.InterpreterSource = source
+		case "outputs":
+			script.OutputsSet = true
+			script.OutputsExpr = attr.Expr
+			script.OutputsSource = source
 		case "run":
 			script.RunSet = true
 			script.RunExpr = attr.Expr
@@ -1032,6 +1040,18 @@ func EvaluateComponentScript(script ComponentScript, ctx EvalContext) (Component
 			return ComponentScript{}, err
 		}
 		out.Interpreter = interpreter
+		out.Sensitive = out.Sensitive || value.ContainsSensitive()
+	}
+	if script.OutputsSet {
+		value, err := evalComponentScriptValue(script.OutputsSource, script.OutputsExpr, ctx)
+		if err != nil {
+			return ComponentScript{}, err
+		}
+		outputs, err := stringListFromValueAllowDuplicates(script.OutputsSource.File, script.OutputsSource.Path, value)
+		if err != nil {
+			return ComponentScript{}, err
+		}
+		out.Outputs = outputs
 		out.Sensitive = out.Sensitive || value.ContainsSensitive()
 	}
 	if script.RunSet {
