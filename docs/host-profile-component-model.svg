@@ -53,15 +53,15 @@
   <rect class="card input" x="58" y="158" width="242" height="82" rx="8"/>
   <text class="label" x="80" y="190">locals / variable</text>
   <text class="body" x="80" y="216">表达式输入、环境参数</text>
-  <text class="small" x="80" y="235">可被 profile / component / host 引用</text>
+  <text class="small" x="80" y="235">供各 block 引用</text>
 
   <rect class="card profile" x="58" y="276" width="242" height="122" rx="8"/>
   <rect x="80" y="296" width="60" height="22" rx="5" fill="#2563eb"/>
   <text class="badge-text" x="92" y="312">merge</text>
   <text class="label" x="80" y="346">profile</text>
   <text class="body" x="80" y="372">不可传参的基础配置片段</text>
-  <text class="small" x="80" y="393">import 顺序在前，当前 block 后覆盖</text>
-  <text class="small" x="80" y="413">不会独立 plan / apply / check</text>
+  <text class="small" x="80" y="393">import 在前，host 后覆盖</text>
+  <text class="small" x="80" y="413">不单独 plan / apply / check</text>
 
   <rect class="card component" x="58" y="436" width="242" height="120" rx="8"/>
   <rect x="80" y="456" width="72" height="22" rx="5" fill="#0f766e"/>
@@ -83,42 +83,43 @@
 
   <rect class="note" x="448" y="318" width="224" height="54" rx="7"/>
   <text class="subhead" x="464" y="341">2. 挂载 component</text>
-  <text class="small" x="464" y="359">传入 typed inputs，按 target 展开</text>
+  <text class="small" x="464" y="359">传 inputs，按 target 展开</text>
 
   <rect class="note" x="448" y="388" width="224" height="44" rx="7"/>
   <text class="subhead" x="464" y="410">3. 得到 HostSpec</text>
-  <text class="small" x="464" y="428">包含 host 资源和 component 资源</text>
+  <text class="small" x="464" y="428">host 资源 + component 资源</text>
 
-  <text class="small" x="446" y="486">每台 host 拥有自己的 SSH、facts、state 和 lock。</text>
-  <text class="code" x="446" y="512">host.app1.components.web...</text>
+  <text class="small" x="446" y="486">每台 host 独立管理：</text>
+  <text class="small" x="446" y="506">SSH、facts、state、lock</text>
 
   <rect class="band" x="788" y="106" width="296" height="458" rx="10"/>
   <text class="section-title" x="808" y="136">生成计划与执行</text>
 
   <rect class="card runtime" x="820" y="170" width="232" height="70" rx="8"/>
   <text class="label" x="846" y="202">ResourceGraph</text>
-  <text class="small" x="846" y="224">资源节点 + 依赖</text>
-  <text class="small" x="946" y="224">operation 触发</text>
+  <text class="small" x="846" y="224">资源节点、依赖</text>
+  <text class="small" x="946" y="224">operations</text>
 
   <rect class="card runtime" x="820" y="282" width="232" height="112" rx="8"/>
   <text class="label" x="846" y="316">plan / check</text>
-  <text class="body" x="846" y="345">读取 state 和 observed 状态</text>
-  <text class="small" x="846" y="369">计算 create / update / delete / no-op</text>
+  <text class="body" x="846" y="345">读取 state / observed</text>
+  <text class="small" x="846" y="369">计算 create / update / no-op</text>
 
   <rect class="card runtime" x="820" y="436" width="232" height="78" rx="8"/>
   <text class="label" x="846" y="470">apply</text>
-  <text class="body" x="846" y="496">持锁后按依赖执行并写回 state</text>
+  <text class="body" x="846" y="490">持锁后按依赖执行</text>
+  <text class="small" x="846" y="510">成功后写回 state</text>
 
   <path class="soft-line" d="M 300 199 C 342 199 356 204 400 214"/>
   <text class="small" x="318" y="188">表达式引用</text>
 
   <path class="blue-line" d="M 300 332 C 350 332 366 291 420 278"/>
   <text class="small" x="325" y="322" fill="#2563eb">imports</text>
-  <text class="small" x="319" y="341" fill="#2563eb">先合并，再由 host 覆盖</text>
+  <text class="small" x="319" y="341" fill="#2563eb">合并后由 host 覆盖</text>
 
   <path class="teal-line" d="M 300 496 C 352 496 366 353 420 348"/>
   <text class="small" x="314" y="482" fill="#0f766e">mount + inputs</text>
-  <text class="small" x="314" y="501" fill="#0f766e">实例化为 host 内资源</text>
+  <text class="small" x="314" y="501" fill="#0f766e">变成 host 内资源</text>
 
   <path class="amber-line" d="M 700 310 C 744 310 764 220 820 205"/>
   <text class="small" x="731" y="286" fill="#b45309">HostSpec</text>
@@ -127,6 +128,6 @@
   <path class="slate-line" d="M 936 394 L 936 434"/>
 
   <rect class="note" x="408" y="532" width="304" height="52" rx="7"/>
-  <text class="small" x="430" y="556">script / on_change 属于 component 内部生命周期，</text>
-  <text class="small" x="430" y="575">由资源变化触发为 operation。</text>
+  <text class="small" x="430" y="556">script / on_change 属于 component 内部生命周期。</text>
+  <text class="small" x="430" y="575">资源变化时触发 operation。</text>
 </svg>
