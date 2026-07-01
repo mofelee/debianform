@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -223,7 +224,7 @@ func TestHelpDocumentsImplementedFlags(t *testing.T) {
 			for _, want := range []string{
 				"dbf validate [-f path ...] [-var name=value] [-var-file path] [--host name]",
 				"dbf plan     [-f path ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]",
-				"dbf apply    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]",
+				"dbf apply    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve] [--debug]",
 				"dbf check    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]",
 			} {
 				if !strings.Contains(output, want) {
@@ -1681,6 +1682,134 @@ func TestParallelFlagIsApplyOnlyAndPositive(t *testing.T) {
 	}
 }
 
+func TestDebugFlagPlanAndApplySemantics(t *testing.T) {
+	output := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", "../../examples/bbr.dbf.hcl", "--format", "json", "--debug", "--offline"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, `"provider_address"`) {
+		t.Fatalf("plan --debug output missing provider addresses:\n%s", output)
+	}
+
+	err := run([]string{"check", "-f", "../../examples/bbr.dbf.hcl", "--debug"})
+	if err == nil || !strings.Contains(err.Error(), "--debug is only supported for plan and apply") {
+		t.Fatalf("check --debug error = %v", err)
+	}
+
+	err = run([]string{"validate", "-f", "../../examples/bbr.dbf.hcl", "--debug"})
+	if err == nil || !strings.Contains(err.Error(), "--debug is only supported for plan and apply") {
+		t.Fatalf("validate --debug error = %v", err)
+	}
+
+	err = run([]string{"apply", "-f", "../../examples/bbr.dbf.hcl", "--debug", "--parallel", "2", "--auto-approve"})
+	if err == nil || !strings.Contains(err.Error(), "--debug cannot be combined with --parallel greater than 1") {
+		t.Fatalf("apply --debug --parallel 2 error = %v", err)
+	}
+
+	err = run([]string{"apply", "-f", filepath.Join(t.TempDir(), "missing.dbf.hcl"), "--debug", "--parallel", "1", "--auto-approve"})
+	if err == nil || !strings.Contains(err.Error(), "configuration source") {
+		t.Fatalf("apply --debug --parallel 1 error = %v, want configuration source error after flag validation", err)
+	}
+}
+
+func TestApplyDebugWrapsOnlineRunnerAndSerializes(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "noop.dbf.hcl")
+	writeTestFile(t, config, `
+host "server1" {}
+host "server2" {}
+`)
+	fakeBin := t.TempDir()
+	lockDir := filepath.Join(dir, "ssh.lock")
+	sshPath := filepath.Join(fakeBin, "ssh")
+	script := fmt.Sprintf(`#!/bin/sh
+input="$(cat)"
+if [ -z "$input" ]; then
+  exit 0
+fi
+if ! mkdir %s 2>/dev/null; then
+  printf 'concurrent fake ssh call\n' >&2
+  exit 88
+fi
+trap 'rmdir %s' EXIT
+sleep 0.02
+case "$input" in
+  *"printf 'hostname=%%s\n'"*)
+    printf 'hostname=test\narchitecture=amd64\ncodename=trixie\n'
+    exit 0
+    ;;
+  *"/var/lib/debianform/state/server1.json"*|*"/var/lib/debianform/state/server2.json"*)
+    exit 0
+    ;;
+esac
+printf 'unexpected fake ssh input:\n%%s\n' "$input" >&2
+exit 1
+`, shellQuoteForTest(lockDir), shellQuoteForTest(lockDir))
+	if err := os.WriteFile(sshPath, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	withStdinString(t, "continue\n")
+
+	stdout, stderr := captureOutput(t, func() {
+		if err := run([]string{"apply", "-f", config, "--debug", "--auto-approve"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(stdout, "Plan:") || !strings.Contains(stdout, "No changes.") {
+		t.Fatalf("apply --debug stdout missing plan no-op output:\n%s", stdout)
+	}
+	for _, want := range []string{
+		applyDebugWarning,
+		"dbf debugger: #1 before remote call",
+		"runner: Run",
+		"dbf debugger: #1 remote call succeeded",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("apply --debug stderr missing %q:\n%s", want, stderr)
+		}
+	}
+}
+
+func TestApplyWithoutDebugDoesNotPrintDebugOutput(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "noop.dbf.hcl")
+	writeTestFile(t, config, `host "server1" {}`)
+	fakeBin := t.TempDir()
+	sshPath := filepath.Join(fakeBin, "ssh")
+	script := `#!/bin/sh
+input="$(cat)"
+if [ -z "$input" ]; then
+  exit 0
+fi
+case "$input" in
+  *"printf 'hostname=%s\n'"*)
+    printf 'hostname=test\narchitecture=amd64\ncodename=trixie\n'
+    exit 0
+    ;;
+  *"/var/lib/debianform/state/server1.json"*)
+    exit 0
+    ;;
+esac
+printf 'unexpected fake ssh input:\n%s\n' "$input" >&2
+exit 1
+`
+	if err := os.WriteFile(sshPath, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	_, stderr := captureOutput(t, func() {
+		if err := run([]string{"apply", "-f", config, "--auto-approve"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if strings.Contains(stderr, "dbf debugger:") {
+		t.Fatalf("normal apply printed debug output:\n%s", stderr)
+	}
+}
+
 func TestPlanBBRHTML(t *testing.T) {
 	dir := t.TempDir()
 	htmlPath := filepath.Join(dir, "plan.html")
@@ -2417,4 +2546,28 @@ func writeTestFile(t *testing.T, path string, content string) {
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func withStdinString(t *testing.T, input string) {
+	t.Helper()
+	old := os.Stdin
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := write.WriteString(input); err != nil {
+		t.Fatal(err)
+	}
+	if err := write.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = read
+	t.Cleanup(func() {
+		os.Stdin = old
+		_ = read.Close()
+	})
+}
+
+func shellQuoteForTest(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }

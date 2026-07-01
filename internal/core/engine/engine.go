@@ -222,7 +222,13 @@ func (e Engine) planNodes(ctx context.Context, hosts []ir.HostSpec, parallel int
 		priors := priorsByHost[node.Host]
 		prior := priors[node.Address]
 		task := progress.Start(node.Host, "inspect", node.Address, node.Summary)
-		providerPlan, err := e.Provider.Plan(ctx, node, prior)
+		callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+			Phase:   "plan inspect",
+			Address: node.Address,
+			Action:  "inspect",
+			Summary: node.Summary,
+		})
+		providerPlan, err := e.Provider.Plan(callCtx, node, prior)
 		if err != nil {
 			task.Done(err)
 			return nil, err
@@ -357,7 +363,12 @@ func (e Engine) planNodesByHost(ctx context.Context, hosts []ir.HostSpec, parall
 			return nil
 		}
 		task := progress.Start(host.Name, "inspect", fmt.Sprintf("%d resource(s)", len(nodes)), "")
-		hostPlans, err := planner.PlanHost(ctx, host, nodes, priorsByHost[host.Name])
+		callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+			Phase:   "plan inspect",
+			Action:  "inspect",
+			Summary: fmt.Sprintf("%d resource(s)", len(nodes)),
+		})
+		hostPlans, err := planner.PlanHost(callCtx, host, nodes, priorsByHost[host.Name])
 		if err != nil {
 			task.Done(err)
 			return err
@@ -1314,12 +1325,22 @@ func (e Engine) executeItem(ctx context.Context, hosts map[string]ir.HostSpec, s
 	case "operation":
 		operation := operationWithStepContext(item.operation)
 		task := progress.Start(item.host, "run", item.address, operation.Summary)
-		result, err := e.Provider.RunOperation(ctx, operation)
+		action := operation.Action
+		if action == "" {
+			action = ActionRun
+		}
+		callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+			Phase:   "run operation",
+			Address: item.address,
+			Action:  action,
+			Summary: operation.Summary,
+		})
+		result, err := e.Provider.RunOperation(callCtx, operation)
 		task.Done(err)
 		if err != nil {
 			return fmt.Errorf("%s failed: %w", item.address, err)
 		}
-		if err := e.recordOperationOutputs(ctx, hosts, states, statesLock, stateLocks, item.operation, result); err != nil {
+		if err := e.recordOperationOutputs(callCtx, hosts, states, statesLock, stateLocks, item.operation, result); err != nil {
 			return fmt.Errorf("%s failed: %w", item.address, err)
 		}
 		return nil
@@ -1427,16 +1448,22 @@ func (e Engine) executeResourceStep(ctx context.Context, hosts map[string]ir.Hos
 	}
 
 	now := e.now().UTC().Format(time.RFC3339)
+	callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "apply resource",
+		Address: step.Address,
+		Action:  step.Action,
+		Summary: step.Summary,
+	})
 	var observed map[string]any
 	switch step.Action {
 	case ActionCreate, ActionUpdate, ActionDelete:
-		result, err := e.Provider.Apply(ctx, providerStep(step))
+		result, err := e.Provider.Apply(callCtx, providerStep(step))
 		if err != nil {
 			return fmt.Errorf("%s failed: %w", step.Address, err)
 		}
 		observed = result
 	case ActionDestroy:
-		if err := e.Provider.Destroy(ctx, step); err != nil {
+		if err := e.Provider.Destroy(callCtx, step); err != nil {
 			return fmt.Errorf("%s failed: %w", step.Address, err)
 		}
 	case ActionAdopt, ActionForget, ActionNoOp:
@@ -1467,7 +1494,7 @@ func (e Engine) executeResourceStep(ctx context.Context, hosts map[string]ir.Hos
 	case ActionNoOp:
 		return nil
 	}
-	if err := e.Backend.Write(ctx, host, st); err != nil {
+	if err := e.Backend.Write(callCtx, host, st); err != nil {
 		return err
 	}
 	statesLock.Lock()

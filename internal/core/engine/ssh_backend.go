@@ -35,7 +35,12 @@ if [ -f %s ]; then
   cat %s
 fi
 `, shellQuote(host.State.Path), shellQuote(host.State.Path))
-	result, err := b.Runner.Run(ctx, host.Name, script)
+	callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "state read",
+		Action:  "read",
+		Summary: host.State.Path,
+	})
+	result, err := b.Runner.Run(callCtx, host.Name, script)
 	if err != nil {
 		return corestate.State{}, err
 	}
@@ -67,7 +72,12 @@ base64 -d > %s <<'__DBF_STATE__'
 __DBF_STATE__
 mv %s %s
 `, shellQuote(host.State.Path), shellQuote(tmp), payload, shellQuote(tmp), shellQuote(host.State.Path))
-	_, err = b.Runner.Run(ctx, host.Name, script)
+	callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "state write",
+		Action:  "write",
+		Summary: host.State.Path,
+	})
+	_, err = b.Runner.Run(callCtx, host.Name, script)
 	return err
 }
 
@@ -123,7 +133,12 @@ __DBF_LOCK__
   sleep 1
 done
 `, shellQuote(host.State.LockPath), shellQuote(lockDir), int(timeout.Seconds()), expiresAt.Unix(), owner, token, expiresAt.Format(time.RFC3339), expiresAt.Unix())
-	result, err := b.Runner.Run(ctx, host.Name, script)
+	callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "state lock",
+		Action:  "lock",
+		Summary: host.State.LockPath,
+	})
+	result, err := b.Runner.Run(callCtx, host.Name, script)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +171,13 @@ else
   exit 1
 fi
 `, shellQuote(l.host.State.LockPath), shellQuote(lockDir), shellQuote(l.token))
-	_, err := l.backend.Runner.Run(ctx, l.host.Name, script)
+	callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "state unlock",
+		Action:  "unlock",
+		Summary: l.host.State.LockPath,
+		Cleanup: true,
+	})
+	_, err := l.backend.Runner.Run(callCtx, l.host.Name, script)
 	return err
 }
 

@@ -24,6 +24,8 @@ import (
 	"github.com/mofelee/debianform/internal/version"
 )
 
+const applyDebugWarning = "dbf debugger: WARNING: apply --debug can print remote scripts, stdin payloads, stdout, and stderr. Expanded output may contain secrets."
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "dbf: %v\n", err)
@@ -285,7 +287,7 @@ func runConfigCommand(cmd string, args []string) error {
 	host := fs.String("host", "", "limit execution to a host")
 	format := fs.String("format", "text", "plan output format: text or json")
 	htmlPath := fs.String("html", "", "write plan as static HTML")
-	debug := fs.Bool("debug", false, "show internal provider addresses in plan output")
+	debug := fs.Bool("debug", false, "show internal provider addresses for plan or run the apply SSH debugger")
 	color := fs.String("color", "auto", "colorize text output: auto, always, or never")
 	offline := fs.Bool("offline", false, "render plan without SSH, state, or runtime facts discovery")
 	parallel := fs.Int("parallel", 0, "maximum number of hosts for apply SSH phases; default 4")
@@ -366,8 +368,8 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 	if htmlPath != "" && format != "text" {
 		return fmt.Errorf("--html cannot be combined with --format")
 	}
-	if debug && cmd != "plan" {
-		return fmt.Errorf("--debug is only supported for plan")
+	if debug && cmd != "plan" && cmd != "apply" {
+		return fmt.Errorf("--debug is only supported for plan and apply")
 	}
 	if offline && cmd != "plan" {
 		return fmt.Errorf("--offline is only supported for plan")
@@ -377,6 +379,9 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 	}
 	if parallel > 0 && cmd != "apply" {
 		return fmt.Errorf("--parallel is only supported for apply")
+	}
+	if debug && cmd == "apply" && parallel > 1 {
+		return fmt.Errorf("--debug cannot be combined with --parallel greater than 1")
 	}
 
 	cfg, err := parseConfigWithExternalValues(files, cliVarFiles, cliVars, coreparser.ParseOptions{})
@@ -449,15 +454,31 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 		if format != "text" {
 			return fmt.Errorf("--format is only supported for plan")
 		}
+		if cmd == "apply" && debug {
+			fmt.Fprintln(os.Stderr, applyDebugWarning)
+		}
 		factsParallel := 0
 		if cmd == "apply" {
 			factsParallel = parallel
 		}
-		program, runner, err := loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr, stderrStyle, factsParallel)
+		var program *coreir.Program
+		var sshRunner *coreengine.SSHRunner
+		var runner coreengine.Runner
+		var err error
+		if cmd == "apply" && debug {
+			factsParallel = 1
+			program, sshRunner, runner, err = loadOnlineDebugProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr, stderrStyle, factsParallel, os.Stdin, os.Stderr)
+			if parallel < 1 {
+				parallel = 1
+			}
+		} else {
+			program, sshRunner, err = loadOnlineProgramWithProgress(context.Background(), cfg, host, &warnings, os.Stderr, stderrStyle, factsParallel)
+			runner = sshRunner
+		}
 		if err != nil {
 			return err
 		}
-		defer runner.Close(context.Background())
+		defer sshRunner.Close(context.Background())
 		resourceGraph, err := coregraph.Compile(program)
 		if err != nil {
 			return err
@@ -862,15 +883,43 @@ func loadOnlineProgramWithProgress(ctx context.Context, cfg *coreparser.Config, 
 		return nil, nil, err
 	}
 	runner := coreengine.NewSSHRunner(coreengine.HostsFromProgram(base))
-	facts, err := coreengine.DiscoverProgramFactsWithOptions(ctx, runner, base, nil, progress, progressStyle, coreengine.DiscoverProgramFactsOptions{Parallel: factsParallel})
-	if err != nil {
-		return nil, nil, err
-	}
-	resolved, err := compileProgram(cfg, host, coremerge.CompileOptions{HostFacts: facts, Warnings: warnings})
+	resolved, err := resolveOnlineProgramWithRunner(ctx, cfg, host, warnings, progress, progressStyle, factsParallel, base, runner)
 	if err != nil {
 		return nil, nil, err
 	}
 	return resolved, runner, nil
+}
+
+func loadOnlineDebugProgramWithProgress(ctx context.Context, cfg *coreparser.Config, host string, warnings *[]coreir.Warning, progress io.Writer, progressStyle termstyle.Options, factsParallel int, input io.Reader, debugOutput io.Writer) (*coreir.Program, *coreengine.SSHRunner, coreengine.Runner, error) {
+	base, err := compileProgram(cfg, host, coremerge.CompileOptions{SkipComponents: true})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sshRunner := coreengine.NewSSHRunner(coreengine.HostsFromProgram(base))
+	debugRunner := coreengine.DebugRunner{
+		Inner: sshRunner,
+		Session: coreengine.NewDebugSession(coreengine.DebugSessionOptions{
+			Writer: debugOutput,
+			Input:  input,
+		}),
+	}
+	resolved, err := resolveOnlineProgramWithRunner(ctx, cfg, host, warnings, progress, progressStyle, factsParallel, base, debugRunner)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return resolved, sshRunner, debugRunner, nil
+}
+
+func resolveOnlineProgramWithRunner(ctx context.Context, cfg *coreparser.Config, host string, warnings *[]coreir.Warning, progress io.Writer, progressStyle termstyle.Options, factsParallel int, base *coreir.Program, runner coreengine.Runner) (*coreir.Program, error) {
+	facts, err := coreengine.DiscoverProgramFactsWithOptions(ctx, runner, base, nil, progress, progressStyle, coreengine.DiscoverProgramFactsOptions{Parallel: factsParallel})
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := compileProgram(cfg, host, coremerge.CompileOptions{HostFacts: facts, Warnings: warnings})
+	if err != nil {
+		return nil, err
+	}
+	return resolved, nil
 }
 
 func commandFile(files []string) string {
@@ -981,7 +1030,7 @@ func usage() {
 Usage:
   dbf validate [-f path ...] [-var name=value] [-var-file path] [--host name]
   dbf plan     [-f path ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]
-  dbf apply    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]
+  dbf apply    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve] [--debug]
   dbf check    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]
   dbf variable inspect [-f path ...] [-var name=value] [-var-file path]
   dbf component inspect [-f path ...] name

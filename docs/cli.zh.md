@@ -27,7 +27,7 @@ deprecated component input 会输出 warning，但 warning 本身不会改变退
 ```text
 dbf validate [-f path ...] [-var name=value] [-var-file path] [--host name]
 dbf plan     [-f path ...] [-var name=value] [-var-file path] [--host name] [--format text|json] [--html file] [--debug] [--color auto|always|never] [--offline]
-dbf apply    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve]
+dbf apply    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--parallel n] [--lock-timeout duration] [--auto-approve] [--debug]
 dbf check    [-f path ...] [-var name=value] [-var-file path] [--host name] [--color auto|always|never] [--lock-timeout duration]
 dbf fmt      [-f path ...]
 dbf variable inspect [-f path ...] [-var name=value] [-var-file path]
@@ -160,7 +160,7 @@ dbf plan -f examples/bbr.dbf.hcl --format json --debug --offline
 | `--host name` | 空 | 只为指定 host 生成 plan。 |
 | `--format text\|json` | `text` | 输出文本或 JSON。JSON 格式见 [plan format](plan-format.md)。 |
 | `--html file` | 空 | 将 plan 写成静态 HTML 文件。只能用于 `plan`，且不能和显式 `--format` 同时使用。 |
-| `--debug` | `false` | 在 plan 输出中显示内部 provider address。只能用于 `plan`。 |
+| `--debug` | `false` | 在 plan 输出中显示内部 provider address。`apply --debug` 是不同语义，见 apply 章节。 |
 | `--offline` | `false` | 不进行 SSH、state 和 runtime facts 探测，只做本地 plan 预览。只能用于 `plan`。 |
 | `-var name=value` | 空 | 可重复；设置顶层变量。 |
 | `-var-file path` | 空 | 可重复；加载变量文件。 |
@@ -204,6 +204,38 @@ dbf apply --parallel 4 --auto-approve
 
 未显式设置 `--parallel` 时，在线 SSH 阶段默认最多同时处理 4 台 host。
 
+调试远端 SSH 调用：
+
+```bash
+dbf apply -f examples/bbr.dbf.hcl --debug --auto-approve
+```
+
+`apply --debug` 会进入交互式 SSH 调试器，从 facts discovery 开始拦截每一次远端调用，并把
+调试信息写到 stderr。它会显示 host、phase、资源或 operation address、action、summary、
+远端脚本或命令、stdin 摘要、stdout/stderr 摘要和执行结果。短文本默认完整显示；长文本和二进制
+payload 只显示长度、sha256、预览和展开提示，需要显式输入 `show stdin`、`show stdout` 或
+`show stderr` 才会展开。
+
+调试器命令：
+
+```text
+step
+next 5
+continue
+show
+show stdin
+retry
+quit
+help
+```
+
+远端调用失败后会进入 `(dbfdbg failed)`，可用 `show` 查看失败上下文，用 `retry` 重跑同一个
+远端调用，或用 `quit` 取消 apply。`quit` 后 state unlock 这类 cleanup 调用仍会尽力执行。
+
+`apply --debug` 是高风险模式：展开输出可能包含 secret、远端脚本、stdin payload、stdout 或
+stderr。建议只在排障时使用，不要把完整调试日志粘贴到公开 issue。调试模式下远端调用强制串行；
+`--debug --parallel 2` 这类组合会失败，`--parallel 1` 可接受。
+
 选项：
 
 | 选项 | 默认值 | 说明 |
@@ -213,6 +245,7 @@ dbf apply --parallel 4 --auto-approve
 | `--parallel n` | `4` | 最多同时进行远端 SSH 阶段的 host 数量，包括 facts discovery、lock/read state、inspect 和 apply；必须大于等于 1，只能用于 `apply`。 |
 | `--lock-timeout duration` | `5m` | 等待远端 state lock 的最长时间。使用 Go duration 格式，例如 `30s`、`2m`、`10m`。 |
 | `--auto-approve` | `false` | 跳过交互确认。 |
+| `--debug` | `false` | 进入交互式 SSH 调试器。只能用于 `apply`；会强制串行，不能和 `--parallel` 大于 1 同时使用。 |
 | `-var name=value` | 空 | 可重复；设置顶层变量。 |
 | `-var-file path` | 空 | 可重复；加载变量文件。 |
 
@@ -390,7 +423,7 @@ dbf -h
 | --- | --- | --- |
 | `--format` | `plan` | `validate`、`apply`、`check` 不支持结构化输出。 |
 | `--html` | `plan` | 不能和显式 `--format` 同时使用。 |
-| `--debug` | `plan` | 用于 plan 调试输出。 |
+| `--debug` | `plan`、`apply` | `plan` 中显示内部 provider address；`apply` 中进入交互式 SSH 调试器。 |
 | `--color` | `plan`、`apply`、`check` | `auto` 只在 TTY 且未设置 `NO_COLOR` / `TERM=dumb` 时启用；`always` 强制启用；`never` 禁用。 |
 | `--offline` | `plan` | 离线 plan 预览。 |
 | `--parallel` | `apply` | 控制多 host 在线 SSH 阶段并发。 |
@@ -403,6 +436,7 @@ dbf -h
 dbf plan -f examples/bbr.dbf.hcl --parallel 2
 dbf check -f examples/bbr.dbf.hcl --offline
 dbf plan -f examples/bbr.dbf.hcl --html plan.html --format json
+dbf apply -f examples/bbr.dbf.hcl --debug --parallel 2
 ```
 
 ## 常见工作流

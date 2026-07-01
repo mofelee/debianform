@@ -28,6 +28,12 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *corest
 	if p.Runner == nil {
 		return ProviderPlan{}, fmt.Errorf("provider runner is required")
 	}
+	ctx = WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "plan inspect",
+		Address: node.Address,
+		Action:  "inspect",
+		Summary: node.Summary,
+	})
 	switch node.Kind {
 	case "file", "secret", "systemd_unit", "nftables_file", "networkd_netdev", "networkd_network":
 		return p.planFileLike(ctx, node, prior)
@@ -75,6 +81,12 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *corest
 }
 
 func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, error) {
+	ctx = WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "apply resource",
+		Address: step.Address,
+		Action:  step.Action,
+		Summary: step.Summary,
+	})
 	switch step.Node.Kind {
 	case "file", "secret", "nftables_file", "networkd_netdev", "networkd_network":
 		return p.applyFileLike(ctx, step, false)
@@ -127,6 +139,12 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 	if step.Prior == nil {
 		return nil
 	}
+	ctx = WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "apply resource",
+		Address: step.Address,
+		Action:  step.Action,
+		Summary: step.Summary,
+	})
 	desired := step.Prior.Desired
 	host := step.Prior.Host
 	switch step.Prior.Kind {
@@ -226,6 +244,20 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 }
 
 func (p NativeProvider) RunOperation(ctx context.Context, operation graph.Operation) (OperationResult, error) {
+	action := operation.Action
+	if action == "" {
+		action = ActionRun
+	}
+	address := operation.Address
+	if current, ok := RemoteCallContextFromContext(ctx); ok && current.Address != "" {
+		address = current.Address
+	}
+	ctx = WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "run operation",
+		Address: address,
+		Action:  action,
+		Summary: operation.Summary,
+	})
 	if operation.ScriptPayload != nil {
 		return p.runScriptOperation(ctx, operation)
 	}
@@ -280,7 +312,13 @@ func (p NativeProvider) readScriptOutputs(ctx context.Context, host string, outp
 	}
 	out := make(map[string]map[string]any, len(outputs))
 	for _, output := range outputs {
-		current, err := p.readPath(ctx, host, output.Path)
+		callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+			Phase:   "operation output read",
+			Address: output.Address,
+			Action:  "read",
+			Summary: output.Path,
+		})
+		current, err := p.readPath(callCtx, host, output.Path)
 		if err != nil {
 			return nil, err
 		}

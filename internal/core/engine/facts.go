@@ -142,7 +142,12 @@ printf 'hostname=%s\n' "$host_name"
 printf 'architecture=%s\n' "$arch"
 printf 'codename=%s\n' "$codename"
 `
-	result, err := runner.Run(ctx, host.Name, script)
+	callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "discover facts",
+		Action:  "inspect",
+		Summary: "system facts",
+	})
+	result, err := runner.Run(callCtx, host.Name, script)
 	if err != nil {
 		return ir.HostFacts{}, fmt.Errorf("discover host facts for %s: %w", host.Name, err)
 	}

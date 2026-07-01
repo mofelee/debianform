@@ -26,7 +26,12 @@ func (p NativeProvider) PlanHost(ctx context.Context, host ir.HostSpec, nodes []
 	if err != nil {
 		return nil, err
 	}
-	result, err := p.Runner.Run(ctx, host.Name, script)
+	callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
+		Phase:   "plan inspect",
+		Action:  "inspect",
+		Summary: fmt.Sprintf("%d resource(s)", len(nodes)),
+	})
+	result, err := p.Runner.Run(callCtx, host.Name, script)
 	if err != nil {
 		return nil, fmt.Errorf("bulk inspect host %s: %w", host.Name, err)
 	}

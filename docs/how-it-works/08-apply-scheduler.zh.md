@@ -18,6 +18,26 @@ program + resourceGraph
 
 CLI 层会先打印一次在线 plan 给用户确认；`Engine.Apply` 内部仍会重新 plan。
 
+## apply --debug 调试层
+
+`dbf apply --debug` 在 CLI 层创建 `DebugSession`，用 `DebugRunner` 包裹底层 `SSHRunner`，
+然后把这个 runner 传给 facts discovery、SSH backend 和 native provider。因此调试器看到的是
+真实 apply 路径里的每一次远端调用：
+
+- facts discovery
+- 在线 plan 的 state read 和 provider inspect
+- apply 前的 state lock、facts 持久化和重新 plan
+- resource apply/destroy、operation run、operation output read
+- 每个成功资源后的 state write
+- 退出或失败路径中的 state unlock cleanup
+
+`DebugRunner` 不改变 provider 脚本和 Engine 调度语义，只在远端调用前后打印上下文并根据用户输入决定
+是否放行、连续放行、重试失败调用或取消普通调用。上下文通过 `RemoteCallContext` 从 engine/backend/
+provider 注入，包含 phase、address、action、summary 和 cleanup 标志。
+
+调试模式下 CLI 会把 facts discovery、online plan 和 apply 的远端调用并发固定为 1，避免交互 prompt
+和多 host 输出交错。cleanup 调用仍会打印，但不会等待 prompt；用户 quit 后也会继续尽力释放 state lock。
+
 ## 为什么 apply 重新 plan
 
 用户确认前打印的 plan 和真正执行之间可能发生变化：

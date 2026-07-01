@@ -164,6 +164,47 @@ host.server1.files.file["/etc/app/config.yaml"] failed: ...
 不要因为 apply 中途失败就删除整个 state。state 已记录成功节点，删除会让 DebianForm 失去 ownership
 上下文，下一次 plan 可能出现不必要的 adopt/create/destroy。
 
+## 使用 apply 调试器排查远端调用
+
+当普通进度日志不足以判断失败发生在哪条远端命令、stdin payload 或 stdout/stderr 中时，可以临时使用
+`apply --debug`：
+
+```bash
+dbf apply -f "$DBF_FILE" --host "$DBF_HOST" --debug --auto-approve
+```
+
+调试器从 facts discovery 开始拦截每一次 SSH 调用，并在 stderr 输出调用编号、host、phase、
+address、action、summary、远端脚本或命令，以及 stdin/stdout/stderr 摘要。常用命令：
+
+```text
+step
+next 5
+continue
+show
+show stdin
+show stdout
+show stderr
+retry
+quit
+```
+
+失败后 prompt 会变成 `(dbfdbg failed)`。此时不要用 `step`、`next` 或 `continue`；先用
+`show stderr`、`show stdout` 或 `show stdin` 看失败上下文，修复临时远端问题后可输入
+`retry` 重跑同一个远端调用。确认无法继续时输入 `quit`；DebianForm 会取消普通调用，但仍会尽力执行
+state unlock 这类 cleanup 调用。
+
+`apply --debug` 是高风险排障模式。完整展开内容可能包含 secret、远端脚本、stdin payload、
+stdout 或 stderr；长文本和二进制默认只显示摘要，只有显式 `show ...` 才展开。需要保留日志时，
+把 stdout 和 stderr 分开保存，并按敏感日志处理：
+
+```bash
+dbf apply -f "$DBF_FILE" --host "$DBF_HOST" --debug --auto-approve \
+  > dbf-apply.out 2> dbf-debug.err
+```
+
+调试模式会强制远端调用串行；`--debug --parallel 2` 会失败。排查多 host 问题时建议先加
+`--host "$DBF_HOST"` 缩小范围。
+
 ## State 与远端不一致
 
 现象：
