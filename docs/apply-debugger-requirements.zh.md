@@ -97,7 +97,7 @@ parse config
 
 ### 调试会话
 
-一次 `dbf apply --debugger` 运行就是一个调试会话。会话从第一次远端 SSH 调用前开始，到 apply
+一次 `dbf apply --debug` 运行就是一个调试会话。会话从第一次远端 SSH 调用前开始，到 apply
 完成、失败退出、用户 quit 或上下文取消为止。
 
 ## CLI 入口
@@ -105,29 +105,33 @@ parse config
 新增选项：
 
 ```bash
-dbf apply --debugger
+dbf apply --debug
 ```
 
 示例：
 
 ```bash
-dbf apply -f examples/bbr.dbf.hcl --debugger
-dbf apply -f base.dbf.hcl -f host.dbf.hcl --host web1 --debugger
-dbf apply --debugger --auto-approve
+dbf apply -f examples/bbr.dbf.hcl --debug
+dbf apply -f base.dbf.hcl -f host.dbf.hcl --host web1 --debug
+dbf apply --debug --auto-approve
 ```
 
-`--debugger` 只允许用于 `apply`。以下命令应报错：
+`--debug` 在不同子命令中有不同含义：
+
+- `dbf plan --debug`：显示 plan 的内部 provider address。
+- `dbf apply --debug`：进入交互式 SSH 调试器。
+
+`check`、`validate` 不支持 `--debug`。以下命令应报错：
 
 ```bash
-dbf plan --debugger
-dbf check --debugger
-dbf validate --debugger
+dbf check --debug
+dbf validate --debug
 ```
 
 错误信息建议：
 
 ```text
---debugger is only supported for apply
+--debug is only supported for plan and apply
 ```
 
 ## 与现有 `plan --debug` 的关系
@@ -135,22 +139,26 @@ dbf validate --debugger
 现有 `dbf plan --debug` 只用于 plan 输出，作用是显示内部 provider address，便于排查资源图和
 provider 映射。它不进入交互会话，也不改变执行行为。
 
-新增 `dbf apply --debugger` 是交互式远端调用调试器。二者是不同功能：
+新增 `dbf apply --debug` 是交互式远端调用调试器。二者复用同一个 flag 名称，但语义按子命令区分：
 
 - `plan --debug`：增强 plan 展示。
-- `apply --debugger`：控制 apply 期间每一次 SSH 调用。
+- `apply --debug`：控制 apply 期间每一次 SSH 调用。
 
-因此不应复用 `--debug` 作为 apply 调试器入口，避免语义混淆。
+文档和 help 文案必须明确这一点，避免用户以为 `apply --debug` 只是增加 provider address 输出。
 
 ## 高风险输出策略
 
-`--debugger` 是显式高风险调试模式。只要用户开启该选项，调试器就会打印完整远端调用内容：
+`apply --debug` 是显式高风险调试模式。调试器会展示远端调用细节，并允许用户展开完整 payload
+和输出。这些内容可能包含 secret。
 
-- 完整 remote command。
-- 完整 shell script。
-- `RunInput` 的完整 stdin payload。
-- 完整 stdout。
-- 完整 stderr。
+默认展示规则：
+
+- remote command 和 shell script 通常较短，默认完整显示。
+- `RunInput` 的 stdin payload 如果是短文本，默认完整显示。
+- stdin payload 如果过长或不是可打印 UTF-8，默认只显示摘要，并提示用户输入 `show stdin` 展开。
+- stdout/stderr 如果较短，默认完整显示。
+- stdout/stderr 如果过长或不是可打印 UTF-8，默认只显示摘要，并提示用户输入 `show stdout` 或
+  `show stderr` 展开。
 
 这可能包含：
 
@@ -164,16 +172,16 @@ provider 映射。它不进入交互会话，也不改变执行行为。
 启动调试会话时必须在 stderr 打印醒目的风险提示：
 
 ```text
-dbf debugger: WARNING: --debugger prints full remote scripts, stdin payloads,
-stdout, and stderr. Output may contain secrets. Do not paste debugger logs into
-issues, CI artifacts, or shared chat without review.
+dbf debugger: WARNING: apply --debug can print remote scripts, stdin payloads,
+stdout, and stderr. Expanded output may contain secrets. Do not paste debugger
+logs into issues, CI artifacts, or shared chat without review.
 ```
 
-第一版不再设计额外的 `--debugger-sensitive` 或环境变量确认。用户选择 `--debugger` 即表示接受
-完整输出风险。
+第一版不再设计额外的 `--debug-sensitive` 或环境变量确认。用户选择 `apply --debug` 即表示接受
+调试输出风险；对于长内容和二进制内容，调试器仍应先给摘要和展开提示，而不是自动刷屏。
 
 普通 `plan`、普通 `apply`、state 持久化、plan JSON/HTML 的脱敏行为必须保持不变。只有
-显式 `--debugger` 的 stderr 调试输出允许暴露原始内容。
+显式 `apply --debug` 的 stderr 调试输出允许暴露原始内容。
 
 ## 覆盖范围
 
@@ -211,15 +219,15 @@ prompt 等待用户输入。
 
 调试模式必须保证远端调用顺序稳定、输出不交错。因此：
 
-- `--debugger` 下远端 SSH 调用强制串行。
+- `--debug` 下远端 SSH 调用强制串行。
 - facts discovery 并发固定为 1。
 - engine apply options 使用 `Parallel: 1` 和 `PerHostParallel: 1`。
-- 如果用户同时传入 `--debugger --parallel N` 且 `N > 1`，命令应报错。
+- 如果用户同时传入 `--debug --parallel N` 且 `N > 1`，命令应报错。
 
 建议错误信息：
 
 ```text
---debugger cannot be combined with --parallel greater than 1
+--debug cannot be combined with --parallel greater than 1
 ```
 
 如果用户传入 `--parallel 1`，可以接受。
@@ -244,6 +252,9 @@ prompt 等待用户输入。
 | `continue` | `c` | 后续不再暂停，直到失败或 apply 完成；仍打印每个调用详情和结果。 |
 | `list` | `l` | 重新打印当前远端调用详情。 |
 | `show` | 无 | 重新打印当前远端调用详情；失败后也打印上次 stdout/stderr。 |
+| `show stdin` | 无 | 展开当前调用的完整 stdin；长文本按文本打印，二进制按 hex dump 打印。 |
+| `show stdout` | 无 | 展开上一次执行结果的完整 stdout；长文本按文本打印，二进制按 hex dump 打印。 |
+| `show stderr` | 无 | 展开上一次执行结果的完整 stderr；长文本按文本打印，二进制按 hex dump 打印。 |
 | `retry` | `r` | 仅失败后可用，重新执行当前失败调用。 |
 | `quit` | `q` | 取消 apply，触发必要 cleanup/unlock。 |
 | `help` | `h` | 打印调试器命令帮助。 |
@@ -257,6 +268,7 @@ prompt 等待用户输入。
 - `next N` 中 `N` 必须是十进制正整数。
 - 未知命令不执行远端调用，只打印帮助提示并继续等待输入。
 - 在非失败状态输入 `retry` 应提示 `retry is only available after a failed remote call`。
+- 对不存在的内容输入展开命令，例如没有 stdin 时输入 `show stdin`，应提示 `current call has no stdin`。
 
 ## 调用详情展示
 
@@ -280,7 +292,7 @@ trap 'rm -f -- "$tmp"' EXIT
 cat > "$tmp"
 install -o 'root' -g 'root' -m '0644' "$tmp" "$dest"
 ----- END remote command -----
-  stdin:
+  stdin: text, length=128, sha256=...
 ----- BEGIN stdin -----
 ...
 ----- END stdin -----
@@ -298,16 +310,43 @@ install -o 'root' -g 'root' -m '0644' "$tmp" "$dest"
 - `remote command` 或 `script` 必填。
 - `stdin` 仅 `RunInput` 显示。
 
-对于不可打印或非 UTF-8 payload：
+### 长内容和二进制展示
 
-- 仍要完整展示内容。
-- 使用 hex dump。
-- 同时展示 byte length 和 sha256。
+调试器要避免自动把终端刷爆。对于 stdin、stdout、stderr，展示策略如下：
 
-示例：
+- 短的可打印 UTF-8 文本：默认完整显示。
+- 长的可打印 UTF-8 文本：默认显示摘要、前若干行预览和展开提示。
+- 非 UTF-8 或包含明显控制字符的内容：默认显示摘要和展开提示，不直接打印原始 bytes。
+- 用户明确输入 `show stdin`、`show stdout` 或 `show stderr` 后，才展开完整内容。
+- 展开二进制内容时使用 hex dump，不直接向终端写原始 bytes。
+
+建议默认阈值：
+
+- 文本超过 8 KiB 或超过 200 行即视为长内容。
+- 二进制内容总是先摘要，不自动展开。
+
+长文本摘要示例：
+
+```text
+  stdin: text payload, length=24576, sha256=..., 612 lines
+  preview:
+----- BEGIN stdin preview -----
+...
+----- END stdin preview -----
+  hint: type "show stdin" to print the full payload
+```
+
+二进制摘要示例：
 
 ```text
   stdin: binary payload, length=128, sha256=...
+  hint: type "show stdin" to print a full hex dump
+```
+
+二进制展开示例：
+
+```text
+(dbfdbg) show stdin
 ----- BEGIN stdin hex -----
 00000000  ...
 ----- END stdin hex -----
@@ -352,6 +391,9 @@ dbf debugger: #12 remote call failed in 348ms
   stderr: <empty>
 ```
 
+如果 stdout/stderr 是长内容或二进制内容，规则与 stdin 相同：先显示摘要和提示，用户输入
+`show stdout` 或 `show stderr` 后再完整展开。
+
 ## 失败处理
 
 远端调用失败后，调试器必须暂停。
@@ -359,6 +401,7 @@ dbf debugger: #12 remote call failed in 348ms
 失败状态下允许：
 
 - `show`：重新打印调用详情和失败输出。
+- `show stdin` / `show stdout` / `show stderr`：展开完整 payload 或输出。
 - `retry` / `r`：重新执行同一个远端调用。
 - `quit` / `q`：退出 apply。
 - `help` / `h`：显示帮助。
@@ -404,7 +447,7 @@ apply cancelled by debugger
 
 ## 与 apply 确认的关系
 
-`dbf apply --debugger` 仍保留现有 apply 确认流程：
+`dbf apply --debug` 仍保留现有 apply 确认流程：
 
 ```text
 Apply these changes? Type yes to continue:
@@ -418,7 +461,7 @@ Apply these changes? Type yes to continue:
 流程示意：
 
 ```text
-dbf apply --debugger
+dbf apply --debug
   -> debugger starts before facts discovery SSH call
   -> facts/probes are stepped
   -> plan is printed
@@ -529,7 +572,7 @@ phase: remote call
 这样可以保留现有脚本对 stdout 的消费方式，也能通过 shell 分开保存：
 
 ```bash
-dbf apply --debugger > apply.out 2> debugger.log
+dbf apply --debug > apply.out 2> debugger.log
 ```
 
 ## 状态和锁语义
@@ -550,8 +593,8 @@ unlock 必须尽力执行，即使用户退出调试器也不能故意保留 loc
 ### 单步执行
 
 ```text
-$ dbf apply -f examples/bbr.dbf.hcl --debugger
-dbf debugger: WARNING: --debugger prints full remote scripts, stdin payloads, stdout, and stderr. Output may contain secrets.
+$ dbf apply -f examples/bbr.dbf.hcl --debug
+dbf debugger: WARNING: apply --debug can print remote scripts, stdin payloads, stdout, and stderr. Expanded output may contain secrets.
 
 dbf debugger: #1 before remote call
   phase: discover facts
@@ -635,8 +678,11 @@ dbf debugger: #13 before remote call
 - `next 5` 连续执行 5 个调用后恢复暂停。
 - `continue` 后不再等待 prompt，但仍打印每个调用和结果。
 - `list` / `show` 不执行远端调用，只重新打印详情。
-- `RunInput` 会打印 remote command 和完整 stdin。
-- 非 UTF-8 stdin 使用 hex dump。
+- `RunInput` 会打印 remote command；短文本 stdin 默认完整显示。
+- 长 stdin 默认显示摘要、预览和 `show stdin` 提示。
+- 非 UTF-8 stdin 默认显示二进制摘要；`show stdin` 使用 hex dump 展开。
+- 长 stdout/stderr 默认显示摘要和展开提示。
+- `show stdout` / `show stderr` 能展开完整输出。
 - 失败后进入 failed prompt。
 - 失败后 `retry` 重新执行同一个调用。
 - 失败后 `step` / `next` / `continue` 不允许。
@@ -647,13 +693,13 @@ dbf debugger: #13 before remote call
 
 覆盖：
 
-- `apply --debugger` flag 可以解析。
-- `plan --debugger` 报错。
-- `check --debugger` 报错。
-- `validate --debugger` 报错。
-- `apply --debugger --parallel 2` 报错。
-- `apply --debugger --parallel 1` 可接受。
-- usage 文本包含 `--debugger`。
+- `apply --debug` flag 可以解析并进入调试模式。
+- `plan --debug` 保持现有 provider address 输出语义，不进入调试模式。
+- `check --debug` 报错。
+- `validate --debug` 报错。
+- `apply --debug --parallel 2` 报错。
+- `apply --debug --parallel 1` 可接受。
+- usage 文本包含 `--debug`。
 - 调试输出写 stderr，不写 stdout。
 
 ### 集成测试建议
@@ -666,7 +712,7 @@ dbf debugger: #13 before remote call
 
 真实 libvirt 集成测试可以后续补充一个小 case：
 
-- 运行 `dbf apply --debugger --auto-approve`。
+- 运行 `dbf apply --debug --auto-approve`。
 - stdin 输入 `next 100` 或 `continue`。
 - 断言命令成功。
 - 断言 stderr 包含 facts discovery、state lock、apply resource、state write。
@@ -682,18 +728,19 @@ dbf debugger: #13 before remote call
 
 文档必须明确：
 
-- `--debugger` 是高风险模式，会输出 secret。
+- `apply --debug` 是高风险模式，展开 payload 或输出时可能泄露 secret。
+- 长文本和二进制 payload 默认只显示摘要和展开提示。
 - 调试器的“一步”是一次 SSH 调用，不是 shell 脚本的一行。
 - `next N` 可以一次执行多个远端调用。
 - 调试模式强制串行，不适合性能测试。
-- `plan --debug` 和 `apply --debugger` 的区别。
+- `plan --debug` 和 `apply --debug` 的区别。
 
 ## 验收标准
 
 以下行为应成立：
 
 ```bash
-dbf apply -f examples/bbr.dbf.hcl --debugger
+dbf apply -f examples/bbr.dbf.hcl --debug
 ```
 
 - 在第一次 facts discovery SSH 调用前停住。
