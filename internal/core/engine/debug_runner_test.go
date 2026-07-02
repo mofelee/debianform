@@ -733,6 +733,47 @@ func TestDebugRunnerFailedPromptContinueReturnsOriginalError(t *testing.T) {
 	}
 }
 
+func TestDebugRunnerFailedPromptRunsDiagnosticCommand(t *testing.T) {
+	inner := &debugSequenceRunner{
+		results: []Result{
+			{},
+			{Stdout: "status output\n", Stderr: "journal hint\n"},
+		},
+		errs: []error{fmt.Errorf("injected failure"), nil},
+	}
+	var out bytes.Buffer
+	runner := DebugRunner{
+		Inner: inner,
+		Session: NewDebugSession(DebugSessionOptions{
+			Writer: &out,
+			Input:  strings.NewReader("step\nrun systemctl status app\ncontinue\n"),
+			Now:    steppedDebugClock(time.Unix(0, 0), time.Millisecond),
+		}),
+	}
+
+	if _, err := runner.Run(context.Background(), "server1", "sometimes\n"); err == nil || !strings.Contains(err.Error(), "injected failure") {
+		t.Fatalf("run after diagnostic error = %v, want original failure", err)
+	}
+	if len(inner.calls) != 2 {
+		t.Fatalf("inner calls = %#v, want original run and diagnostic command", inner.calls)
+	}
+	if inner.calls[1].runner != "RunCommand" || inner.calls[1].host != "server1" || inner.calls[1].remoteCommand != "systemctl status app" {
+		t.Fatalf("diagnostic call = %#v", inner.calls[1])
+	}
+	text := out.String()
+	for _, want := range []string{
+		"dbf debugger: running diagnostic command on server1",
+		"----- BEGIN diagnostic command -----\nsystemctl status app\n----- END diagnostic command -----",
+		"dbf debugger: diagnostic command succeeded",
+		"----- BEGIN diagnostic stdout -----\nstatus output\n----- END diagnostic stdout -----",
+		"----- BEGIN diagnostic stderr -----\njournal hint\n----- END diagnostic stderr -----",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("diagnostic output missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestDebugRunnerQuitAllowsCleanupCalls(t *testing.T) {
 	inner := &debugRecordingRunner{}
 	var out bytes.Buffer

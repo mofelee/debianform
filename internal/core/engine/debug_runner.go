@@ -65,6 +65,7 @@ type debugCall struct {
 	Script        string
 	RemoteCommand string
 	Stdin         []byte
+	Diagnose      func(command string) (Result, error)
 }
 
 type debugCallResult struct {
@@ -128,6 +129,12 @@ func (r DebugRunner) run(ctx context.Context, call debugCall, fn func() (Result,
 	var err error
 	if remoteContext, ok := RemoteCallContextFromContext(ctx); ok {
 		call.Context = remoteContext
+	}
+	call.Diagnose = func(remoteCommand string) (Result, error) {
+		if r.Inner == nil {
+			return Result{}, fmt.Errorf("debug runner inner runner is required")
+		}
+		return r.Inner.RunCommand(ctx, call.Host, remoteCommand)
 	}
 	call, err = session.before(call)
 	if err != nil {
@@ -374,11 +381,12 @@ func (s *DebugSession) handleCommand(call debugCall, command string) (bool, erro
 }
 
 func (s *DebugSession) handleFailedCommand(call debugCall, command string) (bool, bool, error) {
-	fields := strings.Fields(strings.ToLower(command))
-	if len(fields) == 0 {
+	verb, rest := splitDebugCommand(command)
+	if verb == "" {
 		return false, false, nil
 	}
-	switch fields[0] {
+	fields := strings.Fields(strings.ToLower(command))
+	switch strings.ToLower(verb) {
 	case "r", "retry":
 		if len(fields) != 1 {
 			s.printWarningf("retry does not accept arguments")
@@ -392,6 +400,13 @@ func (s *DebugSession) handleFailedCommand(call debugCall, command string) (bool
 		}
 		s.lastExec = "continue"
 		return false, true, nil
+	case "run", "exec":
+		if rest == "" {
+			s.printWarningf("usage: run <remote command>")
+			return false, false, nil
+		}
+		s.runDiagnostic(call, rest)
+		return false, false, nil
 	case "l", "list", "show":
 		if len(fields) == 1 {
 			s.printCall(call)
@@ -451,6 +466,29 @@ func (s *DebugSession) showPayload(call debugCall, name string) {
 	}
 }
 
+func (s *DebugSession) runDiagnostic(call debugCall, command string) {
+	if call.Diagnose == nil {
+		s.printWarningf("diagnostic runner is unavailable")
+		return
+	}
+	fmt.Fprintf(s.w, "%s %s\n", s.debugPrefix(), termstyle.Apply(fmt.Sprintf("running diagnostic command on %s", call.Host), s.style, termstyle.Bold, termstyle.Yellow))
+	writeDebugTextBlockWithStyle(s.w, "diagnostic command", command, s.style, "bash")
+	start := s.now()
+	result, err := call.Diagnose(command)
+	status := "succeeded"
+	statusColor := termstyle.Green
+	if err != nil {
+		status = "failed"
+		statusColor = termstyle.Red
+	}
+	fmt.Fprintf(s.w, "%s diagnostic command %s in %s\n", s.debugPrefix(), termstyle.Apply(status, s.style, termstyle.Bold, statusColor), termstyle.Apply(formatDebugDuration(s.now().Sub(start)), s.style, termstyle.Gray))
+	if err != nil {
+		s.printField("error", err.Error(), termstyle.Red)
+	}
+	writeDebugBytesBlockWithStyle(s.w, "diagnostic stdout", []byte(result.Stdout), s.style)
+	writeDebugBytesBlockWithStyle(s.w, "diagnostic stderr", []byte(result.Stderr), s.style)
+}
+
 func (s *DebugSession) printResultDetails(result debugCallResult) {
 	writeDebugBytesBlockWithStyle(s.w, "stdout", []byte(result.Result.Stdout), s.style)
 	writeDebugBytesBlockWithStyle(s.w, "stderr", []byte(result.Result.Stderr), s.style)
@@ -461,7 +499,7 @@ func (s *DebugSession) printHelp() {
 }
 
 func (s *DebugSession) printFailedHelp() {
-	fmt.Fprintf(s.w, "%s %s\n", termstyle.Apply("dbf debugger failed commands:", s.style, termstyle.Bold, termstyle.Cyan), termstyle.Apply("show [stdin|stdout|stderr], retry, continue, quit, help", s.style, termstyle.Gray))
+	fmt.Fprintf(s.w, "%s %s\n", termstyle.Apply("dbf debugger failed commands:", s.style, termstyle.Bold, termstyle.Cyan), termstyle.Apply("show [stdin|stdout|stderr], run <remote command>, retry, continue, quit, help", s.style, termstyle.Gray))
 }
 
 func writeDebugBytesBlock(w io.Writer, label string, data []byte) {
@@ -649,6 +687,19 @@ func debugPayloadLexer(value string) string {
 		return "bash"
 	}
 	return ""
+}
+
+func splitDebugCommand(command string) (string, string) {
+	trimmed := strings.TrimSpace(command)
+	if trimmed == "" {
+		return "", ""
+	}
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 {
+		return "", ""
+	}
+	verb := fields[0]
+	return verb, strings.TrimSpace(strings.TrimPrefix(trimmed, verb))
 }
 
 func writeDebugHighlighted(w io.Writer, value string, style termstyle.Options, lexerName string) bool {
