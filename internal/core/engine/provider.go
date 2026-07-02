@@ -2100,22 +2100,32 @@ func summarizeDockerComposePS(stdout string, expectedServices []string) map[stri
 			actualServices = append(actualServices, container.Service)
 		}
 	}
-	state := "absent"
-	if total > 0 && running == total {
-		state = "running"
-	} else if total > 0 {
-		state = "stopped"
-	}
+	expectedServices = dedupeStringValues(expectedServices)
+	actualServices = dedupeStringValues(actualServices)
+	state := dockerComposeProjectObservedState(total, running)
 	orphanServices := dockerComposeOrphanServices(actualServices, expectedServices)
 	return map[string]any{
 		"exists":   total > 0,
 		"state":    state,
-		"services": map[string]any{"total": total, "running": running, "stopped": stopped, "expected": expectedServices, "actual": dedupeStringValues(actualServices)},
+		"services": map[string]any{"total": total, "running": running, "stopped": stopped, "expected": expectedServices, "actual": actualServices},
 		"containers": map[string]any{
 			"total": total,
 		},
 		"orphan_count":    len(orphanServices),
 		"orphan_services": orphanServices,
+	}
+}
+
+func dockerComposeProjectObservedState(total, running int) string {
+	switch {
+	case total == 0:
+		return "absent"
+	case running == total:
+		return "running"
+	case running == 0:
+		return "stopped"
+	default:
+		return "degraded"
 	}
 }
 
@@ -2251,6 +2261,7 @@ func dedupeStringValues(values []string) []string {
 		seen[value] = struct{}{}
 		out = append(out, value)
 	}
+	sort.Strings(out)
 	return out
 }
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -1564,6 +1565,41 @@ func TestNativeProviderDockerComposeProjectReadsAllContainers(t *testing.T) {
 	}
 	if !strings.Contains(runner.scripts[1], "'ps' '--all' '--format' 'json'") {
 		t.Fatalf("compose ps command = %q, want --all json output", runner.scripts[1])
+	}
+}
+
+func TestNativeProviderDockerComposeProjectMixedContainerStatesAreDegraded(t *testing.T) {
+	runner := &recordingRunner{outputs: []Result{
+		{Stdout: "redis\nsearxng\nrabbitmq\nnuq-postgres\nplaywright-service\napi\n"},
+		{Stdout: `[
+			{"Name":"api-1","Service":"api","State":"running"},
+			{"Name":"nuq-postgres-1","Service":"nuq-postgres","State":"running"},
+			{"Name":"playwright-service-1","Service":"playwright-service","State":"running"},
+			{"Name":"rabbitmq-1","Service":"rabbitmq","State":"running"},
+			{"Name":"redis-1","Service":"redis","State":"running"},
+			{"Name":"searxng-1","Service":"searxng","State":"exited"}
+		]`},
+	}}
+	provider := NewNativeProvider(runner)
+	node := dockerComposeProjectNode("running")
+
+	got, err := provider.Plan(context.Background(), node, &corestate.Resource{Ownership: "managed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionUpdate || !strings.Contains(got.Summary, "from degraded to running") {
+		t.Fatalf("mixed compose plan = %#v, want degraded update", got)
+	}
+	if got.Observed["state"] != "degraded" || got.Observed["orphan_count"] != 0 {
+		t.Fatalf("mixed compose observed = %#v, want degraded without orphans", got.Observed)
+	}
+	services, ok := got.Observed["services"].(map[string]any)
+	if !ok {
+		t.Fatalf("services observed = %#v", got.Observed["services"])
+	}
+	wantServices := []string{"api", "nuq-postgres", "playwright-service", "rabbitmq", "redis", "searxng"}
+	if !reflect.DeepEqual(services["actual"], wantServices) || !reflect.DeepEqual(services["expected"], wantServices) {
+		t.Fatalf("service lists = actual %#v expected %#v, want sorted %#v", services["actual"], services["expected"], wantServices)
 	}
 }
 
