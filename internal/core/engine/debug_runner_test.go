@@ -13,6 +13,7 @@ import (
 	"github.com/mofelee/debianform/internal/core/graph"
 	"github.com/mofelee/debianform/internal/core/ir"
 	corestate "github.com/mofelee/debianform/internal/core/state"
+	"github.com/mofelee/debianform/internal/core/termstyle"
 )
 
 func TestDebugRunnerRunRecordsAndForwards(t *testing.T) {
@@ -52,6 +53,35 @@ func TestDebugRunnerRunRecordsAndForwards(t *testing.T) {
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("debug output missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestDebugRunnerColorizesDebuggerAndScriptOutput(t *testing.T) {
+	inner := &debugRecordingRunner{result: Result{Stdout: "{\"ok\":true}\n"}}
+	var out bytes.Buffer
+	runner := DebugRunner{
+		Inner: inner,
+		Session: NewDebugSession(DebugSessionOptions{
+			Writer: &out,
+			Now:    steppedDebugClock(time.Unix(0, 0), time.Millisecond),
+			Style:  termstyle.Options{Color: true, Background: true},
+		}),
+	}
+
+	_, err := runner.Run(context.Background(), "server1", "if [ -n \"$HOME\" ]; then\n  echo ok\nfi\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{
+		"\x1b[1m\x1b[36mdbf debugger:\x1b[0m",
+		"\x1b[1m\x1b[32msucceeded\x1b[0m",
+		"\x1b[38;5;",
+		"----- BEGIN script -----",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("colored debug output missing %q:\n%q", want, text)
 		}
 	}
 }

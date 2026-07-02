@@ -26,6 +26,18 @@ import (
 
 const applyDebugWarning = "dbf debugger: WARNING: apply --debug can print remote scripts, stdin payloads, stdout, and stderr. Expanded output may contain secrets."
 
+func formatApplyDebugWarning(style termstyle.Options) string {
+	if !style.Color {
+		return applyDebugWarning
+	}
+	message := strings.TrimPrefix(applyDebugWarning, "dbf debugger: WARNING: ")
+	return fmt.Sprintf("%s %s: %s",
+		termstyle.Apply("dbf debugger:", style, termstyle.Bold, termstyle.Cyan),
+		termstyle.Badge("WARNING", style, termstyle.Yellow, termstyle.BgYellow),
+		message,
+	)
+}
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "dbf: %v\n", err)
@@ -455,7 +467,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			return fmt.Errorf("--format is only supported for plan")
 		}
 		if cmd == "apply" && debug {
-			fmt.Fprintln(os.Stderr, applyDebugWarning)
+			fmt.Fprintln(os.Stderr, formatApplyDebugWarning(stderrStyle))
 		}
 		factsParallel := 0
 		if cmd == "apply" {
@@ -901,6 +913,7 @@ func loadOnlineDebugProgramWithProgress(ctx context.Context, cfg *coreparser.Con
 		Session: coreengine.NewDebugSession(coreengine.DebugSessionOptions{
 			Writer: debugOutput,
 			Input:  input,
+			Style:  progressStyle,
 		}),
 	}
 	resolved, err := resolveOnlineProgramWithRunner(ctx, cfg, host, warnings, progress, progressStyle, factsParallel, base, debugRunner)

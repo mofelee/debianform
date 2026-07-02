@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,11 +14,19 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/alecthomas/chroma/v2/formatters"
+	"github.com/alecthomas/chroma/v2/lexers"
+	"github.com/alecthomas/chroma/v2/styles"
+	"github.com/mofelee/debianform/internal/core/termstyle"
 )
 
 const (
 	debugPreviewBytes = 8 * 1024
 	debugPreviewLines = 200
+
+	debugSyntaxFormatter = "terminal256"
+	debugSyntaxStyle     = "github-dark"
 )
 
 var ErrDebugCancelled = errors.New("apply cancelled by debugger")
@@ -31,6 +40,7 @@ type DebugSession struct {
 	w             io.Writer
 	in            *bufio.Reader
 	now           func() time.Time
+	style         termstyle.Options
 	next          int
 	continueMode  bool
 	nextRemaining int
@@ -44,6 +54,7 @@ type DebugSessionOptions struct {
 	Writer io.Writer
 	Input  io.Reader
 	Now    func() time.Time
+	Style  termstyle.Options
 }
 
 type debugCall struct {
@@ -72,7 +83,7 @@ func NewDebugSession(opts DebugSessionOptions) *DebugSession {
 	if opts.Input != nil {
 		in = bufio.NewReader(opts.Input)
 	}
-	return &DebugSession{w: opts.Writer, in: in, now: now}
+	return &DebugSession{w: opts.Writer, in: in, now: now, style: opts.Style}
 }
 
 func (r DebugRunner) Run(ctx context.Context, host, script string) (Result, error) {
@@ -162,34 +173,34 @@ func (s *DebugSession) before(call debugCall) (debugCall, error) {
 }
 
 func (s *DebugSession) printCall(call debugCall) {
-	fmt.Fprintf(s.w, "dbf debugger: #%d before remote call\n", call.Index)
-	fmt.Fprintf(s.w, "  host: %s\n", call.Host)
+	fmt.Fprintf(s.w, "%s #%d %s\n", s.debugPrefix(), call.Index, termstyle.Apply("before remote call", s.style, termstyle.Bold))
+	s.printField("host", call.Host, termstyle.Cyan)
 	phase := call.Context.Phase
 	if phase == "" {
 		phase = "remote call"
 	}
-	fmt.Fprintf(s.w, "  phase: %s\n", phase)
+	s.printField("phase", phase, termstyle.Cyan)
 	if call.Context.Address != "" {
-		fmt.Fprintf(s.w, "  address: %s\n", call.Context.Address)
+		s.printField("address", call.Context.Address, termstyle.Blue)
 	}
 	if call.Context.Action != "" {
-		fmt.Fprintf(s.w, "  action: %s\n", call.Context.Action)
+		s.printField("action", call.Context.Action, termstyle.ActionColor(call.Context.Action))
 	}
 	if call.Context.Summary != "" {
-		fmt.Fprintf(s.w, "  summary: %s\n", call.Context.Summary)
+		s.printField("summary", call.Context.Summary, termstyle.Gray)
 	}
 	if call.Context.Cleanup {
-		fmt.Fprintln(s.w, "  cleanup: true")
+		s.printField("cleanup", "true", termstyle.Yellow)
 	}
-	fmt.Fprintf(s.w, "  runner: %s\n", call.Runner)
+	s.printField("runner", call.Runner, termstyle.Magenta)
 	if call.RemoteCommand != "" {
-		writeDebugTextBlock(s.w, "remote command", call.RemoteCommand)
+		writeDebugTextBlockWithStyle(s.w, "remote command", call.RemoteCommand, s.style, "bash")
 	}
 	if call.Script != "" {
-		writeDebugTextBlock(s.w, "script", call.Script)
+		writeDebugTextBlockWithStyle(s.w, "script", call.Script, s.style, "bash")
 	}
 	if call.Stdin != nil {
-		writeDebugBytesBlock(s.w, "stdin", call.Stdin)
+		writeDebugBytesBlockWithStyle(s.w, "stdin", call.Stdin, s.style)
 	}
 }
 
@@ -202,12 +213,16 @@ func (s *DebugSession) after(call debugCall, result Result, err error, elapsed t
 	if err != nil {
 		status = "failed"
 	}
-	fmt.Fprintf(s.w, "dbf debugger: #%d remote call %s in %s\n", call.Index, status, formatDebugDuration(elapsed))
+	statusColor := termstyle.Green
 	if err != nil {
-		fmt.Fprintf(s.w, "  error: %v\n", err)
+		statusColor = termstyle.Red
 	}
-	writeDebugBytesBlock(s.w, "stdout", []byte(result.Stdout))
-	writeDebugBytesBlock(s.w, "stderr", []byte(result.Stderr))
+	fmt.Fprintf(s.w, "%s #%d remote call %s in %s\n", s.debugPrefix(), call.Index, termstyle.Apply(status, s.style, termstyle.Bold, statusColor), termstyle.Apply(formatDebugDuration(elapsed), s.style, termstyle.Gray))
+	if err != nil {
+		s.printField("error", err.Error(), termstyle.Red)
+	}
+	writeDebugBytesBlockWithStyle(s.w, "stdout", []byte(result.Stdout), s.style)
+	writeDebugBytesBlockWithStyle(s.w, "stderr", []byte(result.Stderr), s.style)
 }
 
 func (s *DebugSession) afterFailure(call debugCall, err error) (bool, error) {
@@ -215,7 +230,7 @@ func (s *DebugSession) afterFailure(call debugCall, err error) (bool, error) {
 		return false, nil
 	}
 	for {
-		fmt.Fprint(s.w, "(dbfdbg failed) ")
+		fmt.Fprint(s.w, termstyle.Apply("(dbfdbg failed) ", s.style, termstyle.Bold, termstyle.Red))
 		line, readErr := s.in.ReadString('\n')
 		if readErr != nil && !(errors.Is(readErr, io.EOF) && line != "") {
 			if errors.Is(readErr, io.EOF) {
@@ -242,7 +257,7 @@ func (s *DebugSession) printRetry(call debugCall) {
 	if s == nil || s.w == nil {
 		return
 	}
-	fmt.Fprintf(s.w, "dbf debugger: retrying #%d remote call\n", call.Index)
+	fmt.Fprintf(s.w, "%s %s\n", s.debugPrefix(), termstyle.Apply(fmt.Sprintf("retrying #%d remote call", call.Index), s.style, termstyle.Bold, termstyle.Yellow))
 	s.printCall(call)
 }
 
@@ -258,7 +273,7 @@ func (s *DebugSession) waitBeforeCall(call debugCall) error {
 		return nil
 	}
 	for {
-		fmt.Fprint(s.w, "(dbfdbg) ")
+		fmt.Fprint(s.w, termstyle.Apply("(dbfdbg) ", s.style, termstyle.Bold, termstyle.Magenta))
 		line, err := s.in.ReadString('\n')
 		if err != nil && !(errors.Is(err, io.EOF) && line != "") {
 			if errors.Is(err, io.EOF) {
@@ -291,7 +306,7 @@ func (s *DebugSession) handleCommand(call debugCall, command string) (bool, erro
 	switch fields[0] {
 	case "s", "step":
 		if len(fields) != 1 {
-			fmt.Fprintln(s.w, "dbf debugger: step does not accept arguments")
+			s.printWarningf("step does not accept arguments")
 			return false, nil
 		}
 		s.lastExec = "step"
@@ -299,13 +314,13 @@ func (s *DebugSession) handleCommand(call debugCall, command string) (bool, erro
 	case "n", "next":
 		count := 1
 		if len(fields) > 2 {
-			fmt.Fprintln(s.w, "dbf debugger: usage: next [N]")
+			s.printWarningf("usage: next [N]")
 			return false, nil
 		}
 		if len(fields) == 2 {
 			value, err := strconv.Atoi(fields[1])
 			if err != nil || value < 1 {
-				fmt.Fprintln(s.w, "dbf debugger: next requires a positive integer")
+				s.printWarningf("next requires a positive integer")
 				return false, nil
 			}
 			count = value
@@ -315,7 +330,7 @@ func (s *DebugSession) handleCommand(call debugCall, command string) (bool, erro
 		return true, nil
 	case "c", "continue":
 		if len(fields) != 1 {
-			fmt.Fprintln(s.w, "dbf debugger: continue does not accept arguments")
+			s.printWarningf("continue does not accept arguments")
 			return false, nil
 		}
 		s.continueMode = true
@@ -333,11 +348,11 @@ func (s *DebugSession) handleCommand(call debugCall, command string) (bool, erro
 			s.showPayload(call, fields[1])
 			return false, nil
 		}
-		fmt.Fprintln(s.w, "dbf debugger: usage: show [stdin|stdout|stderr]")
+		s.printWarningf("usage: show [stdin|stdout|stderr]")
 		return false, nil
 	case "q", "quit":
 		if len(fields) != 1 {
-			fmt.Fprintln(s.w, "dbf debugger: quit does not accept arguments")
+			s.printWarningf("quit does not accept arguments")
 			return false, nil
 		}
 		s.cancelled = true
@@ -346,7 +361,7 @@ func (s *DebugSession) handleCommand(call debugCall, command string) (bool, erro
 		s.printHelp()
 		return false, nil
 	default:
-		fmt.Fprintf(s.w, "dbf debugger: unknown command %q\n", command)
+		s.printWarningf("unknown command %q", command)
 		s.printHelp()
 		return false, nil
 	}
@@ -360,7 +375,7 @@ func (s *DebugSession) handleFailedCommand(call debugCall, command string) (bool
 	switch fields[0] {
 	case "r", "retry":
 		if len(fields) != 1 {
-			fmt.Fprintln(s.w, "dbf debugger: retry does not accept arguments")
+			s.printWarningf("retry does not accept arguments")
 			return false, nil
 		}
 		return true, nil
@@ -376,14 +391,14 @@ func (s *DebugSession) handleFailedCommand(call debugCall, command string) (bool
 			s.showPayload(call, fields[1])
 			return false, nil
 		}
-		fmt.Fprintln(s.w, "dbf debugger: usage: show [stdin|stdout|stderr]")
+		s.printWarningf("usage: show [stdin|stdout|stderr]")
 		return false, nil
 	case "s", "step", "n", "next", "c", "continue":
-		fmt.Fprintln(s.w, "dbf debugger: failed call cannot step, next, or continue; use retry or quit")
+		s.printWarningf("failed call cannot step, next, or continue; use retry or quit")
 		return false, nil
 	case "q", "quit":
 		if len(fields) != 1 {
-			fmt.Fprintln(s.w, "dbf debugger: quit does not accept arguments")
+			s.printWarningf("quit does not accept arguments")
 			return false, nil
 		}
 		s.cancelled = true
@@ -392,7 +407,7 @@ func (s *DebugSession) handleFailedCommand(call debugCall, command string) (bool
 		s.printFailedHelp()
 		return false, nil
 	default:
-		fmt.Fprintf(s.w, "dbf debugger: unknown failed command %q\n", command)
+		s.printWarningf("unknown failed command %q", command)
 		s.printFailedHelp()
 		return false, nil
 	}
@@ -402,73 +417,83 @@ func (s *DebugSession) showPayload(call debugCall, name string) {
 	switch name {
 	case "stdin":
 		if call.Stdin == nil {
-			fmt.Fprintln(s.w, "dbf debugger: current call has no stdin")
+			s.printWarningf("current call has no stdin")
 			return
 		}
-		writeDebugPayloadFull(s.w, "stdin", call.Stdin)
+		writeDebugPayloadFullWithStyle(s.w, "stdin", call.Stdin, s.style)
 	case "stdout":
 		if !s.lastResult.Valid {
-			fmt.Fprintln(s.w, "dbf debugger: no previous stdout")
+			s.printWarningf("no previous stdout")
 			return
 		}
-		writeDebugPayloadFull(s.w, "stdout", []byte(s.lastResult.Result.Stdout))
+		writeDebugPayloadFullWithStyle(s.w, "stdout", []byte(s.lastResult.Result.Stdout), s.style)
 	case "stderr":
 		if !s.lastResult.Valid {
-			fmt.Fprintln(s.w, "dbf debugger: no previous stderr")
+			s.printWarningf("no previous stderr")
 			return
 		}
-		writeDebugPayloadFull(s.w, "stderr", []byte(s.lastResult.Result.Stderr))
+		writeDebugPayloadFullWithStyle(s.w, "stderr", []byte(s.lastResult.Result.Stderr), s.style)
 	default:
-		fmt.Fprintln(s.w, "dbf debugger: usage: show [stdin|stdout|stderr]")
+		s.printWarningf("usage: show [stdin|stdout|stderr]")
 	}
 }
 
 func (s *DebugSession) printResultDetails(result debugCallResult) {
-	writeDebugBytesBlock(s.w, "stdout", []byte(result.Result.Stdout))
-	writeDebugBytesBlock(s.w, "stderr", []byte(result.Result.Stderr))
+	writeDebugBytesBlockWithStyle(s.w, "stdout", []byte(result.Result.Stdout), s.style)
+	writeDebugBytesBlockWithStyle(s.w, "stderr", []byte(result.Result.Stderr), s.style)
 }
 
 func (s *DebugSession) printHelp() {
-	fmt.Fprintln(s.w, "dbf debugger commands: step, next [N], continue, list, show [stdin|stdout|stderr], quit, help")
+	fmt.Fprintf(s.w, "%s %s\n", termstyle.Apply("dbf debugger commands:", s.style, termstyle.Bold, termstyle.Cyan), termstyle.Apply("step, next [N], continue, list, show [stdin|stdout|stderr], quit, help", s.style, termstyle.Gray))
 }
 
 func (s *DebugSession) printFailedHelp() {
-	fmt.Fprintln(s.w, "dbf debugger failed commands: show [stdin|stdout|stderr], retry, quit, help")
+	fmt.Fprintf(s.w, "%s %s\n", termstyle.Apply("dbf debugger failed commands:", s.style, termstyle.Bold, termstyle.Cyan), termstyle.Apply("show [stdin|stdout|stderr], retry, quit, help", s.style, termstyle.Gray))
 }
 
 func writeDebugBytesBlock(w io.Writer, label string, data []byte) {
+	writeDebugBytesBlockWithStyle(w, label, data, termstyle.Options{})
+}
+
+func writeDebugBytesBlockWithStyle(w io.Writer, label string, data []byte, style termstyle.Options) {
 	if len(data) == 0 {
-		fmt.Fprintf(w, "  %s: <empty>\n", label)
+		fmt.Fprintf(w, "  %s: %s\n", debugBlockLabel(label, style), termstyle.Apply("<empty>", style, termstyle.Gray))
 		return
 	}
 	payload := classifyDebugPayload(data)
 	if payload.Binary {
-		fmt.Fprintf(w, "  %s: binary payload, length=%d, sha256=%s\n", label, len(data), payload.SHA256)
-		fmt.Fprintf(w, "  hint: type \"show %s\" to print a full hex dump\n", label)
+		fmt.Fprintf(w, "  %s: %s\n", debugBlockLabel(label, style), termstyle.Apply(fmt.Sprintf("binary payload, length=%d, sha256=%s", len(data), payload.SHA256), style, termstyle.Yellow))
+		writeDebugHint(w, fmt.Sprintf("type \"show %s\" to print a full hex dump", label), style)
 		return
 	}
 	if payload.Long {
-		fmt.Fprintf(w, "  %s: text payload, length=%d, sha256=%s, %d lines\n", label, len(data), payload.SHA256, payload.Lines)
-		writeDebugTextBlock(w, label+" preview", payload.Preview)
-		fmt.Fprintf(w, "  hint: type \"show %s\" to print the full payload\n", label)
+		fmt.Fprintf(w, "  %s: %s\n", debugBlockLabel(label, style), termstyle.Apply(fmt.Sprintf("text payload, length=%d, sha256=%s, %d lines", len(data), payload.SHA256, payload.Lines), style, termstyle.Gray))
+		writeDebugTextBlockWithStyle(w, label+" preview", payload.Preview, style, debugPayloadLexer(payload.Preview))
+		writeDebugHint(w, fmt.Sprintf("type \"show %s\" to print the full payload", label), style)
 		return
 	}
-	fmt.Fprintf(w, "  %s: text, length=%d, sha256=%s\n", label, len(data), payload.SHA256)
-	writeDebugTextBlock(w, label, payload.Text)
+	fmt.Fprintf(w, "  %s: %s\n", debugBlockLabel(label, style), termstyle.Apply(fmt.Sprintf("text, length=%d, sha256=%s", len(data), payload.SHA256), style, termstyle.Gray))
+	writeDebugTextBlockWithStyle(w, label, payload.Text, style, debugPayloadLexer(payload.Text))
 }
 
 func writeDebugTextBlock(w io.Writer, label string, value string) {
+	writeDebugTextBlockWithStyle(w, label, value, termstyle.Options{}, "")
+}
+
+func writeDebugTextBlockWithStyle(w io.Writer, label string, value string, style termstyle.Options, lexerName string) {
 	if value == "" {
-		fmt.Fprintf(w, "  %s: <empty>\n", label)
+		fmt.Fprintf(w, "  %s: %s\n", debugBlockLabel(label, style), termstyle.Apply("<empty>", style, termstyle.Gray))
 		return
 	}
-	fmt.Fprintf(w, "  %s:\n", label)
-	fmt.Fprintf(w, "----- BEGIN %s -----\n", label)
-	fmt.Fprint(w, value)
+	fmt.Fprintf(w, "  %s:\n", debugBlockLabel(label, style))
+	fmt.Fprintf(w, "%s\n", termstyle.Apply(fmt.Sprintf("----- BEGIN %s -----", label), style, termstyle.Bold, termstyle.Gray))
+	if !writeDebugHighlighted(w, value, style, lexerName) {
+		fmt.Fprint(w, value)
+	}
 	if len(value) == 0 || value[len(value)-1] != '\n' {
 		fmt.Fprintln(w)
 	}
-	fmt.Fprintf(w, "----- END %s -----\n", label)
+	fmt.Fprintf(w, "%s\n", termstyle.Apply(fmt.Sprintf("----- END %s -----", label), style, termstyle.Bold, termstyle.Gray))
 }
 
 func formatDebugDuration(value time.Duration) string {
@@ -551,16 +576,83 @@ func debugTextPreview(text string) string {
 }
 
 func writeDebugPayloadFull(w io.Writer, label string, data []byte) {
+	writeDebugPayloadFullWithStyle(w, label, data, termstyle.Options{})
+}
+
+func writeDebugPayloadFullWithStyle(w io.Writer, label string, data []byte, style termstyle.Options) {
 	if len(data) == 0 {
-		fmt.Fprintf(w, "  %s: <empty>\n", label)
+		fmt.Fprintf(w, "  %s: %s\n", debugBlockLabel(label, style), termstyle.Apply("<empty>", style, termstyle.Gray))
 		return
 	}
 	payload := classifyDebugPayload(data)
 	if payload.Binary {
-		fmt.Fprintf(w, "----- BEGIN %s hex -----\n", label)
-		fmt.Fprint(w, hex.Dump(data))
-		fmt.Fprintf(w, "----- END %s hex -----\n", label)
+		fmt.Fprintf(w, "%s\n", termstyle.Apply(fmt.Sprintf("----- BEGIN %s hex -----", label), style, termstyle.Bold, termstyle.Gray))
+		fmt.Fprint(w, termstyle.Apply(hex.Dump(data), style, termstyle.Yellow))
+		fmt.Fprintf(w, "%s\n", termstyle.Apply(fmt.Sprintf("----- END %s hex -----", label), style, termstyle.Bold, termstyle.Gray))
 		return
 	}
-	writeDebugTextBlock(w, label, payload.Text)
+	writeDebugTextBlockWithStyle(w, label, payload.Text, style, debugPayloadLexer(payload.Text))
+}
+
+func (s *DebugSession) debugPrefix() string {
+	return termstyle.Apply("dbf debugger:", s.style, termstyle.Bold, termstyle.Cyan)
+}
+
+func (s *DebugSession) printField(label string, value string, codes ...string) {
+	fmt.Fprintf(s.w, "  %s: %s\n", debugBlockLabel(label, s.style), debugApply(value, s.style, codes...))
+}
+
+func (s *DebugSession) printWarningf(format string, args ...any) {
+	fmt.Fprintf(s.w, "%s %s\n", s.debugPrefix(), termstyle.Apply(fmt.Sprintf(format, args...), s.style, termstyle.Yellow))
+}
+
+func debugBlockLabel(label string, style termstyle.Options) string {
+	return termstyle.Apply(label, style, termstyle.Bold, termstyle.Gray)
+}
+
+func debugApply(text string, style termstyle.Options, codes ...string) string {
+	filtered := codes[:0]
+	for _, code := range codes {
+		if code != "" {
+			filtered = append(filtered, code)
+		}
+	}
+	return termstyle.Apply(text, style, filtered...)
+}
+
+func writeDebugHint(w io.Writer, text string, style termstyle.Options) {
+	fmt.Fprintf(w, "  %s: %s\n", debugBlockLabel("hint", style), termstyle.Apply(text, style, termstyle.Yellow))
+}
+
+func debugPayloadLexer(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	if json.Valid([]byte(trimmed)) {
+		return "json"
+	}
+	if strings.HasPrefix(trimmed, "#!") {
+		return "bash"
+	}
+	return ""
+}
+
+func writeDebugHighlighted(w io.Writer, value string, style termstyle.Options, lexerName string) bool {
+	if !style.Color || lexerName == "" {
+		return false
+	}
+	lexer := lexers.Get(lexerName)
+	if lexer == nil {
+		return false
+	}
+	formatter := formatters.Get(debugSyntaxFormatter)
+	if formatter == nil {
+		return false
+	}
+	iterator, err := lexer.Tokenise(nil, value)
+	if err != nil {
+		return false
+	}
+	return formatter.Format(w, styles.Get(debugSyntaxStyle), iterator) == nil
 }

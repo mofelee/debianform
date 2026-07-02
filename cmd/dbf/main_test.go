@@ -377,6 +377,23 @@ func TestPrintWarningsWithStyleKeepsWarningTextAndAddsBadge(t *testing.T) {
 	}
 }
 
+func TestFormatApplyDebugWarningWithStyle(t *testing.T) {
+	if got := formatApplyDebugWarning(termstyle.Options{}); got != applyDebugWarning {
+		t.Fatalf("plain debug warning = %q, want %q", got, applyDebugWarning)
+	}
+
+	styled := formatApplyDebugWarning(termstyle.Options{Color: true, Background: true})
+	for _, want := range []string{
+		"\x1b[1m\x1b[36mdbf debugger:\x1b[0m",
+		"\x1b[1m\x1b[30m\x1b[43m WARNING \x1b[0m",
+		"apply --debug can print remote scripts",
+	} {
+		if !strings.Contains(styled, want) {
+			t.Fatalf("styled debug warning missing %q:\n%q", want, styled)
+		}
+	}
+}
+
 func TestValidateRunnableExamples(t *testing.T) {
 	for _, example := range runnableExamples() {
 		t.Run(filepath.Base(example), func(t *testing.T) {
