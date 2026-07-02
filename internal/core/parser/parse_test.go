@@ -317,6 +317,144 @@ host "server1" {
 	}
 }
 
+func TestParseLocalsCanReferenceVariablesAndOtherLocals(t *testing.T) {
+	file := writeConfig(t, `
+variable "app" {
+  type    = string
+  default = "firecrawl"
+}
+
+variable "settings" {
+  type = object({
+    domain = string
+  })
+  default = {
+    domain = "example.test"
+  }
+}
+
+variable "ports" {
+  type    = list(number)
+  default = [3000]
+}
+
+variable "token" {
+  type      = string
+  sensitive = true
+  default   = "not-a-real-local-secret"
+}
+
+variable "runtime_token" {
+  type      = string
+  sensitive = true
+  ephemeral = true
+  default   = "not-a-real-local-runtime-token"
+}
+
+locals {
+  labels       = jsonencode({ app = local.app_name })
+  env          = <<-ENV
+    APP=${local.app_name}
+    DOMAIN=${var.settings.domain}
+    PORT=${var.ports[0]}
+  ENV
+  secret_env   = "TOKEN=${var.token}\n"
+  runtime_copy = var.runtime_token
+  app_name     = var.app
+}
+
+host "server1" {
+  files {
+    file "/etc/app.env" {
+      content = local.env
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFilesWithOptions([]string{file}, ParseOptions{VariableValues: []ExternalVariableValue{
+		{Name: "app", Value: "api", Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Locals["app_name"].String; got != "api" {
+		t.Fatalf("local.app_name = %q, want api", got)
+	}
+	if got := cfg.Locals["labels"].String; got != `{"app":"api"}` {
+		t.Fatalf("local.labels = %q, want encoded api label", got)
+	}
+	env := cfg.Locals["env"].String
+	for _, want := range []string{"APP=api", "DOMAIN=example.test", "PORT=3000"} {
+		if !strings.Contains(env, want) {
+			t.Fatalf("local.env = %q, missing %q", env, want)
+		}
+	}
+	content := cfg.Hosts["server1"].Body.Map["files"].Map["file"].Map["/etc/app.env"].Map["content"]
+	if content.String != env {
+		t.Fatalf("host file content = %q, want local.env %q", content.String, env)
+	}
+	if !cfg.Locals["secret_env"].Sensitive {
+		t.Fatalf("local.secret_env did not inherit sensitive mark")
+	}
+	runtimeCopy := cfg.Locals["runtime_copy"]
+	if !runtimeCopy.Sensitive || !runtimeCopy.Ephemeral {
+		t.Fatalf("local.runtime_copy marks = sensitive:%v ephemeral:%v, want both", runtimeCopy.Sensitive, runtimeCopy.Ephemeral)
+	}
+}
+
+func TestParseRejectsInvalidLocalReferences(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "unknown variable",
+			hcl: `
+locals {
+  app = var.missing
+}
+
+host "server1" {}
+`,
+			want: `local.app: unknown variable var.missing`,
+		},
+		{
+			name: "unknown local",
+			hcl: `
+locals {
+  app = local.missing
+}
+
+host "server1" {}
+`,
+			want: `local.app: unknown local local.missing`,
+		},
+		{
+			name: "cycle",
+			hcl: `
+locals {
+  a = local.b
+  b = local.a
+}
+
+host "server1" {}
+`,
+			want: `locals cycle detected: local.a -> local.b -> local.a`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := writeConfig(t, tt.hcl)
+			_, err := ParseFiles([]string{file})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ParseFiles error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseRejectsInvalidVariableDefaultsAndReferences(t *testing.T) {
 	tests := []struct {
 		name string

@@ -583,6 +583,45 @@ func TestSensitiveVariablePlanDoesNotLeak(t *testing.T) {
 	}
 }
 
+func TestLocalsVarComposeEnvPlanJSONGolden(t *testing.T) {
+	fixture := "../testdata/fixtures/locals-var.dbf.hcl"
+	cfg, err := parser.ParseFilesWithOptions([]string{fixture}, parser.ParseOptions{VariableValues: []parser.ExternalVariableValue{
+		{Name: "postgres_password", Value: testassert.SensitiveVariableDefault, Source: ir.SourceRef{File: "cli", Line: 1, Path: "cli.var[0]"}},
+		{Name: "bull_auth_key", Value: testassert.SensitiveVariableCLIValue, Source: ir.SourceRef{File: "cli", Line: 2, Path: "cli.var[1]"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := merge.CompileWithOptions(cfg, merge.CompileOptions{HostFacts: testHostFacts()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resourceGraph, err := graph.Compile(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := New(resourceGraph, Options{
+		CommandFile: fixture,
+		Host:        "localsvar1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/plan/locals-var.golden.json", got)
+	testassert.NoSecretLeak(t, "locals var plan JSON", got)
+	if !strings.Contains(got, `"path": "host.localsvar1.docker.compose[\"firecrawl\"].env_file[\"app\"]"`) {
+		t.Fatalf("plan JSON missing compose env_file change:\n%s", got)
+	}
+	if !strings.Contains(got, `"sensitive": true`) {
+		t.Fatalf("plan JSON does not mark local-backed env file sensitive:\n%s", got)
+	}
+}
+
 func TestEphemeralVariablePlanDoesNotLeak(t *testing.T) {
 	doc := planFixture(t, "../testdata/fixtures/ephemeral-variable-content.dbf.hcl", Options{
 		CommandFile: "../testdata/fixtures/ephemeral-variable-content.dbf.hcl",
@@ -1188,6 +1227,7 @@ func testHostFacts() map[string]ir.HostFacts {
 		"edge1",
 		"foundation1",
 		"input1",
+		"localsvar1",
 		"merge1",
 		"preview1",
 		"router1",

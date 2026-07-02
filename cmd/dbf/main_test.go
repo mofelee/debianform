@@ -489,6 +489,50 @@ func TestValidateAndPlanAcceptCLIVariableValues(t *testing.T) {
 	}
 }
 
+func TestValidatePlanAndVariableInspectAcceptLocalsVarFixture(t *testing.T) {
+	fixture := "../../internal/core/testdata/fixtures/locals-var.dbf.hcl"
+	varArgs := []string{
+		"-var", "postgres_password=" + testassert.SensitiveVariableDefault,
+		"-var", "bull_auth_key=" + testassert.SensitiveVariableCLIValue,
+	}
+
+	validateArgs := append([]string{"validate", "-f", fixture}, varArgs...)
+	validateOutput := captureStdout(t, func() {
+		if err := run(validateArgs); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(validateOutput, "configuration is valid: 1 host(s)") {
+		t.Fatalf("validate output = %q", validateOutput)
+	}
+
+	planArgs := append([]string{"plan", "-f", fixture, "--offline"}, varArgs...)
+	planOutput, planStderr := captureOutput(t, func() {
+		if err := run(planArgs); err != nil {
+			t.Fatal(err)
+		}
+	})
+	testassert.NoSecretLeak(t, "locals var plan stdout", planOutput)
+	testassert.NoSecretLeak(t, "locals var plan stderr", planStderr)
+	if !strings.Contains(planOutput, `<sensitive sha256=`) {
+		t.Fatalf("plan output does not show sensitive local-backed env file:\n%s", planOutput)
+	}
+
+	inspectOutput := captureStdout(t, func() {
+		if err := run([]string{"variable", "inspect", "-f", fixture}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	for _, want := range []string{"firecrawl_public_port", "postgres_password", "bull_auth_key"} {
+		if !strings.Contains(inspectOutput, want) {
+			t.Fatalf("variable inspect output missing %q:\n%s", want, inspectOutput)
+		}
+	}
+	if strings.Contains(inspectOutput, "firecrawl_env") {
+		t.Fatalf("variable inspect output should not include locals:\n%s", inspectOutput)
+	}
+}
+
 func TestPlanSensitiveCLIVariableDoesNotLeak(t *testing.T) {
 	output, stderr := captureOutput(t, func() {
 		if err := run([]string{
@@ -656,7 +700,17 @@ variable "environment" {
   }
 }
 
-host "server1" {}
+locals {
+  env = var.environment.missing
+}
+
+host "server1" {
+  files {
+    file "/etc/environment" {
+      content = local.env
+    }
+  }
+}
 `), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -912,12 +966,16 @@ profile "base" {
 }
 `)
 	writeTestFile(t, filepath.Join(site, "10-host.dbf.hcl"), `
+locals {
+  environment_file = "env=${var.environment}\n"
+}
+
 host "server1" {
   imports = [profile.base]
 
   files {
     file "/etc/debianform/environment.txt" {
-      content = "env=${var.environment}\n"
+      content = local.environment_file
     }
   }
 }

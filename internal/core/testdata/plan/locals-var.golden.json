@@ -1,0 +1,1363 @@
+{
+  "format_version": "debianform.plan.alpha1",
+  "generated_at": "2026-06-20T12:00:00Z",
+  "command": {
+    "file": "../testdata/fixtures/locals-var.dbf.hcl",
+    "host": "localsvar1"
+  },
+  "summary": {
+    "create": 15,
+    "update": 0,
+    "delete": 0,
+    "no_op": 0,
+    "operations": 3
+  },
+  "changes": [
+    {
+      "address": "host.localsvar1.docker.apt.repository[\"docker-official\"]",
+      "action": "create",
+      "summary": "manage docker official apt repository",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 30,
+        "path": "host.localsvar1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 6,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "Types: deb"
+                  },
+                  {
+                    "op": "create",
+                    "text": "URIs: https://download.docker.com/linux/debian"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Suites: trixie"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Components: stable"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Architectures: amd64"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Signed-By: /etc/apt/keyrings/docker.asc"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-official"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/apt/sources.list.d/docker_official.sources"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.apt.signing_key[\"docker-official\"]",
+      "action": "create",
+      "summary": "manage docker official apt signing key",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 30,
+        "path": "host.localsvar1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-official"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/apt/keyrings/docker.asc"
+          },
+          {
+            "path": [
+              "sha256"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
+          },
+          {
+            "path": [
+              "url"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "https://download.docker.com/linux/debian/gpg"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.compose[\"firecrawl\"].directory",
+      "action": "create",
+      "summary": "create docker compose directory /opt/firecrawl",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 33,
+        "path": "host.localsvar1.docker.compose[\"firecrawl\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0755"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/opt/firecrawl"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.compose[\"firecrawl\"].env_file[\"app\"]",
+      "action": "create",
+      "summary": "manage docker compose env file app",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 41,
+        "path": "host.localsvar1.docker.compose[\"firecrawl\"].env_file[\"app\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": true,
+        "children": [
+          {
+            "path": [
+              "compose"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "firecrawl"
+          },
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "sensitive",
+            "action": "create",
+            "sensitive": true,
+            "after_summary": {
+              "bytes": 100,
+              "sha256": "fa7c407f179b9beacddd6702c4b666db3296d6584a74b454fef04fe50387d464"
+            }
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0600"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/opt/firecrawl/.env"
+          },
+          {
+            "path": [
+              "sensitive"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.compose[\"firecrawl\"].file",
+      "action": "create",
+      "summary": "manage docker compose file",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 36,
+        "path": "host.localsvar1.docker.compose[\"firecrawl\"].file"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "compose"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "firecrawl"
+          },
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 1,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "services: {}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/opt/firecrawl/compose.yaml"
+          },
+          {
+            "path": [
+              "sensitive"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": false
+          },
+          {
+            "path": [
+              "summary"
+            ],
+            "kind": "map",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "summary",
+                  "bytes"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": 13
+              },
+              {
+                "path": [
+                  "summary",
+                  "sha256"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "fa6ccea1ca4e3a031d9e99f25cc05db803aa9bac642c000ddab14f6d9da54b52"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.compose[\"firecrawl\"].project",
+      "action": "create",
+      "summary": "converge docker compose project firecrawl",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 33,
+        "path": "host.localsvar1.docker.compose[\"firecrawl\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "directory"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/opt/firecrawl"
+          },
+          {
+            "path": [
+              "env_files"
+            ],
+            "kind": "list",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "env_files",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "/opt/firecrawl/.env"
+              }
+            ]
+          },
+          {
+            "path": [
+              "files"
+            ],
+            "kind": "list",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "files",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "/opt/firecrawl/compose.yaml"
+              }
+            ]
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "firecrawl"
+          },
+          {
+            "path": [
+              "project"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "firecrawl"
+          },
+          {
+            "path": [
+              "pull"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "missing"
+          },
+          {
+            "path": [
+              "recreate"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "auto"
+          },
+          {
+            "path": [
+              "remove_orphans"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": false
+          },
+          {
+            "path": [
+              "state"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "running"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.compose[\"firecrawl\"].service",
+      "action": "create",
+      "summary": "manage docker compose service debianform-compose-firecrawl",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 33,
+        "path": "host.localsvar1.docker.compose[\"firecrawl\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "enabled"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "debianform-compose-firecrawl"
+          },
+          {
+            "path": [
+              "state"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "running"
+          },
+          {
+            "path": [
+              "unit"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "debianform-compose-firecrawl.service"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.compose[\"firecrawl\"].systemd_unit",
+      "action": "create",
+      "summary": "create docker compose systemd unit debianform-compose-firecrawl.service",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 33,
+        "path": "host.localsvar1.docker.compose[\"firecrawl\"]"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "content"
+            ],
+            "kind": "text",
+            "action": "create",
+            "sensitive": false,
+            "hunks": [
+              {
+                "old_start": 1,
+                "old_lines": 0,
+                "new_start": 1,
+                "new_lines": 15,
+                "lines": [
+                  {
+                    "op": "create",
+                    "text": "[Unit]"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Description=DebianForm Compose Project firecrawl"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Requires=docker.service"
+                  },
+                  {
+                    "op": "create",
+                    "text": "After=docker.service network-online.target"
+                  },
+                  {
+                    "op": "create",
+                    "text": ""
+                  },
+                  {
+                    "op": "create",
+                    "text": "[Service]"
+                  },
+                  {
+                    "op": "create",
+                    "text": "Type=oneshot"
+                  },
+                  {
+                    "op": "create",
+                    "text": "RemainAfterExit=yes"
+                  },
+                  {
+                    "op": "create",
+                    "text": "WorkingDirectory=/opt/firecrawl"
+                  },
+                  {
+                    "op": "create",
+                    "text": "ExecStart=/usr/bin/docker compose -p firecrawl -f /opt/firecrawl/compose.yaml up -d"
+                  },
+                  {
+                    "op": "create",
+                    "text": "ExecStop=/usr/bin/docker compose -p firecrawl -f /opt/firecrawl/compose.yaml stop"
+                  },
+                  {
+                    "op": "create",
+                    "text": "TimeoutStartSec=0"
+                  },
+                  {
+                    "op": "create",
+                    "text": ""
+                  },
+                  {
+                    "op": "create",
+                    "text": "[Install]"
+                  },
+                  {
+                    "op": "create",
+                    "text": "WantedBy=multi-user.target"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "group"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "mode"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "0644"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "debianform-compose-firecrawl.service"
+          },
+          {
+            "path": [
+              "owner"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "root"
+          },
+          {
+            "path": [
+              "path"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "/etc/systemd/system/debianform-compose-firecrawl.service"
+          },
+          {
+            "path": [
+              "summary"
+            ],
+            "kind": "map",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "summary",
+                  "bytes"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": 421
+              },
+              {
+                "path": [
+                  "summary",
+                  "sha256"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "14ae87d6666963c5e3a4c5c61c3635d0f70028318396c74d0df3b7401cfefc40"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.package[\"containerd.io\"]",
+      "action": "create",
+      "summary": "install docker package containerd.io",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 30,
+        "path": "host.localsvar1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "containerd.io"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-official"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.package[\"docker-buildx-plugin\"]",
+      "action": "create",
+      "summary": "install docker package docker-buildx-plugin",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 30,
+        "path": "host.localsvar1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-buildx-plugin"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-official"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.package[\"docker-ce\"]",
+      "action": "create",
+      "summary": "install docker package docker-ce",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 30,
+        "path": "host.localsvar1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-ce"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-official"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.package[\"docker-ce-cli\"]",
+      "action": "create",
+      "summary": "install docker package docker-ce-cli",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 30,
+        "path": "host.localsvar1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-ce-cli"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-official"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.package[\"docker-compose-plugin\"]",
+      "action": "create",
+      "summary": "install docker package docker-compose-plugin",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 30,
+        "path": "host.localsvar1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "present"
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker-compose-plugin"
+          },
+          {
+            "path": [
+              "repositories"
+            ],
+            "kind": "set",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "repositories",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-official"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.package_conflicts",
+      "action": "create",
+      "summary": "remove docker conflict packages",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 30,
+        "path": "host.localsvar1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "ensure"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "absent"
+          },
+          {
+            "path": [
+              "packages"
+            ],
+            "kind": "list",
+            "action": "create",
+            "sensitive": false,
+            "children": [
+              {
+                "path": [
+                  "packages",
+                  "0"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker.io"
+              },
+              {
+                "path": [
+                  "packages",
+                  "1"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-doc"
+              },
+              {
+                "path": [
+                  "packages",
+                  "2"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "docker-compose"
+              },
+              {
+                "path": [
+                  "packages",
+                  "3"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "podman-docker"
+              },
+              {
+                "path": [
+                  "packages",
+                  "4"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "containerd"
+              },
+              {
+                "path": [
+                  "packages",
+                  "5"
+                ],
+                "kind": "scalar",
+                "action": "create",
+                "sensitive": false,
+                "after": "runc"
+              }
+            ]
+          },
+          {
+            "path": [
+              "remove_conflicts"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "auto"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.service[\"docker\"]",
+      "action": "create",
+      "summary": "manage docker service",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 30,
+        "path": "host.localsvar1.docker"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "enabled"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": true
+          },
+          {
+            "path": [
+              "name"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker"
+          },
+          {
+            "path": [
+              "state"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "running"
+          },
+          {
+            "path": [
+              "unit"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "docker.service"
+          }
+        ]
+      }
+    }
+  ],
+  "operations": [
+    {
+      "address": "host.localsvar1.apt.cache_refresh",
+      "action": "run",
+      "summary": "refresh apt package cache",
+      "depends_on": [
+        "host.localsvar1.docker.apt.signing_key[\"docker-official\"]",
+        "host.localsvar1.docker.apt.repository[\"docker-official\"]"
+      ],
+      "triggered_by": [
+        "host.localsvar1.docker.apt.signing_key[\"docker-official\"]",
+        "host.localsvar1.docker.apt.repository[\"docker-official\"]"
+      ],
+      "command_preview": "apt-get update",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 30,
+        "path": "host.localsvar1.docker"
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.compose[\"firecrawl\"].daemon_reload",
+      "action": "run",
+      "summary": "reload systemd manager configuration",
+      "depends_on": [
+        "host.localsvar1.docker.compose[\"firecrawl\"].systemd_unit"
+      ],
+      "triggered_by": [
+        "host.localsvar1.docker.compose[\"firecrawl\"].systemd_unit"
+      ],
+      "command_preview": "systemctl daemon-reload",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 33,
+        "path": "host.localsvar1.docker.compose[\"firecrawl\"]"
+      }
+    },
+    {
+      "address": "host.localsvar1.docker.compose[\"firecrawl\"].validate",
+      "action": "run",
+      "summary": "validate docker compose project firecrawl",
+      "depends_on": [
+        "host.localsvar1.docker.compose[\"firecrawl\"].file",
+        "host.localsvar1.docker.compose[\"firecrawl\"].env_file[\"app\"]"
+      ],
+      "triggered_by": [
+        "host.localsvar1.docker.compose[\"firecrawl\"].file",
+        "host.localsvar1.docker.compose[\"firecrawl\"].env_file[\"app\"]"
+      ],
+      "command_preview": "docker compose -p firecrawl -f /opt/firecrawl/compose.yaml config",
+      "source": {
+        "file": "../testdata/fixtures/locals-var.dbf.hcl",
+        "line": 33,
+        "path": "host.localsvar1.docker.compose[\"firecrawl\"]"
+      }
+    }
+  ],
+  "diagnostics": []
+}

@@ -2656,6 +2656,32 @@ host "server1" {
 	if err != nil && strings.Contains(err.Error(), testassert.EphemeralVariableValue) {
 		t.Fatalf("ephemeral value leaked in error: %v", err)
 	}
+
+	_, err = parseOrCompileInline(t, `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+locals {
+  token_file = var.runtime_token
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/runtime-token.txt" {
+      content = local.token_file
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "requires content_version") {
+		t.Fatalf("local error = %v, want missing content_version", err)
+	}
+	if err != nil && strings.Contains(err.Error(), testassert.EphemeralVariableValue) {
+		t.Fatalf("ephemeral local value leaked in error: %v", err)
+	}
 }
 
 func TestCompileRejectsSensitiveFileContentVersion(t *testing.T) {
@@ -2709,6 +2735,30 @@ host "server1" {
     file "/etc/debianform/runtime-token.txt" {
       content = "ok"
       owner   = var.runtime_token
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "local file owner",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+locals {
+  owner = var.runtime_token
+}
+
+host "server1" {
+  files {
+    file "/etc/debianform/runtime-token.txt" {
+      content = "ok"
+      owner   = local.owner
     }
   }
 }

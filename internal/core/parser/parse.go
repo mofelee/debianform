@@ -16,6 +16,7 @@ import (
 type Config struct {
 	Files                  []string
 	Locals                 map[string]Value
+	localDefinitions       map[string]localDefinition
 	Variables              map[string]Variable
 	VariableValues         map[string]Value
 	ExplicitVariableValues map[string]bool
@@ -200,6 +201,7 @@ func ParseFilesWithOptions(files []string, opts ParseOptions) (*Config, error) {
 	cfg := &Config{
 		Files:                  append([]string(nil), files...),
 		Locals:                 map[string]Value{},
+		localDefinitions:       map[string]localDefinition{},
 		Variables:              map[string]Variable{},
 		VariableValues:         map[string]Value{},
 		ExplicitVariableValues: map[string]bool{},
@@ -228,9 +230,12 @@ func ParseFilesWithOptions(files []string, opts ParseOptions) (*Config, error) {
 	}
 
 	for _, file := range parsed {
-		if err := parseLocals(cfg, file.file, file.body); err != nil {
+		if err := collectLocals(cfg, file.file, file.body); err != nil {
 			return nil, err
 		}
+	}
+	if err := evaluateStaticLocals(cfg); err != nil {
+		return nil, err
 	}
 
 	for _, file := range parsed {
@@ -244,6 +249,12 @@ func ParseFilesWithOptions(files []string, opts ParseOptions) (*Config, error) {
 	if opts.SkipTopLevel {
 		return cfg, nil
 	}
+	if err := validateVariableValues(cfg); err != nil {
+		return nil, err
+	}
+	if err := evaluateLocals(cfg); err != nil {
+		return nil, err
+	}
 
 	for _, file := range parsed {
 		if err := parseTopLevel(cfg, file.file, file.body); err != nil {
@@ -254,8 +265,7 @@ func ParseFilesWithOptions(files []string, opts ParseOptions) (*Config, error) {
 	return cfg, nil
 }
 
-func parseLocals(cfg *Config, file string, body *hclsyntax.Body) error {
-	ctx := EvalContext{ModuleDir: filepath.Dir(file), Locals: cfg.Locals}
+func collectLocals(cfg *Config, file string, body *hclsyntax.Body) error {
 	for _, block := range body.Blocks {
 		if block.Type != "locals" {
 			continue
@@ -270,17 +280,17 @@ func parseLocals(cfg *Config, file string, body *hclsyntax.Body) error {
 		names := sortedAttrNames(block.Body.Attributes)
 		for _, name := range names {
 			attr := block.Body.Attributes[name]
-			attrSource := ir.SourceRef{
+			source := ir.SourceRef{
 				File: file,
 				Line: attr.NameRange.Start.Line,
 				Path: "local." + name,
 			}
-			value, err := evalValue(attr.Expr, ctx, attrSource)
-			if err != nil {
-				return fmt.Errorf("%s:%d: local.%s: %w", file, attrSource.Line, name, err)
+			cfg.localDefinitions[name] = localDefinition{
+				Name:      name,
+				Expr:      attr.Expr,
+				Source:    source,
+				ModuleDir: filepath.Dir(file),
 			}
-			cfg.Locals[name] = value
-			ctx.Locals = cfg.Locals
 		}
 	}
 	return nil
@@ -359,17 +369,9 @@ func resolveVariableValues(cfg *Config, external []ExternalVariableValue, allowM
 }
 
 func evalContextForProgram(cfg *Config, moduleDir string) (EvalContext, error) {
-	varValues := make(map[string]cty.Value, len(cfg.VariableValues))
-	for _, name := range sortedVariableValueNames(cfg.VariableValues) {
-		converted, err := cfg.VariableValues[name].ToCty()
-		if err != nil {
-			return EvalContext{}, fmt.Errorf("var.%s: %w", name, err)
-		}
-		varValues[name] = converted
-	}
-	varNamespace := cty.EmptyObjectVal
-	if len(varValues) > 0 {
-		varNamespace = cty.ObjectVal(varValues)
+	varNamespace, err := variableNamespaceValue(cfg)
+	if err != nil {
+		return EvalContext{}, err
 	}
 	return EvalContext{
 		ModuleDir: moduleDir,
