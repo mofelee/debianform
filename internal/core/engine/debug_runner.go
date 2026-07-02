@@ -229,6 +229,9 @@ func (s *DebugSession) afterFailure(call debugCall, err error) (bool, error) {
 	if s == nil || s.in == nil || s.w == nil || err == nil || call.Context.Cleanup {
 		return false, nil
 	}
+	if call.Context.onFailurePrompt != nil {
+		call.Context.onFailurePrompt()
+	}
 	for {
 		fmt.Fprint(s.w, termstyle.Apply("(dbfdbg failed) ", s.style, termstyle.Bold, termstyle.Red))
 		line, readErr := s.in.ReadString('\n')
@@ -243,12 +246,15 @@ func (s *DebugSession) afterFailure(call debugCall, err error) (bool, error) {
 		if command == "" {
 			command = "show"
 		}
-		retry, err := s.handleFailedCommand(call, command)
+		retry, done, err := s.handleFailedCommand(call, command)
 		if err != nil {
 			return false, err
 		}
 		if retry {
 			return true, nil
+		}
+		if done {
+			return false, nil
 		}
 	}
 }
@@ -367,49 +373,56 @@ func (s *DebugSession) handleCommand(call debugCall, command string) (bool, erro
 	}
 }
 
-func (s *DebugSession) handleFailedCommand(call debugCall, command string) (bool, error) {
+func (s *DebugSession) handleFailedCommand(call debugCall, command string) (bool, bool, error) {
 	fields := strings.Fields(strings.ToLower(command))
 	if len(fields) == 0 {
-		return false, nil
+		return false, false, nil
 	}
 	switch fields[0] {
 	case "r", "retry":
 		if len(fields) != 1 {
 			s.printWarningf("retry does not accept arguments")
-			return false, nil
+			return false, false, nil
 		}
-		return true, nil
+		return true, false, nil
+	case "c", "continue":
+		if len(fields) != 1 {
+			s.printWarningf("continue does not accept arguments")
+			return false, false, nil
+		}
+		s.lastExec = "continue"
+		return false, true, nil
 	case "l", "list", "show":
 		if len(fields) == 1 {
 			s.printCall(call)
 			if s.lastResult.Valid {
 				s.printResultDetails(s.lastResult)
 			}
-			return false, nil
+			return false, false, nil
 		}
 		if fields[0] == "show" && len(fields) == 2 {
 			s.showPayload(call, fields[1])
-			return false, nil
+			return false, false, nil
 		}
 		s.printWarningf("usage: show [stdin|stdout|stderr]")
-		return false, nil
-	case "s", "step", "n", "next", "c", "continue":
-		s.printWarningf("failed call cannot step, next, or continue; use retry or quit")
-		return false, nil
+		return false, false, nil
+	case "s", "step", "n", "next":
+		s.printWarningf("failed call cannot step or next; use retry, continue, or quit")
+		return false, false, nil
 	case "q", "quit":
 		if len(fields) != 1 {
 			s.printWarningf("quit does not accept arguments")
-			return false, nil
+			return false, false, nil
 		}
 		s.cancelled = true
-		return false, ErrDebugCancelled
+		return false, false, ErrDebugCancelled
 	case "h", "help":
 		s.printFailedHelp()
-		return false, nil
+		return false, false, nil
 	default:
 		s.printWarningf("unknown failed command %q", command)
 		s.printFailedHelp()
-		return false, nil
+		return false, false, nil
 	}
 }
 
@@ -448,7 +461,7 @@ func (s *DebugSession) printHelp() {
 }
 
 func (s *DebugSession) printFailedHelp() {
-	fmt.Fprintf(s.w, "%s %s\n", termstyle.Apply("dbf debugger failed commands:", s.style, termstyle.Bold, termstyle.Cyan), termstyle.Apply("show [stdin|stdout|stderr], retry, quit, help", s.style, termstyle.Gray))
+	fmt.Fprintf(s.w, "%s %s\n", termstyle.Apply("dbf debugger failed commands:", s.style, termstyle.Bold, termstyle.Cyan), termstyle.Apply("show [stdin|stdout|stderr], retry, continue, quit, help", s.style, termstyle.Gray))
 }
 
 func writeDebugBytesBlock(w io.Writer, label string, data []byte) {

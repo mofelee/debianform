@@ -27,7 +27,8 @@ type progressTask struct {
 	summary string
 	started time.Time
 	done    chan struct{}
-	once    sync.Once
+	stop    sync.Once
+	log     sync.Once
 }
 
 func newProgressLogger(w io.Writer) *progressLogger {
@@ -72,13 +73,22 @@ func (t *progressTask) Done(err error) {
 	if t == nil || t.logger == nil {
 		return
 	}
-	t.once.Do(func() {
-		close(t.done)
+	t.log.Do(func() {
+		t.stopHeartbeat()
 		status := "done"
 		if err != nil {
 			status = "failed"
 		}
 		t.logger.Logf("%s", t.line(status, t.action, time.Since(t.started)))
+	})
+}
+
+func (t *progressTask) stopHeartbeat() {
+	if t == nil {
+		return
+	}
+	t.stop.Do(func() {
+		close(t.done)
 	})
 }
 

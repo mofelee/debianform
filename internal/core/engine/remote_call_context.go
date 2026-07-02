@@ -3,11 +3,12 @@ package engine
 import "context"
 
 type RemoteCallContext struct {
-	Phase   string
-	Address string
-	Action  string
-	Summary string
-	Cleanup bool
+	Phase           string
+	Address         string
+	Action          string
+	Summary         string
+	Cleanup         bool
+	onFailurePrompt func()
 }
 
 type remoteCallContextKey struct{}
@@ -46,6 +47,9 @@ func mergeRemoteCallContext(current RemoteCallContext, next RemoteCallContext) R
 	}
 	if next.Cleanup {
 		out.Cleanup = true
+	}
+	if next.onFailurePrompt != nil {
+		out.onFailurePrompt = next.onFailurePrompt
 	}
 	return out
 }

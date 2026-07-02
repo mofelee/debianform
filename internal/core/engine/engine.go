@@ -1319,7 +1319,8 @@ func (e Engine) executeItem(ctx context.Context, hosts map[string]ir.HostSpec, s
 	switch item.kind {
 	case "resource":
 		task := progress.Start(item.step.Host, item.step.Action, item.step.Address, item.step.Summary)
-		err := e.executeResourceStep(ctx, hosts, states, statesLock, stateLocks, item.step)
+		callCtx := WithRemoteCallContext(ctx, RemoteCallContext{onFailurePrompt: task.stopHeartbeat})
+		err := e.executeResourceStep(callCtx, hosts, states, statesLock, stateLocks, item.step)
 		task.Done(err)
 		return err
 	case "operation":
@@ -1330,10 +1331,11 @@ func (e Engine) executeItem(ctx context.Context, hosts map[string]ir.HostSpec, s
 			action = ActionRun
 		}
 		callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
-			Phase:   "run operation",
-			Address: item.address,
-			Action:  action,
-			Summary: operation.Summary,
+			Phase:           "run operation",
+			Address:         item.address,
+			Action:          action,
+			Summary:         operation.Summary,
+			onFailurePrompt: task.stopHeartbeat,
 		})
 		result, err := e.Provider.RunOperation(callCtx, operation)
 		task.Done(err)

@@ -649,6 +649,34 @@ func TestDebugRunnerFailedPromptRetrySucceeds(t *testing.T) {
 	}
 }
 
+func TestDebugRunnerFailedPromptStopsProgressHeartbeat(t *testing.T) {
+	inner := &debugSequenceRunner{
+		errs: []error{fmt.Errorf("injected failure"), nil},
+	}
+	var out bytes.Buffer
+	stopped := 0
+	runner := DebugRunner{
+		Inner: inner,
+		Session: NewDebugSession(DebugSessionOptions{
+			Writer: &out,
+			Input:  strings.NewReader("step\nretry\n"),
+			Now:    steppedDebugClock(time.Unix(0, 0), time.Millisecond),
+		}),
+	}
+	ctx := WithRemoteCallContext(context.Background(), RemoteCallContext{
+		onFailurePrompt: func() {
+			stopped++
+		},
+	})
+
+	if _, err := runner.Run(ctx, "server1", "sometimes\n"); err != nil {
+		t.Fatal(err)
+	}
+	if stopped != 1 {
+		t.Fatalf("failure prompt callback count = %d, want 1", stopped)
+	}
+}
+
 func TestDebugRunnerRetryUsesSameStdinPayload(t *testing.T) {
 	inner := &debugSequenceRunner{
 		errs: []error{fmt.Errorf("injected failure"), nil},
@@ -676,7 +704,7 @@ func TestDebugRunnerRetryUsesSameStdinPayload(t *testing.T) {
 	}
 }
 
-func TestDebugRunnerFailedPromptRejectsStepNextAndContinue(t *testing.T) {
+func TestDebugRunnerFailedPromptContinueReturnsOriginalError(t *testing.T) {
 	inner := &debugSequenceRunner{
 		errs: []error{fmt.Errorf("injected failure"), nil},
 	}
@@ -690,15 +718,18 @@ func TestDebugRunnerFailedPromptRejectsStepNextAndContinue(t *testing.T) {
 		}),
 	}
 
-	if _, err := runner.Run(context.Background(), "server1", "sometimes\n"); err != nil {
-		t.Fatal(err)
+	if _, err := runner.Run(context.Background(), "server1", "sometimes\n"); err == nil || !strings.Contains(err.Error(), "injected failure") {
+		t.Fatalf("continue after failed prompt error = %v, want original failure", err)
 	}
-	if len(inner.calls) != 2 {
-		t.Fatalf("inner calls = %#v, want only initial call and retry", inner.calls)
+	if len(inner.calls) != 1 {
+		t.Fatalf("inner calls = %#v, want only initial call", inner.calls)
 	}
 	text := out.String()
-	if count := strings.Count(text, "failed call cannot step, next, or continue"); count != 3 {
-		t.Fatalf("failed prompt rejection count = %d, want 3:\n%s", count, text)
+	if count := strings.Count(text, "failed call cannot step or next"); count != 2 {
+		t.Fatalf("failed prompt rejection count = %d, want 2:\n%s", count, text)
+	}
+	if strings.Contains(text, "retrying #1 remote call") {
+		t.Fatalf("continue unexpectedly retried failed call:\n%s", text)
 	}
 }
 
