@@ -6,6 +6,21 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+## v0.2.0-alpha.3
+
+- Added the interactive SSH apply debugger and `debug run` command for remote
+  diagnostics, including colorized debugger output and safer failed-call
+  recovery.
+- Allowed `locals` values to reference variables and other locals, with
+  validation coverage for dependency ordering and cycles.
+- Added drift detection for component script outputs and refreshed the
+  related graph, hostspec, plan, and text golden coverage.
+- Reported mixed Docker Compose project states as degraded instead of treating
+  partial healthy/running service sets as fully healthy.
+- Refined human-readable plan/delete output and SSH troubleshooting hints.
+- Bumped pinned GitHub Actions dependencies for checkout, setup-go, cache, and
+  provenance attestation workflows.
+
 ## v0.2.0-alpha.2
 
 - Limited default online SSH host concurrency to 4 across fact discovery,
