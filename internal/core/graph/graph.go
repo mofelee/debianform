@@ -1750,8 +1750,6 @@ func aptRepositorySourcePath(name string) string {
 const (
 	dockerOfficialRepositoryName = "docker-official"
 	dockerOfficialKeyPath        = "/etc/apt/keyrings/docker.asc"
-	dockerOfficialKeyURL         = "https://download.docker.com/linux/debian/gpg"
-	dockerOfficialKeySHA256      = "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
 )
 
 var dockerOfficialPackages = []string{
@@ -1831,6 +1829,18 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 		keyAddress := fmt.Sprintf("host.%s.docker.apt.signing_key[%s]", host.Name, strconv.Quote(dockerOfficialRepositoryName))
 		repositoryAddress = fmt.Sprintf("host.%s.docker.apt.repository[%s]", host.Name, strconv.Quote(dockerOfficialRepositoryName))
 		sourcePath := aptRepositorySourcePath(dockerOfficialRepositoryName)
+		repositoryURL := docker.Package.RepositoryURL
+		if repositoryURL == "" {
+			repositoryURL = ir.DockerOfficialRepositoryURL
+		}
+		gpgURL := docker.Package.GPGURL
+		if gpgURL == "" {
+			gpgURL = ir.DockerOfficialGPGURL
+		}
+		gpgSHA256 := docker.Package.GPGSHA256
+		if gpgSHA256 == "" && gpgURL == ir.DockerOfficialGPGURL {
+			gpgSHA256 = ir.DockerOfficialGPGSHA256
+		}
 
 		keyDesired := map[string]any{
 			"name":   dockerOfficialRepositoryName,
@@ -1839,12 +1849,14 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 			"group":  "root",
 			"mode":   "0644",
 			"ensure": "present",
-			"url":    dockerOfficialKeyURL,
-			"sha256": dockerOfficialKeySHA256,
+			"url":    gpgURL,
+		}
+		if gpgSHA256 != "" {
+			keyDesired["sha256"] = gpgSHA256
 		}
 		repositorySpec := ir.APTRepositorySpec{
 			Name:          dockerOfficialRepositoryName,
-			URIs:          []string{"https://download.docker.com/linux/debian"},
+			URIs:          []string{repositoryURL},
 			Suites:        []string{host.System.Codename},
 			Components:    []string{docker.Package.Channel},
 			Architectures: []string{host.System.Architecture},

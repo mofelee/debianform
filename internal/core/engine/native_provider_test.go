@@ -356,6 +356,45 @@ func TestNativeProviderAPTSigningKeyURL(t *testing.T) {
 	}
 }
 
+func TestNativeProviderAPTSigningKeyURLWithoutSHA(t *testing.T) {
+	node := graph.Node{
+		Address: `host.docker1.docker.apt.signing_key["docker-official"]`,
+		Host:    "docker1",
+		Kind:    "apt_signing_key",
+		Desired: map[string]any{
+			"path":   "/etc/apt/keyrings/docker.asc",
+			"url":    "https://mirrors.aliyun.com/docker-ce/linux/debian/gpg",
+			"owner":  "root",
+			"group":  "root",
+			"mode":   "0644",
+			"ensure": "present",
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "missing\n"}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing apt signing key action = %q, want create", got.Action)
+	}
+	if _, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate}); err != nil {
+		t.Fatal(err)
+	}
+	applied := runner.scripts[len(runner.scripts)-1]
+	if !strings.Contains(applied, "curl -fsSL 'https://mirrors.aliyun.com/docker-ce/linux/debian/gpg'") {
+		t.Fatalf("apt signing key apply script missing mirror curl:\n%s", applied)
+	}
+	if strings.Contains(applied, "sha256sum --check --status") {
+		t.Fatalf("apt signing key apply script should not run sha256 check without desired sha:\n%s", applied)
+	}
+	if !strings.Contains(applied, "install -o 'root' -g 'root' -m '0644'") {
+		t.Fatalf("apt signing key apply script missing install:\n%s", applied)
+	}
+}
+
 func TestNativeProviderDockerSigningKeyApplyScript(t *testing.T) {
 	node := graph.Node{
 		Address: `host.docker1.docker.apt.signing_key["docker-official"]`,

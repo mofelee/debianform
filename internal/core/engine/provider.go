@@ -590,10 +590,13 @@ func (p NativeProvider) planAPTSigningKey(ctx context.Context, node graph.Node, 
 		return ProviderPlan{Action: ActionCreate, Summary: "install apt signing key " + path, Observed: observed, Ownership: ownership(prior)}, nil
 	}
 	if current.IsDir ||
-		current.SHA256 != wantSHA ||
+		(wantSHA != "" && current.SHA256 != wantSHA) ||
 		current.Owner != stringDesired(node, "owner") ||
 		current.Group != stringDesired(node, "group") ||
 		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "update apt signing key " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if wantSHA == "" && prior != nil && prior.DesiredDigest != "" && prior.DesiredDigest != corestate.DesiredDigest(node.Desired) {
 		return ProviderPlan{Action: ActionUpdate, Summary: "update apt signing key " + path, Observed: observed, Ownership: ownership(prior)}, nil
 	}
 	return inSyncPlan(node, prior, "no changes for apt signing key "+path, observed), nil
@@ -612,8 +615,8 @@ func (p NativeProvider) applyAPTSigningKey(ctx context.Context, step Step) (map[
 	}
 	url := stringDesired(step.Node, "url")
 	sha := stringDesired(step.Node, "sha256")
-	if url == "" || sha == "" {
-		return nil, fmt.Errorf("%s apt signing key requires url and sha256 or content", step.Address)
+	if url == "" {
+		return nil, fmt.Errorf("%s apt signing key requires url or content", step.Address)
 	}
 	tmp := path + ".dbf-tmp"
 	lines := []string{
@@ -625,13 +628,17 @@ func (p NativeProvider) applyAPTSigningKey(ctx context.Context, step Step) (map[
 		"  apt-get install -y ca-certificates curl",
 		"fi",
 		"curl -fsSL " + shellQuote(url) + " -o " + shellQuote(tmp),
-		"printf '%s  %s\\n' " + shellQuote(sha) + " " + shellQuote(tmp) + " | sha256sum --check --status",
-		"install -o " + shellQuote(stringDesired(step.Node, "owner")) +
-			" -g " + shellQuote(stringDesired(step.Node, "group")) +
-			" -m " + shellQuote(stringDesired(step.Node, "mode")) +
-			" " + shellQuote(tmp) + " " + shellQuote(path),
-		"rm -f -- " + shellQuote(tmp),
 	}
+	if sha != "" {
+		lines = append(lines, "printf '%s  %s\\n' "+shellQuote(sha)+" "+shellQuote(tmp)+" | sha256sum --check --status")
+	}
+	lines = append(lines,
+		"install -o "+shellQuote(stringDesired(step.Node, "owner"))+
+			" -g "+shellQuote(stringDesired(step.Node, "group"))+
+			" -m "+shellQuote(stringDesired(step.Node, "mode"))+
+			" "+shellQuote(tmp)+" "+shellQuote(path),
+		"rm -f -- "+shellQuote(tmp),
+	)
 	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
 	if err != nil {
 		return nil, err
@@ -2576,7 +2583,10 @@ func desiredSigningKeySHA(node graph.Node) (string, error) {
 	if content := stringDesired(node, "content"); content != "" {
 		return sha256Hex([]byte(content)), nil
 	}
-	return "", fmt.Errorf("%s apt signing key requires sha256 or content", node.Address)
+	if url := stringDesired(node, "url"); url != "" {
+		return "", nil
+	}
+	return "", fmt.Errorf("%s apt signing key requires url with optional sha256 or content", node.Address)
 }
 
 func inSyncPlan(node graph.Node, prior *corestate.Resource, summary string, observed map[string]any) ProviderPlan {

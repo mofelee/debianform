@@ -75,6 +75,9 @@
     "package": {
       "source": "official",
       "channel": "stable",
+      "repository_url": "https://download.docker.com/linux/debian",
+      "gpg_url": "https://download.docker.com/linux/debian/gpg",
+      "gpg_sha256": "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570",
       "remove_conflicts": "auto",
       "source_ref": {
         "file": "../../../examples/docker-daemon.dbf.hcl",

@@ -321,6 +321,7 @@ dbf plan -f examples/realistic-systemd-app.dbf.hcl --offline
 dbf validate -f examples/fleet.dbf.hcl
 dbf plan -f examples/fleet.dbf.hcl --offline
 dbf plan -f examples/docker-minimal.dbf.hcl --offline
+dbf plan -f examples/docker-official-mirror.dbf.hcl --offline
 dbf plan -f examples/nftables.dbf.hcl --offline
 ```
 
@@ -330,6 +331,8 @@ dbf plan -f examples/nftables.dbf.hcl --offline
 - `examples/apt-repository.dbf.hcl`
 - `examples/bird2.dbf.hcl`
 - `examples/component-binary.dbf.hcl`
+- `examples/docker-minimal.dbf.hcl`
+- `examples/docker-official-mirror.dbf.hcl`
 - `examples/files-plan-preview.dbf.hcl`
 - `examples/fleet.dbf.hcl`
 - `examples/mihomo.dbf.hcl`

@@ -1251,7 +1251,7 @@ func parseDockerObjectBlock(file, path string, block *hclsyntax.Block, ctx EvalC
 	var allowed map[string]struct{}
 	switch block.Type {
 	case "package":
-		allowed = attrSet("source", "channel", "version", "remove_conflicts")
+		allowed = attrSet("source", "channel", "version", "repository_url", "gpg_url", "gpg_sha256", "remove_conflicts")
 	case "service":
 		allowed = attrSet("enable", "state")
 	case "daemon":
@@ -1813,7 +1813,7 @@ func validateDockerObjectBlockShape(file, path string, block *hclsyntax.Block) e
 	var allowed map[string]struct{}
 	switch block.Type {
 	case "package":
-		allowed = attrSet("source", "channel", "version", "remove_conflicts")
+		allowed = attrSet("source", "channel", "version", "repository_url", "gpg_url", "gpg_sha256", "remove_conflicts")
 	case "service":
 		allowed = attrSet("enable", "state")
 	case "daemon":

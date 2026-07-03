@@ -3925,8 +3925,58 @@ host "docker1" {
 	if docker.Package.Source != "official" || docker.Package.Channel != "stable" || docker.Package.RemoveConflicts != "auto" {
 		t.Fatalf("docker package defaults = %#v", docker.Package)
 	}
+	if docker.Package.RepositoryURL != ir.DockerOfficialRepositoryURL || docker.Package.GPGURL != ir.DockerOfficialGPGURL || docker.Package.GPGSHA256 != ir.DockerOfficialGPGSHA256 {
+		t.Fatalf("docker package official URLs = %#v, want official defaults", docker.Package)
+	}
 	if !docker.Service.Enable || docker.Service.State != "running" || docker.Service.Name != "docker.service" {
 		t.Fatalf("docker service defaults = %#v", docker.Service)
+	}
+}
+
+func TestCompileDockerOfficialMirrorURLs(t *testing.T) {
+	program := compileInline(t, `
+host "docker1" {
+  docker {
+    enable = true
+
+    package {
+      repository_url = "https://mirrors.aliyun.com/docker-ce/linux/debian"
+      gpg_url        = "https://mirrors.aliyun.com/docker-ce/linux/debian/gpg"
+    }
+  }
+}
+`)
+	docker := program.Hosts[0].Docker
+	if docker.Package.RepositoryURL != "https://mirrors.aliyun.com/docker-ce/linux/debian" {
+		t.Fatalf("repository_url = %q", docker.Package.RepositoryURL)
+	}
+	if docker.Package.GPGURL != "https://mirrors.aliyun.com/docker-ce/linux/debian/gpg" {
+		t.Fatalf("gpg_url = %q", docker.Package.GPGURL)
+	}
+	if docker.Package.GPGSHA256 != "" {
+		t.Fatalf("gpg_sha256 = %q, want empty for custom gpg_url without explicit hash", docker.Package.GPGSHA256)
+	}
+}
+
+func TestCompileDockerOfficialMirrorGPGSHA256(t *testing.T) {
+	program := compileInline(t, `
+host "docker1" {
+  docker {
+    enable = true
+
+    package {
+      gpg_url    = "https://mirror.example/docker/gpg"
+      gpg_sha256 = "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789"
+    }
+  }
+}
+`)
+	docker := program.Hosts[0].Docker
+	if docker.Package.GPGURL != "https://mirror.example/docker/gpg" {
+		t.Fatalf("gpg_url = %q", docker.Package.GPGURL)
+	}
+	if docker.Package.GPGSHA256 != "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789" {
+		t.Fatalf("gpg_sha256 = %q, want normalized hash", docker.Package.GPGSHA256)
 	}
 }
 
@@ -4072,6 +4122,60 @@ host "docker1" {
 }
 `,
 			want: "must be auto, true, or false",
+		},
+		{
+			name: "repository url with debian source",
+			hcl: `
+host "docker1" {
+  docker {
+    package {
+      source         = "debian"
+      repository_url = "https://mirrors.aliyun.com/docker-ce/linux/debian"
+    }
+  }
+}
+`,
+			want: `repository_url is only valid when source = "official"`,
+		},
+		{
+			name: "gpg url with custom source",
+			hcl: `
+host "docker1" {
+  docker {
+    package {
+      source  = "custom"
+      gpg_url = "https://mirrors.aliyun.com/docker-ce/linux/debian/gpg"
+    }
+  }
+}
+`,
+			want: `gpg_url is only valid when source = "official"`,
+		},
+		{
+			name: "invalid docker gpg sha",
+			hcl: `
+host "docker1" {
+  docker {
+    package {
+      gpg_sha256 = "not-a-sha"
+    }
+  }
+}
+`,
+			want: "gpg_sha256 must be a 64 character hex string",
+		},
+		{
+			name: "empty docker repository url",
+			hcl: `
+host "docker1" {
+  docker {
+    package {
+      repository_url = ""
+    }
+  }
+}
+`,
+			want: "repository_url must be non-empty",
 		},
 		{
 			name: "empty docker user",

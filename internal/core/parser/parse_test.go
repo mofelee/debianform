@@ -1387,6 +1387,12 @@ host "docker1" {
   docker {
     enable = true
 
+    package {
+      repository_url = "https://mirrors.aliyun.com/docker-ce/linux/debian"
+      gpg_url        = "https://mirrors.aliyun.com/docker-ce/linux/debian/gpg"
+      gpg_sha256     = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+
     daemon {
       settings = {
         "log-driver" = "json-file"
@@ -1417,6 +1423,16 @@ host "docker1" {
 	docker := cfg.Hosts["docker1"].Body.Map["docker"]
 	if docker.Map["enable"].Source.Path != "host.docker1.docker.enable" {
 		t.Fatalf("enable source path = %q", docker.Map["enable"].Source.Path)
+	}
+	packageBlock := docker.Map["package"]
+	if packageBlock.Map["repository_url"].Source.Path != "host.docker1.docker.package.repository_url" {
+		t.Fatalf("package repository_url source path = %q", packageBlock.Map["repository_url"].Source.Path)
+	}
+	if packageBlock.Map["gpg_url"].Source.Path != "host.docker1.docker.package.gpg_url" {
+		t.Fatalf("package gpg_url source path = %q", packageBlock.Map["gpg_url"].Source.Path)
+	}
+	if packageBlock.Map["gpg_sha256"].Source.Path != "host.docker1.docker.package.gpg_sha256" {
+		t.Fatalf("package gpg_sha256 source path = %q", packageBlock.Map["gpg_sha256"].Source.Path)
 	}
 	daemon := docker.Map["daemon"]
 	if daemon.Map["settings"].Source.Path != "host.docker1.docker.daemon.settings" {
@@ -1610,6 +1626,7 @@ func runnableExampleFixtures() []string {
 		"../../../examples/docker-compose.dbf.hcl",
 		"../../../examples/docker-daemon.dbf.hcl",
 		"../../../examples/docker-minimal.dbf.hcl",
+		"../../../examples/docker-official-mirror.dbf.hcl",
 		"../../../examples/docker-package-sources.dbf.hcl",
 		"../../../examples/docker-users.dbf.hcl",
 		"../../../examples/files-plan-preview.dbf.hcl",

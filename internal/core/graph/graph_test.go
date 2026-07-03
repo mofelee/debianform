@@ -192,6 +192,77 @@ func TestCompileDockerMinimalResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileDockerOfficialMirrorResourceGraph(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "docker1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  docker {
+    enable = true
+
+    package {
+      repository_url = "https://mirrors.aliyun.com/docker-ce/linux/debian"
+      gpg_url        = "https://mirrors.aliyun.com/docker-ce/linux/debian/gpg"
+    }
+  }
+}
+`)
+
+	key := nodeFor(resourceGraph, `host.docker1.docker.apt.signing_key["docker-official"]`)
+	if key == nil {
+		t.Fatalf("docker mirror signing key node missing")
+	}
+	if key.Desired["url"] != "https://mirrors.aliyun.com/docker-ce/linux/debian/gpg" {
+		t.Fatalf("docker mirror key desired = %#v, want custom gpg_url", key.Desired)
+	}
+	if _, exists := key.Desired["sha256"]; exists {
+		t.Fatalf("docker mirror key desired = %#v, want no official sha256 for custom gpg_url", key.Desired)
+	}
+
+	repository := nodeFor(resourceGraph, `host.docker1.docker.apt.repository["docker-official"]`)
+	if repository == nil {
+		t.Fatalf("docker mirror repository node missing")
+	}
+	content, _ := repository.Desired["content"].(string)
+	if !strings.Contains(content, "URIs: https://mirrors.aliyun.com/docker-ce/linux/debian") {
+		t.Fatalf("docker mirror repository content missing custom URL:\n%s", content)
+	}
+}
+
+func TestCompileDockerOfficialMirrorResourceGraphWithGPGSHA256(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "docker1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  docker {
+    enable = true
+
+    package {
+      gpg_url    = "https://mirror.example/docker/gpg"
+      gpg_sha256 = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    }
+  }
+}
+`)
+
+	key := nodeFor(resourceGraph, `host.docker1.docker.apt.signing_key["docker-official"]`)
+	if key == nil {
+		t.Fatalf("docker mirror signing key node missing")
+	}
+	if key.Desired["url"] != "https://mirror.example/docker/gpg" {
+		t.Fatalf("docker mirror key desired = %#v, want custom gpg_url", key.Desired)
+	}
+	if key.Desired["sha256"] != "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789" {
+		t.Fatalf("docker mirror key desired = %#v, want custom gpg_sha256", key.Desired)
+	}
+}
+
 func TestCompileDockerPackageSourcesResourceGraphGolden(t *testing.T) {
 	resourceGraph := compileGraphFixture(t, "../../../examples/docker-package-sources.dbf.hcl")
 

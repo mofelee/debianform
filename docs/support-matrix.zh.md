@@ -115,6 +115,7 @@ Linux Homebrew best-effort 规则见
 | --- | --- | --- |
 | `docker { enable = true }` | Beta | 默认使用 Docker 官方 APT 源和官方 packages。 |
 | `package.source = "official"` | Beta | 默认值；安装 `docker-ce`、CLI、containerd、buildx、compose plugin。 |
+| `package.repository_url` / `package.gpg_url` | Beta | official source 下覆盖 Docker official APT repo/key URL；自定义 `gpg_url` 可选配 `gpg_sha256`。 |
 | `package.source = "debian"` | Beta | 使用 Debian 仓库中的 `docker.io` 和 `docker-compose-plugin`。 |
 | `package.source = "none"` | Beta | 不安装 Docker package，但仍可管理 daemon/service/Compose。 |
 | `package.source = "custom"` | Beta | 用户自行声明 repo/key/package；Docker block 不生成 package 节点。 |
@@ -158,7 +159,7 @@ Linux Homebrew best-effort 规则见
 | `examples/component-source-build.dbf.hcl` | Beta | source build component。 |
 | `examples/component-inputs.dbf.hcl` | Beta | typed input、validation、sensitive。 |
 | `examples/component-script-on-change.dbf.hcl` | Beta | component 内 `files.file.on_change` 触发 script operation。 |
-| `examples/docker-*.dbf.hcl` | Beta | Docker minimal、daemon、Compose、users、package source。 |
+| `examples/docker-*.dbf.hcl` | Beta | Docker minimal、official mirror、daemon、Compose、users、package source。 |
 | `examples/fleet.dbf.hcl` | Preview | 当前语法速查，覆盖 profile/component/host、systemd timer/resolved/journald、Docker、nftables 等组合用法。 |
 | `examples/nftables.dbf.hcl` | Beta | nftables validate/activate。 |
 | `examples/realistic-systemd-app.dbf.hcl` | Beta | 低权限 systemd app 部署模板，覆盖 user/group、目录、文件、unit 和 service。 |

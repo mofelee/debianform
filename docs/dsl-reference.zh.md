@@ -490,7 +490,27 @@ service unit 名会自动补 `.service`。支持 `lifecycle { prevent_destroy = 
 | `source` | `"official"` | `"official"`、`"debian"`、`"none"`、`"custom"`。 |
 | `channel` | `"stable"` | 当前只实际使用 stable。 |
 | `version` | `null` | 已解析但版本 pinning 尚未实现。 |
+| `repository_url` | `"https://download.docker.com/linux/debian"` | 仅 `source = "official"` 可用；替换 Docker official APT repository base URL。 |
+| `gpg_url` | `"https://download.docker.com/linux/debian/gpg"` | 仅 `source = "official"` 可用；替换 Docker official APT signing key URL。 |
+| `gpg_sha256` | 默认 `gpg_url` 时为 Docker official key SHA256；自定义 `gpg_url` 时为空 | 仅 `source = "official"` 可用；可选。自定义 `gpg_url` 时不会自动套用官方 SHA，可显式设置此字段启用 checksum 校验。 |
 | `remove_conflicts` | `"auto"` | `"auto"`、`true`/`"true"`、`false`/`"false"`。 |
+
+Aliyun Docker official APT 镜像示例：
+
+```hcl
+docker {
+  package {
+    repository_url = "https://mirrors.aliyun.com/docker-ce/linux/debian"
+    gpg_url        = "https://mirrors.aliyun.com/docker-ce/linux/debian/gpg"
+  }
+}
+```
+
+这些字段只控制 Docker Engine 官方 APT 源和 signing key，不是 Docker registry mirror。它们和
+`get.docker.com --mirror` 的目标相近，都是让 Docker 安装来源使用镜像站；区别是 DebianForm
+不会运行 `get.docker.com` 安装脚本，而是声明式管理 APT source、key、package、service 和 state。
+自定义 `gpg_url` 且省略 `gpg_sha256` 时，DebianForm 不校验 key 文件内容的 checksum；需要内容校验和
+key 内容漂移检测时应设置 `gpg_sha256`。
 
 `service` block 字段：
 

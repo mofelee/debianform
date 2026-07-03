@@ -72,6 +72,47 @@ host "manual1" {
 `system.architecture` 和 `system.codename` 用于离线生成 Docker 官方 APT 源。在线 plan 可以自动发现 facts，
 但教程里显式写出这两个字段，方便 `dbf plan --offline` 也能运行。
 
+## 使用 Docker 官方 APT 镜像站
+
+默认 `docker.package.source = "official"` 使用：
+
+- `repository_url = "https://download.docker.com/linux/debian"`
+- `gpg_url = "https://download.docker.com/linux/debian/gpg"`
+
+如需使用 Aliyun 的 Docker official APT 镜像，可在 `package` 中覆盖 URL：
+
+```hcl
+host "manual1" {
+  system {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  docker {
+    enable = true
+
+    package {
+      repository_url = "https://mirrors.aliyun.com/docker-ce/linux/debian"
+      gpg_url        = "https://mirrors.aliyun.com/docker-ce/linux/debian/gpg"
+    }
+  }
+}
+```
+
+`gpg_sha256` 是可选字段。默认 Docker official GPG URL 会自动使用 Docker official key SHA256；
+自定义 `gpg_url` 时 DebianForm 不会把官方 SHA 套用到镜像 URL 上。如需固定镜像站 key 内容，可添加：
+
+```hcl
+gpg_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+```
+
+自定义 `gpg_url` 且省略 `gpg_sha256` 时，DebianForm 不校验 key 文件内容的 checksum；需要内容校验和
+key 内容漂移检测时应设置 `gpg_sha256`。
+
+这些字段只对 `package.source = "official"` 有效；`debian`、`none`、`custom` 下设置会报错。
+它们和 `get.docker.com --mirror` 都是为了把 Docker 安装来源切到镜像站，但 DebianForm 不运行
+`get.docker.com` 脚本，而是管理 APT source、key、package、service 和 state。
+
 ## 应用配置
 
 运行：

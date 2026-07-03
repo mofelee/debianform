@@ -4227,7 +4227,13 @@ func dockerPackageSpec(docker parser.Value) (ir.DockerPackageSpec, error) {
 	source := "official"
 	channel := "stable"
 	removeConflicts := "auto"
+	repositoryURL := ir.DockerOfficialRepositoryURL
+	gpgURL := ir.DockerOfficialGPGURL
+	gpgSHA256 := ""
 	var version *string
+	var hasRepositoryURL bool
+	var hasGPGURL bool
+	var hasGPGSHA256 bool
 	if ok {
 		sourceRef = packageBlock.Source
 		if value, hasValue, err := stringField(packageBlock, "source"); err != nil {
@@ -4245,6 +4251,24 @@ func dockerPackageSpec(docker parser.Value) (ir.DockerPackageSpec, error) {
 		} else if hasValue {
 			version = value
 		}
+		if value, hasValue, err := stringField(packageBlock, "repository_url"); err != nil {
+			return ir.DockerPackageSpec{}, err
+		} else if hasValue {
+			repositoryURL = value
+			hasRepositoryURL = true
+		}
+		if value, hasValue, err := stringField(packageBlock, "gpg_url"); err != nil {
+			return ir.DockerPackageSpec{}, err
+		} else if hasValue {
+			gpgURL = value
+			hasGPGURL = true
+		}
+		if value, hasValue, err := stringField(packageBlock, "gpg_sha256"); err != nil {
+			return ir.DockerPackageSpec{}, err
+		} else if hasValue {
+			gpgSHA256 = value
+			hasGPGSHA256 = true
+		}
 		if value, hasValue, err := dockerRemoveConflictsField(packageBlock, "remove_conflicts"); err != nil {
 			return ir.DockerPackageSpec{}, err
 		} else if hasValue {
@@ -4261,10 +4285,40 @@ func dockerPackageSpec(docker parser.Value) (ir.DockerPackageSpec, error) {
 	if channel == "" {
 		return ir.DockerPackageSpec{}, fmt.Errorf("%s:%d:%s.channel: docker package channel must be non-empty", sourceRef.File, sourceRef.Line, sourceRef.Path)
 	}
+	if source != "official" {
+		if ok {
+			for _, name := range []string{"repository_url", "gpg_url", "gpg_sha256"} {
+				if value, exists := packageBlock.Map[name]; exists {
+					return ir.DockerPackageSpec{}, fmt.Errorf("%s:%d:%s: docker package %s is only valid when source = \"official\" (current source = %q)", value.Source.File, value.Source.Line, value.Source.Path, name, source)
+				}
+			}
+		}
+		repositoryURL = ""
+		gpgURL = ""
+		gpgSHA256 = ""
+	} else {
+		if hasRepositoryURL && repositoryURL == "" {
+			return ir.DockerPackageSpec{}, fmt.Errorf("%s:%d:%s: docker package repository_url must be non-empty", packageBlock.Map["repository_url"].Source.File, packageBlock.Map["repository_url"].Source.Line, packageBlock.Map["repository_url"].Source.Path)
+		}
+		if hasGPGURL && gpgURL == "" {
+			return ir.DockerPackageSpec{}, fmt.Errorf("%s:%d:%s: docker package gpg_url must be non-empty", packageBlock.Map["gpg_url"].Source.File, packageBlock.Map["gpg_url"].Source.Line, packageBlock.Map["gpg_url"].Source.Path)
+		}
+		if hasGPGSHA256 {
+			if !sha256Pattern.MatchString(gpgSHA256) {
+				return ir.DockerPackageSpec{}, fmt.Errorf("%s:%d:%s: docker package gpg_sha256 must be a 64 character hex string", packageBlock.Map["gpg_sha256"].Source.File, packageBlock.Map["gpg_sha256"].Source.Line, packageBlock.Map["gpg_sha256"].Source.Path)
+			}
+			gpgSHA256 = strings.ToLower(gpgSHA256)
+		} else if gpgURL == ir.DockerOfficialGPGURL {
+			gpgSHA256 = ir.DockerOfficialGPGSHA256
+		}
+	}
 	return ir.DockerPackageSpec{
 		Source:          source,
 		Channel:         channel,
 		Version:         version,
+		RepositoryURL:   repositoryURL,
+		GPGURL:          gpgURL,
+		GPGSHA256:       gpgSHA256,
 		RemoveConflicts: removeConflicts,
 		SourceRef:       sourceRef,
 	}, nil
