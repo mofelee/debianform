@@ -191,6 +191,92 @@ host "web1" {
 	}
 }
 
+func TestSystemTimezoneLocaleMemoryPlanApplyCheckAndForget(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `
+host "web1" {
+  system {
+    timezone = "Asia/Shanghai"
+    locale   = "en_US.UTF-8"
+  }
+}
+`))
+	timezoneAddress := "host.web1.system.timezone"
+	localeAddress := "host.web1.system.locale"
+	provider := NewMemoryProvider()
+	provider.Observed[timezoneAddress] = Observed{
+		Exists:        true,
+		DesiredDigest: "drifted",
+		Values:        map[string]any{"timezone": "UTC", "zone_exists": true},
+	}
+	provider.Observed[localeAddress] = Observed{
+		Exists:        true,
+		DesiredDigest: "drifted",
+		Values:        map[string]any{"locale": "C", "available": true},
+	}
+	backend := NewMemoryBackend()
+	engine := Engine{Backend: backend, Provider: provider}
+
+	plan, err := engine.Plan(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, address := range []string{timezoneAddress, localeAddress} {
+		if !hasStepAction(plan, address, ActionUpdate) {
+			t.Fatalf("%s drift plan missing update step: %#v", address, plan.Steps)
+		}
+	}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	timezone := st.Resources[timezoneAddress]
+	if timezone.Kind != "system_timezone" || timezone.ProviderType != "system_timezone" || timezone.Observed["timezone"] != "Asia/Shanghai" {
+		t.Fatalf("timezone state resource = %#v", timezone)
+	}
+	locale := st.Resources[localeAddress]
+	if locale.Kind != "system_locale" || locale.ProviderType != "system_locale" || locale.Observed["locale"] != "en_US.UTF-8" {
+		t.Fatalf("locale state resource = %#v", locale)
+	}
+
+	next, err := engine.Plan(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(next.Steps) != 0 {
+		t.Fatalf("matching timezone/locale check should be no-op, got steps=%#v", next.Steps)
+	}
+
+	emptyProgram, emptyGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `host "web1" {}`))
+	forgetPlan, err := engine.Plan(context.Background(), emptyProgram, emptyGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, address := range []string{timezoneAddress, localeAddress} {
+		if !hasStepAction(forgetPlan, address, ActionForget) {
+			t.Fatalf("omitted %s should forget state, got steps=%#v", address, forgetPlan.Steps)
+		}
+	}
+	if _, err := engine.Apply(context.Background(), emptyProgram, emptyGraph, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.Destroyed) != 0 {
+		t.Fatalf("omitted timezone/locale should not destroy remote resources: %#v", provider.Destroyed)
+	}
+	st, err = backend.Read(context.Background(), emptyProgram.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, address := range []string{timezoneAddress, localeAddress} {
+		if _, ok := st.Resources[address]; ok {
+			t.Fatalf("%s state was not forgotten: %#v", address, st.Resources)
+		}
+	}
+}
+
 func TestApplyWritesProgress(t *testing.T) {
 	program, resourceGraph := twoFileProgramAndGraph("server1")
 	var progress bytes.Buffer

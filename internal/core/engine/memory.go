@@ -129,6 +129,14 @@ func (p *MemoryProvider) Apply(ctx context.Context, step Step) (map[string]any, 
 	if step.Node.Kind == "system_hostname" {
 		observed["hostname"] = stringDesired(step.Node, "hostname")
 	}
+	if step.Node.Kind == "system_timezone" {
+		observed["timezone"] = stringDesired(step.Node, "timezone")
+		observed["zone_exists"] = true
+	}
+	if step.Node.Kind == "system_locale" {
+		observed["locale"] = stringDesired(step.Node, "locale")
+		observed["available"] = true
+	}
 	p.Observed[step.Address] = Observed{
 		Exists:        true,
 		DesiredDigest: corestate.DesiredDigest(step.Node.Desired),

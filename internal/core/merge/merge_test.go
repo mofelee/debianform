@@ -28,6 +28,7 @@ profile "base" {
 
   system {
     timezone = "UTC"
+    locale   = "C.UTF-8"
   }
 }
 
@@ -73,6 +74,43 @@ host "server1" {
 	}
 	if host.System.Timezone != "Asia/Tokyo" {
 		t.Fatalf("timezone = %q, want Asia/Tokyo", host.System.Timezone)
+	}
+	if !host.System.TimezoneSet {
+		t.Fatalf("timezone should be marked explicit")
+	}
+	if host.System.Locale != "C.UTF-8" {
+		t.Fatalf("locale = %q, want C.UTF-8", host.System.Locale)
+	}
+	if !host.System.LocaleSet {
+		t.Fatalf("locale should be marked explicit")
+	}
+}
+
+func TestCompileAllowsHostToUnsetProfileSystemTimezoneAndLocale(t *testing.T) {
+	program := compileInline(t, `
+profile "base" {
+  system {
+    timezone = "UTC"
+    locale   = "C.UTF-8"
+  }
+}
+
+host "server1" {
+  imports = [profile.base]
+
+  system {
+    timezone = unset()
+    locale   = unset()
+  }
+}
+`)
+
+	host := program.Hosts[0]
+	if host.System.TimezoneSet || host.System.Timezone != "" {
+		t.Fatalf("timezone = %q set=%v, want unset", host.System.Timezone, host.System.TimezoneSet)
+	}
+	if host.System.LocaleSet || host.System.Locale != "" {
+		t.Fatalf("locale = %q set=%v, want unset", host.System.Locale, host.System.LocaleSet)
 	}
 }
 
@@ -3268,6 +3306,78 @@ host "server1" {
 `)
 	if err == nil || !strings.Contains(err.Error(), "profile.bad.system.hostname is host-only") {
 		t.Fatalf("error = %v, want host-only field error", err)
+	}
+}
+
+func TestCompileRejectsInvalidSystemTimezoneAndLocale(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "empty timezone",
+			body: `
+host "server1" {
+  system {
+    timezone = ""
+  }
+}
+`,
+			want: "system.timezone must be non-empty",
+		},
+		{
+			name: "timezone path traversal",
+			body: `
+host "server1" {
+  system {
+    timezone = "Etc/../UTC"
+  }
+}
+`,
+			want: "system.timezone must not contain empty, current, or parent path segments",
+		},
+		{
+			name: "absolute timezone",
+			body: `
+host "server1" {
+  system {
+    timezone = "/etc/localtime"
+  }
+}
+`,
+			want: "system.timezone must be a zoneinfo name",
+		},
+		{
+			name: "empty locale",
+			body: `
+host "server1" {
+  system {
+    locale = ""
+  }
+}
+`,
+			want: "system.locale must be non-empty",
+		},
+		{
+			name: "unsafe locale",
+			body: `
+host "server1" {
+  system {
+    locale = "en_US.UTF-8;rm"
+  }
+}
+`,
+			want: "system.locale must be a locale name",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.body)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 

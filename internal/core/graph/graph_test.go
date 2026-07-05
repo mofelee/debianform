@@ -65,11 +65,19 @@ func TestCompileSystemHostnameResourceRequiresExplicitHostname(t *testing.T) {
 	if node := nodeFor(empty, "host.web1.system.hostname"); node != nil {
 		t.Fatalf("implicit hostname generated system hostname node: %#v", node)
 	}
+	if node := nodeFor(empty, "host.web1.system.timezone"); node != nil {
+		t.Fatalf("implicit timezone generated system timezone node: %#v", node)
+	}
+	if node := nodeFor(empty, "host.web1.system.locale"); node != nil {
+		t.Fatalf("implicit locale generated system locale node: %#v", node)
+	}
 
 	resourceGraph := compileGraphInline(t, `
 host "web1" {
   system {
     hostname = "web-01"
+    timezone = "Asia/Shanghai"
+    locale   = "en_US.UTF-8"
   }
 }
 `)
@@ -82,6 +90,26 @@ host "web1" {
 	}
 	if node.Desired["hostname"] != "web-01" || node.ProviderPayload["hostname"] != "web-01" {
 		t.Fatalf("hostname desired/payload = %#v / %#v, want web-01", node.Desired, node.ProviderPayload)
+	}
+	timezone := nodeFor(resourceGraph, "host.web1.system.timezone")
+	if timezone == nil {
+		t.Fatal("explicit timezone did not generate system timezone node")
+	}
+	if timezone.Kind != "system_timezone" || timezone.ProviderType != "system_timezone" || timezone.ProviderAddress != "system_timezone.web1" {
+		t.Fatalf("timezone node provider = kind:%s type:%s address:%s", timezone.Kind, timezone.ProviderType, timezone.ProviderAddress)
+	}
+	if timezone.Desired["timezone"] != "Asia/Shanghai" || timezone.ProviderPayload["timezone"] != "Asia/Shanghai" {
+		t.Fatalf("timezone desired/payload = %#v / %#v, want Asia/Shanghai", timezone.Desired, timezone.ProviderPayload)
+	}
+	locale := nodeFor(resourceGraph, "host.web1.system.locale")
+	if locale == nil {
+		t.Fatal("explicit locale did not generate system locale node")
+	}
+	if locale.Kind != "system_locale" || locale.ProviderType != "system_locale" || locale.ProviderAddress != "system_locale.web1" {
+		t.Fatalf("locale node provider = kind:%s type:%s address:%s", locale.Kind, locale.ProviderType, locale.ProviderAddress)
+	}
+	if locale.Desired["locale"] != "en_US.UTF-8" || locale.ProviderPayload["locale"] != "en_US.UTF-8" {
+		t.Fatalf("locale desired/payload = %#v / %#v, want en_US.UTF-8", locale.Desired, locale.ProviderPayload)
 	}
 }
 

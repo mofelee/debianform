@@ -184,6 +184,38 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			ProviderPayload: desired,
 		})
 	}
+	if host.System.TimezoneSet {
+		desired := map[string]any{
+			"timezone": host.System.Timezone,
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         "host." + host.Name + ".system.timezone",
+			Kind:            "system_timezone",
+			Summary:         "manage system timezone " + host.System.Timezone,
+			Source:          host.System.Source,
+			Desired:         desired,
+			ProviderType:    "system_timezone",
+			ProviderAddress: "system_timezone." + providerName(host.Name),
+			ProviderPayload: desired,
+		})
+	}
+	if host.System.LocaleSet {
+		desired := map[string]any{
+			"locale": host.System.Locale,
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         "host." + host.Name + ".system.locale",
+			Kind:            "system_locale",
+			Summary:         "manage system locale " + host.System.Locale,
+			Source:          host.System.Source,
+			Desired:         desired,
+			ProviderType:    "system_locale",
+			ProviderAddress: "system_locale." + providerName(host.Name),
+			ProviderPayload: desired,
+		})
+	}
 
 	dockerPackageAddresses := []string{}
 	dockerServiceAddress := ""

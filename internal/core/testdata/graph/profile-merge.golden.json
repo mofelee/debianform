@@ -159,6 +159,44 @@
         "ensure": "present",
         "name": "vim"
       }
+    },
+    {
+      "host": "merge1",
+      "address": "host.merge1.system.locale",
+      "kind": "system_locale",
+      "summary": "manage system locale en_US.UTF-8",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 40,
+        "path": "host.merge1.system"
+      },
+      "desired": {
+        "locale": "en_US.UTF-8"
+      },
+      "provider_type": "system_locale",
+      "provider_address": "system_locale.merge1",
+      "provider_payload": {
+        "locale": "en_US.UTF-8"
+      }
+    },
+    {
+      "host": "merge1",
+      "address": "host.merge1.system.timezone",
+      "kind": "system_timezone",
+      "summary": "manage system timezone Asia/Shanghai",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 40,
+        "path": "host.merge1.system"
+      },
+      "desired": {
+        "timezone": "Asia/Shanghai"
+      },
+      "provider_type": "system_timezone",
+      "provider_address": "system_timezone.merge1",
+      "provider_payload": {
+        "timezone": "Asia/Shanghai"
+      }
     }
   ]
 }

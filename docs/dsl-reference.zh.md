@@ -214,14 +214,16 @@ host "force_example" {
 
 `host` 可用。`profile` 只能设置 `timezone`、`locale`；`hostname` 是 host-only。
 `hostname` 是期望托管的系统 hostname；省略时 DebianForm 不管理远端 hostname。
+`timezone` 和 `locale` 也是 desired state；显式声明后 DebianForm 会在在线 `plan` / `apply` /
+`check` 中检测和收敛远端主机。省略时不管理，不会把远端重置为默认值。
 `architecture` 和 `codename` 不属于 `system`；旧的 `system.architecture` /
 `system.codename` 已移除，继续使用会报错并提示迁移到 `platform`。
 
 | 字段 | 说明 |
 | --- | --- |
 | `hostname` | 期望托管的系统 hostname；省略表示不管理 hostname。 |
-| `timezone` | 预留/HostSpec 字段。 |
-| `locale` | 预留/HostSpec 字段。 |
+| `timezone` | 期望系统 timezone，例如 `UTC`、`Asia/Shanghai`；必须是目标主机 `/usr/share/zoneinfo` 中存在的相对名称。 |
+| `locale` | 期望系统默认 locale，即 `/etc/default/locale` 中的 `LANG`，例如 `C.UTF-8`、`en_US.UTF-8`。DebianForm 会在需要时安装/生成 locale，并保留未管理的 `LC_*` 行。 |
 
 ### platform
 

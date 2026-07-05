@@ -6,7 +6,7 @@
     "host": "merge1"
   },
   "summary": {
-    "create": 7,
+    "create": 9,
     "update": 0,
     "delete": 0,
     "no_op": 0,
@@ -306,6 +306,60 @@
             "action": "create",
             "sensitive": false,
             "after": "vim"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.merge1.system.locale",
+      "action": "create",
+      "summary": "manage system locale en_US.UTF-8",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 40,
+        "path": "host.merge1.system"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "locale"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "en_US.UTF-8"
+          }
+        ]
+      }
+    },
+    {
+      "address": "host.merge1.system.timezone",
+      "action": "create",
+      "summary": "manage system timezone Asia/Shanghai",
+      "source": {
+        "file": "../../../examples/profile-merge.dbf.hcl",
+        "line": 40,
+        "path": "host.merge1.system"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "timezone"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "Asia/Shanghai"
           }
         ]
       }

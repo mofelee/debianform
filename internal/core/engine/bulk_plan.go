@@ -128,6 +128,10 @@ func bulkPlanNodeScripts(node graph.Node) ([]string, error) {
 	switch node.Kind {
 	case "system_hostname":
 		return []string{systemHostnameReadScript()}, nil
+	case "system_timezone":
+		return []string{systemTimezoneReadScript(stringDesired(node, "timezone"))}, nil
+	case "system_locale":
+		return []string{systemLocaleReadScript(stringDesired(node, "locale"))}, nil
 	case "file", "secret", "systemd_unit", "nftables_file", "networkd_netdev", "networkd_network":
 		return []string{bulkReadPathScript(stringDesired(node, "path"))}, nil
 	case "apt_source_file":

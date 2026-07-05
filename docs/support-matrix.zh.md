@@ -68,7 +68,8 @@ Linux Homebrew best-effort 规则见
 | --- | --- | --- | --- |
 | `ssh` | Beta | root SSH host/port/user/identity_file。 | CLI online plan/apply/check。 |
 | `state` | Beta | 每 host state path、lock path、atomic write、stale lock 接管。 | state、engine、SSH backend 单测。 |
-| `system` | Beta | hostname、architecture、codename、timezone、locale；online facts 校验。 | merge/facts 单测。 |
+| `system` | Beta | desired hostname、timezone 和默认 locale；省略字段不管理远端值。 | merge/graph/engine 单测，`hostname` 和 `system-settings` integration cases。 |
+| `platform` | Beta | 目标 architecture/codename facts，用于 Docker 官方源、component source selection 和离线 plan。 | merge/graph/plan 单测，Docker integration cases。 |
 | `kernel` | Beta | kernel module、sysctl 持久化和运行时应用。 | BBR example 和 libvirt `bbr` case。 |
 | `packages` | Beta | package install，含 repository dependency。 | graph/plan 和 integration cases。 |
 | `apt` | Beta | deb822 repository、source file、signing key、APT refresh operation。 | `apt-source` integration case。 |
@@ -92,6 +93,9 @@ Linux Homebrew best-effort 规则见
 
 | 类型 | 当前状态 | 来源 DSL | 说明 |
 | --- | --- | --- | --- |
+| `system_hostname` | Beta | `system.hostname` | 显式声明时管理系统 hostname；移除配置后只 forget state，不重置远端。 |
+| `system_timezone` | Beta | `system.timezone` | 显式声明时管理系统 timezone；移除配置后只 forget state，不重置远端。 |
+| `system_locale` | Beta | `system.locale` | 显式声明时管理系统默认 `LANG`，按需生成 glibc locale，并保留未管理的 `LC_*`。 |
 | `kernel_module` | Beta | `kernel.modules` | 加载并持久化 kernel module。 |
 | `sysctl` | Beta | `kernel.sysctl` | 写 sysctl 配置并应用运行时值。 |
 | `package` | Beta | `packages`、`docker.package` | APT package 安装。 |

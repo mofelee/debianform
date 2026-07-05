@@ -839,6 +839,8 @@ func orphanSteps(states map[string]corestate.State, desired map[string]graph.Nod
 func forgetOrphan(prior corestate.Resource) bool {
 	return prior.Kind == "component_script_output" ||
 		prior.Kind == "system_hostname" ||
+		prior.Kind == "system_timezone" ||
+		prior.Kind == "system_locale" ||
 		prior.Kind == "apt_source_file" && stringMapValue(prior.Desired, "on_destroy") == "keep"
 }
 

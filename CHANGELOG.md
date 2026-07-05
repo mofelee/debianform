@@ -6,6 +6,9 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+- Added managed `system.timezone` and `system.locale` resources; online plan,
+  apply, and check now converge explicitly declared host timezone and system
+  `LANG` while leaving omitted settings unmanaged.
 - Breaking: removed the legacy DSL aliases `system.architecture` and
   `system.codename`; declare target platform facts with
   `platform.architecture` and `platform.codename`.

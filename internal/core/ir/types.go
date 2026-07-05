@@ -94,7 +94,9 @@ type SystemSpec struct {
 	Hostname    string    `json:"hostname,omitempty"`
 	HostnameSet bool      `json:"hostname_set,omitempty"`
 	Timezone    string    `json:"timezone,omitempty"`
+	TimezoneSet bool      `json:"timezone_set,omitempty"`
 	Locale      string    `json:"locale,omitempty"`
+	LocaleSet   bool      `json:"locale_set,omitempty"`
 	Source      SourceRef `json:"source,omitempty"`
 }
 

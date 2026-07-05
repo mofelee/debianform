@@ -42,7 +42,9 @@
   },
   "system": {
     "timezone": "Asia/Shanghai",
+    "timezone_set": true,
     "locale": "en_US.UTF-8",
+    "locale_set": true,
     "source": {
       "file": "../../../examples/profile-merge.dbf.hcl",
       "line": 40,
