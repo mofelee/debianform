@@ -7,7 +7,7 @@
       "summary": "manage docker official apt repository",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker-daemon1.docker"
       },
       "desired": {
@@ -41,7 +41,7 @@
       "summary": "manage docker official apt signing key",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker-daemon1.docker"
       },
       "desired": {
@@ -74,7 +74,7 @@
       "summary": "manage docker daemon configuration",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 15,
+        "line": 11,
         "path": "host.docker-daemon1.docker.daemon"
       },
       "desired": {
@@ -118,7 +118,7 @@
       "summary": "install docker package containerd.io",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker-daemon1.docker"
       },
       "desired": {
@@ -150,7 +150,7 @@
       "summary": "install docker package docker-buildx-plugin",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker-daemon1.docker"
       },
       "desired": {
@@ -182,7 +182,7 @@
       "summary": "install docker package docker-ce",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker-daemon1.docker"
       },
       "desired": {
@@ -214,7 +214,7 @@
       "summary": "install docker package docker-ce-cli",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker-daemon1.docker"
       },
       "desired": {
@@ -246,7 +246,7 @@
       "summary": "install docker package docker-compose-plugin",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker-daemon1.docker"
       },
       "desired": {
@@ -278,7 +278,7 @@
       "summary": "remove docker conflict packages",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker-daemon1.docker"
       },
       "desired": {
@@ -315,7 +315,7 @@
       "summary": "manage docker service",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker-daemon1.docker"
       },
       "desired": {
@@ -358,7 +358,7 @@
       "command_preview": "apt-get update",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker-daemon1.docker"
       }
     },
@@ -376,7 +376,7 @@
       "command_preview": "systemctl restart docker.service",
       "source": {
         "file": "../../../examples/docker-daemon.dbf.hcl",
-        "line": 15,
+        "line": 11,
         "path": "host.docker-daemon1.docker.daemon"
       }
     }

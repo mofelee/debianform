@@ -1,14 +1,10 @@
 # DebianForm Docker daemon 示例。
 #
 # daemon.settings 会映射到 /etc/docker/daemon.json，并在变化后 restart Docker。
-# 离线 plan 需要显式声明目标 Debian runtime facts。
+# 在线 plan 会自动发现目标 Debian platform facts。若要离线 plan，
+# 请在 host 中显式声明 platform.architecture 和 platform.codename。
 
 host "docker-daemon1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   docker {
     enable = true
 

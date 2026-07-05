@@ -27,13 +27,19 @@
       "path": "host.build1"
     }
   },
-  "system": {
-    "hostname": "build1",
+  "platform": {
     "architecture": "amd64",
     "source": {
       "file": "../../../examples/component-source-build.dbf.hcl",
       "line": 49,
-      "path": "host.build1.system"
+      "path": "host.build1.platform"
+    }
+  },
+  "system": {
+    "source": {
+      "file": "../../../examples/component-source-build.dbf.hcl",
+      "line": 44,
+      "path": "host.build1"
     }
   },
   "kernel": {

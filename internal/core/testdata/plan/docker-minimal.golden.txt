@@ -1,7 +1,7 @@
 Plan:
   + host.docker1.docker.apt.repository["docker-official"]
     manage docker official apt repository
-    source: ../../../examples/docker-minimal.dbf.hcl:12:host.docker1.docker
+    source: ../../../examples/docker-minimal.dbf.hcl:8:host.docker1.docker
     + content
       @@ -1,0 +1,6 @@
       + Types: deb
@@ -18,7 +18,7 @@ Plan:
     + path: "/etc/apt/sources.list.d/docker_official.sources"
   + host.docker1.docker.apt.signing_key["docker-official"]
     manage docker official apt signing key
-    source: ../../../examples/docker-minimal.dbf.hcl:12:host.docker1.docker
+    source: ../../../examples/docker-minimal.dbf.hcl:8:host.docker1.docker
     + ensure: "present"
     + group: "root"
     + mode: "0644"
@@ -29,42 +29,42 @@ Plan:
     + url: "https://download.docker.com/linux/debian/gpg"
   + host.docker1.docker.package["containerd.io"]
     install docker package containerd.io
-    source: ../../../examples/docker-minimal.dbf.hcl:12:host.docker1.docker
+    source: ../../../examples/docker-minimal.dbf.hcl:8:host.docker1.docker
     + ensure: "present"
     + name: "containerd.io"
     + repositories
       + repositories.0: "docker-official"
   + host.docker1.docker.package["docker-buildx-plugin"]
     install docker package docker-buildx-plugin
-    source: ../../../examples/docker-minimal.dbf.hcl:12:host.docker1.docker
+    source: ../../../examples/docker-minimal.dbf.hcl:8:host.docker1.docker
     + ensure: "present"
     + name: "docker-buildx-plugin"
     + repositories
       + repositories.0: "docker-official"
   + host.docker1.docker.package["docker-ce"]
     install docker package docker-ce
-    source: ../../../examples/docker-minimal.dbf.hcl:12:host.docker1.docker
+    source: ../../../examples/docker-minimal.dbf.hcl:8:host.docker1.docker
     + ensure: "present"
     + name: "docker-ce"
     + repositories
       + repositories.0: "docker-official"
   + host.docker1.docker.package["docker-ce-cli"]
     install docker package docker-ce-cli
-    source: ../../../examples/docker-minimal.dbf.hcl:12:host.docker1.docker
+    source: ../../../examples/docker-minimal.dbf.hcl:8:host.docker1.docker
     + ensure: "present"
     + name: "docker-ce-cli"
     + repositories
       + repositories.0: "docker-official"
   + host.docker1.docker.package["docker-compose-plugin"]
     install docker package docker-compose-plugin
-    source: ../../../examples/docker-minimal.dbf.hcl:12:host.docker1.docker
+    source: ../../../examples/docker-minimal.dbf.hcl:8:host.docker1.docker
     + ensure: "present"
     + name: "docker-compose-plugin"
     + repositories
       + repositories.0: "docker-official"
   + host.docker1.docker.package_conflicts
     remove docker conflict packages
-    source: ../../../examples/docker-minimal.dbf.hcl:12:host.docker1.docker
+    source: ../../../examples/docker-minimal.dbf.hcl:8:host.docker1.docker
     + ensure: "absent"
     + packages
       + packages.0: "docker.io"
@@ -76,7 +76,7 @@ Plan:
     + remove_conflicts: "auto"
   + host.docker1.docker.service["docker"]
     manage docker service
-    source: ../../../examples/docker-minimal.dbf.hcl:12:host.docker1.docker
+    source: ../../../examples/docker-minimal.dbf.hcl:8:host.docker1.docker
     + enabled: true
     + name: "docker"
     + state: "running"

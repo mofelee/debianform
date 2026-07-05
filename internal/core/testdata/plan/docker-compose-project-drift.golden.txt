@@ -1,7 +1,7 @@
 Plan:
   + host.compose1.docker.apt.repository["docker-official"]
     create file docker-official
-    source: ../../../examples/docker-compose.dbf.hcl:13:host.compose1.docker
+    source: ../../../examples/docker-compose.dbf.hcl:9:host.compose1.docker
     + content
       @@ -1,0 +1,6 @@
       + Types: deb
@@ -18,7 +18,7 @@ Plan:
     + path: "/etc/apt/sources.list.d/docker_official.sources"
   + host.compose1.docker.apt.signing_key["docker-official"]
     create apt_signing_key docker-official
-    source: ../../../examples/docker-compose.dbf.hcl:13:host.compose1.docker
+    source: ../../../examples/docker-compose.dbf.hcl:9:host.compose1.docker
     + ensure: "present"
     + group: "root"
     + mode: "0644"
@@ -29,7 +29,7 @@ Plan:
     + url: "https://download.docker.com/linux/debian/gpg"
   + host.compose1.docker.compose["app"].directory
     create directory /opt/app
-    source: ../../../examples/docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"]
+    source: ../../../examples/docker-compose.dbf.hcl:12:host.compose1.docker.compose["app"]
     + ensure: "present"
     + group: "root"
     + mode: "0755"
@@ -37,7 +37,7 @@ Plan:
     + path: "/opt/app"
   + host.compose1.docker.compose["app"].env_file["app"]
     create file /opt/app/.env
-    source: ../../../examples/docker-compose.dbf.hcl:32:host.compose1.docker.compose["app"].env_file["app"]
+    source: ../../../examples/docker-compose.dbf.hcl:28:host.compose1.docker.compose["app"].env_file["app"]
     + compose: "app"
     + content: <sensitive sha256=13960174065f5092768d3f5b11c1acad09272142febb757484b9709779b52588, 32 bytes>
     + ensure: "present"
@@ -48,7 +48,7 @@ Plan:
     + sensitive: true
   + host.compose1.docker.compose["app"].file
     create file /opt/app/compose.yaml
-    source: ../../../examples/docker-compose.dbf.hcl:20:host.compose1.docker.compose["app"].file
+    source: ../../../examples/docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"].file
     + compose: "app"
     + content
       @@ -1,0 +1,5 @@
@@ -68,7 +68,7 @@ Plan:
       + summary.sha256: "d1f744f61ab84b59402583765d65b4d6b984fd44c128388ac3ea0a07ef123d0f"
   ~ host.compose1.docker.compose["app"].project
     update docker_compose_project app
-    source: ../../../examples/docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"]
+    source: ../../../examples/docker-compose.dbf.hcl:12:host.compose1.docker.compose["app"]
     - containers
       - containers.total: 2
     - desired_digest: "drifted"
@@ -97,14 +97,14 @@ Plan:
       - services.total: 2
   + host.compose1.docker.compose["app"].service
     create service debianform-compose-app
-    source: ../../../examples/docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"]
+    source: ../../../examples/docker-compose.dbf.hcl:12:host.compose1.docker.compose["app"]
     + enabled: true
     + name: "debianform-compose-app"
     + state: "running"
     + unit: "debianform-compose-app.service"
   + host.compose1.docker.compose["app"].systemd_unit
     create systemd_unit debianform-compose-app.service
-    source: ../../../examples/docker-compose.dbf.hcl:16:host.compose1.docker.compose["app"]
+    source: ../../../examples/docker-compose.dbf.hcl:12:host.compose1.docker.compose["app"]
     + content
       @@ -1,0 +1,15 @@
       + [Unit]
@@ -133,42 +133,42 @@ Plan:
       + summary.sha256: "6cd6cbb3f51b6cd295517fa585d8573a31c5d55879472513038c5329b490072a"
   + host.compose1.docker.package["containerd.io"]
     create package containerd.io
-    source: ../../../examples/docker-compose.dbf.hcl:13:host.compose1.docker
+    source: ../../../examples/docker-compose.dbf.hcl:9:host.compose1.docker
     + ensure: "present"
     + name: "containerd.io"
     + repositories
       + repositories.0: "docker-official"
   + host.compose1.docker.package["docker-buildx-plugin"]
     create package docker-buildx-plugin
-    source: ../../../examples/docker-compose.dbf.hcl:13:host.compose1.docker
+    source: ../../../examples/docker-compose.dbf.hcl:9:host.compose1.docker
     + ensure: "present"
     + name: "docker-buildx-plugin"
     + repositories
       + repositories.0: "docker-official"
   + host.compose1.docker.package["docker-ce"]
     create package docker-ce
-    source: ../../../examples/docker-compose.dbf.hcl:13:host.compose1.docker
+    source: ../../../examples/docker-compose.dbf.hcl:9:host.compose1.docker
     + ensure: "present"
     + name: "docker-ce"
     + repositories
       + repositories.0: "docker-official"
   + host.compose1.docker.package["docker-ce-cli"]
     create package docker-ce-cli
-    source: ../../../examples/docker-compose.dbf.hcl:13:host.compose1.docker
+    source: ../../../examples/docker-compose.dbf.hcl:9:host.compose1.docker
     + ensure: "present"
     + name: "docker-ce-cli"
     + repositories
       + repositories.0: "docker-official"
   + host.compose1.docker.package["docker-compose-plugin"]
     create package docker-compose-plugin
-    source: ../../../examples/docker-compose.dbf.hcl:13:host.compose1.docker
+    source: ../../../examples/docker-compose.dbf.hcl:9:host.compose1.docker
     + ensure: "present"
     + name: "docker-compose-plugin"
     + repositories
       + repositories.0: "docker-official"
   + host.compose1.docker.service["docker"]
     create service docker
-    source: ../../../examples/docker-compose.dbf.hcl:13:host.compose1.docker
+    source: ../../../examples/docker-compose.dbf.hcl:9:host.compose1.docker
     + enabled: true
     + name: "docker"
     + state: "running"

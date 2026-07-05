@@ -620,7 +620,7 @@ component "tools" {
   apt {
     repository "tools_repo" {
       uris       = [input.repo_uri]
-      suites     = [target.system.codename]
+      suites     = [target.platform.codename]
       components = ["main"]
     }
   }
@@ -641,7 +641,7 @@ host "server1" {
     }
   }
 
-  system {
+  platform {
     codename = "trixie"
   }
 }
@@ -670,7 +670,7 @@ component "tools" {
   apt {
     repository "tools_repo" {
       uris       = ["https://repo.example/debian"]
-      suites     = [target.system.codename]
+      suites     = [target.platform.codename]
       components = ["main"]
     }
   }
@@ -679,7 +679,7 @@ component "tools" {
 host "bookworm1" {
   components = [component.tools]
 
-  system {
+  platform {
     codename = "bookworm"
   }
 }
@@ -687,7 +687,7 @@ host "bookworm1" {
 host "trixie1" {
   components = [component.tools]
 
-  system {
+  platform {
     codename = "trixie"
   }
 }
@@ -735,7 +735,7 @@ component "rclone" {
 host "tool1" {
   components = [component.rclone]
 
-  system {
+  platform {
     architecture = "arm64"
   }
 }
@@ -781,7 +781,7 @@ component "tool" {
 host "server1" {
   components = [component.tool]
 
-  system {
+  platform {
     architecture = "amd64"
   }
 }
@@ -813,7 +813,7 @@ component "tool" {
 host "server1" {
   components = [component.tool]
 
-  system {
+  platform {
     architecture = "amd64"
   }
 }
@@ -854,7 +854,7 @@ component "hello" {
 host "tool1" {
   components = [component.hello]
 
-  system {
+  platform {
     architecture = "amd64"
   }
 }
@@ -896,13 +896,13 @@ component "tools" {
   }
 
   script "reload" {
-    run = "systemctl reload tools-${target.system.codename}.service"
+    run = "systemctl reload tools-${target.platform.codename}.service"
   }
 
   apt {
     repository "tools_repo" {
       uris       = ["https://repo.example/debian"]
-      suites     = [target.system.codename]
+      suites     = [target.platform.codename]
       components = ["main"]
     }
   }
@@ -925,8 +925,11 @@ host "server1" {
 		t.Fatal(err)
 	}
 	host := program.Hosts[0]
-	if host.System.Architecture != "amd64" || host.System.Codename != "trixie" {
-		t.Fatalf("system facts were not applied: %#v", host.System)
+	if host.Platform == nil {
+		t.Fatalf("platform facts were not applied: platform is nil")
+	}
+	if host.Platform.Architecture != "amd64" || host.Platform.Codename != "trixie" {
+		t.Fatalf("platform facts were not applied: %#v", host.Platform)
 	}
 	component := host.Components[0]
 	if component.SelectedSource == nil || component.SelectedSource.Architecture != "amd64" {
@@ -934,6 +937,164 @@ host "server1" {
 	}
 	if got := component.APT.Repositories["tools_repo"].Suites; !reflect.DeepEqual(got, []string{"trixie"}) {
 		t.Fatalf("repository suites = %#v", got)
+	}
+}
+
+func TestCompilePlatformBlockExposesTargetAndSelf(t *testing.T) {
+	cfg := parseInline(t, `
+component "tools" {
+  apt {
+    repository "platform_repo" {
+      uris       = ["https://repo.example/debian"]
+      suites     = [target.platform.codename]
+      components = ["main"]
+    }
+
+  }
+}
+
+host "server1" {
+  platform {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  components = [component.tools]
+
+  assert {
+    condition = self.platform.architecture == "amd64" && self.platform.codename == "trixie"
+    message   = "platform facts should resolve"
+  }
+}
+`)
+	program, err := CompileWithOptions(cfg, CompileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := program.Hosts[0]
+	if host.Platform == nil {
+		t.Fatalf("platform = nil, want explicit platform spec")
+	}
+	if host.Platform.Architecture != "amd64" || host.Platform.Codename != "trixie" {
+		t.Fatalf("platform = %#v, want amd64/trixie", host.Platform)
+	}
+	component := host.Components[0]
+	if got := component.APT.Repositories["platform_repo"].Suites; !reflect.DeepEqual(got, []string{"trixie"}) {
+		t.Fatalf("platform repository suites = %#v", got)
+	}
+}
+
+func TestCompileRejectsLegacySystemPlatformFacts(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "architecture",
+			body: `
+host "server1" {
+  system {
+    architecture = "arm64"
+  }
+}
+`,
+			want: `system.architecture is no longer supported; use platform.architecture`,
+		},
+		{
+			name: "codename",
+			body: `
+host "server1" {
+  system {
+    codename = "bookworm"
+  }
+}
+`,
+			want: `system.codename is no longer supported; use platform.codename`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := parseInline(t, tt.body)
+			_, err := CompileWithOptions(cfg, CompileOptions{})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("CompileWithOptions error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompileRejectsLegacySystemPlatformExpressions(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "target codename",
+			body: `
+component "tools" {
+  apt {
+    repository "tools_repo" {
+      uris       = ["https://repo.example/debian"]
+      suites     = [target.system.codename]
+      components = ["main"]
+    }
+  }
+}
+
+host "server1" {
+  platform {
+    codename = "trixie"
+  }
+
+  components = [component.tools]
+}
+`,
+			want: `target.system.codename is no longer supported; use target.platform.codename`,
+		},
+		{
+			name: "self architecture",
+			body: `
+host "server1" {
+  platform {
+    architecture = "amd64"
+  }
+
+  assert {
+    condition = self.system.architecture == "amd64"
+    message   = "must be amd64"
+  }
+}
+`,
+			want: `self.system.architecture is no longer supported; use self.platform.architecture`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := parseInline(t, tt.body)
+			_, err := CompileWithOptions(cfg, CompileOptions{})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("CompileWithOptions error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseRejectsPlatformFactsInProfile(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+profile "base" {
+  platform {
+    architecture = "amd64"
+  }
+}
+
+host "server1" {
+  imports = [profile.base]
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "host-only and cannot be declared in profile") {
+		t.Fatalf("parseOrCompileInline error = %v, want host-only platform error", err)
 	}
 }
 
@@ -945,29 +1106,29 @@ func TestCompileRejectsDeclaredRuntimeFactMismatch(t *testing.T) {
 		want  string
 	}{
 		{
-			name: "architecture",
+			name: "platform architecture",
 			body: `
 host "server1" {
-  system {
+  platform {
     architecture = "arm64"
   }
 }
 `,
 			facts: ir.SystemFacts{Architecture: "amd64", Codename: "trixie"},
-			want:  `declared architecture "arm64" does not match detected architecture "amd64"`,
+			want:  `declared platform.architecture "arm64" does not match detected architecture "amd64"`,
 		},
 		{
-			name: "codename",
+			name: "platform codename",
 			body: `
 host "server1" {
-  system {
+  platform {
     architecture = "amd64"
     codename     = "bookworm"
   }
 }
 `,
 			facts: ir.SystemFacts{Architecture: "amd64", Codename: "trixie"},
-			want:  `declared codename "bookworm" does not match detected codename "trixie"`,
+			want:  `declared platform.codename "bookworm" does not match detected codename "trixie"`,
 		},
 	}
 
@@ -1010,8 +1171,45 @@ host "server1" {
 	if host.System.Hostname != "desired-hostname" {
 		t.Fatalf("desired hostname = %q, want desired-hostname", host.System.Hostname)
 	}
+	if !host.System.HostnameSet {
+		t.Fatalf("desired hostname should be marked explicit")
+	}
 	if host.Facts.System.Hostname != "observed-hostname" {
 		t.Fatalf("observed hostname fact = %q, want observed-hostname", host.Facts.System.Hostname)
+	}
+}
+
+func TestCompileDoesNotDefaultDesiredHostnameFromHostLabel(t *testing.T) {
+	cfg := parseInline(t, `
+host "server1" {}
+`)
+	program, err := CompileWithOptions(cfg, CompileOptions{
+		HostFacts: map[string]ir.HostFacts{
+			"server1": {System: ir.SystemFacts{
+				Hostname:     "observed-hostname",
+				Architecture: "amd64",
+				Codename:     "trixie",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := program.Hosts[0]
+	if host.System.HostnameSet {
+		t.Fatalf("desired hostname should be unset")
+	}
+	if host.System.Hostname != "" {
+		t.Fatalf("desired hostname = %q, want empty when unset", host.System.Hostname)
+	}
+	if host.Facts.System.Hostname != "observed-hostname" {
+		t.Fatalf("observed hostname fact = %q, want observed-hostname", host.Facts.System.Hostname)
+	}
+	if host.SSH.Host != "server1" {
+		t.Fatalf("ssh host = %q, want host label default", host.SSH.Host)
+	}
+	if !strings.Contains(host.State.Path, "server1.json") {
+		t.Fatalf("state path = %q, want host label default", host.State.Path)
 	}
 }
 
@@ -1041,7 +1239,7 @@ component "tools" {
   apt {
     repository "tools_repo" {
       uris       = ["https://repo.example/debian"]
-      suites     = [target.system.codename]
+      suites     = [target.platform.codename]
       components = ["main"]
     }
   }
@@ -1096,7 +1294,7 @@ component "tools" {
   apt {
     repository "tools_repo" {
       uris       = ["https://repo.example/debian"]
-      suites     = [target.system.codename]
+      suites     = [target.platform.codename]
       components = ["main"]
       invalid    = true
     }
@@ -1168,7 +1366,7 @@ component "company_ca" {
 host "server1" {
   components = [component.artifact_file, component.artifact_archive, component.company_ca]
 
-  system {
+  platform {
     architecture = "amd64"
   }
 }
@@ -1241,7 +1439,7 @@ host "tool1" {
   components = [component.rclone]
 }
 `,
-			want: "must declare system.architecture",
+			want: "must declare platform.architecture",
 		},
 		{
 			name: "mixed source labels",
@@ -1267,7 +1465,7 @@ component "rclone" {
 host "tool1" {
   components = [component.rclone]
 
-  system {
+  platform {
     architecture = "amd64"
   }
 }
@@ -1651,7 +1849,7 @@ component "proxy" {
   input "listeners" {
     type = list(object({ port = number }))
     validation {
-      condition     = target.system.codename == "trixie"
+      condition     = target.platform.codename == "trixie"
       error_message = "bad"
     }
   }
@@ -2089,7 +2287,7 @@ variable "environment" {
   type    = string
   default = "prod"
   validation {
-    condition     = target.system.codename == "trixie"
+    condition     = target.platform.codename == "trixie"
     error_message = "bad"
   }
 }
@@ -3283,6 +3481,10 @@ func TestCompileProfileMergeHostSpecGolden(t *testing.T) {
 
 func TestCompileFoundationHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../testdata/fixtures/foundation.dbf.hcl", "../testdata/hostspec/foundation.golden.json")
+}
+
+func TestCompilePlatformHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../testdata/fixtures/platform.dbf.hcl", "../testdata/hostspec/platform.golden.json")
 }
 
 func TestCompileAPTRepositoryHostSpecGolden(t *testing.T) {

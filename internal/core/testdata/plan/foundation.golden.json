@@ -6,7 +6,7 @@
     "host": "foundation1"
   },
   "summary": {
-    "create": 9,
+    "create": 10,
     "update": 0,
     "delete": 0,
     "no_op": 0,
@@ -19,7 +19,7 @@
       "summary": "create directory /etc/myapp",
       "source": {
         "file": "../testdata/fixtures/foundation.dbf.hcl",
-        "line": 27,
+        "line": 30,
         "path": "host.foundation1.directories.directory[\"/etc/myapp\"]"
       },
       "diff": {
@@ -82,7 +82,7 @@
       "summary": "create file /etc/myapp/config.yaml",
       "source": {
         "file": "../testdata/fixtures/foundation.dbf.hcl",
-        "line": 47,
+        "line": 50,
         "path": "host.foundation1.files.file[\"/etc/myapp/config.yaml\"]"
       },
       "diff": {
@@ -296,7 +296,7 @@
       "summary": "create secret file /etc/myapp/token",
       "source": {
         "file": "../testdata/fixtures/foundation.dbf.hcl",
-        "line": 59,
+        "line": 62,
         "path": "host.foundation1.secrets.file[\"/etc/myapp/token\"]"
       },
       "diff": {
@@ -380,7 +380,7 @@
       "summary": "manage service myapp",
       "source": {
         "file": "../testdata/fixtures/foundation.dbf.hcl",
-        "line": 77,
+        "line": 80,
         "path": "host.foundation1.services.service[\"myapp\"]"
       },
       "diff": {
@@ -438,12 +438,39 @@
       }
     },
     {
+      "address": "host.foundation1.system.hostname",
+      "action": "create",
+      "summary": "manage system hostname foundation1",
+      "source": {
+        "file": "../testdata/fixtures/foundation.dbf.hcl",
+        "line": 20,
+        "path": "host.foundation1.system"
+      },
+      "diff": {
+        "path": [],
+        "kind": "object",
+        "action": "create",
+        "sensitive": false,
+        "children": [
+          {
+            "path": [
+              "hostname"
+            ],
+            "kind": "scalar",
+            "action": "create",
+            "sensitive": false,
+            "after": "foundation1"
+          }
+        ]
+      }
+    },
+    {
       "address": "host.foundation1.systemd.unit[\"myapp.service\"]",
       "action": "create",
       "summary": "create systemd unit myapp.service",
       "source": {
         "file": "../testdata/fixtures/foundation.dbf.hcl",
-        "line": 65,
+        "line": 68,
         "path": "host.foundation1.systemd.unit[\"myapp.service\"]"
       },
       "diff": {
@@ -592,7 +619,7 @@
       "summary": "create user deploy",
       "source": {
         "file": "../testdata/fixtures/foundation.dbf.hcl",
-        "line": 35,
+        "line": 38,
         "path": "host.foundation1.users.user[\"deploy\"]"
       },
       "diff": {
@@ -701,7 +728,7 @@
       "summary": "create authorized key for deploy",
       "source": {
         "file": "../testdata/fixtures/foundation.dbf.hcl",
-        "line": 35,
+        "line": 38,
         "path": "host.foundation1.users.user[\"deploy\"]"
       },
       "diff": {
@@ -755,7 +782,7 @@
       "command_preview": "systemctl daemon-reload",
       "source": {
         "file": "../testdata/fixtures/foundation.dbf.hcl",
-        "line": 64,
+        "line": 67,
         "path": "host.foundation1.systemd"
       }
     }

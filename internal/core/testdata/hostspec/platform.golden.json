@@ -1,0 +1,79 @@
+{
+  "name": "platform1",
+  "source": {
+    "file": "../testdata/fixtures/platform.dbf.hcl",
+    "line": 1,
+    "path": "host.platform1"
+  },
+  "facts": {
+    "system": {}
+  },
+  "ssh": {
+    "host": "platform1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../testdata/fixtures/platform.dbf.hcl",
+      "line": 1,
+      "path": "host.platform1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/platform1.json",
+    "lock_path": "/var/lock/debianform/state/platform1.lock",
+    "source": {
+      "file": "../testdata/fixtures/platform.dbf.hcl",
+      "line": 1,
+      "path": "host.platform1"
+    }
+  },
+  "platform": {
+    "architecture": "amd64",
+    "codename": "trixie",
+    "source": {
+      "file": "../testdata/fixtures/platform.dbf.hcl",
+      "line": 2,
+      "path": "host.platform1.platform"
+    }
+  },
+  "system": {
+    "source": {
+      "file": "../testdata/fixtures/platform.dbf.hcl",
+      "line": 1,
+      "path": "host.platform1"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  }
+}

@@ -28,13 +28,10 @@
     }
   },
   "system": {
-    "hostname": "docker-users1",
-    "architecture": "amd64",
-    "codename": "trixie",
     "source": {
       "file": "../../../examples/docker-users.dbf.hcl",
-      "line": 7,
-      "path": "host.docker-users1.system"
+      "line": 6,
+      "path": "host.docker-users1"
     }
   },
   "kernel": {
@@ -63,14 +60,14 @@
         "ensure": "present",
         "source": {
           "file": "../../../examples/docker-users.dbf.hcl",
-          "line": 13,
+          "line": 8,
           "path": "host.docker-users1.groups.group[\"deploy\"]"
         }
       }
     },
     "source": {
       "file": "../../../examples/docker-users.dbf.hcl",
-      "line": 12,
+      "line": 7,
       "path": "host.docker-users1.groups"
     }
   },
@@ -84,14 +81,14 @@
         "ensure": "present",
         "source": {
           "file": "../../../examples/docker-users.dbf.hcl",
-          "line": 19,
+          "line": 14,
           "path": "host.docker-users1.users.user[\"deploy\"]"
         }
       }
     },
     "source": {
       "file": "../../../examples/docker-users.dbf.hcl",
-      "line": 18,
+      "line": 13,
       "path": "host.docker-users1.users"
     }
   },
@@ -115,7 +112,7 @@
       "remove_conflicts": "auto",
       "source_ref": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       }
     },
@@ -125,7 +122,7 @@
       "name": "docker.service",
       "source_ref": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       }
     },
@@ -134,7 +131,7 @@
     ],
     "source": {
       "file": "../../../examples/docker-users.dbf.hcl",
-      "line": 26,
+      "line": 21,
       "path": "host.docker-users1.docker"
     }
   }

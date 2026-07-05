@@ -82,7 +82,8 @@ state 和 observed 状态后才能知道。
 
 ## Host facts
 
-`HostFacts` 当前主要包含 system facts：
+DSL 中目标平台 facts 写作 `platform.architecture` / `platform.codename`。IR 的 `HostFacts`
+当前仍通过 `System` 字段保存探测结果，沿用现有 provider/state facts schema：
 
 - hostname
 - architecture

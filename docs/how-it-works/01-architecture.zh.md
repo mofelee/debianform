@@ -90,7 +90,7 @@ parser.Config
 
 这里不会调用 `engine.Plan`，所以不会读取 state，也不会知道目标机上资源是否已经存在。
 
-如果配置依赖运行期 facts，例如没有声明 `system.architecture` 却需要按架构选择 component artifact，
+如果配置依赖运行期 facts，例如没有声明 `platform.architecture` 却需要按架构选择 component artifact，
 离线 plan 会报错并提示改用在线 plan 或显式声明 facts。
 
 ## 在线 `plan`

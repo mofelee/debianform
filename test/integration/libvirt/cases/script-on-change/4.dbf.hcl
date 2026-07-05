@@ -9,9 +9,4 @@ host "cihost" {
     path      = "/var/lib/debianform-integration/script-on-change-state.json"
     lock_path = "/var/lock/debianform-integration/script-on-change-state.lock"
   }
-
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
 }

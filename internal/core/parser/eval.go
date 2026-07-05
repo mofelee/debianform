@@ -91,6 +91,10 @@ func evalValue(expr hcl.Expression, ctx EvalContext, source ir.SourceRef) (Value
 		return MapValue(values, source), nil
 	}
 
+	if err := RemovedSystemPlatformAliasError(expr, source); err != nil {
+		return Value{}, err
+	}
+
 	value, err := evalCty(expr, ctx)
 	if err != nil {
 		return Value{}, err
@@ -108,6 +112,47 @@ func evalCty(expr hcl.Expression, ctx EvalContext) (cty.Value, error) {
 		return cty.NilVal, fmt.Errorf("%s", diags.Error())
 	}
 	return value, nil
+}
+
+func RemovedSystemPlatformAliasError(expr hcl.Expression, source ir.SourceRef) error {
+	for _, traversal := range expr.Variables() {
+		legacy, replacement, ok := removedSystemPlatformAlias(traversal)
+		if !ok {
+			continue
+		}
+		rng := traversal.SourceRange()
+		line := source.Line
+		if rng.Start.Line != 0 {
+			line = rng.Start.Line
+		}
+		file := source.File
+		if rng.Filename != "" {
+			file = rng.Filename
+		}
+		return fmt.Errorf("%s:%d:%s: %s is no longer supported; use %s", file, line, source.Path, legacy, replacement)
+	}
+	return nil
+}
+
+func removedSystemPlatformAlias(traversal hcl.Traversal) (string, string, bool) {
+	if len(traversal) < 3 {
+		return "", "", false
+	}
+	root, ok := traversal[0].(hcl.TraverseRoot)
+	if !ok || (root.Name != "target" && root.Name != "self") {
+		return "", "", false
+	}
+	first, ok := traversal[1].(hcl.TraverseAttr)
+	if !ok || first.Name != "system" {
+		return "", "", false
+	}
+	second, ok := traversal[2].(hcl.TraverseAttr)
+	if !ok || (second.Name != "architecture" && second.Name != "codename") {
+		return "", "", false
+	}
+	legacy := root.Name + ".system." + second.Name
+	replacement := root.Name + ".platform." + second.Name
+	return legacy, replacement, true
 }
 
 func hclEvalContext(ctx EvalContext) (*hcl.EvalContext, error) {

@@ -2,7 +2,7 @@
   "name": "docker1",
   "source": {
     "file": "../../../examples/docker-minimal.dbf.hcl",
-    "line": 6,
+    "line": 7,
     "path": "host.docker1"
   },
   "facts": {
@@ -14,7 +14,7 @@
     "user": "root",
     "source": {
       "file": "../../../examples/docker-minimal.dbf.hcl",
-      "line": 6,
+      "line": 7,
       "path": "host.docker1"
     }
   },
@@ -23,18 +23,15 @@
     "lock_path": "/var/lock/debianform/state/docker1.lock",
     "source": {
       "file": "../../../examples/docker-minimal.dbf.hcl",
-      "line": 6,
+      "line": 7,
       "path": "host.docker1"
     }
   },
   "system": {
-    "hostname": "docker1",
-    "architecture": "amd64",
-    "codename": "trixie",
     "source": {
       "file": "../../../examples/docker-minimal.dbf.hcl",
       "line": 7,
-      "path": "host.docker1.system"
+      "path": "host.docker1"
     }
   },
   "kernel": {
@@ -81,7 +78,7 @@
       "remove_conflicts": "auto",
       "source_ref": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       }
     },
@@ -91,13 +88,13 @@
       "name": "docker.service",
       "source_ref": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       }
     },
     "source": {
       "file": "../../../examples/docker-minimal.dbf.hcl",
-      "line": 12,
+      "line": 8,
       "path": "host.docker1.docker"
     }
   }

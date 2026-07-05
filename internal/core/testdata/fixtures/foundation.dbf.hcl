@@ -18,7 +18,10 @@ host "foundation1" {
   }
 
   system {
-    hostname     = "foundation1"
+    hostname = "foundation1"
+  }
+
+  platform {
     architecture = "amd64"
     codename     = "trixie"
   }

@@ -1,17 +1,17 @@
 Plan:
   + host.docker-sources1.docker.package["docker-compose-plugin"]
     install docker package docker-compose-plugin
-    source: ../../../examples/docker-package-sources.dbf.hcl:10:host.docker-sources1.docker.package
+    source: ../../../examples/docker-package-sources.dbf.hcl:5:host.docker-sources1.docker.package
     + ensure: "present"
     + name: "docker-compose-plugin"
   + host.docker-sources1.docker.package["docker.io"]
     install docker package docker.io
-    source: ../../../examples/docker-package-sources.dbf.hcl:10:host.docker-sources1.docker.package
+    source: ../../../examples/docker-package-sources.dbf.hcl:5:host.docker-sources1.docker.package
     + ensure: "present"
     + name: "docker.io"
   + host.docker-sources1.docker.service["docker"]
     manage docker service
-    source: ../../../examples/docker-package-sources.dbf.hcl:7:host.docker-sources1.docker
+    source: ../../../examples/docker-package-sources.dbf.hcl:2:host.docker-sources1.docker
     + enabled: true
     + name: "docker"
     + state: "running"

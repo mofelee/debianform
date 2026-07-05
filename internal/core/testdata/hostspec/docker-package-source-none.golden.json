@@ -28,7 +28,6 @@
     }
   },
   "system": {
-    "hostname": "docker-none1",
     "source": {
       "file": "../testdata/fixtures/docker-package-source-none.dbf.hcl",
       "line": 1,

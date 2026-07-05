@@ -6,6 +6,15 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+- Breaking: removed the legacy DSL aliases `system.architecture` and
+  `system.codename`; declare target platform facts with
+  `platform.architecture` and `platform.codename`.
+- Breaking: removed the legacy expression aliases
+  `target.system.architecture`, `target.system.codename`,
+  `self.system.architecture`, and `self.system.codename`; use
+  `target.platform.*` or `self.platform.*` instead. Persisted state facts
+  remain under `facts.system.*`.
+
 ## v0.2.0-alpha.3
 
 - Added the interactive SSH apply debugger and `debug run` command for remote

@@ -36,11 +36,6 @@ component "managed_app" {
 }
 
 host "app1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   component "app" {
     source = component.managed_app
 

@@ -129,7 +129,7 @@ host "proxy1" {
     component.mihomo,
   ]
 
-  system {
+  platform {
     architecture = "amd64"
   }
 }

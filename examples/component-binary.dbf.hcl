@@ -5,7 +5,7 @@
 #
 # 行为边界：
 # - component 封装 artifact source、extract 和 install。
-# - source 按 target.system.architecture 选择。
+# - source 按 target.platform.architecture 选择。
 # - 下载必须先校验，再解压/安装，失败不能触碰目标路径。
 
 component "rclone" {

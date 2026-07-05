@@ -31,10 +31,16 @@
       "path": "host.users1"
     }
   },
-  "system": {
-    "hostname": "users1",
+  "platform": {
     "architecture": "amd64",
     "codename": "trixie",
+    "source": {
+      "file": "../../../examples/user-group.dbf.hcl",
+      "line": 3,
+      "path": "host.users1"
+    }
+  },
+  "system": {
     "source": {
       "file": "../../../examples/user-group.dbf.hcl",
       "line": 3,

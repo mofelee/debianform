@@ -71,9 +71,6 @@
         "name": "input1",
         "components": [
           "proxy=reverse_proxy"
-        ],
-        "body_keys": [
-          "system"
         ]
       }
     ]
@@ -90,7 +87,7 @@
           "hello_from_source=hello_from_source"
         ],
         "body_keys": [
-          "system"
+          "platform"
         ]
       }
     ]
@@ -101,8 +98,7 @@
       {
         "name": "compose1",
         "body_keys": [
-          "docker",
-          "system"
+          "docker"
         ]
       }
     ]
@@ -113,8 +109,7 @@
       {
         "name": "docker-daemon1",
         "body_keys": [
-          "docker",
-          "system"
+          "docker"
         ]
       }
     ]
@@ -125,8 +120,7 @@
       {
         "name": "docker1",
         "body_keys": [
-          "docker",
-          "system"
+          "docker"
         ]
       }
     ]
@@ -137,8 +131,7 @@
       {
         "name": "docker-mirror1",
         "body_keys": [
-          "docker",
-          "system"
+          "docker"
         ]
       }
     ]
@@ -149,8 +142,7 @@
       {
         "name": "docker-sources1",
         "body_keys": [
-          "docker",
-          "system"
+          "docker"
         ]
       }
     ]
@@ -163,7 +155,6 @@
         "body_keys": [
           "docker",
           "groups",
-          "system",
           "users"
         ]
       }
@@ -231,6 +222,7 @@
           "groups",
           "nftables",
           "packages",
+          "platform",
           "services",
           "ssh",
           "state",
@@ -252,7 +244,7 @@
           "mihomo=mihomo"
         ],
         "body_keys": [
-          "system"
+          "platform"
         ]
       }
     ]

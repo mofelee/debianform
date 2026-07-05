@@ -268,9 +268,11 @@ host "app1" {
   }
 
   system {
-    hostname     = "app1"
-    architecture = "amd64"
-    codename     = "trixie"
+    hostname = "app1"
+  }
+
+  platform {
+    codename = "trixie"
   }
 
   files {
@@ -304,7 +306,7 @@ host "app1" {
   }
 
   assert {
-    condition = self.system.codename == "trixie"
+    condition = self.platform.codename == "trixie"
     message   = "app1 example expects Debian 13 trixie."
   }
 }
@@ -320,10 +322,11 @@ dbf validate -f examples/realistic-systemd-app.dbf.hcl
 dbf plan -f examples/realistic-systemd-app.dbf.hcl --offline
 dbf validate -f examples/fleet.dbf.hcl
 dbf plan -f examples/fleet.dbf.hcl --offline
-dbf plan -f examples/docker-minimal.dbf.hcl --offline
-dbf plan -f examples/docker-official-mirror.dbf.hcl --offline
 dbf plan -f examples/nftables.dbf.hcl --offline
 ```
+
+Docker 官方源和跨架构 component 依赖目标 platform facts。真实主机上使用在线
+`dbf plan`；纯离线预览时在 host 中声明 `platform.architecture` / `platform.codename`。
 
 当前 README 覆盖的可运行示例：
 

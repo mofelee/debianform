@@ -17,6 +17,9 @@ func evaluateAssertions(asserts []parser.Assert, host ir.HostSpec) error {
 	}
 	self := hostSpecToCty(host)
 	for _, assert := range asserts {
+		if err := parser.RemovedSystemPlatformAliasError(assert.Condition, assert.ConditionSource); err != nil {
+			return fmt.Errorf("%s:%d:%s: assert condition: %w", assert.ConditionSource.File, assert.ConditionSource.Line, assert.ConditionSource.Path, err)
+		}
 		value, diags := assert.Condition.Value(&hcl.EvalContext{
 			Variables: map[string]cty.Value{
 				"self": self,
@@ -44,6 +47,7 @@ func hostSpecToCty(host ir.HostSpec) cty.Value {
 		"name":        cty.StringVal(host.Name),
 		"ssh":         sshSpecToCty(host.SSH),
 		"state":       stateSpecToCty(host.State),
+		"platform":    platformSpecToCty(host),
 		"system":      systemSpecToCty(host.System),
 		"kernel":      kernelSpecToCty(host.Kernel),
 		"packages":    packageSpecToCty(host.Packages),
@@ -56,6 +60,21 @@ func hostSpecToCty(host ir.HostSpec) cty.Value {
 		"systemd":     systemdSpecToCty(host.Systemd),
 		"services":    serviceSpecToCty(host.Services),
 		"nftables":    nftablesSpecToCty(host.Nftables),
+	})
+}
+
+func effectivePlatformArchitecture(host ir.HostSpec) string {
+	return host.PlatformArchitecture()
+}
+
+func effectivePlatformCodename(host ir.HostSpec) string {
+	return host.PlatformCodename()
+}
+
+func platformSpecToCty(host ir.HostSpec) cty.Value {
+	return cty.ObjectVal(map[string]cty.Value{
+		"architecture": cty.StringVal(effectivePlatformArchitecture(host)),
+		"codename":     cty.StringVal(effectivePlatformCodename(host)),
 	})
 }
 
@@ -77,11 +96,9 @@ func stateSpecToCty(spec ir.StateSpec) cty.Value {
 
 func systemSpecToCty(spec ir.SystemSpec) cty.Value {
 	return cty.ObjectVal(map[string]cty.Value{
-		"hostname":     cty.StringVal(spec.Hostname),
-		"architecture": cty.StringVal(spec.Architecture),
-		"codename":     cty.StringVal(spec.Codename),
-		"timezone":     cty.StringVal(spec.Timezone),
-		"locale":       cty.StringVal(spec.Locale),
+		"hostname": cty.StringVal(spec.Hostname),
+		"timezone": cty.StringVal(spec.Timezone),
+		"locale":   cty.StringVal(spec.Locale),
 	})
 }
 

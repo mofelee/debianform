@@ -168,6 +168,23 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 	}
 
+	if host.System.HostnameSet {
+		desired := map[string]any{
+			"hostname": host.System.Hostname,
+		}
+		nodes = append(nodes, Node{
+			Host:            host.Name,
+			Address:         "host." + host.Name + ".system.hostname",
+			Kind:            "system_hostname",
+			Summary:         "manage system hostname " + host.System.Hostname,
+			Source:          host.System.Source,
+			Desired:         desired,
+			ProviderType:    "system_hostname",
+			ProviderAddress: "system_hostname." + providerName(host.Name),
+			ProviderPayload: desired,
+		})
+	}
+
 	dockerPackageAddresses := []string{}
 	dockerServiceAddress := ""
 	dockerDaemonFileAddress := ""
@@ -1813,11 +1830,13 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 
 	switch docker.Package.Source {
 	case "official":
-		if host.System.Architecture == "" {
-			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.system.architecture: host %q must declare system.architecture to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
+		architecture := host.PlatformArchitecture()
+		if architecture == "" {
+			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.platform.architecture: host %q must declare platform.architecture to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
 		}
-		if host.System.Codename == "" {
-			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.system.codename: host %q must declare system.codename to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
+		codename := host.PlatformCodename()
+		if codename == "" {
+			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.platform.codename: host %q must declare platform.codename to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
 		}
 		if _, exists := host.APT.Repositories[dockerOfficialRepositoryName]; exists {
 			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: apt repository %q conflicts with docker official repository", host.Source.File, host.Source.Line, host.Source.Path, dockerOfficialRepositoryName)
@@ -1857,9 +1876,9 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 		repositorySpec := ir.APTRepositorySpec{
 			Name:          dockerOfficialRepositoryName,
 			URIs:          []string{repositoryURL},
-			Suites:        []string{host.System.Codename},
+			Suites:        []string{codename},
 			Components:    []string{docker.Package.Channel},
-			Architectures: []string{host.System.Architecture},
+			Architectures: []string{architecture},
 			Ensure:        "present",
 			SigningKey: &ir.APTSigningKeySpec{
 				Path: dockerOfficialKeyPath,

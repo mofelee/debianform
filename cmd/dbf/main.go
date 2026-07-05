@@ -420,14 +420,14 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			program, err := compileProgram(cfg, host, coremerge.CompileOptions{Warnings: &warnings})
 			if err != nil {
 				if isRuntimeFactCompileError(err) {
-					return fmt.Errorf("offline plan cannot resolve runtime facts; run dbf plan without --offline or declare matching system facts: %w", err)
+					return fmt.Errorf("offline plan cannot resolve runtime facts; run dbf plan without --offline or declare platform.architecture / platform.codename: %w", err)
 				}
 				return err
 			}
 			resourceGraph, err := coregraph.Compile(program)
 			if err != nil {
 				if isRuntimeFactCompileError(err) {
-					return fmt.Errorf("offline plan cannot resolve runtime facts; run dbf plan without --offline or declare matching system facts: %w", err)
+					return fmt.Errorf("offline plan cannot resolve runtime facts; run dbf plan without --offline or declare platform.architecture / platform.codename: %w", err)
 				}
 				return err
 			}
@@ -876,10 +876,10 @@ func isRuntimeFactCompileError(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	if strings.Contains(msg, "must declare system.architecture") {
+	if strings.Contains(msg, "must declare platform.architecture") {
 		return true
 	}
-	if strings.Contains(msg, "must declare system.codename") {
+	if strings.Contains(msg, "must declare platform.codename") {
 		return true
 	}
 	return strings.Contains(msg, ".suites") && strings.Contains(msg, "non-empty")

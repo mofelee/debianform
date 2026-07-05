@@ -28,13 +28,10 @@
     }
   },
   "system": {
-    "hostname": "app1",
-    "architecture": "amd64",
-    "codename": "trixie",
     "source": {
       "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-      "line": 26,
-      "path": "host.app1.system"
+      "line": 25,
+      "path": "host.app1"
     }
   },
   "kernel": {
@@ -155,7 +152,7 @@
       },
       "source": {
         "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-        "line": 31,
+        "line": 26,
         "path": "host.app1.component[\"app\"]"
       }
     }

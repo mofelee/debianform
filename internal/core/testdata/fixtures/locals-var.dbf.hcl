@@ -22,7 +22,7 @@ locals {
 }
 
 host "localsvar1" {
-  system {
+  platform {
     architecture = "amd64"
     codename     = "trixie"
   }

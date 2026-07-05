@@ -33,9 +33,10 @@ state 顶层字段：
 - `host`: host label。
 - `serial`: 每次成功写入时递增。
 - `updated_at`: UTC RFC3339。
-- `facts`: 运行时探测到的主机事实，例如 `system.architecture`、`system.codename`
-  和当前远端 hostname。`facts.system.hostname` 是 observed value，不等同于配置中的
-  desired `system.hostname`。
+- `facts`: 运行时探测到的主机事实。DSL 中目标平台 facts 写作 `platform.architecture`
+  和 `platform.codename`；state schema 仍以 `facts.system.*` 保存这些值。
+  `facts.system.hostname` 是 observed value，不等同于配置中的 desired `system.hostname`。
+  配置省略 `system.hostname` 时，DebianForm 不管理远端 hostname。
 - `resources`: 以稳定 address 为 key 的资源记录。
 
 资源记录保存：

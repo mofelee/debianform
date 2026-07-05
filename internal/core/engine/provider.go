@@ -35,6 +35,8 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *corest
 		Summary: node.Summary,
 	})
 	switch node.Kind {
+	case "system_hostname":
+		return p.planSystemHostname(ctx, node, prior)
 	case "file", "secret", "systemd_unit", "nftables_file", "networkd_netdev", "networkd_network":
 		return p.planFileLike(ctx, node, prior)
 	case "apt_source_file":
@@ -88,6 +90,8 @@ func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, e
 		Summary: step.Summary,
 	})
 	switch step.Node.Kind {
+	case "system_hostname":
+		return p.applySystemHostname(ctx, step)
 	case "file", "secret", "nftables_file", "networkd_netdev", "networkd_network":
 		return p.applyFileLike(ctx, step, false)
 	case "apt_source_file":
@@ -148,6 +152,8 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 	desired := step.Prior.Desired
 	host := step.Prior.Host
 	switch step.Prior.Kind {
+	case "system_hostname":
+		return nil
 	case "apt_source_file":
 		return p.destroyAPTSourceFile(ctx, step)
 	case "component_build":
@@ -364,6 +370,98 @@ func firstString(values []string) string {
 		return ""
 	}
 	return values[0]
+}
+
+type systemHostnameState struct {
+	Hostname string
+}
+
+func (s systemHostnameState) observed() map[string]any {
+	return map[string]any{"hostname": s.Hostname}
+}
+
+func (p NativeProvider) planSystemHostname(ctx context.Context, node graph.Node, prior *corestate.Resource) (ProviderPlan, error) {
+	hostname := stringDesired(node, "hostname")
+	if hostname == "" {
+		return ProviderPlan{}, fmt.Errorf("%s system_hostname requires hostname", node.Address)
+	}
+	current, err := p.readSystemHostname(ctx, node.Host)
+	if err != nil {
+		return ProviderPlan{}, err
+	}
+	observed := current.observed()
+	if current.Hostname != hostname {
+		return ProviderPlan{Action: ActionUpdate, Summary: systemHostnameUpdateSummary(current.Hostname, hostname), Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	return inSyncPlan(node, prior, "no changes for system hostname "+hostname, observed), nil
+}
+
+func (p NativeProvider) applySystemHostname(ctx context.Context, step Step) (map[string]any, error) {
+	hostname := stringDesired(step.Node, "hostname")
+	if hostname == "" {
+		return nil, fmt.Errorf("%s system_hostname requires hostname", step.Address)
+	}
+	if _, err := p.Runner.Run(ctx, step.Node.Host, systemHostnameApplyScript(hostname)); err != nil {
+		return nil, err
+	}
+	current, err := p.readSystemHostname(ctx, step.Node.Host)
+	if err != nil {
+		return nil, err
+	}
+	if current.Hostname != hostname {
+		return nil, fmt.Errorf("%s set system hostname to %q but observed %q", step.Address, hostname, current.Hostname)
+	}
+	observed := current.observed()
+	observed["desired_digest"] = corestate.DesiredDigest(step.Node.Desired)
+	return observed, nil
+}
+
+func (p NativeProvider) readSystemHostname(ctx context.Context, host string) (systemHostnameState, error) {
+	result, err := p.Runner.Run(ctx, host, systemHostnameReadScript())
+	if err != nil {
+		return systemHostnameState{}, err
+	}
+	return systemHostnameState{Hostname: parseSystemHostname(result.Stdout)}, nil
+}
+
+func systemHostnameReadScript() string {
+	return `set -eu
+if command -v hostnamectl >/dev/null 2>&1; then
+  if hostnamectl --static 2>/dev/null; then
+    exit 0
+  fi
+fi
+if [ -r /etc/hostname ]; then
+  sed -n '1p' /etc/hostname
+else
+  printf '\n'
+fi
+`
+}
+
+func systemHostnameApplyScript(hostname string) string {
+	return strings.Join([]string{
+		"set -eu",
+		"name=" + shellQuote(hostname),
+		"if command -v hostnamectl >/dev/null 2>&1; then",
+		`  hostnamectl set-hostname "$name"`,
+		"else",
+		`  printf '%s\n' "$name" > /etc/hostname`,
+		"  if command -v hostname >/dev/null 2>&1; then hostname \"$name\"; fi",
+		"fi",
+	}, "\n") + "\n"
+}
+
+func parseSystemHostname(stdout string) string {
+	line, _, _ := strings.Cut(strings.TrimRight(stdout, "\n"), "\n")
+	return strings.TrimSpace(line)
+}
+
+func systemHostnameUpdateSummary(current string, desired string) string {
+	if current == "" {
+		return "set system hostname to " + desired
+	}
+	return "change system hostname from " + current + " to " + desired
 }
 
 func scriptPayloadContent(address string, payload *graph.ScriptPayload) (string, error) {

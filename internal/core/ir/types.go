@@ -17,6 +17,7 @@ type HostSpec struct {
 	Facts       HostFacts               `json:"facts,omitempty"`
 	SSH         SSHSpec                 `json:"ssh"`
 	State       StateSpec               `json:"state"`
+	Platform    *PlatformSpec           `json:"platform,omitempty"`
 	System      SystemSpec              `json:"system"`
 	Kernel      KernelSpec              `json:"kernel"`
 	Packages    PackageSpec             `json:"packages"`
@@ -31,6 +32,20 @@ type HostSpec struct {
 	Nftables    NftablesSpec            `json:"nftables"`
 	Docker      *DockerSpec             `json:"docker,omitempty"`
 	Components  []ComponentInstanceSpec `json:"components,omitempty"`
+}
+
+func (h HostSpec) PlatformArchitecture() string {
+	if h.Platform != nil && h.Platform.Architecture != "" {
+		return h.Platform.Architecture
+	}
+	return ""
+}
+
+func (h HostSpec) PlatformCodename() string {
+	if h.Platform != nil && h.Platform.Codename != "" {
+		return h.Platform.Codename
+	}
+	return ""
 }
 
 type SourceRef struct {
@@ -69,13 +84,18 @@ type StateSpec struct {
 	Source   SourceRef `json:"source,omitempty"`
 }
 
-type SystemSpec struct {
-	Hostname     string    `json:"hostname"`
+type PlatformSpec struct {
 	Architecture string    `json:"architecture,omitempty"`
 	Codename     string    `json:"codename,omitempty"`
-	Timezone     string    `json:"timezone,omitempty"`
-	Locale       string    `json:"locale,omitempty"`
 	Source       SourceRef `json:"source,omitempty"`
+}
+
+type SystemSpec struct {
+	Hostname    string    `json:"hostname,omitempty"`
+	HostnameSet bool      `json:"hostname_set,omitempty"`
+	Timezone    string    `json:"timezone,omitempty"`
+	Locale      string    `json:"locale,omitempty"`
+	Source      SourceRef `json:"source,omitempty"`
 }
 
 type KernelSpec struct {

@@ -31,14 +31,20 @@
       "path": "host.input1"
     }
   },
-  "system": {
-    "hostname": "input1",
+  "platform": {
     "architecture": "amd64",
     "codename": "trixie",
     "source": {
       "file": "../../../examples/component-inputs.dbf.hcl",
-      "line": 50,
-      "path": "host.input1.system"
+      "line": 49,
+      "path": "host.input1"
+    }
+  },
+  "system": {
+    "source": {
+      "file": "../../../examples/component-inputs.dbf.hcl",
+      "line": 49,
+      "path": "host.input1"
     }
   },
   "kernel": {
@@ -168,7 +174,7 @@
       },
       "source": {
         "file": "../../../examples/component-inputs.dbf.hcl",
-        "line": 55,
+        "line": 50,
         "path": "host.input1.component[\"proxy\"]"
       }
     }

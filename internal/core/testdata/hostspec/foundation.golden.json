@@ -31,10 +31,18 @@
       "path": "host.foundation1"
     }
   },
-  "system": {
-    "hostname": "foundation1",
+  "platform": {
     "architecture": "amd64",
     "codename": "trixie",
+    "source": {
+      "file": "../testdata/fixtures/foundation.dbf.hcl",
+      "line": 24,
+      "path": "host.foundation1.platform"
+    }
+  },
+  "system": {
+    "hostname": "foundation1",
+    "hostname_set": true,
     "source": {
       "file": "../testdata/fixtures/foundation.dbf.hcl",
       "line": 20,
@@ -79,14 +87,14 @@
         },
         "source": {
           "file": "../testdata/fixtures/foundation.dbf.hcl",
-          "line": 47,
+          "line": 50,
           "path": "host.foundation1.files.file[\"/etc/myapp/config.yaml\"]"
         }
       }
     },
     "source": {
       "file": "../testdata/fixtures/foundation.dbf.hcl",
-      "line": 46,
+      "line": 49,
       "path": "host.foundation1.files"
     }
   },
@@ -105,14 +113,14 @@
         },
         "source": {
           "file": "../testdata/fixtures/foundation.dbf.hcl",
-          "line": 59,
+          "line": 62,
           "path": "host.foundation1.secrets.file[\"/etc/myapp/token\"]"
         }
       }
     },
     "source": {
       "file": "../testdata/fixtures/foundation.dbf.hcl",
-      "line": 58,
+      "line": 61,
       "path": "host.foundation1.secrets"
     }
   },
@@ -126,14 +134,14 @@
         "ensure": "present",
         "source": {
           "file": "../testdata/fixtures/foundation.dbf.hcl",
-          "line": 27,
+          "line": 30,
           "path": "host.foundation1.directories.directory[\"/etc/myapp\"]"
         }
       }
     },
     "source": {
       "file": "../testdata/fixtures/foundation.dbf.hcl",
-      "line": 26,
+      "line": 29,
       "path": "host.foundation1.directories"
     }
   },
@@ -169,14 +177,14 @@
         "ensure": "present",
         "source": {
           "file": "../testdata/fixtures/foundation.dbf.hcl",
-          "line": 35,
+          "line": 38,
           "path": "host.foundation1.users.user[\"deploy\"]"
         }
       }
     },
     "source": {
       "file": "../testdata/fixtures/foundation.dbf.hcl",
-      "line": 34,
+      "line": 37,
       "path": "host.foundation1.users"
     }
   },
@@ -196,14 +204,14 @@
         },
         "source": {
           "file": "../testdata/fixtures/foundation.dbf.hcl",
-          "line": 65,
+          "line": 68,
           "path": "host.foundation1.systemd.unit[\"myapp.service\"]"
         }
       }
     },
     "source": {
       "file": "../testdata/fixtures/foundation.dbf.hcl",
-      "line": 64,
+      "line": 67,
       "path": "host.foundation1.systemd"
     }
   },
@@ -217,14 +225,14 @@
         "state": "running",
         "source": {
           "file": "../testdata/fixtures/foundation.dbf.hcl",
-          "line": 77,
+          "line": 80,
           "path": "host.foundation1.services.service[\"myapp\"]"
         }
       }
     },
     "source": {
       "file": "../testdata/fixtures/foundation.dbf.hcl",
-      "line": 76,
+      "line": 79,
       "path": "host.foundation1.services"
     }
   },

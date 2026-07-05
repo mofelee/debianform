@@ -1,7 +1,7 @@
 Plan:
   + host.docker-daemon1.docker.apt.repository["docker-official"]
     manage docker official apt repository
-    source: ../../../examples/docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
+    source: ../../../examples/docker-daemon.dbf.hcl:8:host.docker-daemon1.docker
     + content
       @@ -1,0 +1,6 @@
       + Types: deb
@@ -18,7 +18,7 @@ Plan:
     + path: "/etc/apt/sources.list.d/docker_official.sources"
   + host.docker-daemon1.docker.apt.signing_key["docker-official"]
     manage docker official apt signing key
-    source: ../../../examples/docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
+    source: ../../../examples/docker-daemon.dbf.hcl:8:host.docker-daemon1.docker
     + ensure: "present"
     + group: "root"
     + mode: "0644"
@@ -29,7 +29,7 @@ Plan:
     + url: "https://download.docker.com/linux/debian/gpg"
   + host.docker-daemon1.docker.daemon.file["/etc/docker/daemon.json"]
     manage docker daemon configuration
-    source: ../../../examples/docker-daemon.dbf.hcl:15:host.docker-daemon1.docker.daemon
+    source: ../../../examples/docker-daemon.dbf.hcl:11:host.docker-daemon1.docker.daemon
     + content
       @@ -1,0 +1,10 @@
       + {
@@ -52,42 +52,42 @@ Plan:
       + summary.sha256: "4395cec3f3943d131f071b303237cbf7a8aaf06563c7332a2a5e329681c0db43"
   + host.docker-daemon1.docker.package["containerd.io"]
     install docker package containerd.io
-    source: ../../../examples/docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
+    source: ../../../examples/docker-daemon.dbf.hcl:8:host.docker-daemon1.docker
     + ensure: "present"
     + name: "containerd.io"
     + repositories
       + repositories.0: "docker-official"
   + host.docker-daemon1.docker.package["docker-buildx-plugin"]
     install docker package docker-buildx-plugin
-    source: ../../../examples/docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
+    source: ../../../examples/docker-daemon.dbf.hcl:8:host.docker-daemon1.docker
     + ensure: "present"
     + name: "docker-buildx-plugin"
     + repositories
       + repositories.0: "docker-official"
   + host.docker-daemon1.docker.package["docker-ce"]
     install docker package docker-ce
-    source: ../../../examples/docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
+    source: ../../../examples/docker-daemon.dbf.hcl:8:host.docker-daemon1.docker
     + ensure: "present"
     + name: "docker-ce"
     + repositories
       + repositories.0: "docker-official"
   + host.docker-daemon1.docker.package["docker-ce-cli"]
     install docker package docker-ce-cli
-    source: ../../../examples/docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
+    source: ../../../examples/docker-daemon.dbf.hcl:8:host.docker-daemon1.docker
     + ensure: "present"
     + name: "docker-ce-cli"
     + repositories
       + repositories.0: "docker-official"
   + host.docker-daemon1.docker.package["docker-compose-plugin"]
     install docker package docker-compose-plugin
-    source: ../../../examples/docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
+    source: ../../../examples/docker-daemon.dbf.hcl:8:host.docker-daemon1.docker
     + ensure: "present"
     + name: "docker-compose-plugin"
     + repositories
       + repositories.0: "docker-official"
   + host.docker-daemon1.docker.package_conflicts
     remove docker conflict packages
-    source: ../../../examples/docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
+    source: ../../../examples/docker-daemon.dbf.hcl:8:host.docker-daemon1.docker
     + ensure: "absent"
     + packages
       + packages.0: "docker.io"
@@ -99,7 +99,7 @@ Plan:
     + remove_conflicts: "auto"
   + host.docker-daemon1.docker.service["docker"]
     manage docker service
-    source: ../../../examples/docker-daemon.dbf.hcl:12:host.docker-daemon1.docker
+    source: ../../../examples/docker-daemon.dbf.hcl:8:host.docker-daemon1.docker
     + enabled: true
     + name: "docker"
     + state: "running"

@@ -7,7 +7,7 @@
       "summary": "manage docker official apt repository",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -41,7 +41,7 @@
       "summary": "manage docker official apt signing key",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -74,7 +74,7 @@
       "summary": "create docker group",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -99,7 +99,7 @@
       "summary": "install docker package containerd.io",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -131,7 +131,7 @@
       "summary": "install docker package docker-buildx-plugin",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -163,7 +163,7 @@
       "summary": "install docker package docker-ce",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -195,7 +195,7 @@
       "summary": "install docker package docker-ce-cli",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -227,7 +227,7 @@
       "summary": "install docker package docker-compose-plugin",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -259,7 +259,7 @@
       "summary": "remove docker conflict packages",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -296,7 +296,7 @@
       "summary": "manage docker service",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -328,7 +328,7 @@
       "summary": "add user deploy to docker group",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       },
       "desired": {
@@ -357,7 +357,7 @@
       "summary": "create group deploy",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 13,
+        "line": 8,
         "path": "host.docker-users1.groups.group[\"deploy\"]"
       },
       "desired": {
@@ -382,7 +382,7 @@
       "summary": "create user deploy",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 19,
+        "line": 14,
         "path": "host.docker-users1.users.user[\"deploy\"]"
       },
       "desired": {
@@ -430,7 +430,7 @@
       "command_preview": "apt-get update",
       "source": {
         "file": "../../../examples/docker-users.dbf.hcl",
-        "line": 26,
+        "line": 21,
         "path": "host.docker-users1.docker"
       }
     }

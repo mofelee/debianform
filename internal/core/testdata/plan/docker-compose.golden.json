@@ -19,7 +19,7 @@
       "summary": "manage docker official apt repository",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       },
       "diff": {
@@ -133,7 +133,7 @@
       "summary": "manage docker official apt signing key",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       },
       "diff": {
@@ -223,7 +223,7 @@
       "summary": "create docker compose directory /opt/app",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 16,
+        "line": 12,
         "path": "host.compose1.docker.compose[\"app\"]"
       },
       "diff": {
@@ -286,7 +286,7 @@
       "summary": "manage docker compose env file app",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 32,
+        "line": 28,
         "path": "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
       },
       "diff": {
@@ -379,7 +379,7 @@
       "summary": "manage docker compose file",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 20,
+        "line": 16,
         "path": "host.compose1.docker.compose[\"app\"].file"
       },
       "diff": {
@@ -528,7 +528,7 @@
       "summary": "converge docker compose project app",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 16,
+        "line": 12,
         "path": "host.compose1.docker.compose[\"app\"]"
       },
       "diff": {
@@ -649,7 +649,7 @@
       "summary": "manage docker compose service debianform-compose-app",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 16,
+        "line": 12,
         "path": "host.compose1.docker.compose[\"app\"]"
       },
       "diff": {
@@ -703,7 +703,7 @@
       "summary": "create docker compose systemd unit debianform-compose-app.service",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 16,
+        "line": 12,
         "path": "host.compose1.docker.compose[\"app\"]"
       },
       "diff": {
@@ -883,7 +883,7 @@
       "summary": "install docker package containerd.io",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       },
       "diff": {
@@ -939,7 +939,7 @@
       "summary": "install docker package docker-buildx-plugin",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       },
       "diff": {
@@ -995,7 +995,7 @@
       "summary": "install docker package docker-ce",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       },
       "diff": {
@@ -1051,7 +1051,7 @@
       "summary": "install docker package docker-ce-cli",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       },
       "diff": {
@@ -1107,7 +1107,7 @@
       "summary": "install docker package docker-compose-plugin",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       },
       "diff": {
@@ -1163,7 +1163,7 @@
       "summary": "remove docker conflict packages",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       },
       "diff": {
@@ -1269,7 +1269,7 @@
       "summary": "manage docker service",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       },
       "diff": {
@@ -1334,7 +1334,7 @@
       "command_preview": "apt-get update",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       }
     },
@@ -1351,7 +1351,7 @@
       "command_preview": "systemctl daemon-reload",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 16,
+        "line": 12,
         "path": "host.compose1.docker.compose[\"app\"]"
       }
     },
@@ -1370,7 +1370,7 @@
       "command_preview": "docker compose -p app -f /opt/app/compose.yaml config",
       "source": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 16,
+        "line": 12,
         "path": "host.compose1.docker.compose[\"app\"]"
       }
     }

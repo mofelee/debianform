@@ -48,11 +48,6 @@ host "cihost" {
     lock_path = "/var/lock/debianform-integration/script-on-change-state.lock"
   }
 
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   component "app" {
     source = component.watched_config
 

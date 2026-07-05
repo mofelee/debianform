@@ -47,11 +47,6 @@ component "reverse_proxy" {
 }
 
 host "input1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   component "proxy" {
     source = component.reverse_proxy
 

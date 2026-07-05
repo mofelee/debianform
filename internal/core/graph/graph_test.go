@@ -60,6 +60,31 @@ func TestCompileFoundationResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileSystemHostnameResourceRequiresExplicitHostname(t *testing.T) {
+	empty := compileGraphInline(t, `host "web1" {}`)
+	if node := nodeFor(empty, "host.web1.system.hostname"); node != nil {
+		t.Fatalf("implicit hostname generated system hostname node: %#v", node)
+	}
+
+	resourceGraph := compileGraphInline(t, `
+host "web1" {
+  system {
+    hostname = "web-01"
+  }
+}
+`)
+	node := nodeFor(resourceGraph, "host.web1.system.hostname")
+	if node == nil {
+		t.Fatal("explicit hostname did not generate system hostname node")
+	}
+	if node.Kind != "system_hostname" || node.ProviderType != "system_hostname" || node.ProviderAddress != "system_hostname.web1" {
+		t.Fatalf("hostname node provider = kind:%s type:%s address:%s", node.Kind, node.ProviderType, node.ProviderAddress)
+	}
+	if node.Desired["hostname"] != "web-01" || node.ProviderPayload["hostname"] != "web-01" {
+		t.Fatalf("hostname desired/payload = %#v / %#v, want web-01", node.Desired, node.ProviderPayload)
+	}
+}
+
 func TestSecretFileCompilesAsFileProviderWithStableAddress(t *testing.T) {
 	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/foundation.dbf.hcl")
 	address := `host.foundation1.secrets.file["/etc/myapp/token"]`
@@ -192,10 +217,51 @@ func TestCompileDockerMinimalResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileDockerOfficialRepositoryUsesPlatformFacts(t *testing.T) {
+	resourceGraph, err := Compile(&ir.Program{Hosts: []ir.HostSpec{{
+		Name:   "docker1",
+		Source: ir.SourceRef{File: "inline.dbf.hcl", Line: 1, Path: "host.docker1"},
+		Platform: &ir.PlatformSpec{
+			Architecture: "amd64",
+			Codename:     "trixie",
+			Source:       ir.SourceRef{File: "inline.dbf.hcl", Line: 2, Path: "host.docker1.platform"},
+		},
+		Docker: &ir.DockerSpec{
+			Enable: true,
+			Package: ir.DockerPackageSpec{
+				Source:          "official",
+				Channel:         "stable",
+				RemoveConflicts: "auto",
+				SourceRef:       ir.SourceRef{File: "inline.dbf.hcl", Line: 5, Path: "host.docker1.docker.package"},
+			},
+			Service: ir.DockerServiceSpec{
+				Enable:    true,
+				State:     "running",
+				Name:      "docker",
+				SourceRef: ir.SourceRef{File: "inline.dbf.hcl", Line: 5, Path: "host.docker1.docker.service"},
+			},
+			Source: ir.SourceRef{File: "inline.dbf.hcl", Line: 4, Path: "host.docker1.docker"},
+		},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := nodeFor(resourceGraph, `host.docker1.docker.apt.repository["docker-official"]`)
+	if repository == nil {
+		t.Fatalf("docker repository node missing")
+	}
+	content, _ := repository.Desired["content"].(string)
+	for _, want := range []string{"Suites: trixie", "Architectures: amd64"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("docker repository content missing %q:\n%s", want, content)
+		}
+	}
+}
+
 func TestCompileDockerOfficialMirrorResourceGraph(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "docker1" {
-  system {
+  platform {
     architecture = "amd64"
     codename     = "trixie"
   }
@@ -235,7 +301,7 @@ host "docker1" {
 func TestCompileDockerOfficialMirrorResourceGraphWithGPGSHA256(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "docker1" {
-  system {
+  platform {
     architecture = "amd64"
     codename     = "trixie"
   }
@@ -561,7 +627,7 @@ func TestCompileDockerUsersResourceGraphGolden(t *testing.T) {
 func TestCompileDockerUsersReusesDeclaredDockerGroup(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "docker-users1" {
-  system {
+  platform {
     architecture = "amd64"
     codename     = "trixie"
   }
@@ -797,7 +863,7 @@ host "server1" {
 func TestCompileDockerPackageSourceDebianUsesDebianPackages(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {
-  system {
+  platform {
     architecture = "amd64"
     codename     = "trixie"
   }
@@ -1343,7 +1409,7 @@ component "myapp" {
 host "server1" {
   components = [component.company_ca, component.config, component.myapp]
 
-  system {
+  platform {
     architecture = "amd64"
   }
 }
@@ -1403,7 +1469,7 @@ component "hello" {
 host "server1" {
   components = [component.hello]
 
-  system {
+  platform {
     architecture = "amd64"
   }
 }
@@ -1777,6 +1843,7 @@ func testHostFacts() map[string]ir.HostFacts {
 		"compose1",
 		"docker-daemon1",
 		"docker1",
+		"docker-users1",
 		"edge1",
 		"foundation1",
 		"input1",

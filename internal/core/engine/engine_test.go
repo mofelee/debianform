@@ -119,6 +119,78 @@ func TestApplyWithMemoryProviderIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestSystemHostnameMemoryPlanApplyCheckAndForget(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `
+host "web1" {
+  system {
+    hostname = "web-01"
+  }
+}
+`))
+	address := "host.web1.system.hostname"
+	provider := NewMemoryProvider()
+	provider.Observed[address] = Observed{
+		Exists:        true,
+		DesiredDigest: "drifted",
+		Values:        map[string]any{"hostname": "old-host"},
+	}
+	backend := NewMemoryBackend()
+	engine := Engine{Backend: backend, Provider: provider}
+
+	plan, err := engine.Plan(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasStepAction(plan, address, ActionUpdate) {
+		t.Fatalf("hostname drift plan missing update step: %#v", plan.Steps)
+	}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource, ok := st.Resources[address]
+	if !ok {
+		t.Fatalf("state missing system hostname resource: %#v", st.Resources)
+	}
+	if resource.Kind != "system_hostname" || resource.ProviderType != "system_hostname" || resource.Observed["hostname"] != "web-01" {
+		t.Fatalf("hostname state resource = %#v", resource)
+	}
+
+	next, err := engine.Plan(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(next.Steps) != 0 {
+		t.Fatalf("matching hostname check should be no-op, got steps=%#v", next.Steps)
+	}
+
+	emptyProgram, emptyGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `host "web1" {}`))
+	forgetPlan, err := engine.Plan(context.Background(), emptyProgram, emptyGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasStepAction(forgetPlan, address, ActionForget) {
+		t.Fatalf("omitted hostname should forget state, got steps=%#v", forgetPlan.Steps)
+	}
+	if _, err := engine.Apply(context.Background(), emptyProgram, emptyGraph, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.Destroyed) != 0 {
+		t.Fatalf("omitted hostname should not destroy remote resource: %#v", provider.Destroyed)
+	}
+	st, err = backend.Read(context.Background(), emptyProgram.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.Resources[address]; ok {
+		t.Fatalf("system hostname state was not forgotten: %#v", st.Resources)
+	}
+}
+
 func TestApplyWritesProgress(t *testing.T) {
 	program, resourceGraph := twoFileProgramAndGraph("server1")
 	var progress bytes.Buffer
@@ -581,7 +653,7 @@ func TestDockerEngineMemoryApplyIsIdempotentAndPersistsHighLevelState(t *testing
 func TestDockerDaemonDesiredChangePlansRestartOperation(t *testing.T) {
 	initial := `
 host "server1" {
-  system {
+  platform {
     architecture = "amd64"
     codename     = "trixie"
   }
@@ -1405,7 +1477,7 @@ func fixtureProgramAndGraph(t *testing.T, fixture string) (*ir.Program, *graph.R
 	if err != nil {
 		t.Fatal(err)
 	}
-	program, err := merge.Compile(cfg)
+	program, err := merge.CompileWithOptions(cfg, merge.CompileOptions{HostFacts: testHostFacts()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1414,6 +1486,21 @@ func fixtureProgramAndGraph(t *testing.T, fixture string) (*ir.Program, *graph.R
 		t.Fatal(err)
 	}
 	return program, resourceGraph
+}
+
+func testHostFacts() map[string]ir.HostFacts {
+	out := map[string]ir.HostFacts{}
+	for _, name := range []string{
+		"compose1",
+		"docker1",
+	} {
+		out[name] = ir.HostFacts{System: ir.SystemFacts{
+			Hostname:     name,
+			Architecture: "amd64",
+			Codename:     "trixie",
+		}}
+	}
+	return out
 }
 
 func twoFileProgramAndGraph(host string) (*ir.Program, *graph.ResourceGraph) {

@@ -658,25 +658,30 @@ func validateComponentAgainstHost(target ir.HostSpec, component ir.ComponentInst
 }
 
 func runtimeValidationTargetValue(host ir.HostSpec) cty.Value {
-	architecture := cty.StringVal(host.System.Architecture)
-	if host.System.Architecture == "" {
+	architectureValue := effectivePlatformArchitecture(host)
+	architecture := cty.StringVal(architectureValue)
+	if architectureValue == "" {
 		architecture = cty.UnknownVal(cty.String)
 	}
-	codename := cty.StringVal(host.System.Codename)
-	if host.System.Codename == "" {
+	codenameValue := effectivePlatformCodename(host)
+	codename := cty.StringVal(codenameValue)
+	if codenameValue == "" {
 		codename = cty.UnknownVal(cty.String)
 	}
-	system := cty.ObjectVal(map[string]cty.Value{
-		"hostname":     cty.StringVal(host.System.Hostname),
+	platform := cty.ObjectVal(map[string]cty.Value{
 		"architecture": architecture,
 		"codename":     codename,
-		"timezone":     cty.StringVal(host.System.Timezone),
-		"locale":       cty.StringVal(host.System.Locale),
+	})
+	system := cty.ObjectVal(map[string]cty.Value{
+		"hostname": cty.StringVal(host.System.Hostname),
+		"timezone": cty.StringVal(host.System.Timezone),
+		"locale":   cty.StringVal(host.System.Locale),
 	})
 	return cty.ObjectVal(map[string]cty.Value{
 		"name":        cty.StringVal(host.Name),
 		"ssh":         sshSpecToCty(host.SSH),
 		"state":       stateSpecToCty(host.State),
+		"platform":    platform,
 		"system":      system,
 		"kernel":      kernelSpecToCty(host.Kernel),
 		"packages":    packageSpecToCty(host.Packages),
@@ -1128,9 +1133,9 @@ func selectComponentArtifactSource(template parser.Component, target ir.HostSpec
 		}
 		return independent, nil
 	}
-	architecture := target.System.Architecture
+	architecture := target.PlatformArchitecture()
 	if architecture == "" {
-		return parser.ComponentArtifactSource{}, fmt.Errorf("%s:%d:%s: host %q must declare system.architecture to select a component source", target.Source.File, target.Source.Line, target.Source.Path, target.Name)
+		return parser.ComponentArtifactSource{}, fmt.Errorf("%s:%d:%s.platform.architecture: host %q must declare platform.architecture to select a component source", target.Source.File, target.Source.Line, target.Source.Path, target.Name)
 	}
 	source, ok := template.Sources[architecture]
 	if !ok {
@@ -1492,8 +1497,7 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 			Source:   host.Source,
 		},
 		System: ir.SystemSpec{
-			Hostname: host.Name,
-			Source:   host.Source,
+			Source: host.Source,
 		},
 		Kernel: ir.KernelSpec{
 			Sysctl: map[string]ir.SysctlSpec{},
@@ -1582,16 +1586,13 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 			return spec, err
 		} else if ok {
 			spec.System.Hostname = value
+			spec.System.HostnameSet = true
 		}
-		if value, ok, err := stringField(system, "architecture"); err != nil {
-			return spec, err
-		} else if ok {
-			spec.System.Architecture = value
+		if value, exists := system.Map["architecture"]; exists {
+			return spec, fmt.Errorf("%s:%d:%s: system.architecture is no longer supported; use platform.architecture", value.Source.File, value.Source.Line, value.Source.Path)
 		}
-		if value, ok, err := stringField(system, "codename"); err != nil {
-			return spec, err
-		} else if ok {
-			spec.System.Codename = value
+		if value, exists := system.Map["codename"]; exists {
+			return spec, fmt.Errorf("%s:%d:%s: system.codename is no longer supported; use platform.codename", value.Source.File, value.Source.Line, value.Source.Path)
 		}
 		if value, ok, err := stringField(system, "timezone"); err != nil {
 			return spec, err
@@ -1602,6 +1603,22 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 			return spec, err
 		} else if ok {
 			spec.System.Locale = value
+		}
+	}
+
+	if platform, ok, err := mapField(raw, "platform"); err != nil {
+		return spec, err
+	} else if ok {
+		spec.Platform = &ir.PlatformSpec{Source: platform.Source}
+		if value, ok, err := stringField(platform, "architecture"); err != nil {
+			return spec, err
+		} else if ok {
+			spec.Platform.Architecture = value
+		}
+		if value, ok, err := stringField(platform, "codename"); err != nil {
+			return spec, err
+		} else if ok {
+			spec.Platform.Codename = value
 		}
 	}
 
@@ -1776,16 +1793,22 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 func applyHostFacts(spec *ir.HostSpec, facts ir.HostFacts) error {
 	system := facts.System
 	if system.Architecture != "" {
-		if spec.System.Architecture != "" && spec.System.Architecture != system.Architecture {
-			return fmt.Errorf("%s:%d:%s.system.architecture: declared architecture %q does not match detected architecture %q", spec.Source.File, spec.Source.Line, spec.Source.Path, spec.System.Architecture, system.Architecture)
+		if spec.Platform != nil && spec.Platform.Architecture != "" && spec.Platform.Architecture != system.Architecture {
+			return fmt.Errorf("%s:%d:%s.architecture: declared platform.architecture %q does not match detected architecture %q", spec.Platform.Source.File, spec.Platform.Source.Line, spec.Platform.Source.Path, spec.Platform.Architecture, system.Architecture)
 		}
-		spec.System.Architecture = system.Architecture
+		if spec.Platform == nil {
+			spec.Platform = &ir.PlatformSpec{Source: spec.Source}
+		}
+		spec.Platform.Architecture = system.Architecture
 	}
 	if system.Codename != "" {
-		if spec.System.Codename != "" && spec.System.Codename != system.Codename {
-			return fmt.Errorf("%s:%d:%s.system.codename: declared codename %q does not match detected codename %q", spec.Source.File, spec.Source.Line, spec.Source.Path, spec.System.Codename, system.Codename)
+		if spec.Platform != nil && spec.Platform.Codename != "" && spec.Platform.Codename != system.Codename {
+			return fmt.Errorf("%s:%d:%s.codename: declared platform.codename %q does not match detected codename %q", spec.Platform.Source.File, spec.Platform.Source.Line, spec.Platform.Source.Path, spec.Platform.Codename, system.Codename)
 		}
-		spec.System.Codename = system.Codename
+		if spec.Platform == nil {
+			spec.Platform = &ir.PlatformSpec{Source: spec.Source}
+		}
+		spec.Platform.Codename = system.Codename
 	}
 	spec.Facts = facts
 	return nil

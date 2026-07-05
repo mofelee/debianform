@@ -46,7 +46,7 @@ host "build1" {
     component.hello_from_source,
   ]
 
-  system {
+  platform {
     architecture = "amd64"
   }
 }

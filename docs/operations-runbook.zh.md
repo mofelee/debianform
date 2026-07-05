@@ -356,14 +356,14 @@ ssh.user must be "root" or omitted
 
 ```text
 offline plan cannot resolve runtime facts
-must declare system.architecture
-must declare system.codename
+must declare platform.architecture
+must declare platform.codename
 ```
 
-处理：对真实主机运行在线 plan，或只在本地 fixture 中声明匹配的 `host.system`：
+处理：对真实主机运行在线 plan，或只在本地 fixture 中声明匹配的 `host.platform`：
 
 ```text
-system {
+platform {
   architecture = "amd64"
   codename     = "trixie"
 }
@@ -374,11 +374,11 @@ system {
 常见输出：
 
 ```text
-declared architecture "arm64" does not match detected architecture "amd64"
-declared codename "bookworm" does not match detected codename "trixie"
+declared platform.architecture "arm64" does not match detected architecture "amd64"
+declared platform.codename "bookworm" does not match detected codename "trixie"
 ```
 
-处理：如果管理真实主机，优先删除手写 `system.architecture` / `system.codename`，让在线探测填充；
+处理：如果管理真实主机，优先删除手写 `platform.architecture` / `platform.codename`，让在线探测填充；
 如果是 fixture，修正为目标环境的真实值。
 
 ### 目标系统 facts 探测失败

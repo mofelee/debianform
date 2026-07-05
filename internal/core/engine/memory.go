@@ -126,6 +126,9 @@ func (p *MemoryProvider) Apply(ctx context.Context, step Step) (map[string]any, 
 			observed["containers"] = map[string]any{"total": 0}
 		}
 	}
+	if step.Node.Kind == "system_hostname" {
+		observed["hostname"] = stringDesired(step.Node, "hostname")
+	}
 	p.Observed[step.Address] = Observed{
 		Exists:        true,
 		DesiredDigest: corestate.DesiredDigest(step.Node.Desired),

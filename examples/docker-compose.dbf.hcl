@@ -2,14 +2,10 @@
 #
 # Compose 的原生 YAML 仍然由 compose.yaml 表达；DebianForm 管理 project 文件、
 # env 文件、配置校验、默认 systemd unit、daemon-reload、开机启动服务和 project 状态。
-# 离线 plan 需要显式声明目标 Debian runtime facts。
+# 在线 plan 会自动发现目标 Debian platform facts。若要离线 plan，
+# 请在 host 中显式声明 platform.architecture 和 platform.codename。
 
 host "compose1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   docker {
     enable = true
 

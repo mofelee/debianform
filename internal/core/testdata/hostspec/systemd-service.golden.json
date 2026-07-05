@@ -31,10 +31,16 @@
       "path": "host.service1"
     }
   },
-  "system": {
-    "hostname": "service1",
+  "platform": {
     "architecture": "amd64",
     "codename": "trixie",
+    "source": {
+      "file": "../../../examples/systemd-service.dbf.hcl",
+      "line": 3,
+      "path": "host.service1"
+    }
+  },
+  "system": {
     "source": {
       "file": "../../../examples/systemd-service.dbf.hcl",
       "line": 3,

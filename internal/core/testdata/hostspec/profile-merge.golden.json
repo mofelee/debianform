@@ -31,10 +31,16 @@
       "path": "host.merge1"
     }
   },
-  "system": {
-    "hostname": "merge1",
+  "platform": {
     "architecture": "amd64",
     "codename": "trixie",
+    "source": {
+      "file": "../../../examples/profile-merge.dbf.hcl",
+      "line": 37,
+      "path": "host.merge1"
+    }
+  },
+  "system": {
     "timezone": "Asia/Shanghai",
     "locale": "en_US.UTF-8",
     "source": {

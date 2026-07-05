@@ -27,11 +27,6 @@ host "manual1" {
     lock_path = "/var/lock/debianform/manual/08-state.lock"
   }
 
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   users {
     user "dockerdeploy" {
       system = true
@@ -69,8 +64,15 @@ host "manual1" {
 - 可选 daemon 配置和 restart operation。
 - 可选用户 supplementary group membership。
 
-`system.architecture` 和 `system.codename` 用于离线生成 Docker 官方 APT 源。在线 plan 可以自动发现 facts，
-但教程里显式写出这两个字段，方便 `dbf plan --offline` 也能运行。
+Docker 官方 APT 源会使用目标主机 platform facts。在线 `dbf plan` 会自动发现这些 facts；
+如果只做纯离线预览，在 host 中临时添加：
+
+```hcl
+platform {
+  architecture = "amd64"
+  codename     = "trixie"
+}
+```
 
 ## 使用 Docker 官方 APT 镜像站
 
@@ -83,11 +85,6 @@ host "manual1" {
 
 ```hcl
 host "manual1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   docker {
     enable = true
 
@@ -119,11 +116,11 @@ key 内容漂移检测时应设置 `gpg_sha256`。
 
 ```bash
 dbf validate
-dbf plan --offline
+dbf plan
 dbf apply --auto-approve
 ```
 
-离线 plan 会显示较多资源，summary 类似：
+首次 plan 会显示较多资源，summary 类似：
 
 ```text
 Summary: 13 create, 0 update, 0 delete, 0 no-op, 2 operations
@@ -229,11 +226,6 @@ host "manual1" {
     lock_path = "/var/lock/debianform/manual/08-state.lock"
   }
 
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   users {
     user "dockerdeploy" {
       system = true
@@ -260,7 +252,7 @@ host "manual1" {
 EOF
 
 dbf validate
-dbf plan --offline
+dbf plan
 dbf apply --auto-approve
 ssh manual1 'docker --version; docker compose version; systemctl is-active docker; systemctl is-enabled docker; id dockerdeploy; cat /etc/docker/daemon.json'
 

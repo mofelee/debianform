@@ -2,7 +2,7 @@
   "name": "compose1",
   "source": {
     "file": "../../../examples/docker-compose.dbf.hcl",
-    "line": 7,
+    "line": 8,
     "path": "host.compose1"
   },
   "facts": {
@@ -14,7 +14,7 @@
     "user": "root",
     "source": {
       "file": "../../../examples/docker-compose.dbf.hcl",
-      "line": 7,
+      "line": 8,
       "path": "host.compose1"
     }
   },
@@ -23,18 +23,15 @@
     "lock_path": "/var/lock/debianform/state/compose1.lock",
     "source": {
       "file": "../../../examples/docker-compose.dbf.hcl",
-      "line": 7,
+      "line": 8,
       "path": "host.compose1"
     }
   },
   "system": {
-    "hostname": "compose1",
-    "architecture": "amd64",
-    "codename": "trixie",
     "source": {
       "file": "../../../examples/docker-compose.dbf.hcl",
       "line": 8,
-      "path": "host.compose1.system"
+      "path": "host.compose1"
     }
   },
   "kernel": {
@@ -81,7 +78,7 @@
       "remove_conflicts": "auto",
       "source_ref": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       }
     },
@@ -91,7 +88,7 @@
       "name": "docker.service",
       "source_ref": {
         "file": "../../../examples/docker-compose.dbf.hcl",
-        "line": 13,
+        "line": 9,
         "path": "host.compose1.docker"
       }
     },
@@ -114,7 +111,7 @@
           },
           "source": {
             "file": "../../../examples/docker-compose.dbf.hcl",
-            "line": 20,
+            "line": 16,
             "path": "host.compose1.docker.compose[\"app\"].file"
           }
         },
@@ -133,7 +130,7 @@
             },
             "source": {
               "file": "../../../examples/docker-compose.dbf.hcl",
-              "line": 32,
+              "line": 28,
               "path": "host.compose1.docker.compose[\"app\"].env_file[\"app\"]"
             }
           }
@@ -154,14 +151,14 @@
         ],
         "source": {
           "file": "../../../examples/docker-compose.dbf.hcl",
-          "line": 16,
+          "line": 12,
           "path": "host.compose1.docker.compose[\"app\"]"
         }
       }
     },
     "source": {
       "file": "../../../examples/docker-compose.dbf.hcl",
-      "line": 13,
+      "line": 9,
       "path": "host.compose1.docker"
     }
   }

@@ -31,10 +31,16 @@
       "path": "host.bbr1"
     }
   },
-  "system": {
-    "hostname": "bbr1",
+  "platform": {
     "architecture": "amd64",
     "codename": "trixie",
+    "source": {
+      "file": "../../../examples/bbr.dbf.hcl",
+      "line": 10,
+      "path": "host.bbr1"
+    }
+  },
+  "system": {
     "source": {
       "file": "../../../examples/bbr.dbf.hcl",
       "line": 10,

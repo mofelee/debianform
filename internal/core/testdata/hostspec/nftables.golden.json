@@ -31,10 +31,16 @@
       "path": "host.edge1"
     }
   },
-  "system": {
-    "hostname": "edge1",
+  "platform": {
     "architecture": "amd64",
     "codename": "trixie",
+    "source": {
+      "file": "../../../examples/nftables.dbf.hcl",
+      "line": 9,
+      "path": "host.edge1"
+    }
+  },
+  "system": {
     "source": {
       "file": "../../../examples/nftables.dbf.hcl",
       "line": 9,

@@ -27,11 +27,6 @@ host "manual1" {
     lock_path = "/var/lock/debianform/manual/09-state.lock"
   }
 
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   docker {
     enable = true
 
@@ -81,17 +76,20 @@ host "manual1" {
 - `pull = "missing"` 会在缺镜像时拉取镜像。
 - `remove_orphans = true` 会在收敛时清理多余服务容器。
 
+本章同样会通过 Docker 官方源安装 Docker Engine。在线 `dbf plan` 会自动发现 platform facts；
+如需纯离线预览，可按第 8 章的方式临时声明 `platform.architecture` / `platform.codename`。
+
 ## 应用配置
 
 运行：
 
 ```bash
 dbf validate
-dbf plan --offline
+dbf plan
 dbf apply --auto-approve
 ```
 
-首次离线 plan 会显示 Docker Engine、Compose 文件、systemd unit 和 project 资源，summary 类似：
+首次 plan 会显示 Docker Engine、Compose 文件、systemd unit 和 project 资源，summary 类似：
 
 ```text
 Summary: 15 create, 0 update, 0 delete, 0 no-op, 3 operations
@@ -177,11 +175,6 @@ host "manual1" {
     lock_path = "/var/lock/debianform/manual/09-state.lock"
   }
 
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   docker {
     enable = true
 
@@ -219,7 +212,7 @@ host "manual1" {
 EOF
 
 dbf validate
-dbf plan --offline
+dbf plan
 dbf apply --auto-approve
 dbf plan
 dbf check

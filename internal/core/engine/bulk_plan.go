@@ -126,6 +126,8 @@ dbf_emit_script() {
 
 func bulkPlanNodeScripts(node graph.Node) ([]string, error) {
 	switch node.Kind {
+	case "system_hostname":
+		return []string{systemHostnameReadScript()}, nil
 	case "file", "secret", "systemd_unit", "nftables_file", "networkd_netdev", "networkd_network":
 		return []string{bulkReadPathScript(stringDesired(node, "path"))}, nil
 	case "apt_source_file":

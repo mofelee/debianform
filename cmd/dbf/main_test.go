@@ -1438,6 +1438,9 @@ func TestOfflinePlanExplainsRuntimeFactsDependency(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "offline plan cannot resolve runtime facts") {
 		t.Fatalf("plan --offline error = %v, want runtime facts explanation", err)
 	}
+	if !strings.Contains(err.Error(), "platform.architecture") || !strings.Contains(err.Error(), "platform.codename") {
+		t.Fatalf("plan --offline error = %v, want platform fact declaration detail", err)
+	}
 }
 
 func TestOfflinePlanExplainsDockerRuntimeFactsDependency(t *testing.T) {
@@ -1457,8 +1460,31 @@ host "docker1" {
 	if err == nil || !strings.Contains(err.Error(), "offline plan cannot resolve runtime facts") {
 		t.Fatalf("docker plan --offline error = %v, want runtime facts explanation", err)
 	}
-	if !strings.Contains(err.Error(), "must declare system.architecture") {
+	if !strings.Contains(err.Error(), "must declare platform.architecture") {
 		t.Fatalf("docker plan --offline error = %v, want missing architecture detail", err)
+	}
+}
+
+func TestOfflinePlanUsesDeclaredPlatformFacts(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "docker.dbf.hcl")
+	if err := os.WriteFile(file, []byte(`
+host "docker1" {
+  platform {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  docker {
+    enable = true
+  }
+}
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := run([]string{"plan", "-f", file, "--offline"}); err != nil {
+		t.Fatalf("plan --offline error = %v, want declared platform facts to resolve", err)
 	}
 }
 
@@ -2023,24 +2049,27 @@ func TestDSLReferenceMarkedExamplesAreRunnable(t *testing.T) {
 }
 
 func TestUserDocsHCLExamplesAreRunnable(t *testing.T) {
-	docs := []string{
-		"quickstart.zh.md",
-		"user-manual/01-first-apply.zh.md",
-		"user-manual/02-files-and-drift.zh.md",
-		"user-manual/03-users-and-ssh-keys.zh.md",
-		"user-manual/04-apt-and-packages.zh.md",
-		"user-manual/05-systemd-service.zh.md",
-		"user-manual/06-kernel-and-sysctl.zh.md",
-		"user-manual/07-nftables.zh.md",
-		"user-manual/08-docker-engine.zh.md",
-		"user-manual/09-docker-compose.zh.md",
-		"user-manual/11-components.zh.md",
-		"user-manual/12-operations.zh.md",
+	docs := []struct {
+		path        string
+		planOffline bool
+	}{
+		{path: "quickstart.zh.md", planOffline: true},
+		{path: "user-manual/01-first-apply.zh.md", planOffline: true},
+		{path: "user-manual/02-files-and-drift.zh.md", planOffline: true},
+		{path: "user-manual/03-users-and-ssh-keys.zh.md", planOffline: true},
+		{path: "user-manual/04-apt-and-packages.zh.md", planOffline: true},
+		{path: "user-manual/05-systemd-service.zh.md", planOffline: true},
+		{path: "user-manual/06-kernel-and-sysctl.zh.md", planOffline: true},
+		{path: "user-manual/07-nftables.zh.md", planOffline: true},
+		{path: "user-manual/08-docker-engine.zh.md"},
+		{path: "user-manual/09-docker-compose.zh.md"},
+		{path: "user-manual/11-components.zh.md", planOffline: true},
+		{path: "user-manual/12-operations.zh.md", planOffline: true},
 	}
-	for _, docPath := range docs {
-		t.Run(docPath, func(t *testing.T) {
-			config := firstRunnableHCLBlock(t, "../../docs/"+docPath)
-			runDocConfigLocalChecks(t, config)
+	for _, doc := range docs {
+		t.Run(doc.path, func(t *testing.T) {
+			config := firstRunnableHCLBlock(t, "../../docs/"+doc.path)
+			runDocConfigLocalChecks(t, config, doc.planOffline)
 		})
 	}
 }
@@ -2103,7 +2132,7 @@ func TestReferenceDocsHCLExamplesAreRunnable(t *testing.T) {
 				if doc.wrapDomain {
 					block = "host \"doc_example\" {\n" + indentHCL(block, "  ") + "}\n"
 				}
-				runDocConfigLocalChecks(t, block)
+				runDocConfigLocalChecks(t, block, true)
 			})
 		}
 	}
@@ -2504,15 +2533,16 @@ func hclCodeBlocksFromFile(t *testing.T, path string) []string {
 	return blocks
 }
 
-func runDocConfigLocalChecks(t *testing.T, hcl string) {
+func runDocConfigLocalChecks(t *testing.T, hcl string, planOffline bool) {
 	t.Helper()
 	dir := t.TempDir()
 	config := filepath.Join(dir, "site.dbf.hcl")
 	writeTestFile(t, config, hcl)
-	for _, args := range [][]string{
-		{"validate", "-f", config},
-		{"plan", "-f", config, "--offline"},
-	} {
+	commands := [][]string{{"validate", "-f", config}}
+	if planOffline {
+		commands = append(commands, []string{"plan", "-f", config, "--offline"})
+	}
+	for _, args := range commands {
 		args := args
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			captureOutput(t, func() {

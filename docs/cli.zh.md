@@ -171,7 +171,7 @@ dbf plan -f examples/bbr.dbf.hcl --format json --debug --offline
   DebianForm 不支持 sudo、become 或非 root 管理连接；`ssh.user` 只能省略或设为
   `"root"`。
 - `--offline` 不能解析依赖远端 runtime facts 的表达式，除非配置中已经声明了匹配的
-  system facts。
+  `platform` facts。
 - `--html` 输出目录不存在时会自动创建。
 
 ## apply

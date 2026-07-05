@@ -63,11 +63,6 @@ host "manual1" {
     lock_path = "/var/lock/debianform/manual/11-state.lock"
   }
 
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   directories {
     directory "/var/lib/debianform/manual/component-source" {
       owner = "root"
@@ -294,11 +289,6 @@ host "manual1" {
   state {
     path      = "/var/lib/debianform/manual/11-state.json"
     lock_path = "/var/lock/debianform/manual/11-state.lock"
-  }
-
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
   }
 
   directories {

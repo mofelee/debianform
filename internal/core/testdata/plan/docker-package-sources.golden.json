@@ -19,7 +19,7 @@
       "summary": "install docker package docker-compose-plugin",
       "source": {
         "file": "../../../examples/docker-package-sources.dbf.hcl",
-        "line": 10,
+        "line": 5,
         "path": "host.docker-sources1.docker.package"
       },
       "diff": {
@@ -55,7 +55,7 @@
       "summary": "install docker package docker.io",
       "source": {
         "file": "../../../examples/docker-package-sources.dbf.hcl",
-        "line": 10,
+        "line": 5,
         "path": "host.docker-sources1.docker.package"
       },
       "diff": {
@@ -91,7 +91,7 @@
       "summary": "manage docker service",
       "source": {
         "file": "../../../examples/docker-package-sources.dbf.hcl",
-        "line": 7,
+        "line": 2,
         "path": "host.docker-sources1.docker"
       },
       "diff": {

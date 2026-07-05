@@ -4,11 +4,6 @@
 # 自定义 gpg_url 默认不使用 Docker 官方 GPG sha256；需要固定 key 内容时可设置 gpg_sha256。
 
 host "docker-mirror1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   docker {
     enable = true
 

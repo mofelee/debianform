@@ -50,11 +50,6 @@ host "cihost" {
     lock_path = "/var/lock/debianform-integration/component-inputs-state.lock"
   }
 
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   component "proxy" {
     source = component.reverse_proxy
 

@@ -31,10 +31,16 @@
       "path": "host.tool1"
     }
   },
-  "system": {
-    "hostname": "tool1",
+  "platform": {
     "architecture": "amd64",
     "codename": "trixie",
+    "source": {
+      "file": "../../../examples/component-binary.dbf.hcl",
+      "line": 39,
+      "path": "host.tool1"
+    }
+  },
+  "system": {
     "source": {
       "file": "../../../examples/component-binary.dbf.hcl",
       "line": 39,

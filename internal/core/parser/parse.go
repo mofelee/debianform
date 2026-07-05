@@ -1142,7 +1142,7 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext,
 
 	for _, block := range body.Blocks {
 		switch block.Type {
-		case "ssh", "state", "system", "kernel", "packages", "apt", "files", "secrets", "directories", "groups", "users", "systemd", "services", "nftables":
+		case "ssh", "state", "platform", "system", "kernel", "packages", "apt", "files", "secrets", "directories", "groups", "users", "systemd", "services", "nftables":
 			if len(block.Labels) != 0 {
 				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, block.Type)
 			}
@@ -2572,6 +2572,8 @@ func allowedDomainAttrs(domain string) map[string]struct{} {
 		return attrSet("host", "port", "user", "identity_file")
 	case "state":
 		return attrSet("path", "lock_path")
+	case "platform":
+		return attrSet("architecture", "codename")
 	case "system":
 		return attrSet("hostname", "architecture", "codename", "timezone", "locale")
 	case "kernel":
@@ -2651,6 +2653,13 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 }
 
 func validateProfileBody(profile ir.SourceRef, body Value) error {
+	if platform, ok := body.Map["platform"]; ok {
+		for _, name := range []string{"architecture", "codename"} {
+			if value, exists := platform.Map[name]; exists {
+				return fmt.Errorf("%s:%d: %s is host-only and cannot be declared in profile %s", value.Source.File, value.Source.Line, value.Source.Path, profile.Path)
+			}
+		}
+	}
 	system, ok := body.Map["system"]
 	if !ok {
 		return nil

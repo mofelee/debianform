@@ -19,7 +19,7 @@
       "summary": "manage docker official apt repository",
       "source": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       },
       "diff": {
@@ -133,7 +133,7 @@
       "summary": "manage docker official apt signing key",
       "source": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       },
       "diff": {
@@ -223,7 +223,7 @@
       "summary": "install docker package containerd.io",
       "source": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       },
       "diff": {
@@ -279,7 +279,7 @@
       "summary": "install docker package docker-buildx-plugin",
       "source": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       },
       "diff": {
@@ -335,7 +335,7 @@
       "summary": "install docker package docker-ce",
       "source": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       },
       "diff": {
@@ -391,7 +391,7 @@
       "summary": "install docker package docker-ce-cli",
       "source": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       },
       "diff": {
@@ -447,7 +447,7 @@
       "summary": "install docker package docker-compose-plugin",
       "source": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       },
       "diff": {
@@ -503,7 +503,7 @@
       "summary": "remove docker conflict packages",
       "source": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       },
       "diff": {
@@ -609,7 +609,7 @@
       "summary": "manage docker service",
       "source": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       },
       "diff": {
@@ -674,7 +674,7 @@
       "command_preview": "apt-get update",
       "source": {
         "file": "../../../examples/docker-minimal.dbf.hcl",
-        "line": 12,
+        "line": 8,
         "path": "host.docker1.docker"
       }
     }

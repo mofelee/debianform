@@ -31,10 +31,16 @@
       "path": "host.router1"
     }
   },
-  "system": {
-    "hostname": "router1",
+  "platform": {
     "architecture": "amd64",
     "codename": "trixie",
+    "source": {
+      "file": "../../../examples/bird2.dbf.hcl",
+      "line": 41,
+      "path": "host.router1"
+    }
+  },
+  "system": {
     "source": {
       "file": "../../../examples/bird2.dbf.hcl",
       "line": 41,

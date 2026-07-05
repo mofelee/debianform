@@ -154,7 +154,7 @@ dbf apply
 dbf check
 ```
 
-并确认 `target.system.architecture == "arm64"` 的 component source selection 生效。
+并确认 `target.platform.architecture == "arm64"` 的 component source selection 生效。
 
 ### Loop C: Linux arm64 CLI installer verification
 

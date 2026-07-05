@@ -12,7 +12,7 @@ component "bird2" {
   apt {
     repository "cznic_bird2" {
       uris       = ["https://pkg.labs.nic.cz/bird2"]
-      suites     = [target.system.codename]
+      suites     = [target.platform.codename]
       components = ["main"]
 
       signing_key {

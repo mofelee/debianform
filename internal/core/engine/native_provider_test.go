@@ -183,6 +183,64 @@ func TestNativeProviderObservedModeUsesFourDigitDisplay(t *testing.T) {
 	}
 }
 
+func TestNativeProviderSystemHostnamePlanApplyAndNoOp(t *testing.T) {
+	node := graph.Node{
+		Address: "host.web1.system.hostname",
+		Host:    "web1",
+		Kind:    "system_hostname",
+		Desired: map[string]any{"hostname": "web-01"},
+	}
+	runner := &recordingRunner{outputs: []Result{
+		{Stdout: "old-host\n"},
+		{},
+		{Stdout: "web-01\n"},
+		{Stdout: "web-01\n"},
+	}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionUpdate {
+		t.Fatalf("hostname drift action = %q, want update", got.Action)
+	}
+	if got.Observed["hostname"] != "old-host" {
+		t.Fatalf("hostname observed = %#v, want old-host", got.Observed)
+	}
+
+	observed, err := provider.Apply(context.Background(), Step{Address: node.Address, Node: node, Action: ActionUpdate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observed["hostname"] != "web-01" || observed["desired_digest"] != corestate.DesiredDigest(node.Desired) {
+		t.Fatalf("apply observed = %#v, want hostname and desired digest", observed)
+	}
+	allScripts := strings.Join(runner.scripts, "\n---\n")
+	for _, want := range []string{
+		"hostnamectl --static",
+		"sed -n '1p' /etc/hostname",
+		`hostnamectl set-hostname "$name"`,
+		`printf '%s\n' "$name" > /etc/hostname`,
+	} {
+		if !strings.Contains(allScripts, want) {
+			t.Fatalf("system hostname scripts missing %q:\n%s", want, allScripts)
+		}
+	}
+	if strings.Contains(allScripts, "/etc/hosts") {
+		t.Fatalf("system hostname provider must not touch /etc/hosts:\n%s", allScripts)
+	}
+
+	prior := &corestate.Resource{Ownership: "managed", DesiredDigest: corestate.DesiredDigest(node.Desired)}
+	got, err = provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionNoOp {
+		t.Fatalf("matching hostname action = %q, want no-op", got.Action)
+	}
+}
+
 func TestNativeProviderPlanHostBulkInspectsMultipleFilesWithOneRun(t *testing.T) {
 	dir := t.TempDir()
 	fileA := filepath.Join(dir, "a.txt")

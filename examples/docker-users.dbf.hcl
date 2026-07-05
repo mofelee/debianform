@@ -4,11 +4,6 @@
 # 已登录 session 需要重新登录后才会获得新的 docker group 权限。
 
 host "docker-users1" {
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
   groups {
     group "deploy" {
       system = true

@@ -31,10 +31,16 @@
       "path": "host.apt1"
     }
   },
-  "system": {
-    "hostname": "apt1",
+  "platform": {
     "architecture": "amd64",
     "codename": "trixie",
+    "source": {
+      "file": "../../../examples/apt-repository.dbf.hcl",
+      "line": 10,
+      "path": "host.apt1"
+    }
+  },
+  "system": {
     "source": {
       "file": "../../../examples/apt-repository.dbf.hcl",
       "line": 10,

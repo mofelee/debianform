@@ -9,9 +9,4 @@ host "cihost" {
     path      = "/var/lib/debianform-integration/component-inputs-state.json"
     lock_path = "/var/lock/debianform-integration/component-inputs-state.lock"
   }
-
-  system {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
 }

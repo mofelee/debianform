@@ -28,13 +28,10 @@
     }
   },
   "system": {
-    "hostname": "docker-sources1",
-    "architecture": "amd64",
-    "codename": "trixie",
     "source": {
       "file": "../../../examples/docker-package-sources.dbf.hcl",
-      "line": 2,
-      "path": "host.docker-sources1.system"
+      "line": 1,
+      "path": "host.docker-sources1"
     }
   },
   "kernel": {
@@ -78,7 +75,7 @@
       "remove_conflicts": "auto",
       "source_ref": {
         "file": "../../../examples/docker-package-sources.dbf.hcl",
-        "line": 10,
+        "line": 5,
         "path": "host.docker-sources1.docker.package"
       }
     },
@@ -88,13 +85,13 @@
       "name": "docker.service",
       "source_ref": {
         "file": "../../../examples/docker-package-sources.dbf.hcl",
-        "line": 7,
+        "line": 2,
         "path": "host.docker-sources1.docker"
       }
     },
     "source": {
       "file": "../../../examples/docker-package-sources.dbf.hcl",
-      "line": 7,
+      "line": 2,
       "path": "host.docker-sources1.docker"
     }
   }
