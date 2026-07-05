@@ -6,6 +6,8 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+## v0.3.0
+
 - Added managed `system.timezone` and `system.locale` resources; online plan,
   apply, and check now converge explicitly declared host timezone and system
   `LANG` while leaving omitted settings unmanaged.
