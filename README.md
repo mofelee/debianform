@@ -71,21 +71,84 @@ cd debianform-demo
 新建 `site.dbf.hcl`：
 
 ```hcl
-host "server1" {
-  kernel {
-    modules = ["tcp_bbr"]
+variable "ss_password" {
+  type      = string
+  sensitive = true
+}
 
-    sysctl = {
-      "net.core.default_qdisc"          = "fq"
-      "net.ipv4.tcp_congestion_control" = "bbr"
+component "shadowsocks_rust" {
+  type    = "binary"
+  version = "1.24.0"
+
+  source "amd64" {
+    url    = "https://github.com/shadowsocks/shadowsocks-rust/releases/download/v1.24.0/shadowsocks-v1.24.0.x86_64-unknown-linux-gnu.tar.xz"
+    sha256 = "5f528efb4e51e732352f5c69538dcc76e8cf8f6d1a240dfb5b748a67f0b05f65"
+  }
+
+  extract {
+    include = "ssserver"
+  }
+
+  install {
+    path = "/usr/local/bin/ssserver"
+  }
+
+  directories {
+    directory "/etc/shadowsocks-rust" {}
+  }
+
+  files {
+    file "/etc/shadowsocks-rust/server.json" {
+      mode = "0600"
+      content = jsonencode({
+        server      = "0.0.0.0"
+        server_port = 8388
+        password    = var.ss_password
+        method      = "chacha20-ietf-poly1305"
+        mode        = "tcp_and_udp"
+      })
+    }
+  }
+
+  systemd {
+    service_unit "shadowsocks-rust" {
+      description = "Shadowsocks Rust Server"
+      run = [
+        "/usr/local/bin/ssserver",
+        "-c",
+        "/etc/shadowsocks-rust/server.json",
+      ]
+      restart = "always"
+      after   = ["network-online.target"]
+      wants   = ["network-online.target"]
+    }
+  }
+
+  services {
+    service "shadowsocks-rust" {
+      enabled = true
+      state   = "running"
     }
   }
 }
+
+host "server1" {
+  platform {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  components = [
+    component.shadowsocks_rust,
+  ]
+}
 ```
 
-然后执行。因为当前目录只有这一份 `*.dbf.hcl`，所以不需要写 `-f`：
+先在 shell 中传入真实密码，不写入配置文件。然后执行。因为当前目录只有这一份
+`*.dbf.hcl`，所以不需要写 `-f`：
 
 ```bash
+export DBF_VAR_ss_password="$(openssl rand -base64 32)"
 dbf validate
 dbf plan --offline
 dbf plan
@@ -104,8 +167,8 @@ dbf check
 - `check`：检查远端是否漂移；不一致时返回非零。
 
 更完整的新手教程见 [Quickstart](docs/quickstart.zh.md)，后续章节见
-[用户手册](docs/user-manual/README.zh.md)。真实服务部署模板见
-[systemd app 示例](docs/realistic-deployment-example.zh.md)。
+[用户手册](docs/user-manual/README.zh.md)。完整多架构、低权限版本见
+[`examples/shadowsocks-rust.dbf.hcl`](examples/shadowsocks-rust.dbf.hcl)。
 
 ## 常用命令
 
@@ -318,6 +381,7 @@ host "app1" {
 ```bash
 dbf validate -f examples/bbr.dbf.hcl
 dbf plan -f examples/bbr.dbf.hcl --offline
+dbf validate -f examples/shadowsocks-rust.dbf.hcl
 dbf validate -f examples/realistic-systemd-app.dbf.hcl
 dbf plan -f examples/realistic-systemd-app.dbf.hcl --offline
 dbf validate -f examples/fleet.dbf.hcl
@@ -343,6 +407,7 @@ Docker 官方源和跨架构 component 依赖目标 platform facts。真实主�
 - `examples/plan-preview.dbf.hcl`
 - `examples/profile-merge.dbf.hcl`
 - `examples/realistic-systemd-app.dbf.hcl`
+- `examples/shadowsocks-rust.dbf.hcl`
 - `examples/systemd-service.dbf.hcl`
 - `examples/user-group.dbf.hcl`
 - `examples/variable-secret-file.dbf.hcl`

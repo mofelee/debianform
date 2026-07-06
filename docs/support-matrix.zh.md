@@ -167,6 +167,7 @@ Linux Homebrew best-effort 规则见
 | `examples/fleet.dbf.hcl` | Preview | 当前语法速查，覆盖 profile/component/host、systemd timer/resolved/journald、Docker、nftables 等组合用法。 |
 | `examples/nftables.dbf.hcl` | Beta | nftables validate/activate。 |
 | `examples/realistic-systemd-app.dbf.hcl` | Beta | 低权限 systemd app 部署模板，覆盖 user/group、目录、文件、unit 和 service。 |
+| `examples/shadowsocks-rust.dbf.hcl` | Beta | shadowsocks-rust binary component、配置文件和 systemd service。 |
 | `examples/systemd-service*.dbf.hcl` | Beta | raw unit 和 structured service_unit。 |
 | `examples/user-group.dbf.hcl` | Beta | users/groups/directories/files。 |
 | `examples/variable-secret-file.dbf.hcl` | Beta | variable + sensitive file 写入。 |
