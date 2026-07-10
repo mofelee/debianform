@@ -1488,6 +1488,115 @@ host "docker1" {
 	}
 }
 
+func TestCheckForwardsLockTimeoutToStateLock(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "check.dbf.hcl")
+	writeTestFile(t, config, `host "server1" {}`)
+	logPath := filepath.Join(dir, "ssh.log")
+	fakeBin := t.TempDir()
+	sshPath := filepath.Join(fakeBin, "ssh")
+	script := `#!/bin/sh
+input="$(cat)"
+printf '%s\n__DBF_CALL__\n' "$input" >> "$DBF_TEST_SSH_LOG"
+case "$input" in
+  "")
+    exit 0
+    ;;
+  *"printf 'hostname=%s\n'"*)
+    printf 'hostname=server1\narchitecture=amd64\ncodename=trixie\n'
+    exit 0
+    ;;
+  *"/var/lock/debianform/state/server1.lock"*)
+    exit 0
+    ;;
+  *"/var/lib/debianform/state/server1.json"*)
+    exit 0
+    ;;
+esac
+printf 'unexpected fake ssh input:\n%s\n' "$input" >&2
+exit 1
+`
+	if err := os.WriteFile(sshPath, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DBF_TEST_SSH_LOG", logPath)
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	captureStdout(t, func() {
+		if err := run([]string{"check", "-f", config, "--lock-timeout", "321ms"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(data)
+	if !strings.Contains(log, "deadline_ns=$(( $(date +%s%N) + 321000000 ))") {
+		t.Fatalf("check lock script did not receive 321ms timeout:\n%s", log)
+	}
+	if !strings.Contains(log, `rm -f -- "$lock_path"`) {
+		t.Fatalf("check did not release the state lock:\n%s", log)
+	}
+	if strings.Contains(log, "base64 -d >") {
+		t.Fatalf("check unexpectedly wrote state:\n%s", log)
+	}
+}
+
+func TestCheckLockTimeoutIsNotReportedAsDrift(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "check.dbf.hcl")
+	writeTestFile(t, config, `host "server1" {}`)
+	logPath := filepath.Join(dir, "ssh.log")
+	fakeBin := t.TempDir()
+	sshPath := filepath.Join(fakeBin, "ssh")
+	script := `#!/bin/sh
+input="$(cat)"
+printf '%s\n__DBF_CALL__\n' "$input" >> "$DBF_TEST_SSH_LOG"
+case "$input" in
+  "")
+    exit 0
+    ;;
+  *"printf 'hostname=%s\n'"*)
+    printf 'hostname=server1\narchitecture=amd64\ncodename=trixie\n'
+    exit 0
+    ;;
+  *'deadline_ns=$(( $(date +%s%N) + 1000000 ))'*)
+    printf 'timed out waiting for state lock /var/lock/debianform/state/server1.lock\n' >&2
+    exit 1
+    ;;
+esac
+printf 'unexpected fake ssh input:\n%s\n' "$input" >&2
+exit 1
+`
+	if err := os.WriteFile(sshPath, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DBF_TEST_SSH_LOG", logPath)
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var checkErr error
+	captureStdout(t, func() {
+		checkErr = run([]string{"check", "-f", config, "--lock-timeout", "1ms"})
+	})
+	if checkErr == nil || !strings.Contains(checkErr.Error(), "timed out waiting for state lock") {
+		t.Fatalf("check lock timeout error = %v, want state lock timeout", checkErr)
+	}
+	if strings.Contains(checkErr.Error(), "unexpected fake ssh input") {
+		t.Fatalf("check lock timeout used the wrong fake SSH branch: %v", checkErr)
+	}
+	if strings.Contains(checkErr.Error(), "remote state does not match configuration") {
+		t.Fatalf("check lock timeout was reported as drift: %v", checkErr)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "/var/lib/debianform/state/server1.json") {
+		t.Fatalf("check read state after lock timeout:\n%s", data)
+	}
+}
+
 func TestCheckDockerServiceDriftReturnsError(t *testing.T) {
 	fakeBin := t.TempDir()
 	sshPath := filepath.Join(fakeBin, "ssh")
@@ -1499,6 +1608,9 @@ case "$input" in
     exit 0
     ;;
   *"/var/lib/debianform/state/docker1.json"*)
+    exit 0
+    ;;
+  *"/var/lock/debianform/state/docker1.lock"*)
     exit 0
     ;;
   *"/etc/apt/keyrings/docker.asc"*)
@@ -1572,6 +1684,9 @@ case "$input" in
     exit 0
     ;;
   *"/var/lib/debianform/state/compose1.json"*)
+    exit 0
+    ;;
+  *"/var/lock/debianform/state/compose1.lock"*)
     exit 0
     ;;
   *"/etc/apt/keyrings/docker.asc"*)
@@ -1676,6 +1791,9 @@ case "$input" in
     exit 0
     ;;
   *"/var/lib/debianform/state/compose1.json"*)
+    exit 0
+    ;;
+  *"/var/lock/debianform/state/compose1.lock"*)
     exit 0
     ;;
   *"/etc/apt/keyrings/docker.asc"*)

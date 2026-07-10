@@ -15,7 +15,9 @@ ir.Program + graph.ResourceGraph
   -> engine.Plan
 ```
 
-`Engine.Plan` 不执行修改；它只读取 state、观测现实并计算步骤。
+`Engine.Plan` 不执行修改；它只读取 state、观测现实并计算步骤。`Engine.Plan` 本身不获取 state lock，
+因此普通 `dbf plan` 仍是无锁读取。`dbf check` 使用 `Engine.Check`，先获取所有目标 host 的锁，再在
+同一锁周期内运行完整的 `Engine.Plan`。
 
 ## Engine 依赖
 
@@ -29,7 +31,8 @@ ir.Program + graph.ResourceGraph
 - `Backend.Read`
 - `Provider.Plan`
 
-apply 才需要 write、lock、apply、destroy、run operation。
+`Engine.Check` 还需要 `Backend.Lock`，但仍然不会调用 write、apply、destroy 或 run operation。
+apply 才会调用这些修改接口。
 
 ## State、desired、observed
 
@@ -58,6 +61,17 @@ provider 仍然要观测主机，才能识别漂移和已有资源。
 10. 生成 summary。
 
 `opts.Host` 会在读取 state、遍历 node、处理 orphan 和 operation 时过滤 host。
+
+## Engine.Check 的锁周期
+
+`Engine.Check` 先按 `opts.Host` 选出目标 host，并在读取任何 state 前获取全部 host 的 state lock。
+`opts.LockTimeout` 控制锁等待时间。全部锁获取成功后，它调用 `Engine.Plan`；state 读取、逐资源或
+逐 host 的 provider 观测都在锁内完成，最后才释放所有锁。
+
+锁租约丢失会取消正在执行的 plan。无论 plan 成功、失败或 context 被取消，engine 都会尝试释放
+每个已获取的锁，并把租约或 unlock 错误与 plan 错误一起返回。这个包装只提供一致性边界，不会
+持久化 host facts 或写入 state。CLI 为解析配置执行的 runtime facts discovery 发生在调用
+`Engine.Check` 之前，因此不在锁周期内；不遵守 DebianForm state lock 的外部进程也不会被阻止。
 
 ## ProviderPlan
 

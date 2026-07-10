@@ -215,6 +215,16 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	}, nil
 }
 
+// Check computes a read-only plan while holding every selected host's state lock.
+func (e Engine) Check(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
+	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
+	selectedHosts := selectedProgramHosts(program, opts)
+	parallel := boundedHostParallel(opts.Parallel, len(selectedHosts))
+	return e.withHostLocks(ctx, selectedHosts, parallel, opts, progress, func(ctx context.Context) (Plan, error) {
+		return e.Plan(ctx, program, resourceGraph, opts)
+	})
+}
+
 func (e Engine) planNodes(ctx context.Context, hosts []ir.HostSpec, parallel int, nodes []planRequest, nodesByHost map[string][]graph.Node, priorsByHost map[string]map[string]*corestate.Resource, progress *progressLogger) (map[string]ProviderPlan, error) {
 	plans := map[string]ProviderPlan{}
 	if planner, ok := e.Provider.(HostPlanner); ok {
@@ -242,12 +252,53 @@ func (e Engine) planNodes(ctx context.Context, hosts []ir.HostSpec, parallel int
 	return plans, nil
 }
 
-func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (result Plan, resultErr error) {
+func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := hostsByName(program)
 	selectedHosts := selectedProgramHosts(program, opts)
 	parallel := boundedHostParallel(opts.Parallel, len(selectedHosts))
-	locks, err := e.lockHosts(ctx, selectedHosts, parallel, opts, progress)
+	applyOpts := opts
+	if applyOpts.Parallel < 1 {
+		applyOpts.Parallel = parallel
+	}
+	return e.withHostLocks(ctx, selectedHosts, parallel, opts, progress, func(ctx context.Context) (Plan, error) {
+		if err := e.persistHostFacts(ctx, program, applyOpts); err != nil {
+			return Plan{}, err
+		}
+
+		plan, err := e.Plan(ctx, program, resourceGraph, applyOpts)
+		if err != nil {
+			return Plan{}, err
+		}
+		if len(plan.Steps) == 0 && len(plan.Operations) == 0 {
+			return plan, nil
+		}
+
+		states, err := e.readStates(ctx, selectedHosts, applyOpts.Parallel, progress)
+		if err != nil {
+			return plan, err
+		}
+
+		waves, err := executionWaves(resourceGraph, plan)
+		if err != nil {
+			return plan, err
+		}
+		if err := e.runExecutionWaves(ctx, hosts, states, waves, applyOpts); err != nil {
+			return plan, err
+		}
+		return plan, nil
+	})
+}
+
+func (e Engine) withHostLocks(
+	ctx context.Context,
+	hosts []ir.HostSpec,
+	parallel int,
+	opts Options,
+	progress *progressLogger,
+	fn func(context.Context) (Plan, error),
+) (result Plan, resultErr error) {
+	locks, err := e.lockHosts(ctx, hosts, parallel, opts, progress)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -261,37 +312,7 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		}
 		resultErr = errors.Join(resultErr, leaseErr, unlockErr)
 	}()
-	ctx = leaseMonitor.context()
-
-	applyOpts := opts
-	if applyOpts.Parallel < 1 {
-		applyOpts.Parallel = parallel
-	}
-	if err := e.persistHostFacts(ctx, program, applyOpts); err != nil {
-		return Plan{}, err
-	}
-
-	plan, err := e.Plan(ctx, program, resourceGraph, applyOpts)
-	if err != nil {
-		return Plan{}, err
-	}
-	if len(plan.Steps) == 0 && len(plan.Operations) == 0 {
-		return plan, nil
-	}
-
-	states, err := e.readStates(ctx, selectedHosts, applyOpts.Parallel, progress)
-	if err != nil {
-		return plan, err
-	}
-
-	waves, err := executionWaves(resourceGraph, plan)
-	if err != nil {
-		return plan, err
-	}
-	if err := e.runExecutionWaves(ctx, hosts, states, waves, applyOpts); err != nil {
-		return plan, err
-	}
-	return plan, nil
+	return fn(leaseMonitor.context())
 }
 
 func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts Options) error {

@@ -500,7 +500,12 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			Provider: coreengine.NewNativeProvider(runner),
 		}
 		opts := coreengine.Options{Host: host, LockTimeout: lockTimeout, Parallel: parallel, Progress: os.Stderr, ProgressStyle: stderrStyle}
-		onlinePlan, err := engine.Plan(context.Background(), program, resourceGraph, opts)
+		var onlinePlan coreengine.Plan
+		if cmd == "check" {
+			onlinePlan, err = engine.Check(context.Background(), program, resourceGraph, opts)
+		} else {
+			onlinePlan, err = engine.Plan(context.Background(), program, resourceGraph, opts)
+		}
 		if err != nil {
 			return err
 		}
