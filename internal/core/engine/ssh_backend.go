@@ -97,6 +97,10 @@ func (b SSHBackend) Lock(ctx context.Context, host ir.HostSpec, timeout time.Dur
 		now = b.Now
 	}
 	expiresAt := now().Add(timeout).UTC()
+	expiresAtUnix := expiresAt.Unix()
+	if expiresAt.Nanosecond() != 0 {
+		expiresAtUnix++
+	}
 	owner := b.Owner
 	if owner == "" {
 		owner = "dbf"
@@ -105,7 +109,7 @@ func (b SSHBackend) Lock(ctx context.Context, host ir.HostSpec, timeout time.Dur
 	script := fmt.Sprintf(`set -eu
 lock_path=%s
 lock_dir=%s
-deadline=$(( $(date +%%s) + %d ))
+deadline_ns=$(( $(date +%%s%%N) + %d ))
 expires_at_unix=%d
 while true; do
   mkdir -p "$(dirname "$lock_path")"
@@ -115,7 +119,8 @@ while true; do
 __DBF_LOCK__
     exit 0
   fi
-  now=$(date +%%s)
+  now_ns=$(date +%%s%%N)
+  now=$(( now_ns / 1000000000 ))
   current_expires=0
   if [ -f "$lock_path" ]; then
     current_expires=$(sed -n 's/.*"expires_at_unix":[ ]*\([0-9][0-9]*\).*/\1/p' "$lock_path" | tail -n 1)
@@ -126,13 +131,13 @@ __DBF_LOCK__
     rm -rf -- "$lock_dir"
     continue
   fi
-  if [ "$now" -ge "$deadline" ]; then
+  if [ "$now_ns" -ge "$deadline_ns" ]; then
     printf 'timed out waiting for state lock %%s\n' "$lock_path" >&2
     exit 1
   fi
   sleep 1
 done
-`, shellQuote(host.State.LockPath), shellQuote(lockDir), int(timeout.Seconds()), expiresAt.Unix(), owner, token, expiresAt.Format(time.RFC3339), expiresAt.Unix())
+`, shellQuote(host.State.LockPath), shellQuote(lockDir), timeout.Nanoseconds(), expiresAtUnix, owner, token, expiresAt.Format(time.RFC3339Nano), expiresAtUnix)
 	callCtx := WithRemoteCallContext(ctx, RemoteCallContext{
 		Phase:   "state lock",
 		Action:  "lock",

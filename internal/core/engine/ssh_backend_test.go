@@ -166,6 +166,36 @@ func TestSSHBackendLockTakesOverStaleLockWithWarning(t *testing.T) {
 	}
 }
 
+func TestSSHBackendLockUsesHighPrecisionDeadline(t *testing.T) {
+	host := testBackendHost(t)
+	runner := &recordingRunner{}
+	backend := SSHBackend{
+		Runner: runner,
+		Owner:  "test",
+		Now: func() time.Time {
+			return time.Unix(100, 1)
+		},
+	}
+
+	if _, err := backend.Lock(context.Background(), host, 1500*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 1 {
+		t.Fatalf("lock scripts = %d, want 1", len(runner.scripts))
+	}
+	script := runner.scripts[0]
+	for _, want := range []string{
+		"deadline_ns=$(( $(date +%s%N) + 1500000000 ))",
+		"now_ns=$(date +%s%N)",
+		"expires_at_unix=102",
+		`"expires_at_unix":102`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("lock script missing %q:\n%s", want, script)
+		}
+	}
+}
+
 func TestSSHBackendLockIsMutuallyExclusive(t *testing.T) {
 	host := testBackendHost(t)
 	backend := SSHBackend{Runner: localShellRunner{}, Owner: "test"}
