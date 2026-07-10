@@ -131,8 +131,8 @@ dbf apply
 dbf apply --auto-approve
 ```
 
-apply 会先重新生成在线 plan，获取目标主机 state lock，然后按资源图顺序执行变更并写入
-state。
+apply 会先生成未持锁的在线 preview，获取目标主机 state lock 后重新读取 state/observed 状态，再打印
+实际执行计划。交互模式下，实际计划发生变化会再次要求确认；获准后才按资源图顺序执行并写入 state。
 
 ## 8. 验证 no-op 和 check
 

@@ -162,7 +162,7 @@ dbf check
 - `validate`：本地解析和校验配置，不连接主机。
 - `plan --offline`：本地预览资源地址和变更形状。
 - `plan`：通过 SSH 读取目标主机事实、远端 state 和 observed 状态。
-- `apply`：重新生成在线 plan，获取远端 lock，按资源图执行变更并写 state。
+- `apply`：打印在线 preview，获取远端 lock 后重算并展示实际计划，获准后按资源图执行并写 state。
 - 第二次 `plan`：预期 no-op。
 - `check`：检查远端是否漂移；不一致时返回非零。
 

@@ -133,14 +133,15 @@ parser.Config
 `engine.Apply`。`Engine.Apply` 内部会：
 
 1. 获取目标 host 的 state lock。
-2. 持久化已发现 facts。
-3. 再次调用 `Engine.Plan`。
-4. 根据资源图依赖拆成 execution waves。
-5. 调 provider 执行 resource step 和 operation。
-6. 每个资源 step 成功后写回 state。
+2. 再次调用 `Engine.Plan`。
+3. 在仍持有 lock 时打印实际执行计划；若它与已确认的 preview 不同，交互模式下再次确认。
+4. 获准后持久化已发现 facts。
+5. 根据资源图依赖拆成 execution waves。
+6. 调 provider 执行 resource step 和 operation。
+7. 每个资源 step 成功后写回 state。
 
-重新 plan 是为了让 apply 在持锁之后基于最新 state 和 observed reality 执行，避免用户确认和实际执行之间
-状态已经变化。
+重新 plan 是为了让 apply 在持锁之后基于最新 state 和 observed reality 执行。实际执行计划在任何 state
+写入或 provider 修改之前展示和批准，避免用户只确认旧 preview、实际却执行了新增动作。
 
 ## `fmt`
 

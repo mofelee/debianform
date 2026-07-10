@@ -147,7 +147,8 @@ dbf apply --auto-approve
 apply complete
 ```
 
-`apply` 会先打印计划，再获取远端 lock，重新计算在线 plan，然后执行变更并写入 state。
+`apply` 会先打印未持锁的 preview，获取远端 lock 后重新计算并打印实际执行计划，然后才执行变更并
+写入 state。交互模式下，如果两份计划不同，会在仍持锁时再次要求确认。
 
 ## 再次 plan 和 check
 

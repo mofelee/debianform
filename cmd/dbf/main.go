@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -513,34 +514,79 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 			CommandFile: commandFile(files),
 			Host:        commandHost(program, host),
 		})
+		textOpts := coreplan.TextOptions{Color: stdoutStyle.Color, Unicode: stdoutStyle.Unicode, Background: stdoutStyle.Background}
 		printWarningsWithStyle(warnings, stderrStyle)
-		coreplan.PrintTextWithOptions(os.Stdout, doc, coreplan.TextOptions{Color: stdoutStyle.Color, Unicode: stdoutStyle.Unicode, Background: stdoutStyle.Background})
+		if cmd == "apply" {
+			fmt.Fprintln(os.Stdout, "Preview plan (state lock not held):")
+		}
+		coreplan.PrintTextWithOptions(os.Stdout, doc, textOpts)
 		if cmd == "check" {
 			if len(onlinePlan.Steps) > 0 || len(onlinePlan.Operations) > 0 {
 				return fmt.Errorf("remote state does not match configuration")
 			}
 			return nil
 		}
-		if len(onlinePlan.Steps) == 0 && len(onlinePlan.Operations) == 0 {
+		if !planHasActions(onlinePlan) {
 			return nil
 		}
-		if !autoApprove && !confirmApply() {
+		if !autoApprove && planHasActions(onlinePlan) && !confirmApply() {
 			return fmt.Errorf("apply cancelled")
 		}
-		applied, err := engine.Apply(context.Background(), program, resourceGraph, opts)
+		opts.BeforeExecute = func(_ context.Context, actual coreengine.Plan) error {
+			actualDoc := actual.Document(coreplan.Options{
+				CommandFile: commandFile(files),
+				Host:        commandHost(program, host),
+			})
+			return reviewExecutionPlan(onlinePlan, actual, doc, actualDoc, autoApprove, os.Stdout, textOpts, confirmApply)
+		}
+		_, err = engine.Apply(context.Background(), program, resourceGraph, opts)
 		if err != nil {
 			return err
 		}
-		appliedDoc := applied.Document(coreplan.Options{
-			CommandFile: commandFile(files),
-			Host:        commandHost(program, host),
-		})
-		coreplan.PrintTextWithOptions(os.Stdout, appliedDoc, coreplan.TextOptions{Color: stdoutStyle.Color, Unicode: stdoutStyle.Unicode, Background: stdoutStyle.Background})
 		fmt.Println("apply complete")
 		return nil
 	default:
 		return fmt.Errorf("unsupported command %q", cmd)
 	}
+}
+
+func planHasActions(plan coreengine.Plan) bool {
+	return len(plan.Steps) > 0 || len(plan.Operations) > 0
+}
+
+func sameApprovedPlan(preview, actual coreengine.Plan, previewDoc, actualDoc coreplan.Document) bool {
+	if !reflect.DeepEqual(preview, actual) {
+		return false
+	}
+	return sameVisiblePlanDocument(previewDoc, actualDoc)
+}
+
+func sameVisiblePlanDocument(left, right coreplan.Document) bool {
+	left.GeneratedAt = ""
+	right.GeneratedAt = ""
+	return reflect.DeepEqual(left, right)
+}
+
+func reviewExecutionPlan(
+	preview coreengine.Plan,
+	actual coreengine.Plan,
+	previewDoc coreplan.Document,
+	actualDoc coreplan.Document,
+	autoApprove bool,
+	stdout io.Writer,
+	textOpts coreplan.TextOptions,
+	confirm func() bool,
+) error {
+	fmt.Fprintln(stdout, "Execution plan (state lock held):")
+	coreplan.PrintTextWithOptions(stdout, actualDoc, textOpts)
+	if autoApprove || sameApprovedPlan(preview, actual, previewDoc, actualDoc) {
+		return nil
+	}
+	fmt.Fprintln(stdout, "The execution plan changed while waiting for the state lock; approval is required again.")
+	if !confirm() {
+		return fmt.Errorf("apply cancelled")
+	}
+	return nil
 }
 
 func printPlanDocument(doc coreplan.Document, format string, htmlPath string, style termstyle.Options) error {

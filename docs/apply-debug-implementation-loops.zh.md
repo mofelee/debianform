@@ -17,7 +17,7 @@
 
 - [x] `Runner` 已统一封装远端调用：`Run`、`RunInput`、`RunCommand`。
 - [x] `apply` 会先打印 online plan，确认后再进入真正执行。
-- [x] `Engine.Apply` 内部会重新 plan，并在每个资源成功后写 state。
+- [x] `Engine.Apply` 内部会持锁重新 plan，在写 state 或修改主机前展示/批准实际计划，并在每个资源成功后写 state。
 - [x] `plan --debug` 已显示内部 `provider_address`。
 - [x] progress 日志已能显示 host、动作、资源地址和摘要。
 - [x] 普通 plan/state 输出已有敏感值脱敏约束。

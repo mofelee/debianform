@@ -464,9 +464,11 @@ Apply these changes? Type yes to continue:
 dbf apply --debug
   -> debugger starts before facts discovery SSH call
   -> facts/probes are stepped
-  -> plan is printed
+  -> unlocked preview plan is printed
   -> normal apply confirmation
-  -> lock/re-plan/apply/state writes are stepped
+  -> lock/re-plan are stepped
+  -> locked execution plan is printed and re-confirmed if changed
+  -> apply/state writes are stepped
 ```
 
 ## Runner 设计建议

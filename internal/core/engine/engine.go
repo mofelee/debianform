@@ -77,6 +77,8 @@ type Options struct {
 	PerHostParallel int
 	Progress        io.Writer
 	ProgressStyle   termstyle.Options
+	// BeforeExecute reviews the locked plan before any state write or provider mutation.
+	BeforeExecute func(context.Context, Plan) error
 }
 
 type Engine struct {
@@ -262,13 +264,23 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		applyOpts.Parallel = parallel
 	}
 	return e.withHostLocks(ctx, selectedHosts, parallel, opts, progress, func(ctx context.Context) (Plan, error) {
-		if err := e.persistHostFacts(ctx, program, applyOpts); err != nil {
-			return Plan{}, err
-		}
-
 		plan, err := e.Plan(ctx, program, resourceGraph, applyOpts)
 		if err != nil {
 			return Plan{}, err
+		}
+		if err := ctx.Err(); err != nil {
+			return plan, err
+		}
+		if applyOpts.BeforeExecute != nil {
+			if err := applyOpts.BeforeExecute(ctx, plan); err != nil {
+				return plan, err
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			return plan, err
+		}
+		if err := e.persistHostFacts(ctx, program, applyOpts); err != nil {
+			return plan, err
 		}
 		if len(plan.Steps) == 0 && len(plan.Operations) == 0 {
 			return plan, nil

@@ -107,8 +107,11 @@ dbf check
 
 `apply` 的输出通常会出现两段 plan：
 
-- 第一段是确认前的在线 plan。
-- 持有 state lock 后，DebianForm 会重新读取 state 和 observed 状态，再打印第二段 plan 并执行。
+- `Preview plan (state lock not held)` 是确认前的在线 preview。
+- `Execution plan (state lock held)` 是持有 state lock 后重新读取 state 和 observed 状态得到的实际执行计划。
+
+实际执行计划会在任何 state 写入或 provider 修改前打印。交互模式下，两份计划不同会再次要求确认；
+`--auto-approve` 会接受变化，但仍打印第二份计划。执行完成后不会重复打印实际计划。
 
 执行阶段 stderr 会显示当前 host、资源地址、动作以及长步骤心跳，例如 `start update ...`、
 `still update ...`、`done update ...`，用来判断它正在处理哪一步。
