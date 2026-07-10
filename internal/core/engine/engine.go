@@ -27,6 +27,8 @@ const (
 	ActionForget  = "forget"
 	ActionNoOp    = "no-op"
 	ActionRun     = "run"
+
+	defaultLockCleanupTimeout = 10 * time.Second
 )
 
 type Backend interface {
@@ -250,10 +252,15 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		return Plan{}, err
 	}
 	leaseMonitor := newLockLeaseMonitor(ctx, locks)
+	cleanupParent := ctx
 	defer func() {
-		resultErr = errors.Join(resultErr, leaseMonitor.stop())
+		unlockErr := unlockHosts(cleanupParent, locks)
+		leaseErr := leaseMonitor.stop()
+		if leaseErr != nil && errors.Is(unlockErr, leaseErr) {
+			leaseErr = nil
+		}
+		resultErr = errors.Join(resultErr, leaseErr, unlockErr)
 	}()
-	defer unlockHosts(ctx, locks)
 	ctx = leaseMonitor.context()
 
 	applyOpts := opts
@@ -481,20 +488,31 @@ func (e Engine) lockHosts(ctx context.Context, hosts []ir.HostSpec, parallel int
 		return nil
 	})
 	if err != nil {
-		unlockHosts(ctx, locks)
-		return nil, err
+		rollbackErr := unlockHosts(ctx, locks)
+		return nil, errors.Join(err, rollbackErr)
 	}
 	return locks, nil
 }
 
 func unlockHosts(ctx context.Context, locks []heldLock) error {
-	var firstErr error
+	return unlockHostsWithTimeout(ctx, locks, defaultLockCleanupTimeout)
+}
+
+func unlockHostsWithTimeout(parent context.Context, locks []heldLock, timeout time.Duration) error {
+	if parent == nil {
+		parent = context.Background()
+	}
+	base := context.WithoutCancel(parent)
+	errs := make([]error, 0, len(locks))
 	for i := len(locks) - 1; i >= 0; i-- {
-		if err := locks[i].lock.Unlock(ctx); err != nil && firstErr == nil {
-			firstErr = err
+		cleanupCtx, cancel := context.WithTimeout(base, timeout)
+		err := locks[i].lock.Unlock(cleanupCtx)
+		cancel()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("unlock state for host %q: %w", locks[i].host.Name, err))
 		}
 	}
-	return firstErr
+	return errors.Join(errs...)
 }
 
 func runHosts(ctx context.Context, hosts []ir.HostSpec, parallel int, fn func(context.Context, ir.HostSpec) error) error {

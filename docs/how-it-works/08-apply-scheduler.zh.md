@@ -122,6 +122,12 @@ active 节点，会保证顺序。
 
 已经成功执行的资源不会回滚。DebianForm 依赖 state 和 observed 状态，让下一次 `plan/apply` 继续修复。
 
+退出 apply 时，每台 host 的 state unlock 都使用从原调用 context 保留 values、但不继承 cancel/deadline
+状态的独立短超时 context。即使 caller 已取消、某一台 unlock 超时或失败，其余已获取锁仍会逐一尝试
+释放。apply 主错误、lease 丢失和所有带 host 信息的 unlock 错误会通过 error chain 一起返回；主流程
+成功但 unlock 失败时也不会报告完整成功。多 host 获取过程中部分失败时，同样会释放所有已经成功
+获取的锁，并合并 acquisition 与 rollback cleanup 错误。
+
 ## Resource step 执行
 
 `executeResourceStep` 根据 action 决定 provider 调用：

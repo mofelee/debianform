@@ -3,8 +3,10 @@ package engine
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -149,6 +151,9 @@ func TestApplyCancelsWorkAndReturnsLeaseLossCause(t *testing.T) {
 		if !errors.Is(err, leaseCause) {
 			t.Fatalf("apply error = %v, want lease renewal root cause", err)
 		}
+		if count := strings.Count(err.Error(), leaseCause.Error()); count != 1 {
+			t.Fatalf("lease renewal root cause appears %d times in error: %v", count, err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("apply did not stop after lease loss")
 	}
@@ -157,6 +162,247 @@ func TestApplyCancelsWorkAndReturnsLeaseLossCause(t *testing.T) {
 	lease.mu.Unlock()
 	if !unlocked {
 		t.Fatal("lease was not unlocked after renewal failure")
+	}
+}
+
+func TestApplyReturnsUnlockErrorAfterSuccessfulExecution(t *testing.T) {
+	unlockErr := errors.New("injected unlock failure")
+	lock := &cleanupTestLock{err: unlockErr}
+	backend := &cleanupTestBackend{
+		MemoryBackend: NewMemoryBackend(),
+		locks:         map[string]*cleanupTestLock{"server1": lock},
+	}
+	provider := NewMemoryProvider()
+	engine := Engine{Backend: backend, Provider: provider}
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{fileNode("server1", "/tmp/unlock-error", nil)}}
+
+	_, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if !errors.Is(err, unlockErr) {
+		t.Fatalf("apply error = %v, want unlock failure", err)
+	}
+	if len(provider.Applied) != 1 {
+		t.Fatalf("provider applied = %v, want successful main execution", provider.Applied)
+	}
+	if calls, _, _ := lock.snapshot(); calls != 1 {
+		t.Fatalf("unlock calls = %d, want 1", calls)
+	}
+	if !strings.Contains(err.Error(), `unlock state for host "server1"`) {
+		t.Fatalf("apply error lacks host context: %v", err)
+	}
+}
+
+func TestApplyReturnsSSHBackendTokenMismatchAfterSuccessfulExecution(t *testing.T) {
+	host := testBackendHost(t)
+	backend := SSHBackend{
+		Runner:        localShellRunner{},
+		Owner:         "test",
+		Warnings:      io.Discard,
+		LeaseTTL:      3 * time.Hour,
+		RenewInterval: time.Hour,
+		RenewTimeout:  time.Second,
+	}
+	foreignToken := strings.Repeat("b", 32)
+	provider := &afterApplyProvider{MemoryProvider: NewMemoryProvider()}
+	provider.hook = func() error {
+		data, err := os.ReadFile(host.State.LockPath)
+		if err != nil {
+			return err
+		}
+		var record testLockRecordData
+		if err := json.Unmarshal(data, &record); err != nil {
+			return err
+		}
+		if err := os.WriteFile(host.State.LockPath, testLockRecord("other", "999", foreignToken, record.LeaseExpiresAtUnix), 0600); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(host.State.LockPath+".d", "owner.v2"), testLockMarker(foreignToken), 0600)
+	}
+	engine := Engine{Backend: backend, Provider: provider}
+	program := &ir.Program{Hosts: []ir.HostSpec{host}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{fileNode(host.Name, "/tmp/ssh-token-mismatch", nil)}}
+
+	_, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err == nil || !strings.Contains(err.Error(), "state lock token mismatch") {
+		t.Fatalf("apply error = %v, want SSH token mismatch", err)
+	}
+	if len(provider.Applied) != 1 {
+		t.Fatalf("provider applied = %v, want successful main execution", provider.Applied)
+	}
+	if _, statErr := os.Stat(host.State.LockPath); statErr != nil {
+		t.Fatalf("foreign lease was removed after token mismatch: %v", statErr)
+	}
+}
+
+func TestApplyUnlockUsesCleanupContextAfterCallerCancellation(t *testing.T) {
+	cleanupErr := errors.New("cleanup after cancellation failed")
+	lock := &cleanupTestLock{err: cleanupErr}
+	backend := &cleanupTestBackend{
+		MemoryBackend: NewMemoryBackend(),
+		locks:         map[string]*cleanupTestLock{"server1": lock},
+	}
+	provider := &leaseBlockingProvider{
+		MemoryProvider: NewMemoryProvider(),
+		started:        make(chan struct{}),
+	}
+	engine := Engine{Backend: backend, Provider: provider}
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{fileNode("server1", "/tmp/cancel-cleanup", nil)}}
+	ctx, cancel := context.WithCancel(context.Background())
+	resultCh := make(chan error, 1)
+	go func() {
+		_, err := engine.Apply(ctx, program, resourceGraph, Options{})
+		resultCh <- err
+	}()
+	select {
+	case <-provider.started:
+	case <-time.After(time.Second):
+		t.Fatal("provider apply did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-resultCh:
+		if !errors.Is(err, context.Canceled) || !errors.Is(err, cleanupErr) {
+			t.Fatalf("apply error = %v, want context canceled and cleanup failure", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("apply did not return after caller cancellation")
+	}
+	calls, sawCanceled, sawDeadline := lock.snapshot()
+	if calls != 1 || sawCanceled || !sawDeadline {
+		t.Fatalf("unlock context: calls=%d canceled=%t deadline=%t, want 1/false/true", calls, sawCanceled, sawDeadline)
+	}
+}
+
+func TestApplyUnlockUsesCleanupContextAfterCallerDeadline(t *testing.T) {
+	cleanupErr := errors.New("cleanup after deadline failed")
+	lock := &cleanupTestLock{err: cleanupErr}
+	backend := &cleanupTestBackend{
+		MemoryBackend: NewMemoryBackend(),
+		locks:         map[string]*cleanupTestLock{"server1": lock},
+	}
+	provider := &leaseBlockingProvider{
+		MemoryProvider: NewMemoryProvider(),
+		started:        make(chan struct{}),
+	}
+	engine := Engine{Backend: backend, Provider: provider}
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{fileNode("server1", "/tmp/deadline-cleanup", nil)}}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := engine.Apply(ctx, program, resourceGraph, Options{})
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("apply error = %v, want context deadline exceeded and cleanup failure", err)
+	}
+	calls, sawCanceled, sawDeadline := lock.snapshot()
+	if calls != 1 || sawCanceled || !sawDeadline {
+		t.Fatalf("unlock context: calls=%d canceled=%t deadline=%t, want 1/false/true", calls, sawCanceled, sawDeadline)
+	}
+}
+
+func TestApplyJoinsAllHostUnlockErrors(t *testing.T) {
+	hosts := []ir.HostSpec{{Name: "server1"}, {Name: "server2"}, {Name: "server3"}}
+	unlockErrs := []error{
+		errors.New("unlock server1 failed"),
+		errors.New("unlock server2 failed"),
+		errors.New("unlock server3 failed"),
+	}
+	locks := map[string]*cleanupTestLock{}
+	for i, host := range hosts {
+		locks[host.Name] = &cleanupTestLock{err: unlockErrs[i]}
+	}
+	backend := &cleanupTestBackend{MemoryBackend: NewMemoryBackend(), locks: locks}
+	engine := Engine{Backend: backend, Provider: NewMemoryProvider()}
+
+	_, err := engine.Apply(context.Background(), &ir.Program{Hosts: hosts}, &graph.ResourceGraph{}, Options{Parallel: 1})
+	for i, unlockErr := range unlockErrs {
+		if !errors.Is(err, unlockErr) {
+			t.Fatalf("apply error = %v, want unlock error %v", err, unlockErr)
+		}
+		if calls, _, _ := locks[hosts[i].Name].snapshot(); calls != 1 {
+			t.Fatalf("host %s unlock calls = %d, want 1", hosts[i].Name, calls)
+		}
+	}
+}
+
+func TestUnlockHostsUsesIndependentCleanupTimeouts(t *testing.T) {
+	timedOut := &cleanupTestLock{waitForDeadline: true}
+	afterErr := errors.New("later unlock failure")
+	after := &cleanupTestLock{err: afterErr}
+	locks := []heldLock{
+		{host: ir.HostSpec{Name: "after"}, lock: after},
+		{host: ir.HostSpec{Name: "timeout"}, lock: timedOut},
+	}
+
+	err := unlockHostsWithTimeout(context.Background(), locks, 20*time.Millisecond)
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, afterErr) {
+		t.Fatalf("unlock error = %v, want timeout and later failure", err)
+	}
+	if calls, sawCanceled, sawDeadline := after.snapshot(); calls != 1 || sawCanceled || !sawDeadline {
+		t.Fatalf("later cleanup context: calls=%d canceled=%t deadline=%t, want fresh context", calls, sawCanceled, sawDeadline)
+	}
+}
+
+func TestLockHostsJoinsAcquireAndPartialCleanupErrors(t *testing.T) {
+	acquireErr := errors.New("injected third host lock failure")
+	cleanupErr1 := errors.New("server1 rollback failed")
+	cleanupErr2 := errors.New("server2 rollback failed")
+	var rollbackMu sync.Mutex
+	rollbackOrder := []string{}
+	lock1 := &cleanupTestLock{err: cleanupErr1, name: "server1", order: &rollbackOrder, orderMu: &rollbackMu}
+	lock2 := &cleanupTestLock{err: cleanupErr2, name: "server2", order: &rollbackOrder, orderMu: &rollbackMu}
+	backend := &cleanupTestBackend{
+		MemoryBackend: NewMemoryBackend(),
+		locks: map[string]*cleanupTestLock{
+			"server1": lock1,
+			"server2": lock2,
+		},
+		acquireErrs: map[string]error{"server3": acquireErr},
+	}
+	engine := Engine{Backend: backend, Provider: NewMemoryProvider()}
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}, {Name: "server2"}, {Name: "server3"}}}
+
+	_, err := engine.Apply(context.Background(), program, &graph.ResourceGraph{}, Options{Parallel: 1})
+	for _, want := range []error{acquireErr, cleanupErr1, cleanupErr2} {
+		if !errors.Is(err, want) {
+			t.Fatalf("apply error = %v, want joined error %v", err, want)
+		}
+	}
+	if calls, _, _ := lock1.snapshot(); calls != 1 {
+		t.Fatalf("server1 rollback calls = %d, want 1", calls)
+	}
+	if calls, _, _ := lock2.snapshot(); calls != 1 {
+		t.Fatalf("server2 rollback calls = %d, want 1", calls)
+	}
+	rollbackMu.Lock()
+	gotOrder := append([]string(nil), rollbackOrder...)
+	rollbackMu.Unlock()
+	if want := []string{"server2", "server1"}; !reflect.DeepEqual(gotOrder, want) {
+		t.Fatalf("rollback order = %v, want reverse acquisition order %v", gotOrder, want)
+	}
+}
+
+func TestLockHostsRollsBackLockAcquiredAfterPeerCancellation(t *testing.T) {
+	acquireErr := errors.New("injected peer lock failure")
+	rollbackErr := errors.New("post-cancel rollback failure")
+	slowLock := &cleanupTestLock{err: rollbackErr}
+	backend := &postCancelAcquireBackend{
+		MemoryBackend: NewMemoryBackend(),
+		slowStarted:   make(chan struct{}),
+		slowLock:      slowLock,
+		acquireErr:    acquireErr,
+	}
+	engine := Engine{Backend: backend, Provider: NewMemoryProvider()}
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "failing"}, {Name: "slow"}}}
+
+	_, err := engine.Apply(context.Background(), program, &graph.ResourceGraph{}, Options{Parallel: 2})
+	if !errors.Is(err, acquireErr) || !errors.Is(err, rollbackErr) {
+		t.Fatalf("apply error = %v, want acquire and post-cancel rollback failures", err)
+	}
+	if calls, sawCanceled, sawDeadline := slowLock.snapshot(); calls != 1 || sawCanceled || !sawDeadline {
+		t.Fatalf("post-cancel rollback: calls=%d canceled=%t deadline=%t, want 1/false/true", calls, sawCanceled, sawDeadline)
 	}
 }
 
@@ -1801,6 +2047,90 @@ type testRenewableBackend struct {
 	lock *testRenewableLock
 }
 
+type cleanupTestBackend struct {
+	*MemoryBackend
+	mu          sync.Mutex
+	locks       map[string]*cleanupTestLock
+	acquireErrs map[string]error
+}
+
+type postCancelAcquireBackend struct {
+	*MemoryBackend
+	slowStarted chan struct{}
+	startOnce   sync.Once
+	slowLock    *cleanupTestLock
+	acquireErr  error
+}
+
+func (b *postCancelAcquireBackend) Lock(ctx context.Context, host ir.HostSpec, timeout time.Duration) (Lock, error) {
+	switch host.Name {
+	case "failing":
+		<-b.slowStarted
+		return nil, b.acquireErr
+	case "slow":
+		b.startOnce.Do(func() { close(b.slowStarted) })
+		<-ctx.Done()
+		return b.slowLock, nil
+	default:
+		return nil, fmt.Errorf("unexpected host %q", host.Name)
+	}
+}
+
+func (b *cleanupTestBackend) Lock(ctx context.Context, host ir.HostSpec, timeout time.Duration) (Lock, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if err := b.acquireErrs[host.Name]; err != nil {
+		return nil, err
+	}
+	lock := b.locks[host.Name]
+	if lock == nil {
+		return nil, fmt.Errorf("test lock for host %q is not configured", host.Name)
+	}
+	return lock, nil
+}
+
+type cleanupTestLock struct {
+	mu              sync.Mutex
+	err             error
+	waitForDeadline bool
+	name            string
+	order           *[]string
+	orderMu         *sync.Mutex
+	calls           int
+	sawCanceled     bool
+	sawDeadline     bool
+}
+
+func (l *cleanupTestLock) Unlock(ctx context.Context) error {
+	if l.order != nil {
+		l.orderMu.Lock()
+		*l.order = append(*l.order, l.name)
+		l.orderMu.Unlock()
+	}
+	l.mu.Lock()
+	l.calls++
+	if ctx.Err() != nil {
+		l.sawCanceled = true
+	}
+	if _, ok := ctx.Deadline(); ok {
+		l.sawDeadline = true
+	}
+	waitForDeadline := l.waitForDeadline
+	err := l.err
+	l.mu.Unlock()
+	if waitForDeadline {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	return err
+}
+
+func (l *cleanupTestLock) snapshot() (calls int, sawCanceled bool, sawDeadline bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.calls, l.sawCanceled, l.sawDeadline
+}
+
 func (b *testRenewableBackend) Lock(ctx context.Context, host ir.HostSpec, timeout time.Duration) (Lock, error) {
 	return b.lock, nil
 }
@@ -1816,7 +2146,7 @@ func (l *testRenewableLock) Unlock(ctx context.Context) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.unlocked = true
-	return nil
+	return l.err
 }
 
 func (l *testRenewableLock) Lost() <-chan struct{} {
@@ -1840,6 +2170,24 @@ type leaseBlockingProvider struct {
 	*MemoryProvider
 	started chan struct{}
 	once    sync.Once
+}
+
+type afterApplyProvider struct {
+	*MemoryProvider
+	hook func() error
+}
+
+func (p *afterApplyProvider) Apply(ctx context.Context, step Step) (map[string]any, error) {
+	observed, err := p.MemoryProvider.Apply(ctx, step)
+	if err != nil {
+		return nil, err
+	}
+	if p.hook != nil {
+		if err := p.hook(); err != nil {
+			return nil, err
+		}
+	}
+	return observed, nil
 }
 
 func (p *leaseBlockingProvider) Apply(ctx context.Context, step Step) (map[string]any, error) {
