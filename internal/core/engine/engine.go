@@ -33,7 +33,7 @@ const (
 
 type Backend interface {
 	Read(ctx context.Context, host ir.HostSpec) (corestate.State, error)
-	Write(ctx context.Context, host ir.HostSpec, st corestate.State) error
+	Write(ctx context.Context, host ir.HostSpec, st corestate.State) (corestate.State, error)
 	Lock(ctx context.Context, host ir.HostSpec, timeout time.Duration) (Lock, error)
 }
 
@@ -351,7 +351,7 @@ func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts 
 		}
 		facts := host.Facts
 		st.Facts = &facts
-		if err := e.Backend.Write(ctx, host, st); err != nil {
+		if _, err := e.Backend.Write(ctx, host, st); err != nil {
 			task.Done(err)
 			return err
 		}
@@ -1504,7 +1504,7 @@ func (e Engine) recordOperationOutputs(ctx context.Context, hosts map[string]ir.
 	defer lock.Unlock()
 
 	statesLock.Lock()
-	st := states[host.Name]
+	st := cloneState(states[host.Name])
 	statesLock.Unlock()
 	for address, observed := range result.Outputs {
 		if observed == nil {
@@ -1530,11 +1530,12 @@ func (e Engine) recordOperationOutputs(ctx context.Context, hosts map[string]ir.
 			Ownership: "managed",
 		}, observed, now)
 	}
-	if err := e.Backend.Write(ctx, host, st); err != nil {
+	committed, err := e.Backend.Write(ctx, host, st)
+	if err != nil {
 		return err
 	}
 	statesLock.Lock()
-	states[host.Name] = st
+	states[host.Name] = committed
 	statesLock.Unlock()
 	return nil
 }
@@ -1616,7 +1617,7 @@ func (e Engine) executeResourceStep(ctx context.Context, hosts map[string]ir.Hos
 	defer lock.Unlock()
 
 	statesLock.Lock()
-	st := states[host.Name]
+	st := cloneState(states[host.Name])
 	statesLock.Unlock()
 	switch step.Action {
 	case ActionCreate, ActionUpdate:
@@ -1634,11 +1635,12 @@ func (e Engine) executeResourceStep(ctx context.Context, hosts map[string]ir.Hos
 	case ActionNoOp:
 		return nil
 	}
-	if err := e.Backend.Write(callCtx, host, st); err != nil {
+	committed, err := e.Backend.Write(callCtx, host, st)
+	if err != nil {
 		return err
 	}
 	statesLock.Lock()
-	states[host.Name] = st
+	states[host.Name] = committed
 	statesLock.Unlock()
 	return nil
 }

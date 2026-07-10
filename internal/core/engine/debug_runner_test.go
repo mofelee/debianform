@@ -249,7 +249,7 @@ func TestSSHBackendAddsStateRemoteCallContexts(t *testing.T) {
 	if _, err := backend.Read(context.Background(), host); err != nil {
 		t.Fatal(err)
 	}
-	if err := backend.Write(context.Background(), host, corestate.Empty("server1")); err != nil {
+	if _, err := backend.Write(context.Background(), host, corestate.Empty("server1")); err != nil {
 		t.Fatal(err)
 	}
 	lock, err := backend.Lock(context.Background(), host, time.Minute)

@@ -113,6 +113,9 @@ func TestApplyPersistsRuntimeFactsWithoutResourceChanges(t *testing.T) {
 	if st.Facts == nil || st.Facts.System.Architecture != "amd64" || st.Facts.System.Codename != "trixie" {
 		t.Fatalf("state facts = %#v", st.Facts)
 	}
+	if st.Serial != 1 {
+		t.Fatalf("facts-only state serial = %d, want 1", st.Serial)
+	}
 }
 
 type factRunner struct {

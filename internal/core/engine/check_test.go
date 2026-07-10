@@ -338,11 +338,11 @@ func (b *checkTrackingBackend) Read(_ context.Context, host ir.HostSpec) (corest
 	return corestate.Empty(host.Name), nil
 }
 
-func (b *checkTrackingBackend) Write(_ context.Context, _ ir.HostSpec, _ corestate.State) error {
+func (b *checkTrackingBackend) Write(_ context.Context, _ ir.HostSpec, _ corestate.State) (corestate.State, error) {
 	b.tracker.mu.Lock()
 	b.tracker.writes++
 	b.tracker.mu.Unlock()
-	return fmt.Errorf("check unexpectedly wrote state")
+	return corestate.State{}, fmt.Errorf("check unexpectedly wrote state")
 }
 
 func (b *checkTrackingBackend) Lock(_ context.Context, host ir.HostSpec, timeout time.Duration) (Lock, error) {
@@ -430,7 +430,7 @@ func (b *checkGateBackend) Read(ctx context.Context, host ir.HostSpec) (corestat
 	return b.inner.Read(ctx, host)
 }
 
-func (b *checkGateBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) error {
+func (b *checkGateBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) (corestate.State, error) {
 	return b.inner.Write(ctx, host, st)
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mofelee/debianform/internal/core/ir"
 	"github.com/mofelee/debianform/internal/core/testassert"
@@ -166,5 +167,56 @@ func TestStateEncodesRuntimeFacts(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"facts"`) || !strings.Contains(string(data), `"architecture": "amd64"`) {
 		t.Fatalf("encoded state missing facts:\n%s", data)
+	}
+}
+
+func TestPrepareWriteAdvancesNormalizedCopy(t *testing.T) {
+	address := `host.server1.files.file["/tmp/example"]`
+	st := Empty("server1")
+	st.Serial = 7
+	st.UpdatedAt = "2026-07-09T12:00:00Z"
+	st.Resources[address] = Resource{Kind: "file", Ownership: "managed", DesiredDigest: "digest"}
+
+	committed, err := PrepareWrite(st, "server1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if committed.Serial != 8 {
+		t.Fatalf("committed serial = %d, want 8", committed.Serial)
+	}
+	if _, err := time.Parse(time.RFC3339, committed.UpdatedAt); err != nil {
+		t.Fatalf("committed updated_at = %q: %v", committed.UpdatedAt, err)
+	}
+	if got := committed.Resources[address].Host; got != "server1" {
+		t.Fatalf("committed resource host = %q, want server1", got)
+	}
+	if st.Serial != 7 || st.UpdatedAt != "2026-07-09T12:00:00Z" || st.Resources[address].Host != "" {
+		t.Fatalf("PrepareWrite mutated input state: %#v", st)
+	}
+}
+
+func TestEncodeIsRevisionPure(t *testing.T) {
+	address := `host.server1.files.file["/tmp/example"]`
+	st := Empty("server1")
+	st.Serial = 7
+	st.UpdatedAt = "2026-07-09T12:00:00Z"
+	st.Resources[address] = Resource{Kind: "file", Ownership: "managed", DesiredDigest: "digest"}
+
+	data, err := Encode(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var encoded State
+	if err := json.Unmarshal(data, &encoded); err != nil {
+		t.Fatal(err)
+	}
+	if encoded.Serial != st.Serial || encoded.UpdatedAt != st.UpdatedAt {
+		t.Fatalf("encoded revision = serial %d updated_at %q, want serial %d updated_at %q", encoded.Serial, encoded.UpdatedAt, st.Serial, st.UpdatedAt)
+	}
+	if got := encoded.Resources[address].Host; got != "server1" {
+		t.Fatalf("encoded resource host = %q, want normalized server1", got)
+	}
+	if st.Resources[address].Host != "" {
+		t.Fatalf("Encode mutated input resource host: %#v", st.Resources[address])
 	}
 }

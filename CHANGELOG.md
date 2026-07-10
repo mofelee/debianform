@@ -6,6 +6,10 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+- Fixed state revision tracking so every successful backend write advances and
+  returns exactly one committed serial, while failed writes leave the visible
+  revision unchanged.
+
 ## v0.3.0
 
 - Added managed `system.timezone` and `system.locale` resources; online plan,

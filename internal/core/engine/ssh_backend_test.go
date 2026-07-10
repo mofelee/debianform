@@ -87,23 +87,105 @@ func TestSSHBackendStateRoundTrip(t *testing.T) {
 		DesiredDigest: "digest",
 		Desired:       map[string]any{"path": "/tmp/example"},
 	}
-	if err := backend.Write(context.Background(), host, state); err != nil {
+	first, err := backend.Write(context.Background(), host, state)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if first.Serial != 1 {
+		t.Fatalf("first committed serial = %d, want 1", first.Serial)
 	}
 	if _, err := os.Stat(host.State.Path + ".tmp"); !os.IsNotExist(err) {
 		t.Fatalf("temporary state file still exists: %v", err)
 	}
 
+	readFirst, err := backend.Read(context.Background(), host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if readFirst.Serial != first.Serial {
+		t.Fatalf("first read serial = %d, want committed %d", readFirst.Serial, first.Serial)
+	}
+
+	second, err := backend.Write(context.Background(), host, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Serial != 2 {
+		t.Fatalf("second committed serial = %d, want 2", second.Serial)
+	}
 	got, err := backend.Read(context.Background(), host)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Serial != 1 {
-		t.Fatalf("serial = %d, want 1", got.Serial)
+	if got.Serial != 2 {
+		t.Fatalf("second read serial = %d, want 2", got.Serial)
 	}
 	if got.Resources[address].Desired["path"] != "/tmp/example" {
 		t.Fatalf("state resources = %#v", got.Resources)
 	}
+}
+
+func TestSSHBackendFailedWriteDoesNotAdvanceRevision(t *testing.T) {
+	host := testBackendHost(t)
+	address := `host.server1.files.file["/tmp/example"]`
+	initial := corestate.Empty(host.Name)
+	initial.Serial = 7
+	initial.Resources[address] = corestate.Resource{
+		Kind:          "file",
+		Ownership:     "managed",
+		DesiredDigest: "digest",
+	}
+	runner := &failOnceLocalBackendRunner{}
+	backend := SSHBackend{Runner: runner, Owner: "test"}
+
+	failed, err := backend.Write(context.Background(), host, initial)
+	if err == nil || !strings.Contains(err.Error(), "injected state write failure") {
+		t.Fatalf("first Write() error = %v, want injected failure", err)
+	}
+	if failed.Serial != 0 {
+		t.Fatalf("failed committed state = %#v, want zero value", failed)
+	}
+	if initial.Serial != 7 || initial.Resources[address].Host != "" {
+		t.Fatalf("failed Write mutated input state: %#v", initial)
+	}
+	if _, err := os.Stat(host.State.Path); !os.IsNotExist(err) {
+		t.Fatalf("state file exists after failed write: %v", err)
+	}
+
+	committed, err := backend.Write(context.Background(), host, initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if committed.Serial != 8 || committed.Resources[address].Host != host.Name {
+		t.Fatalf("retry committed state = %#v, want serial 8 with normalized host", committed)
+	}
+	read, err := backend.Read(context.Background(), host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.Serial != 8 || read.Resources[address].Host != host.Name {
+		t.Fatalf("retry read state = %#v, want serial 8 with normalized host", read)
+	}
+}
+
+type failOnceLocalBackendRunner struct {
+	failed bool
+}
+
+func (r *failOnceLocalBackendRunner) Run(ctx context.Context, host, script string) (Result, error) {
+	if !r.failed {
+		r.failed = true
+		return Result{}, errors.New("injected state write failure")
+	}
+	return localShellRunner{}.Run(ctx, host, script)
+}
+
+func (r *failOnceLocalBackendRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (Result, error) {
+	return localShellRunner{}.RunInput(ctx, host, remoteCommand, input)
+}
+
+func (r *failOnceLocalBackendRunner) RunCommand(ctx context.Context, host, remoteCommand string) (Result, error) {
+	return localShellRunner{}.RunCommand(ctx, host, remoteCommand)
 }
 
 func TestSSHBackendReadRejectsIncompatibleOrForeignStateWithoutRewriting(t *testing.T) {
@@ -193,7 +275,7 @@ func TestSSHBackendWriteRejectsIncompatibleOrForeignState(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			runner := &countingBackendRunner{}
 			backend := SSHBackend{Runner: runner, Owner: "test"}
-			if err := backend.Write(context.Background(), host, tt.state); err == nil {
+			if _, err := backend.Write(context.Background(), host, tt.state); err == nil {
 				t.Fatal("Write() succeeded, want state validation error")
 			}
 			if runner.calls != 0 {

@@ -157,7 +157,7 @@ func TestMemoryBackendWriteRejectsIncompatibleOrForeignState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			backend := NewMemoryBackend()
-			if err := backend.Write(context.Background(), host, tt.state); err == nil {
+			if _, err := backend.Write(context.Background(), host, tt.state); err == nil {
 				t.Fatal("Write() succeeded, want state validation error")
 			}
 			st, err := backend.Read(context.Background(), host)
@@ -195,11 +195,11 @@ func (b *stateValidationBackend) Read(context.Context, ir.HostSpec) (corestate.S
 	return cloneState(b.states[index]), nil
 }
 
-func (b *stateValidationBackend) Write(context.Context, ir.HostSpec, corestate.State) error {
+func (b *stateValidationBackend) Write(context.Context, ir.HostSpec, corestate.State) (corestate.State, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.writes++
-	return nil
+	return corestate.State{}, nil
 }
 
 func (b *stateValidationBackend) writeCount() int {

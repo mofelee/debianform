@@ -33,7 +33,7 @@ state 顶层字段：
 
 - `version`: 当前为 `2`。
 - `host`: host label。
-- `serial`: 每次成功写入时递增。
+- `serial`: 每次成功提交 state write 时恰好递增 1。
 - `updated_at`: UTC RFC3339。
 - `facts`: 运行时探测到的主机事实。DSL 中目标平台 facts 写作 `platform.architecture`
   和 `platform.codename`；state schema 仍以 `facts.system.*` 保存这些值。
@@ -106,6 +106,13 @@ version 2 协议的旧客户端把仍在续租的 lease 当成 stale lock。
 
 state 使用临时文件写入并通过同目录 `mv` 原子替换。apply 每成功执行一个资源节点后
 立即写回 state，因此中途失败时 state 只包含已经成功的节点。
+
+写入前，`state.PrepareWrite` 会在严格归一化后的副本上推进 `serial` 并更新 `updated_at`；
+`state.Encode` 只校验和序列化，不改变 revision。backend 只有在持久化成功后才返回这个
+committed state，engine 随后用它替换内存快照。写入失败时，候选 revision 不会进入调用方
+可见 state，使用原快照重试仍只增加 1。一次 operation 返回多条 output 时，这些 output 在
+同一次 state write 中提交，因此合计只推进一次 `serial`。host facts 的持久化也是独立的
+成功 state write，会单独推进一次 `serial`。
 
 state schema 兼容性、版本检测、自动迁移、备份和回滚边界见
 [compatibility policy](compatibility-policy.zh.md)。

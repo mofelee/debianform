@@ -782,7 +782,7 @@ func TestApplyDestroysOrphanStateResource(t *testing.T) {
 	backend := NewMemoryBackend()
 	provider := NewMemoryProvider()
 	orphanAddress := `host.bbr1.packages.install["curl"]`
-	if err := backend.Write(context.Background(), program.Hosts[0], corestate.State{
+	if _, err := backend.Write(context.Background(), program.Hosts[0], corestate.State{
 		Version: corestate.Version,
 		Host:    "bbr1",
 		Resources: map[string]corestate.Resource{
@@ -843,7 +843,7 @@ func TestApplyForgetsSharedDirectoryOrphanWithoutDestroy(t *testing.T) {
 	}
 	backend := NewMemoryBackend()
 	provider := NewMemoryProvider()
-	if err := backend.Write(context.Background(), program.Hosts[0], corestate.State{
+	if _, err := backend.Write(context.Background(), program.Hosts[0], corestate.State{
 		Version: corestate.Version,
 		Host:    "server1",
 		Resources: map[string]corestate.Resource{
@@ -900,7 +900,7 @@ func TestApplyForgetsAdoptedOrphanWithoutDestroy(t *testing.T) {
 	backend := NewMemoryBackend()
 	provider := NewMemoryProvider()
 	orphanAddress := `host.bbr1.packages.install["curl"]`
-	if err := backend.Write(context.Background(), program.Hosts[0], corestate.State{
+	if _, err := backend.Write(context.Background(), program.Hosts[0], corestate.State{
 		Version: corestate.Version,
 		Host:    "bbr1",
 		Resources: map[string]corestate.Resource{
@@ -940,7 +940,7 @@ func TestApplyForgetsAPTSourceFileOrphanWhenDestroyKeeps(t *testing.T) {
 	backend := NewMemoryBackend()
 	provider := NewMemoryProvider()
 	orphanAddress := `host.bbr1.apt.source_file["main"]`
-	if err := backend.Write(context.Background(), program.Hosts[0], corestate.State{
+	if _, err := backend.Write(context.Background(), program.Hosts[0], corestate.State{
 		Version: corestate.Version,
 		Host:    "bbr1",
 		Resources: map[string]corestate.Resource{
@@ -2309,7 +2309,7 @@ func (b *concurrencyBackend) Read(ctx context.Context, host ir.HostSpec) (corest
 	return b.Backend.Read(ctx, host)
 }
 
-func (b *concurrencyBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) error {
+func (b *concurrencyBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) (corestate.State, error) {
 	return b.Backend.Write(ctx, host, st)
 }
 

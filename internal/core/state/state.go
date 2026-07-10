@@ -85,14 +85,22 @@ func Decode(data []byte, host string) (State, error) {
 	return Normalize(st, host)
 }
 
+func PrepareWrite(st State, host string) (State, error) {
+	st, err := Normalize(st, host)
+	if err != nil {
+		return State{}, err
+	}
+	st.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	st.Serial++
+	return st, nil
+}
+
 func Encode(st State) ([]byte, error) {
 	var err error
 	st, err = Normalize(st, st.Host)
 	if err != nil {
 		return nil, err
 	}
-	st.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	st.Serial++
 	return json.MarshalIndent(st, "", "  ")
 }
 

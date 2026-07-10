@@ -33,16 +33,15 @@ func (b *MemoryBackend) Read(ctx context.Context, host ir.HostSpec) (corestate.S
 	return corestate.Empty(host.Name), nil
 }
 
-func (b *MemoryBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) error {
+func (b *MemoryBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) (corestate.State, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	var err error
-	st, err = corestate.Normalize(st, host.Name)
+	committed, err := corestate.PrepareWrite(st, host.Name)
 	if err != nil {
-		return err
+		return corestate.State{}, err
 	}
-	b.states[host.Name] = cloneState(st)
-	return nil
+	b.states[host.Name] = cloneState(committed)
+	return cloneState(committed), nil
 }
 
 func (b *MemoryBackend) Lock(ctx context.Context, host ir.HostSpec, timeout time.Duration) (Lock, error) {

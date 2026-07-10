@@ -67,18 +67,17 @@ fi
 	return corestate.Decode([]byte(data), host.Name)
 }
 
-func (b SSHBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) error {
+func (b SSHBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) (corestate.State, error) {
 	if b.Runner == nil {
-		return fmt.Errorf("ssh backend runner is required")
+		return corestate.State{}, fmt.Errorf("ssh backend runner is required")
 	}
-	var err error
-	st, err = corestate.Normalize(st, host.Name)
+	committed, err := corestate.PrepareWrite(st, host.Name)
 	if err != nil {
-		return err
+		return corestate.State{}, err
 	}
-	data, err := corestate.Encode(st)
+	data, err := corestate.Encode(committed)
 	if err != nil {
-		return err
+		return corestate.State{}, err
 	}
 	payload := base64.StdEncoding.EncodeToString(data)
 	tmp := host.State.Path + ".tmp"
@@ -95,7 +94,10 @@ mv %s %s
 		Summary: host.State.Path,
 	})
 	_, err = b.Runner.Run(callCtx, host.Name, script)
-	return err
+	if err != nil {
+		return corestate.State{}, err
+	}
+	return committed, nil
 }
 
 func (b SSHBackend) Lock(ctx context.Context, host ir.HostSpec, timeout time.Duration) (Lock, error) {

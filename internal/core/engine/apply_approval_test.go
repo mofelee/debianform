@@ -37,7 +37,7 @@ func TestApplyBeforeExecuteRejectsNewDestroyWithoutWriting(t *testing.T) {
 	}
 
 	orphanAddress := `host.server1.packages.install["curl"]`
-	if err := backend.Write(context.Background(), host, corestate.State{
+	if _, err := backend.Write(context.Background(), host, corestate.State{
 		Version: corestate.Version,
 		Host:    host.Name,
 		Resources: map[string]corestate.Resource{
@@ -161,7 +161,7 @@ func newApprovalTrackingBackend() *approvalTrackingBackend {
 	return &approvalTrackingBackend{MemoryBackend: NewMemoryBackend()}
 }
 
-func (b *approvalTrackingBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) error {
+func (b *approvalTrackingBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) (corestate.State, error) {
 	b.mu.Lock()
 	b.writes++
 	b.mu.Unlock()
