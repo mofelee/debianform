@@ -36,7 +36,11 @@ func (b *MemoryBackend) Read(ctx context.Context, host ir.HostSpec) (corestate.S
 func (b *MemoryBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.State) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	corestate.Normalize(&st, host.Name)
+	var err error
+	st, err = corestate.Normalize(st, host.Name)
+	if err != nil {
+		return err
+	}
 	b.states[host.Name] = cloneState(st)
 	return nil
 }

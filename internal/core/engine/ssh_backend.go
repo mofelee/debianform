@@ -71,6 +71,11 @@ func (b SSHBackend) Write(ctx context.Context, host ir.HostSpec, st corestate.St
 	if b.Runner == nil {
 		return fmt.Errorf("ssh backend runner is required")
 	}
+	var err error
+	st, err = corestate.Normalize(st, host.Name)
+	if err != nil {
+		return err
+	}
 	data, err := corestate.Encode(st)
 	if err != nil {
 		return err

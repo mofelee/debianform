@@ -44,16 +44,34 @@ func Empty(host string) State {
 	}
 }
 
-func Normalize(st *State, host string) {
-	if st.Version == 0 {
-		st.Version = Version
+func Normalize(st State, host string) (State, error) {
+	if host == "" {
+		return State{}, fmt.Errorf("cannot validate state without an expected host")
+	}
+	if st.Version > Version {
+		return State{}, fmt.Errorf("state for host %q uses newer version %d; this DebianForm supports version %d, upgrade DebianForm before reading this state", host, st.Version, Version)
+	}
+	if st.Version != Version {
+		return State{}, fmt.Errorf("state for host %q uses unsupported version %d; no automatic migration to version %d is available", host, st.Version, Version)
 	}
 	if st.Host == "" {
-		st.Host = host
+		return State{}, fmt.Errorf("state host is empty; expected %q", host)
 	}
-	if st.Resources == nil {
-		st.Resources = map[string]Resource{}
+	if st.Host != host {
+		return State{}, fmt.Errorf("state host %q does not match requested host %q", st.Host, host)
 	}
+
+	normalized := st
+	normalized.Resources = make(map[string]Resource, len(st.Resources))
+	for address, resource := range st.Resources {
+		if resource.Host == "" {
+			resource.Host = host
+		} else if resource.Host != host {
+			return State{}, fmt.Errorf("state resource %q belongs to host %q, expected %q", address, resource.Host, host)
+		}
+		normalized.Resources[address] = resource
+	}
+	return normalized, nil
 }
 
 func Decode(data []byte, host string) (State, error) {
@@ -64,12 +82,15 @@ func Decode(data []byte, host string) (State, error) {
 	if err := json.Unmarshal(data, &st); err != nil {
 		return State{}, err
 	}
-	Normalize(&st, host)
-	return st, nil
+	return Normalize(st, host)
 }
 
 func Encode(st State) ([]byte, error) {
-	Normalize(&st, st.Host)
+	var err error
+	st, err = Normalize(st, st.Host)
+	if err != nil {
+		return nil, err
+	}
 	st.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	st.Serial++
 	return json.MarshalIndent(st, "", "  ")

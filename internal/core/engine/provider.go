@@ -158,7 +158,10 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 		Summary: step.Summary,
 	})
 	desired := step.Prior.Desired
-	host := step.Prior.Host
+	host := step.Host
+	if host == "" {
+		return fmt.Errorf("%s is missing its target host", step.Address)
+	}
 	switch step.Prior.Kind {
 	case "system_hostname", "system_timezone", "system_locale":
 		return nil
@@ -949,10 +952,10 @@ func (p NativeProvider) destroyAPTSourceFile(ctx context.Context, step Step) err
 	if aptSourceOnDestroy(step.Prior.Desired) != "restore" {
 		return nil
 	}
-	if err := p.restoreAPTSourceFile(ctx, step.Prior.Host, stringMapValue(step.Prior.Desired, "path"), step.Prior); err != nil {
+	if err := p.restoreAPTSourceFile(ctx, step.Host, stringMapValue(step.Prior.Desired, "path"), step.Prior); err != nil {
 		return err
 	}
-	_, err := p.Runner.Run(ctx, step.Prior.Host, "set -eu\nexport DEBIAN_FRONTEND=noninteractive\napt-get update\n")
+	_, err := p.Runner.Run(ctx, step.Host, "set -eu\nexport DEBIAN_FRONTEND=noninteractive\napt-get update\n")
 	return err
 }
 

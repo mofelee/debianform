@@ -344,7 +344,11 @@ func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts 
 			task.Done(err)
 			return err
 		}
-		corestate.Normalize(&st, host.Name)
+		st, err = corestate.Normalize(st, host.Name)
+		if err != nil {
+			task.Done(err)
+			return err
+		}
 		facts := host.Facts
 		st.Facts = &facts
 		if err := e.Backend.Write(ctx, host, st); err != nil {
@@ -387,8 +391,12 @@ func (e Engine) readStates(ctx context.Context, hosts []ir.HostSpec, parallel in
 			task.Done(err)
 			return err
 		}
+		st, err = corestate.Normalize(st, host.Name)
+		if err != nil {
+			task.Done(err)
+			return err
+		}
 		task.Done(nil)
-		corestate.Normalize(&st, host.Name)
 		mu.Lock()
 		states[host.Name] = st
 		mu.Unlock()

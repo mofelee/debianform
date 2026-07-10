@@ -23,6 +23,7 @@ import (
 type recordingRunner struct {
 	outputs []Result
 	errors  []error
+	hosts   []string
 	scripts []string
 	inputs  []string
 }
@@ -59,6 +60,7 @@ func (r *countingLocalRunner) RunCommand(ctx context.Context, host, remoteComman
 }
 
 func (r *recordingRunner) Run(ctx context.Context, host, script string) (Result, error) {
+	r.hosts = append(r.hosts, host)
 	r.scripts = append(r.scripts, script)
 	return r.next()
 }
@@ -68,6 +70,7 @@ func (r *recordingRunner) RunInput(ctx context.Context, host, remoteCommand stri
 	if err != nil {
 		return Result{}, err
 	}
+	r.hosts = append(r.hosts, host)
 	r.scripts = append(r.scripts, remoteCommand)
 	r.inputs = append(r.inputs, string(data))
 	return r.next()
@@ -865,7 +868,7 @@ func TestNativeProviderAPTSourceFilePreservesOriginalAndRestores(t *testing.T) {
 	}
 
 	prior := &corestate.Resource{
-		Host: "server1",
+		Host: "foreign-server",
 		Kind: "apt_source_file",
 		Desired: map[string]any{
 			"path":       "/etc/apt/sources.list",
@@ -879,8 +882,14 @@ func TestNativeProviderAPTSourceFilePreservesOriginalAndRestores(t *testing.T) {
 			"original_mode":    "0644",
 		},
 	}
-	if err := provider.Destroy(context.Background(), Step{Address: node.Address, Prior: prior}); err != nil {
+	destroyCallStart := len(runner.hosts)
+	if err := provider.Destroy(context.Background(), Step{Address: node.Address, Host: node.Host, Prior: prior}); err != nil {
 		t.Fatal(err)
+	}
+	for _, host := range runner.hosts[destroyCallStart:] {
+		if host != node.Host {
+			t.Fatalf("destroy host = %q, want authoritative step host %q", host, node.Host)
+		}
 	}
 	if len(runner.scripts) < 2 {
 		t.Fatalf("restore should write original content and refresh apt cache, scripts = %#v", runner.scripts)
@@ -947,6 +956,28 @@ func TestNativeProviderSensitiveAPTSourceFileDoesNotPreserveOriginal(t *testing.
 	}
 	if len(runner.inputs) != 1 || runner.inputs[0] != content {
 		t.Fatalf("apt source provider input = %#v, want sensitive payload", runner.inputs)
+	}
+}
+
+func TestNativeProviderDestroyUsesAuthoritativeStepHost(t *testing.T) {
+	runner := &recordingRunner{}
+	provider := NewNativeProvider(runner)
+	prior := &corestate.Resource{
+		Host:    "foreign-server",
+		Kind:    "file",
+		Desired: map[string]any{"path": "/tmp/example"},
+	}
+
+	err := provider.Destroy(context.Background(), Step{
+		Address: `host.server1.files.file["/tmp/example"]`,
+		Host:    "server1",
+		Prior:   prior,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.hosts) != 1 || runner.hosts[0] != "server1" {
+		t.Fatalf("destroy hosts = %#v, want authoritative step host server1", runner.hosts)
 	}
 }
 
@@ -2326,7 +2357,7 @@ func TestNativeProviderDockerComposeProjectDestroyRunsDown(t *testing.T) {
 		Desired: cloneMap(node.Desired),
 	}
 
-	if err := provider.Destroy(context.Background(), Step{Address: node.Address, Prior: prior}); err != nil {
+	if err := provider.Destroy(context.Background(), Step{Address: node.Address, Host: node.Host, Prior: prior}); err != nil {
 		t.Fatal(err)
 	}
 	if len(runner.scripts) != 1 || !strings.Contains(runner.scripts[0], "'docker' 'compose' '-p' 'app' '-f' '/opt/app/compose.yaml' 'down'") {
@@ -2413,7 +2444,7 @@ func TestNativeProviderUserGroupMembershipDestroyRemovesSupplementaryOnly(t *tes
 		Desired: cloneMap(node.Desired),
 	}
 
-	if err := provider.Destroy(context.Background(), Step{Address: node.Address, Prior: prior}); err != nil {
+	if err := provider.Destroy(context.Background(), Step{Address: node.Address, Host: node.Host, Prior: prior}); err != nil {
 		t.Fatal(err)
 	}
 	if len(runner.scripts) != 1 {

@@ -59,8 +59,8 @@ func TestSanitizeObservedUsesSensitiveRedaction(t *testing.T) {
 	}
 }
 
-func TestStateDecodeDefaultsToVersionTwo(t *testing.T) {
-	st, err := Decode([]byte(`{"resources":{}}`), "server1")
+func TestStateDecodeEmptyReturnsCurrentState(t *testing.T) {
+	st, err := Decode(nil, "server1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,6 +72,85 @@ func TestStateDecodeDefaultsToVersionTwo(t *testing.T) {
 	}
 	if st.Resources == nil {
 		t.Fatalf("resources map was not initialized")
+	}
+}
+
+func TestStateDecodeRejectsIncompatibleOrForeignState(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    string
+		wantErr string
+	}{
+		{
+			name:    "missing version",
+			data:    `{"host":"server1","resources":{}}`,
+			wantErr: "unsupported version 0",
+		},
+		{
+			name:    "old version",
+			data:    `{"version":1,"host":"server1","resources":{}}`,
+			wantErr: "unsupported version 1",
+		},
+		{
+			name:    "newer version",
+			data:    `{"version":3,"host":"server1","resources":{}}`,
+			wantErr: "newer version 3",
+		},
+		{
+			name:    "missing host",
+			data:    `{"version":2,"resources":{}}`,
+			wantErr: "state host is empty",
+		},
+		{
+			name:    "foreign host",
+			data:    `{"version":2,"host":"server2","resources":{}}`,
+			wantErr: `state host "server2" does not match requested host "server1"`,
+		},
+		{
+			name:    "foreign resource host",
+			data:    `{"version":2,"host":"server1","resources":{"host.server1.files.file[\"/tmp/example\"]":{"host":"server2","kind":"file","ownership":"managed","desired_digest":"digest"}}}`,
+			wantErr: `belongs to host "server2", expected "server1"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Decode([]byte(tt.data), "server1")
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Decode() error = %v, want containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestStateDecodeNormalizesCompatibleResourceHost(t *testing.T) {
+	address := `host.server1.files.file["/tmp/example"]`
+	st, err := Decode([]byte(`{"version":2,"host":"server1","resources":{"host.server1.files.file[\"/tmp/example\"]":{"kind":"file","ownership":"managed","desired_digest":"digest"}}}`), "server1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Resources == nil {
+		t.Fatal("resources map was not initialized")
+	}
+	if got := st.Resources[address].Host; got != "server1" {
+		t.Fatalf("resource host = %q, want server1", got)
+	}
+}
+
+func TestStateNormalizeDoesNotMutateInputResourceHost(t *testing.T) {
+	address := `host.server1.files.file["/tmp/example"]`
+	st := Empty("server1")
+	st.Resources[address] = Resource{Kind: "file", Ownership: "managed", DesiredDigest: "digest"}
+
+	normalized, err := Normalize(st, "server1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := normalized.Resources[address].Host; got != "server1" {
+		t.Fatalf("normalized resource host = %q, want server1", got)
+	}
+	if got := st.Resources[address].Host; got != "" {
+		t.Fatalf("input resource host = %q, want unchanged empty host", got)
 	}
 }
 

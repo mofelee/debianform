@@ -106,6 +106,125 @@ func TestSSHBackendStateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSSHBackendReadRejectsIncompatibleOrForeignStateWithoutRewriting(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    string
+		wantErr string
+	}{
+		{
+			name:    "missing version",
+			data:    `{"host":"server1","resources":{}}`,
+			wantErr: "unsupported version 0",
+		},
+		{
+			name:    "old version",
+			data:    `{"version":1,"host":"server1","resources":{}}`,
+			wantErr: "unsupported version 1",
+		},
+		{
+			name:    "newer version",
+			data:    `{"version":3,"host":"server1","resources":{}}`,
+			wantErr: "newer version 3",
+		},
+		{
+			name:    "foreign host",
+			data:    `{"version":2,"host":"server2","resources":{}}`,
+			wantErr: `state host "server2" does not match requested host "server1"`,
+		},
+		{
+			name:    "foreign resource host",
+			data:    `{"version":2,"host":"server1","resources":{"host.server1.files.file[\"/tmp/example\"]":{"host":"server2","kind":"file","ownership":"managed","desired_digest":"digest"}}}`,
+			wantErr: `belongs to host "server2", expected "server1"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host := testBackendHost(t)
+			if err := os.MkdirAll(filepath.Dir(host.State.Path), 0755); err != nil {
+				t.Fatal(err)
+			}
+			original := []byte(tt.data)
+			if err := os.WriteFile(host.State.Path, original, 0600); err != nil {
+				t.Fatal(err)
+			}
+			backend := SSHBackend{Runner: localShellRunner{}, Owner: "test"}
+
+			_, err := backend.Read(context.Background(), host)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Read() error = %v, want containing %q", err, tt.wantErr)
+			}
+			got, err := os.ReadFile(host.State.Path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, original) {
+				t.Fatalf("state file changed after rejected read:\n got: %s\nwant: %s", got, original)
+			}
+		})
+	}
+}
+
+func TestSSHBackendWriteRejectsIncompatibleOrForeignState(t *testing.T) {
+	host := testBackendHost(t)
+	address := `host.server1.files.file["/tmp/example"]`
+	tests := []struct {
+		name  string
+		state corestate.State
+	}{
+		{
+			name:  "newer version",
+			state: corestate.State{Version: corestate.Version + 1, Host: host.Name, Resources: map[string]corestate.Resource{}},
+		},
+		{
+			name:  "foreign host",
+			state: corestate.State{Version: corestate.Version, Host: "server2", Resources: map[string]corestate.Resource{}},
+		},
+		{
+			name: "foreign resource host",
+			state: corestate.State{Version: corestate.Version, Host: host.Name, Resources: map[string]corestate.Resource{
+				address: {Host: "server2", Kind: "file", Ownership: "managed", DesiredDigest: "digest"},
+			}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runner := &countingBackendRunner{}
+			backend := SSHBackend{Runner: runner, Owner: "test"}
+			if err := backend.Write(context.Background(), host, tt.state); err == nil {
+				t.Fatal("Write() succeeded, want state validation error")
+			}
+			if runner.calls != 0 {
+				t.Fatalf("runner calls = %d, want 0", runner.calls)
+			}
+			if _, err := os.Stat(host.State.Path); !os.IsNotExist(err) {
+				t.Fatalf("state file exists after rejected write: %v", err)
+			}
+		})
+	}
+}
+
+type countingBackendRunner struct {
+	calls int
+}
+
+func (r *countingBackendRunner) Run(context.Context, string, string) (Result, error) {
+	r.calls++
+	return Result{}, nil
+}
+
+func (r *countingBackendRunner) RunInput(context.Context, string, string, io.Reader) (Result, error) {
+	r.calls++
+	return Result{}, nil
+}
+
+func (r *countingBackendRunner) RunCommand(context.Context, string, string) (Result, error) {
+	r.calls++
+	return Result{}, nil
+}
+
 func TestSSHBackendLockRejectsTokenMismatch(t *testing.T) {
 	host := testBackendHost(t)
 	backend := SSHBackend{Runner: localShellRunner{}, Owner: "test"}
