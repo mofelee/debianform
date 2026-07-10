@@ -347,6 +347,7 @@ func TestApplyStateDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 		{name: "sensitive file content", fixture: "../../../examples/files-plan-preview.dbf.hcl", host: "preview1"},
 		{name: "sensitive component input", fixture: "../../../examples/component-inputs.dbf.hcl", host: "input1"},
 		{name: "sensitive service environment", fixture: "../testdata/fixtures/sensitive-service-environment.dbf.hcl", host: "server1"},
+		{name: "sensitive apt and nftables content", fixture: "../testdata/fixtures/sensitive-apt-nftables-content.dbf.hcl", host: "server1"},
 		{name: "ephemeral variable content", fixture: "../testdata/fixtures/ephemeral-variable-content.dbf.hcl", host: "ephemeral1"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -383,6 +384,46 @@ func TestApplyStateDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 			testassert.NoSecretLeak(t, tt.name+" apply state", string(data))
 		})
 	}
+}
+
+func TestApplySensitiveAPTAndNftablesStateStoresOnlySummaries(t *testing.T) {
+	fixture := "../testdata/fixtures/sensitive-apt-nftables-content.dbf.hcl"
+	program, resourceGraph := fixtureProgramAndGraph(t, fixture)
+	backend := NewMemoryBackend()
+	engine := Engine{Backend: backend, Provider: NewMemoryProvider()}
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{Host: "server1"}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, address := range []string{
+		`host.server1.apt.source_file["private"]`,
+		`host.server1.apt.signing_key["private"]`,
+		`host.server1.components.private_apt.apt.source_file["component-private"]`,
+		`host.server1.components.private_apt.apt.signing_key["component-private"]`,
+		`host.server1.nftables.file["main"]`,
+		`host.server1.nftables.file["private"]`,
+	} {
+		resource, ok := st.Resources[address]
+		if !ok {
+			t.Fatalf("state missing sensitive resource %s", address)
+		}
+		if resource.Desired["sensitive"] != true || resource.Desired["content_sha256"] == "" {
+			t.Fatalf("state resource %s missing sensitive summary: %#v", address, resource.Desired)
+		}
+		for _, key := range []string{"content", "source_path", "summary"} {
+			if _, ok := resource.Desired[key]; ok {
+				t.Fatalf("state resource %s contains %s: %#v", address, key, resource.Desired)
+			}
+		}
+	}
+	data, err := corestate.Encode(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive apt and nftables structured state", string(data))
 }
 
 func TestApplyWriteOnlyFilePersistsVersionAndPassesPayload(t *testing.T) {

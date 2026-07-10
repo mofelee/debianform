@@ -326,6 +326,7 @@ func TestCompileHostSpecJSONDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 		{name: "sensitive component input", fixture: "../../../examples/component-inputs.dbf.hcl"},
 		{name: "sensitive service environment", fixture: "../testdata/fixtures/sensitive-service-environment.dbf.hcl"},
 		{name: "sensitive variable content", fixture: "../testdata/fixtures/sensitive-variable-files.dbf.hcl"},
+		{name: "sensitive apt and nftables content", fixture: "../testdata/fixtures/sensitive-apt-nftables-content.dbf.hcl"},
 		{name: "ephemeral variable content", fixture: "../testdata/fixtures/ephemeral-variable-content.dbf.hcl"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -343,6 +344,69 @@ func TestCompileHostSpecJSONDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 			}
 			testassert.NoSecretLeak(t, tt.name+" HostSpec JSON", string(data))
 		})
+	}
+}
+
+func TestCompileSensitiveAPTAndNftablesContentPropagatesMarks(t *testing.T) {
+	cfg, err := parser.ParseFiles([]string{"../testdata/fixtures/sensitive-apt-nftables-content.dbf.hcl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := CompileWithOptions(cfg, CompileOptions{HostFacts: testHostFacts()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := program.Hosts[0]
+
+	sourceFile := host.APT.SourceFiles["private"]
+	if !sourceFile.Sensitive || sourceFile.Content != testassert.SensitiveVariableDefault {
+		t.Fatalf("apt source file sensitive/content = %v/%q", sourceFile.Sensitive, sourceFile.Content)
+	}
+	signingKey := host.APT.Repositories["private"].SigningKey
+	if signingKey == nil || !signingKey.Sensitive || signingKey.Content != testassert.SensitiveVariableDefault {
+		t.Fatalf("apt signing key = %#v", signingKey)
+	}
+	nftablesFile := host.Nftables.Files["private"]
+	if !nftablesFile.Sensitive || nftablesFile.Content != testassert.SensitiveVariableDefault {
+		t.Fatalf("nftables file sensitive/content = %v/%q", nftablesFile.Sensitive, nftablesFile.Content)
+	}
+	if host.Nftables.Main == nil || !host.Nftables.Main.Sensitive || host.Nftables.Main.Content != testassert.SensitiveVariableDefault {
+		t.Fatalf("nftables main = %#v", host.Nftables.Main)
+	}
+	if len(host.Components) != 1 {
+		t.Fatalf("components = %#v", host.Components)
+	}
+	component := host.Components[0]
+	componentSource := component.APT.SourceFiles["component-private"]
+	componentKey := component.APT.Repositories["component-private"].SigningKey
+	if !componentSource.Sensitive || componentKey == nil || !componentKey.Sensitive {
+		t.Fatalf("component apt sensitive marks = source %#v key %#v", componentSource, componentKey)
+	}
+}
+
+func TestCompileRejectsSensitiveAPTSourceRestore(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+variable "managed_content" {
+  type      = string
+  sensitive = true
+  default   = "not-a-real-variable-secret"
+}
+
+host "server1" {
+  apt {
+    source_file "private" {
+      path       = "/etc/apt/sources.list.d/private.list"
+      content    = var.managed_content
+      on_destroy = "restore"
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "restore is not supported with sensitive content") {
+		t.Fatalf("error = %v, want sensitive restore rejection", err)
+	}
+	if strings.Contains(err.Error(), testassert.SensitiveVariableDefault) {
+		t.Fatalf("sensitive content leaked in error: %v", err)
 	}
 }
 
@@ -3034,6 +3098,89 @@ host "server1" {
     file "runtime" {
       path    = var.runtime_token
       content = "flush ruleset\n"
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "apt source file content",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  apt {
+    source_file "private" {
+      path    = "/etc/apt/sources.list.d/private.list"
+      content = var.runtime_token
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "apt repository signing key content",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  apt {
+    repository "private" {
+      uris       = ["https://repo.example/debian"]
+      suites     = ["trixie"]
+      components = ["main"]
+
+      signing_key {
+        content = var.runtime_token
+      }
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "nftables main content",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  nftables {
+    main {
+      content = var.runtime_token
+    }
+  }
+}
+`,
+			want: "ephemeral value is not allowed in this field",
+		},
+		{
+			name: "nftables content",
+			hcl: `
+variable "runtime_token" {
+  type      = string
+  ephemeral = true
+  default   = "not-a-real-ephemeral-token"
+}
+
+host "server1" {
+  nftables {
+    file "private" {
+      content = var.runtime_token
     }
   }
 }

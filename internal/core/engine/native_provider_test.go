@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/core/graph"
 	corestate "github.com/mofelee/debianform/internal/core/state"
+	"github.com/mofelee/debianform/internal/core/testassert"
 )
 
 type recordingRunner struct {
@@ -604,6 +606,53 @@ func TestNativeProviderAPTSigningKeyURL(t *testing.T) {
 	}
 }
 
+func TestNativeProviderSensitiveAPTSigningKeyContentUsesProviderPayload(t *testing.T) {
+	content := testassert.SensitiveVariableDefault
+	node := graph.Node{
+		Address: "host.server1.apt.signing_key[\"private\"]",
+		Host:    "server1",
+		Kind:    "apt_signing_key",
+		Desired: map[string]any{
+			"path":           "/etc/apt/keyrings/private.asc",
+			"content_sha256": sha256Hex([]byte(content)),
+			"content_bytes":  len(content),
+			"owner":          "root",
+			"group":          "root",
+			"mode":           "0644",
+			"ensure":         "present",
+			"sensitive":      true,
+		},
+	}
+	node.ProviderPayload = cloneMap(node.Desired)
+	node.ProviderPayload["content"] = content
+	runner := &recordingRunner{outputs: []Result{{Stdout: "missing\n"}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionCreate {
+		t.Fatalf("missing sensitive apt signing key action = %q, want create", got.Action)
+	}
+	observed, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.inputs) != 1 || runner.inputs[0] != content {
+		t.Fatalf("apt signing key provider input = %#v, want sensitive payload", runner.inputs)
+	}
+	data, err := json.Marshal(observed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := strings.Join(runner.scripts, "\n") + string(data)
+	testassert.NoSecretLeak(t, "sensitive apt signing key provider output", output)
+	if strings.Contains(output, base64.StdEncoding.EncodeToString([]byte(content))) {
+		t.Fatalf("sensitive apt signing key provider output contains encoded payload: %s", output)
+	}
+}
+
 func TestNativeProviderAPTSigningKeyURLWithoutSHA(t *testing.T) {
 	node := graph.Node{
 		Address: `host.docker1.docker.apt.signing_key["docker-official"]`,
@@ -845,6 +894,225 @@ func TestNativeProviderAPTSourceFilePreservesOriginalAndRestores(t *testing.T) {
 	}
 	if !strings.Contains(runner.scripts[len(runner.scripts)-1], "apt-get update") {
 		t.Fatalf("destroy restore should refresh apt cache:\n%s", runner.scripts[len(runner.scripts)-1])
+	}
+}
+
+func TestNativeProviderSensitiveAPTSourceFileDoesNotPreserveOriginal(t *testing.T) {
+	content := testassert.SensitiveVariableDefault
+	current := "file\nroot\nroot\n644\n" + sha256Hex([]byte(content)) + "\n" + base64.StdEncoding.EncodeToString([]byte(content)) + "\n"
+	node := graph.Node{
+		Address: "host.server1.apt.source_file[\"private\"]",
+		Host:    "server1",
+		Kind:    "apt_source_file",
+		Desired: map[string]any{
+			"label":          "private",
+			"path":           "/etc/apt/sources.list.d/private.list",
+			"content_sha256": sha256Hex([]byte(content)),
+			"content_bytes":  len(content),
+			"owner":          "root",
+			"group":          "root",
+			"mode":           "0644",
+			"ensure":         "present",
+			"on_destroy":     "keep",
+			"sensitive":      true,
+		},
+	}
+	node.ProviderPayload = cloneMap(node.Desired)
+	node.ProviderPayload["content"] = content
+	runner := &recordingRunner{outputs: []Result{{Stdout: current}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionAdopt {
+		t.Fatalf("matching sensitive apt source action = %q, want adopt", got.Action)
+	}
+	if _, ok := got.Observed["original_content"]; ok {
+		t.Fatalf("sensitive plan observed contains original content: %#v", got.Observed)
+	}
+	data, err := json.Marshal(got.Observed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive apt source online plan", string(data))
+
+	observed, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionUpdate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := observed["original_content"]; ok {
+		t.Fatalf("sensitive apply observed contains original content: %#v", observed)
+	}
+	if len(runner.inputs) != 1 || runner.inputs[0] != content {
+		t.Fatalf("apt source provider input = %#v, want sensitive payload", runner.inputs)
+	}
+}
+
+func TestNativeProviderSensitiveAPTSourceFileRefreshesLeakedLegacyState(t *testing.T) {
+	content := testassert.SensitiveVariableDefault
+	current := "file\nroot\nroot\n644\n" + sha256Hex([]byte(content)) + "\n" + base64.StdEncoding.EncodeToString([]byte(content)) + "\n"
+	node := graph.Node{
+		Address: "host.server1.apt.source_file[\"private\"]",
+		Host:    "server1",
+		Kind:    "apt_source_file",
+		Desired: map[string]any{
+			"path":           "/etc/apt/sources.list.d/private.list",
+			"content_sha256": sha256Hex([]byte(content)),
+			"content_bytes":  len(content),
+			"owner":          "root",
+			"group":          "root",
+			"mode":           "0644",
+			"ensure":         "present",
+			"on_destroy":     "keep",
+			"sensitive":      true,
+		},
+	}
+	prior := &corestate.Resource{
+		DesiredDigest: "legacy-digest",
+		Ownership:     "managed",
+		Observed: map[string]any{
+			"original_exists":  true,
+			"original_content": content,
+		},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: current}}}
+	provider := NewNativeProvider(runner)
+
+	got, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Action != ActionAdopt {
+		t.Fatalf("legacy sensitive apt source action = %q, want state-refresh adopt", got.Action)
+	}
+	if _, ok := got.Observed["original_content"]; ok {
+		t.Fatalf("state-refresh observed contains legacy content: %#v", got.Observed)
+	}
+	resource := resourceStateForStep(Step{Node: node, Ownership: got.Ownership}, got.Observed, "2026-07-10T00:00:00Z")
+	data, err := json.Marshal(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "refreshed sensitive apt source state", string(data))
+}
+
+func TestNativeProviderAPTSourceFileRestoreRequiresBaseline(t *testing.T) {
+	node := graph.Node{
+		Address: "host.server1.apt.source_file[\"private\"]",
+		Host:    "server1",
+		Kind:    "apt_source_file",
+		Desired: map[string]any{
+			"path":       "/etc/apt/sources.list.d/private.list",
+			"ensure":     "absent",
+			"on_destroy": "restore",
+		},
+	}
+	prior := &corestate.Resource{Ownership: "managed", Observed: map[string]any{"exists": true}}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "file\nroot\nroot\n644\nabc\n\n"}}}
+	provider := NewNativeProvider(runner)
+
+	_, err := provider.Plan(context.Background(), node, prior)
+	if err == nil || !strings.Contains(err.Error(), "original content baseline is unavailable") {
+		t.Fatalf("error = %v, want missing restore baseline rejection", err)
+	}
+}
+
+func TestNativeProviderSensitiveNftablesUsesProviderPayload(t *testing.T) {
+	content := testassert.SensitiveVariableDefault
+	for _, tt := range []struct {
+		label string
+		path  string
+	}{
+		{label: "main", path: "/etc/nftables.conf"},
+		{label: "private", path: "/etc/nftables.d/private.nft"},
+	} {
+		t.Run(tt.label, func(t *testing.T) {
+			node := graph.Node{
+				Address: "host.server1.nftables.file[\"" + tt.label + "\"]",
+				Host:    "server1",
+				Kind:    "nftables_file",
+				Desired: map[string]any{
+					"label":          tt.label,
+					"path":           tt.path,
+					"content_sha256": sha256Hex([]byte(content)),
+					"content_bytes":  len(content),
+					"owner":          "root",
+					"group":          "root",
+					"mode":           "0644",
+					"ensure":         "present",
+					"sensitive":      true,
+				},
+			}
+			node.ProviderPayload = cloneMap(node.Desired)
+			node.ProviderPayload["content"] = content
+			runner := &recordingRunner{outputs: []Result{{Stdout: "missing\n"}}}
+			provider := NewNativeProvider(runner)
+
+			got, err := provider.Plan(context.Background(), node, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Action != ActionCreate {
+				t.Fatalf("missing sensitive nftables action = %q, want create", got.Action)
+			}
+			observed, err := provider.Apply(context.Background(), Step{Node: node, Action: ActionCreate})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(runner.inputs) != 1 || runner.inputs[0] != content {
+				t.Fatalf("nftables provider input = %#v, want sensitive payload", runner.inputs)
+			}
+			data, err := json.Marshal(observed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			output := strings.Join(runner.scripts, "\n") + string(data)
+			testassert.NoSecretLeak(t, "sensitive nftables provider output", output)
+			if strings.Contains(output, base64.StdEncoding.EncodeToString([]byte(content))) {
+				t.Fatalf("sensitive nftables provider output contains encoded payload: %s", output)
+			}
+		})
+	}
+}
+
+func TestNativeProviderSensitiveOperationRedactsRemoteError(t *testing.T) {
+	runner := &recordingRunner{errors: []error{errors.New("remote failed with " + testassert.SensitiveVariableDefault)}}
+	provider := NewNativeProvider(runner)
+	_, err := provider.RunOperation(context.Background(), graph.Operation{
+		Address:        "host.server1.nftables.validate",
+		Action:         "run",
+		Summary:        "validate nftables ruleset",
+		Sensitive:      true,
+		CommandPreview: "nft -c -f /etc/nftables.conf",
+	})
+	if err == nil {
+		t.Fatal("sensitive operation succeeded, want injected failure")
+	}
+	testassert.NoSecretLeak(t, "sensitive operation error", err.Error())
+	if !strings.Contains(err.Error(), "<redacted>") {
+		t.Fatalf("sensitive operation error = %q, want redaction marker", err)
+	}
+}
+
+func TestResourceStateForSensitiveAPTSourceDropsOriginalContent(t *testing.T) {
+	content := testassert.SensitiveVariableDefault
+	step := Step{Node: graph.Node{Desired: map[string]any{
+		"path":      "/etc/apt/sources.list.d/private.list",
+		"sensitive": true,
+	}}}
+	resource := resourceStateForStep(step, map[string]any{
+		"exists":           true,
+		"original_content": content,
+	}, "2026-07-10T00:00:00Z")
+	data, err := json.Marshal(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive apt source state", string(data))
+	if _, ok := resource.Observed["original_content"]; ok {
+		t.Fatalf("sensitive state observed contains original content: %#v", resource.Observed)
 	}
 }
 

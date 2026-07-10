@@ -23,6 +23,38 @@ func (m ManagedFile) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
+type aptSigningKeySpecJSON APTSigningKeySpec
+
+func (s APTSigningKeySpec) MarshalJSON() ([]byte, error) {
+	out := aptSigningKeySpecJSON(s)
+	if s.Sensitive {
+		out.Content = ""
+	}
+	return json.Marshal(out)
+}
+
+type aptSourceFileSpecJSON APTSourceFileSpec
+
+func (s APTSourceFileSpec) MarshalJSON() ([]byte, error) {
+	out := aptSourceFileSpecJSON(s)
+	if s.Sensitive {
+		out.Content = ""
+		out.SourcePath = ""
+	}
+	return json.Marshal(out)
+}
+
+type nftablesFileSpecJSON NftablesFileSpec
+
+func (n NftablesFileSpec) MarshalJSON() ([]byte, error) {
+	out := nftablesFileSpecJSON(n)
+	if n.Sensitive {
+		out.Content = ""
+		out.SourcePath = ""
+	}
+	return json.Marshal(out)
+}
+
 type componentScriptSpecJSON ComponentScriptSpec
 
 func (s ComponentScriptSpec) MarshalJSON() ([]byte, error) {

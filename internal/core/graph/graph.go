@@ -35,6 +35,10 @@ type Node struct {
 func (n Node) MarshalJSON() ([]byte, error) {
 	type nodeJSON Node
 	out := nodeJSON(n)
+	if nodeSensitive(n) {
+		out.Desired = cloneMap(n.Desired)
+		delete(out.Desired, "content")
+	}
 	if nodeContentWriteOnly(n) || nodeSensitive(n) {
 		out.ProviderPayload = nil
 	}
@@ -55,6 +59,7 @@ type Operation struct {
 	Address        string         `json:"address"`
 	Action         string         `json:"action"`
 	Summary        string         `json:"summary"`
+	Sensitive      bool           `json:"sensitive,omitempty"`
 	DependsOn      []string       `json:"depends_on,omitempty"`
 	TriggeredBy    []string       `json:"triggered_by,omitempty"`
 	CommandPreview string         `json:"command_preview,omitempty"`
@@ -112,6 +117,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	packageAddresses := map[string]string{}
 	repositoryAddresses := map[string]string{}
 	repositoryTriggers := []string{}
+	repositorySensitive := false
 	aptCacheSource := host.APT.Source
 	aptCacheRefreshAddress := ""
 	groupAddresses := map[string]string{}
@@ -313,6 +319,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			sourceDesired["content"] = aptRepositorySourceContent(item)
 		}
 		if item.SigningKey != nil {
+			repositorySensitive = repositorySensitive || item.SigningKey.Sensitive
 			keyAddress := fmt.Sprintf("host.%s.apt.signing_key[%s]", host.Name, strconv.Quote(name))
 			keyDesired := map[string]any{
 				"name":   item.Name,
@@ -325,12 +332,16 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			if item.SigningKey.URL != "" {
 				keyDesired["url"] = item.SigningKey.URL
 			}
-			if item.SigningKey.Content != "" {
-				keyDesired["content"] = item.SigningKey.Content
-			}
 			if item.SigningKey.SHA256 != "" {
 				keyDesired["sha256"] = item.SigningKey.SHA256
 			}
+			keyDesired, keyPayload := contentResourceDesiredPayload(
+				keyDesired,
+				item.SigningKey.Content,
+				"",
+				item.SigningKey.Sensitive,
+				optionalContentSummary(item.SigningKey.Content),
+			)
 			nodes = append(nodes, Node{
 				Host:            host.Name,
 				Address:         keyAddress,
@@ -341,7 +352,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				Desired:         keyDesired,
 				ProviderType:    "apt_signing_key",
 				ProviderAddress: "apt_signing_key." + providerName(host.Name, item.Name),
-				ProviderPayload: keyDesired,
+				ProviderPayload: keyPayload,
 			})
 			deps = append(deps, keyAddress)
 			repositoryTriggers = append(repositoryTriggers, keyAddress)
@@ -363,6 +374,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	}
 	for _, label := range sortedKeys(host.APT.SourceFiles) {
 		item := host.APT.SourceFiles[label]
+		repositorySensitive = repositorySensitive || item.Sensitive
 		address := fmt.Sprintf("host.%s.apt.source_file[%s]", host.Name, strconv.Quote(label))
 		if aptCacheSource.File == "" {
 			aptCacheSource = item.Source
@@ -376,12 +388,14 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			"ensure":     item.Ensure,
 			"on_destroy": item.OnDestroy,
 		}
+		var payload map[string]any
 		if item.Ensure != "absent" {
-			if item.Content != "" {
-				desired["content"] = item.Content
-			}
-			if item.SourcePath != "" {
-				desired["source_path"] = item.SourcePath
+			desired, payload = contentResourceDesiredPayload(desired, item.Content, item.SourcePath, item.Sensitive, item.Summary)
+		} else {
+			payload = cloneMap(desired)
+			if item.Sensitive {
+				desired["sensitive"] = true
+				payload["sensitive"] = true
 			}
 		}
 		nodes = append(nodes, Node{
@@ -394,7 +408,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Desired:         desired,
 			ProviderType:    "apt_source_file",
 			ProviderAddress: "apt_source_file." + providerName(host.Name, item.Label),
-			ProviderPayload: desired,
+			ProviderPayload: payload,
 		})
 		repositoryTriggers = append(repositoryTriggers, address)
 	}
@@ -423,6 +437,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				sourceDesired["content"] = aptRepositorySourceContent(item)
 			}
 			if item.SigningKey != nil {
+				repositorySensitive = repositorySensitive || item.SigningKey.Sensitive
 				keyAddress := fmt.Sprintf("%s.apt.signing_key[%s]", componentPrefix, strconv.Quote(name))
 				keyDesired := map[string]any{
 					"name":      item.Name,
@@ -436,12 +451,16 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				if item.SigningKey.URL != "" {
 					keyDesired["url"] = item.SigningKey.URL
 				}
-				if item.SigningKey.Content != "" {
-					keyDesired["content"] = item.SigningKey.Content
-				}
 				if item.SigningKey.SHA256 != "" {
 					keyDesired["sha256"] = item.SigningKey.SHA256
 				}
+				keyDesired, keyPayload := contentResourceDesiredPayload(
+					keyDesired,
+					item.SigningKey.Content,
+					"",
+					item.SigningKey.Sensitive,
+					optionalContentSummary(item.SigningKey.Content),
+				)
 				nodes = append(nodes, Node{
 					Host:            host.Name,
 					Address:         keyAddress,
@@ -452,7 +471,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 					Desired:         keyDesired,
 					ProviderType:    "apt_signing_key",
 					ProviderAddress: "apt_signing_key." + providerName(host.Name, component.Name, item.Name),
-					ProviderPayload: keyDesired,
+					ProviderPayload: keyPayload,
 				})
 				deps = append(deps, keyAddress)
 				repositoryTriggers = append(repositoryTriggers, keyAddress)
@@ -474,6 +493,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 		for _, label := range sortedKeys(component.APT.SourceFiles) {
 			item := component.APT.SourceFiles[label]
+			repositorySensitive = repositorySensitive || item.Sensitive
 			address := fmt.Sprintf("%s.apt.source_file[%s]", componentPrefix, strconv.Quote(label))
 			if aptCacheSource.File == "" {
 				aptCacheSource = item.Source
@@ -488,12 +508,14 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				"ensure":     item.Ensure,
 				"on_destroy": item.OnDestroy,
 			}
+			var payload map[string]any
 			if item.Ensure != "absent" {
-				if item.Content != "" {
-					desired["content"] = item.Content
-				}
-				if item.SourcePath != "" {
-					desired["source_path"] = item.SourcePath
+				desired, payload = contentResourceDesiredPayload(desired, item.Content, item.SourcePath, item.Sensitive, item.Summary)
+			} else {
+				payload = cloneMap(desired)
+				if item.Sensitive {
+					desired["sensitive"] = true
+					payload["sensitive"] = true
 				}
 			}
 			nodes = append(nodes, Node{
@@ -506,7 +528,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				Desired:         desired,
 				ProviderType:    "apt_source_file",
 				ProviderAddress: "apt_source_file." + providerName(host.Name, component.Name, item.Label),
-				ProviderPayload: desired,
+				ProviderPayload: payload,
 			})
 			repositoryTriggers = append(repositoryTriggers, address)
 		}
@@ -518,6 +540,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Address:        aptCacheRefreshAddress,
 			Action:         "run",
 			Summary:        "refresh apt package cache",
+			Sensitive:      repositorySensitive,
 			DependsOn:      append([]string(nil), repositoryTriggers...),
 			TriggeredBy:    append([]string(nil), repositoryTriggers...),
 			CommandPreview: "apt-get update",
@@ -611,12 +634,14 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	nftablesMainPath := "/etc/nftables.conf"
 	nftablesValidate := false
 	nftablesActivate := false
+	nftablesSensitive := false
 	nftablesFileDeps := []string{}
 	if packageAddress, ok := packageAddresses["nftables"]; ok {
 		nftablesFileDeps = append(nftablesFileDeps, packageAddress)
 	}
 	if host.Nftables.Main != nil {
 		item := *host.Nftables.Main
+		nftablesSensitive = nftablesSensitive || item.Sensitive
 		nftablesMainPath = item.Path
 		nftablesValidate = nftablesValidate || (item.Ensure != "absent" && item.Validate)
 		nftablesActivate = nftablesActivate || (item.Ensure != "absent" && item.Activate)
@@ -629,6 +654,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	}
 	for _, label := range sortedKeys(host.Nftables.Files) {
 		item := host.Nftables.Files[label]
+		nftablesSensitive = nftablesSensitive || item.Sensitive
 		nftablesValidate = nftablesValidate || (item.Ensure != "absent" && item.Validate)
 		nftablesActivate = nftablesActivate || (item.Ensure != "absent" && item.Activate)
 		if nftablesSource.File == "" {
@@ -645,6 +671,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Address:        validateAddress,
 			Action:         "run",
 			Summary:        "validate nftables ruleset",
+			Sensitive:      nftablesSensitive,
 			DependsOn:      append([]string(nil), nftablesTriggers...),
 			TriggeredBy:    append([]string(nil), nftablesTriggers...),
 			CommandPreview: "nft -c -f " + nftablesMainPath,
@@ -656,6 +683,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				Address:        nftablesActivateAddress,
 				Action:         "run",
 				Summary:        "activate nftables ruleset",
+				Sensitive:      nftablesSensitive,
 				DependsOn:      []string{validateAddress},
 				TriggeredBy:    append([]string(nil), nftablesTriggers...),
 				CommandPreview: "nft -f " + nftablesMainPath,
@@ -668,6 +696,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Address:        nftablesActivateAddress,
 			Action:         "run",
 			Summary:        "activate nftables ruleset",
+			Sensitive:      nftablesSensitive,
 			DependsOn:      append([]string(nil), nftablesTriggers...),
 			TriggeredBy:    append([]string(nil), nftablesTriggers...),
 			CommandPreview: "nft -f " + nftablesMainPath,
@@ -2754,12 +2783,7 @@ func nftablesFileNode(hostName string, address string, item ir.NftablesFileSpec,
 		"sensitive": item.Sensitive,
 		"summary":   item.Summary,
 	}
-	if item.Content != "" {
-		desired["content"] = item.Content
-	}
-	if item.SourcePath != "" {
-		desired["source_path"] = item.SourcePath
-	}
+	desired, payload := contentResourceDesiredPayload(desired, item.Content, item.SourcePath, item.Sensitive, item.Summary)
 	summary := "manage nftables snippet " + item.Label
 	if item.Label == "main" {
 		summary = "manage nftables main ruleset"
@@ -2775,8 +2799,41 @@ func nftablesFileNode(hostName string, address string, item ir.NftablesFileSpec,
 		DependsOn:       dedupeStrings(deps),
 		ProviderType:    "nftables_file",
 		ProviderAddress: "nftables_file." + providerName(hostName, item.Label),
-		ProviderPayload: desired,
+		ProviderPayload: payload,
 	}
+}
+
+func contentResourceDesiredPayload(desired map[string]any, content, sourcePath string, sensitive bool, summary ir.ContentSummary) (map[string]any, map[string]any) {
+	hasContent := content != "" || (sourcePath == "" && summary.SHA256 != "")
+	if sensitive {
+		desired["sensitive"] = true
+		if summary.SHA256 != "" {
+			desired["content_sha256"] = summary.SHA256
+			desired["content_bytes"] = summary.Bytes
+		}
+	} else {
+		if hasContent {
+			desired["content"] = content
+		}
+		if sourcePath != "" {
+			desired["source_path"] = sourcePath
+		}
+	}
+	payload := cloneMap(desired)
+	if hasContent {
+		payload["content"] = content
+	}
+	if sourcePath != "" {
+		payload["source_path"] = sourcePath
+	}
+	return desired, payload
+}
+
+func optionalContentSummary(content string) ir.ContentSummary {
+	if content == "" {
+		return ir.ContentSummary{}
+	}
+	return contentSummary([]byte(content))
 }
 
 type fileResourceSpec struct {

@@ -1297,6 +1297,7 @@ func TestResourceGraphDesiredDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 		{name: "sensitive component input", fixture: "../../../examples/component-inputs.dbf.hcl"},
 		{name: "sensitive service environment", fixture: "../testdata/fixtures/sensitive-service-environment.dbf.hcl"},
 		{name: "sensitive variable content", fixture: "../testdata/fixtures/sensitive-variable-files.dbf.hcl"},
+		{name: "sensitive apt and nftables content", fixture: "../testdata/fixtures/sensitive-apt-nftables-content.dbf.hcl"},
 		{name: "ephemeral variable content", fixture: "../testdata/fixtures/ephemeral-variable-content.dbf.hcl"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1312,6 +1313,48 @@ func TestResourceGraphDesiredDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 			testassert.NoSecretLeak(t, tt.name+" ResourceGraph desired", string(data))
 		})
 	}
+}
+
+func TestSensitiveAPTAndNftablesContentStaysOutOfResourceGraphJSON(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/sensitive-apt-nftables-content.dbf.hcl")
+	for _, address := range []string{
+		`host.server1.apt.source_file["private"]`,
+		`host.server1.apt.signing_key["private"]`,
+		`host.server1.components.private_apt.apt.source_file["component-private"]`,
+		`host.server1.components.private_apt.apt.signing_key["component-private"]`,
+		`host.server1.nftables.file["main"]`,
+		`host.server1.nftables.file["private"]`,
+	} {
+		node := nodeFor(resourceGraph, address)
+		if node == nil {
+			t.Fatalf("sensitive resource node missing: %s", address)
+		}
+		if node.Desired["sensitive"] != true {
+			t.Fatalf("%s desired is not sensitive: %#v", address, node.Desired)
+		}
+		if _, ok := node.Desired["content"]; ok {
+			t.Fatalf("%s desired contains sensitive content: %#v", address, node.Desired)
+		}
+		if node.ProviderPayload["content"] != testassert.SensitiveVariableDefault {
+			t.Fatalf("%s provider payload lost sensitive content: %#v", address, node.ProviderPayload)
+		}
+	}
+	for _, address := range []string{
+		"host.server1.apt.cache_refresh",
+		"host.server1.nftables.validate",
+		"host.server1.nftables.activate",
+	} {
+		operation := operationFor(resourceGraph, address)
+		if operation == nil || !operation.Sensitive {
+			t.Fatalf("sensitive operation missing mark: %s: %#v", address, operation)
+		}
+	}
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive apt and nftables ResourceGraph JSON", string(data))
 }
 
 func TestWriteOnlyFileContentStaysOutOfDesired(t *testing.T) {

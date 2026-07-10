@@ -2355,7 +2355,7 @@ func aptSourceFileSpecs(apt parser.Value) (map[string]ir.APTSourceFileSpec, erro
 		if err != nil {
 			return nil, err
 		}
-		content, hasContent, err := stringFieldAllowEphemeral(item, "content")
+		content, hasContent, err := stringField(item, "content")
 		if err != nil {
 			return nil, err
 		}
@@ -2385,6 +2385,10 @@ func aptSourceFileSpecs(apt parser.Value) (map[string]ir.APTSourceFileSpec, erro
 		if onDestroy != "keep" && onDestroy != "restore" {
 			return nil, fmt.Errorf("%s:%d:%s.on_destroy: on_destroy must be keep or restore", item.Source.File, item.Source.Line, item.Source.Path)
 		}
+		sensitive := hasContent && item.Map["content"].ContainsSensitive()
+		if sensitive && onDestroy == "restore" {
+			return nil, fmt.Errorf("%s:%d:%s.on_destroy: restore is not supported with sensitive content", item.Source.File, item.Source.Line, item.Source.Path)
+		}
 		lifecycle, err := lifecycleSpec(item)
 		if err != nil {
 			return nil, err
@@ -2399,6 +2403,7 @@ func aptSourceFileSpecs(apt parser.Value) (map[string]ir.APTSourceFileSpec, erro
 			Mode:       mode,
 			Ensure:     ensure,
 			OnDestroy:  onDestroy,
+			Sensitive:  sensitive,
 			Lifecycle:  lifecycle,
 			Source:     item.Source,
 		}
@@ -2425,7 +2430,7 @@ func aptSigningKeySpec(repoName string, repo parser.Value, ensure string) (*ir.A
 	if err != nil {
 		return nil, err
 	}
-	content, hasContent, err := stringFieldAllowEphemeral(signingKey, "content")
+	content, hasContent, err := stringField(signingKey, "content")
 	if err != nil {
 		return nil, err
 	}
@@ -2468,11 +2473,12 @@ func aptSigningKeySpec(repoName string, repo parser.Value, ensure string) (*ir.A
 		return nil, fmt.Errorf("%s:%d:%s.path: signing key path must be absolute", signingKey.Source.File, signingKey.Source.Line, signingKey.Source.Path)
 	}
 	return &ir.APTSigningKeySpec{
-		URL:     url,
-		Content: content,
-		SHA256:  sha,
-		Path:    path,
-		Source:  signingKey.Source,
+		URL:       url,
+		Content:   content,
+		SHA256:    sha,
+		Path:      path,
+		Sensitive: hasContent && signingKey.Map["content"].ContainsSensitive(),
+		Source:    signingKey.Source,
 	}, nil
 }
 
@@ -4117,7 +4123,7 @@ func nftablesFileSpec(label string, item parser.Value, defaultPath string) (ir.N
 	if err != nil {
 		return ir.NftablesFileSpec{}, err
 	}
-	content, hasContent, err := stringFieldAllowEphemeral(item, "content")
+	content, hasContent, err := stringField(item, "content")
 	if err != nil {
 		return ir.NftablesFileSpec{}, err
 	}
@@ -4149,6 +4155,9 @@ func nftablesFileSpec(label string, item parser.Value, defaultPath string) (ir.N
 	}
 	if !ok {
 		sensitive = false
+	}
+	if hasContent && item.Map["content"].ContainsSensitive() {
+		sensitive = true
 	}
 	validate, err := boolFieldDefault(item, "validate", true)
 	if err != nil {

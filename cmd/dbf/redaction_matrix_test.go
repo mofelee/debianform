@@ -164,6 +164,98 @@ func TestSecretRedactionRegressionMatrix(t *testing.T) {
 	}
 }
 
+func TestAPTAndNftablesRedactionRegressionMatrix(t *testing.T) {
+	fixture := "../../internal/core/testdata/fixtures/sensitive-apt-nftables-content.dbf.hcl"
+	htmlPath := filepath.Join(t.TempDir(), "plan.html")
+
+	matrix := []struct {
+		name string
+		run  func(t *testing.T) string
+	}{
+		{
+			name: "plan text stdout",
+			run: func(t *testing.T) string {
+				stdout, stderr := captureOutput(t, func() {
+					if err := run([]string{"plan", "-f", fixture, "--offline"}); err != nil {
+						t.Fatal(err)
+					}
+				})
+				return stdout + stderr
+			},
+		},
+		{
+			name: "plan json stdout",
+			run: func(t *testing.T) string {
+				stdout, stderr := captureOutput(t, func() {
+					if err := run([]string{"plan", "-f", fixture, "--offline", "--format", "json"}); err != nil {
+						t.Fatal(err)
+					}
+				})
+				var decoded map[string]any
+				if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
+					t.Fatalf("plan JSON did not parse: %v\n%s", err, stdout)
+				}
+				return stdout + stderr
+			},
+		},
+		{
+			name: "plan html artifact and stdout",
+			run: func(t *testing.T) string {
+				stdout, stderr := captureOutput(t, func() {
+					if err := run([]string{"plan", "-f", fixture, "--offline", "--html", htmlPath}); err != nil {
+						t.Fatal(err)
+					}
+				})
+				data, err := os.ReadFile(htmlPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return stdout + stderr + string(data)
+			},
+		},
+		{
+			name: "hostspec json",
+			run: func(t *testing.T) string {
+				program := compileRedactionFixture(t, fixture, nil)
+				data, err := json.Marshal(program)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return string(data)
+			},
+		},
+		{
+			name: "resource graph json",
+			run: func(t *testing.T) string {
+				program := compileRedactionFixture(t, fixture, nil)
+				resourceGraph, err := coregraph.Compile(program)
+				if err != nil {
+					t.Fatal(err)
+				}
+				data, err := json.Marshal(resourceGraph)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return string(data)
+			},
+		},
+		{
+			name: "state json",
+			run: func(t *testing.T) string {
+				return applyFixtureStateJSON(t, fixture, "server1")
+			},
+		},
+	}
+
+	for _, tt := range matrix {
+		t.Run(tt.name, func(t *testing.T) {
+			output := tt.run(t)
+			testassert.NoSecretLeak(t, tt.name, output)
+			assertRedactionMatrixNoEncodedPayload(t, output)
+		})
+	}
+}
+
 func compileRedactionFixture(t *testing.T, fixture string, values []coreparser.ExternalVariableValue) *coreir.Program {
 	t.Helper()
 
@@ -272,8 +364,10 @@ func redactionMatrixWriteOnlyNode() coregraph.Node {
 
 func assertRedactionMatrixNoEncodedPayload(t *testing.T, text string) {
 	t.Helper()
-	encoded := base64.StdEncoding.EncodeToString([]byte(testassert.EphemeralVariableValue))
-	if strings.Contains(text, encoded) {
-		t.Fatalf("encoded write-only payload leaked:\n%s", text)
+	for _, payload := range []string{testassert.EphemeralVariableValue, testassert.SensitiveVariableDefault} {
+		encoded := base64.StdEncoding.EncodeToString([]byte(payload))
+		if strings.Contains(text, encoded) {
+			t.Fatalf("encoded sensitive payload leaked:\n%s", text)
+		}
 	}
 }

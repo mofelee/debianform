@@ -583,6 +583,59 @@ func TestSensitiveVariablePlanDoesNotLeak(t *testing.T) {
 	}
 }
 
+func TestSensitiveAPTAndNftablesContentPlanDoesNotLeak(t *testing.T) {
+	fixture := "../testdata/fixtures/sensitive-apt-nftables-content.dbf.hcl"
+	doc := planFixture(t, fixture, Options{
+		CommandFile: fixture,
+		Host:        "server1",
+		Now: func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	for _, address := range []string{
+		`host.server1.apt.source_file["private"]`,
+		`host.server1.apt.signing_key["private"]`,
+		`host.server1.components.private_apt.apt.source_file["component-private"]`,
+		`host.server1.components.private_apt.apt.signing_key["component-private"]`,
+		`host.server1.nftables.file["main"]`,
+		`host.server1.nftables.file["private"]`,
+	} {
+		var change *Change
+		for i := range doc.Changes {
+			if doc.Changes[i].Address == address {
+				change = &doc.Changes[i]
+				break
+			}
+		}
+		if change == nil {
+			t.Fatalf("sensitive resource change missing: %s", address)
+		}
+		if !change.Diff.Sensitive {
+			t.Fatalf("sensitive resource diff is not marked sensitive: %s", address)
+		}
+	}
+
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive apt and nftables plan JSON", string(data))
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	rendered := text.String()
+	testassert.NoSecretLeak(t, "sensitive apt and nftables plan text", rendered)
+	if strings.Count(rendered, "<sensitive sha256=") < 6 {
+		t.Fatalf("plan text does not redact all sensitive content fields:\n%s", rendered)
+	}
+
+	var html bytes.Buffer
+	if err := PrintHTML(&html, doc); err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive apt and nftables plan HTML", html.String())
+}
+
 func TestLocalsVarComposeEnvPlanJSONGolden(t *testing.T) {
 	fixture := "../testdata/fixtures/locals-var.dbf.hcl"
 	cfg, err := parser.ParseFilesWithOptions([]string{fixture}, parser.ParseOptions{VariableValues: []parser.ExternalVariableValue{

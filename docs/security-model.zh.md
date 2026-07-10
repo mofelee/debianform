@@ -48,11 +48,14 @@ DebianForm 的目标是避免把 secret 明文写入 plan、state、普通日志
 - `files.file sensitive = true`：普通文件资源按敏感内容处理。
 - `secrets.file`：兼容层，等价于敏感文件部署语义；新配置优先使用
   `variable + files.file sensitive = true`。
-- sensitive variable 或 component input 派生出的 file/unit content 会继承敏感标记。
+- sensitive variable 或 component input 派生出的文件类内容会继承敏感标记，包括
+  files、systemd unit、APT source/signing key 和 nftables content。
 - plan text、plan JSON、HTML plan、state 和 HostSpec/ResourceGraph debug 输出只应保存
   hash、bytes、changed 等摘要，不输出明文。
 - ephemeral variable 不应写入 HostSpec、ResourceGraph、plan、state、cache、golden fixture
   或普通日志。
+- APT source、APT signing key 和 nftables content 尚未实现 write-only 边界，因此会在
+  编译期拒绝 ephemeral 值，不能把 mark 丢失后的普通字符串继续编译。
 - write-only 值只能进入 provider apply 通道，不应进入 desired/state/diff。
 
 用户仍需要注意：
@@ -81,7 +84,8 @@ state 保存 resource ownership、脱敏 desired 摘要和 observed 摘要。它
 
 - secret content。
 - sensitive component input 明文。
-- 由 sensitive input 派生的 file/unit content 明文。
+- 由 sensitive input 派生的 files、systemd unit、APT source/signing key 或 nftables
+  content 明文。
 - SSH 私钥。
 - 命令日志。
 - lock lease token 之外的运行期细节。

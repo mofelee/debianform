@@ -273,7 +273,11 @@ func (p NativeProvider) RunOperation(ctx context.Context, operation graph.Operat
 		Summary: operation.Summary,
 	})
 	if operation.ScriptPayload != nil {
-		return p.runScriptOperation(ctx, operation)
+		result, err := p.runScriptOperation(ctx, operation)
+		if err != nil && operation.Sensitive {
+			err = redactPayloadError(err)
+		}
+		return result, err
 	}
 	if operation.CommandPreview == "" {
 		return OperationResult{}, nil
@@ -283,6 +287,9 @@ func (p NativeProvider) RunOperation(ctx context.Context, operation graph.Operat
 		return OperationResult{}, fmt.Errorf("cannot infer host from operation address %s", operation.Address)
 	}
 	_, err := p.Runner.RunCommand(ctx, host, operation.CommandPreview)
+	if err != nil && operation.Sensitive {
+		err = redactPayloadError(err)
+	}
 	return OperationResult{}, err
 }
 
@@ -877,6 +884,9 @@ func (p NativeProvider) planAPTSourceFile(ctx context.Context, node graph.Node, 
 		if onDestroy == "keep" {
 			return ProviderPlan{Action: ActionForget, Summary: "forget apt source file " + path, Observed: observed, Ownership: ownership(prior)}, nil
 		}
+		if !hasAPTSourceOriginal(prior.Observed) {
+			return ProviderPlan{}, fmt.Errorf("%s cannot restore apt source file: original content baseline is unavailable", node.Address)
+		}
 		return ProviderPlan{Action: ActionDelete, Summary: "restore apt source file " + path, Observed: observed, Ownership: ownership(prior)}, nil
 	}
 	wantSHA, err := desiredContentSHA(node)
@@ -893,6 +903,12 @@ func (p NativeProvider) planAPTSourceFile(ctx context.Context, node graph.Node, 
 		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
 		return ProviderPlan{Action: ActionUpdate, Summary: "update apt source file " + path, Observed: observed, Ownership: ownership(prior)}, nil
 	}
+	if boolDesired(node, "sensitive") {
+		if aptSourceStateNeedsRefresh(node, prior) {
+			return ProviderPlan{Action: ActionAdopt, Summary: "refresh sensitive apt source file state " + path, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+		return inSyncPlan(node, prior, "no changes for apt source file "+path, observed), nil
+	}
 	return inSyncPlan(node, prior, "no changes for apt source file "+path, withAPTSourceOriginal(observed, prior, current)), nil
 }
 
@@ -906,9 +922,13 @@ func (p NativeProvider) applyAPTSourceFile(ctx context.Context, step Step) (map[
 		}
 		return map[string]any{"exists": false}, nil
 	}
-	original, err := p.aptSourceOriginal(ctx, step)
-	if err != nil {
-		return nil, err
+	original := map[string]any{}
+	if !boolDesired(step.Node, "sensitive") {
+		var err error
+		original, err = p.aptSourceOriginal(ctx, step)
+		if err != nil {
+			return nil, err
+		}
 	}
 	content, err := desiredContent(step.Node)
 	if err != nil {
@@ -1000,11 +1020,12 @@ func (p NativeProvider) applyAPTSigningKey(ctx context.Context, step Step) (map[
 		}
 		return map[string]any{"exists": false}, nil
 	}
-	if stringDesired(step.Node, "content") != "" {
+	payload := providerDesired(step.Node)
+	if stringMapValue(payload, "content") != "" {
 		return p.applyFileLike(ctx, step, false)
 	}
-	url := stringDesired(step.Node, "url")
-	sha := stringDesired(step.Node, "sha256")
+	url := stringMapValue(payload, "url")
+	sha := stringMapValue(payload, "sha256")
 	if url == "" {
 		return nil, fmt.Errorf("%s apt signing key requires url or content", step.Address)
 	}
@@ -2873,6 +2894,16 @@ func hasAPTSourceOriginal(values map[string]any) bool {
 	return ok
 }
 
+func aptSourceStateNeedsRefresh(node graph.Node, prior *corestate.Resource) bool {
+	if prior == nil {
+		return false
+	}
+	if _, ok := prior.Observed["original_content"]; ok {
+		return true
+	}
+	return prior.DesiredDigest != "" && prior.DesiredDigest != corestate.DesiredDigest(node.Desired)
+}
+
 func copyAPTSourceOriginal(dst map[string]any, src map[string]any) {
 	for _, key := range []string{"original_exists", "original_content", "original_owner", "original_group", "original_mode"} {
 		if value, ok := src[key]; ok {
@@ -2968,6 +2999,9 @@ func providerDesired(node graph.Node) map[string]any {
 
 func desiredSigningKeySHA(node graph.Node) (string, error) {
 	if sha := stringDesired(node, "sha256"); sha != "" {
+		return strings.ToLower(sha), nil
+	}
+	if sha := stringDesired(node, "content_sha256"); sha != "" {
 		return strings.ToLower(sha), nil
 	}
 	if content := stringDesired(node, "content"); content != "" {

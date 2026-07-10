@@ -47,9 +47,10 @@ state 顶层字段：
 - 必要的 observed 摘要。
 - lifecycle、更新时间和执行顺序。
 
-secret content、sensitive component input 明文、由 sensitive input 派生的 file/unit
-content、SSH 私钥、命令日志和 lock 租约不会写入 state。敏感 content 只保存
-`content_sha256`、`content_bytes` 等摘要字段，用于 drift 比对和 no-op 判断。
+secret content、sensitive component input 明文，以及由 sensitive input 派生的 files、
+systemd unit、APT source/signing key 或 nftables content 不会写入 state。SSH 私钥、
+命令日志和 lock 租约同样不会写入 state。敏感 content 只保存 `content_sha256`、
+`content_bytes` 等摘要字段，用于 drift 比对和 no-op 判断。
 
 ## Ownership
 

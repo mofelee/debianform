@@ -152,11 +152,12 @@ type APTRepositorySpec struct {
 }
 
 type APTSigningKeySpec struct {
-	URL     string    `json:"url,omitempty"`
-	Content string    `json:"content,omitempty"`
-	SHA256  string    `json:"sha256,omitempty"`
-	Path    string    `json:"path"`
-	Source  SourceRef `json:"source,omitempty"`
+	URL       string    `json:"url,omitempty"`
+	Content   string    `json:"content,omitempty"`
+	SHA256    string    `json:"sha256,omitempty"`
+	Path      string    `json:"path"`
+	Sensitive bool      `json:"sensitive,omitempty"`
+	Source    SourceRef `json:"source,omitempty"`
 }
 
 type APTSourceFileSpec struct {
@@ -169,6 +170,7 @@ type APTSourceFileSpec struct {
 	Mode       string         `json:"mode"`
 	Ensure     string         `json:"ensure"`
 	OnDestroy  string         `json:"on_destroy"`
+	Sensitive  bool           `json:"sensitive,omitempty"`
 	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
 	Summary    ContentSummary `json:"summary,omitempty"`
 	Source     SourceRef      `json:"source,omitempty"`

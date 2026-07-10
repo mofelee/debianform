@@ -972,6 +972,10 @@ func resourceStateForStep(step Step, observed map[string]any, updatedAt string) 
 	if ownership == "" {
 		ownership = "managed"
 	}
+	sanitizedObserved := corestate.SanitizeObserved(observed)
+	if sensitive, _ := step.Node.Desired["sensitive"].(bool); sensitive {
+		delete(sanitizedObserved, "original_content")
+	}
 	return corestate.Resource{
 		Host:            step.Host,
 		Kind:            step.Node.Kind,
@@ -981,7 +985,7 @@ func resourceStateForStep(step Step, observed map[string]any, updatedAt string) 
 		Lifecycle:       cloneLifecycle(step.Node.Lifecycle),
 		Desired:         corestate.SanitizeDesired(step.Node.Desired),
 		DesiredDigest:   corestate.DesiredDigest(step.Node.Desired),
-		Observed:        corestate.SanitizeObserved(observed),
+		Observed:        sanitizedObserved,
 		UpdatedAt:       updatedAt,
 		Order:           step.Order,
 	}

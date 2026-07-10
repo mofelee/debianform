@@ -8,7 +8,9 @@
 常见来源：
 
 - `secret` file。
-- `files.file` 或 `systemd.unit` 等资源的 `sensitive = true`。
+- `files.file`、nftables 等资源显式设置的 `sensitive = true`。
+- sensitive content 自动传播到 files、systemd unit、APT source/signing key 或 nftables
+  等文件类资源的标记。
 - `content_write_only = true`。
 - sensitive variable。
 - ephemeral variable。
@@ -53,6 +55,11 @@ IR 可能仍然携带执行所需内容，包括文件 content。IR 本身不是
 
 后续 graph、plan、state 依赖这些字段决定如何展示和持久化。
 
+APT source、APT signing key 和 nftables 的 content 编译路径会在把 `parser.Value` 转为
+Go 字符串前检查 sensitive/ephemeral 元数据：sensitive 标记继续传播；这三类资源尚未实现
+ephemeral write-only 语义，因此在编译期拒绝该值。不能只保存字符串值，否则这些独立
+文件类资源会绕过下游脱敏。
+
 ## Graph 层
 
 graph node 有两套内容：
@@ -64,6 +71,8 @@ provider payload 可能包含真实执行内容。`Node.MarshalJSON` 对 content
 `ProviderPayload`，避免 graph JSON 泄漏。
 
 注意：这只保护 JSON 序列化；内存中的 graph 仍需要 payload 执行。
+节点的 `Desired` 也必须先按 sensitive/write-only 语义移除明文并保留必要摘要；不能只依赖
+`Node.MarshalJSON` 隐藏 `ProviderPayload`。
 
 ## Plan 层
 
@@ -110,8 +119,10 @@ redaction matrix 里专门测试 native provider command preview、错误、stdo
 - state JSON。
 - native provider command preview 和 error。
 - native provider stdout/stderr。
+- APT source、APT signing key 和 nftables content 的 sensitive 输出矩阵。
 
 `internal/core/testassert/secrets.go` 维护一组哨兵 secret 字符串。`NoSecretLeak` 会检查输出中不包含这些值。
+上述三类 content 的 fail-closed ephemeral 用例位于 merge 回归测试中。
 
 新增敏感路径时，优先把它纳入 matrix。
 
@@ -119,6 +130,10 @@ redaction matrix 里专门测试 native provider command preview、错误、stdo
 
 ephemeral 值比 sensitive 更严格：它通常不应进入持久化结构。当前实现通过 mark、key 限制、state sanitize
 和 redaction test 防止泄漏。
+
+`files.file.content` 具备 write-only provider payload 和非敏感 `content_version` 触发字段。
+APT source、APT signing key 和 nftables content 当前没有这套语义，因此会在编译期拒绝
+ephemeral 值。
 
 如果新增能力允许 ephemeral 影响资源内容，要检查：
 

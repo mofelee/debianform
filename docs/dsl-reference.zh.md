@@ -84,7 +84,7 @@ assert 在合并后的 host spec 上求值，只能读取 `self`，当前支持 
 | `description` | 否 | `""` | inspect 输出用说明。 |
 | `nullable` | 否 | `true` | `false` 时拒绝 `null`。 |
 | `sensitive` | 否 | `false` | plan/state/错误中脱敏。 |
-| `ephemeral` | 否 | `false` | 值可进入 write-only content，但不能进入 state 结构性字段。 |
+| `ephemeral` | 否 | `false` | 支持边界由各资源字段定义。`files.file.content` 通过 `content_version` 使用 write-only 语义；APT source/signing key 与 nftables content 当前拒绝 ephemeral。 |
 | `const` | 否 | `false` | 当前作为变量元数据输出；不要依赖它阻止外部覆盖。 |
 | `deprecated` | 否 | `""` | 外部显式传值时输出 warning。 |
 | `validation` | 否 | 无 | 包含 `condition` 和 `error_message`。只能读取当前 `var.<name>`。 |
@@ -276,7 +276,7 @@ Docker 官方源和按架构选择的 component source。在线 `plan` / `apply`
 | 字段 | 说明 |
 | --- | --- |
 | `url` | 下载 key；必须同时提供 `sha256`。 |
-| `content` | 内联 key 内容；若同时提供 `sha256` 会校验内容摘要。 |
+| `content` | 内联 key 内容；引用 sensitive 值时自动脱敏；当前不支持 ephemeral 值。若同时提供 `sha256` 会校验内容摘要。 |
 | `sha256` | 64 位 hex。 |
 | `path` | keyring 路径；默认 `/etc/apt/keyrings/<safe-name>.asc`。 |
 
@@ -285,12 +285,12 @@ Docker 官方源和按架构选择的 component source。在线 `plan` / `apply`
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `path` | 无 | 必须是绝对路径。 |
-| `content` / `source` | 无 | present 时必须二选一；`source` 相对配置文件目录解析。 |
+| `content` / `source` | 无 | present 时必须二选一；`content` 引用 sensitive 值时自动脱敏，当前不支持 ephemeral 值；`source` 相对配置文件目录解析。 |
 | `owner` | `"root"` | 文件 owner。 |
 | `group` | `"root"` | 文件 group。 |
 | `mode` | `"0644"` | 四位八进制字符串。 |
 | `ensure` | `"present"` | `"present"` 或 `"absent"`。 |
-| `on_destroy` | `"keep"` | `"keep"` 或 `"restore"`。 |
+| `on_destroy` | `"keep"` | `"keep"` 或 `"restore"`；sensitive content 不支持 `"restore"`，避免在 state 中保存待恢复明文。 |
 
 `repository` 和 `source_file` 都支持 `lifecycle { prevent_destroy = true }`。
 
@@ -479,12 +479,12 @@ service unit 名会自动补 `.service`。支持 `lifecycle { prevent_destroy = 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `path` | 见上 | 必须是绝对路径。 |
-| `content` / `source` | 无 | present 时必须二选一。 |
+| `content` / `source` | 无 | present 时必须二选一；`content` 引用 sensitive 值时自动脱敏，当前不支持 ephemeral 值。 |
 | `owner` | `"root"` | 文件 owner。 |
 | `group` | `"root"` | 文件 group。 |
 | `mode` | `"0644"` | 四位八进制字符串。 |
 | `ensure` | `"present"` | `"present"` 或 `"absent"`。 |
-| `sensitive` | `false` | 输出脱敏。 |
+| `sensitive` | `false` | 显式要求输出脱敏；`content` 引用 sensitive 值时会自动启用。 |
 | `validate` | `true` | 触发 `nft -c -f`。 |
 | `activate` | `true` | 触发 nftables reload/activate。 |
 
