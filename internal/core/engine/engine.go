@@ -16,6 +16,7 @@ import (
 	coreplan "github.com/mofelee/debianform/internal/core/plan"
 	corestate "github.com/mofelee/debianform/internal/core/state"
 	"github.com/mofelee/debianform/internal/core/termstyle"
+	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -1362,12 +1363,12 @@ func (e Engine) runExecutionWaves(ctx context.Context, hosts map[string]ir.HostS
 	}
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 
-	globalSem := make(chan struct{}, parallel)
-	hostSems := map[string]chan struct{}{}
+	globalSem := semaphore.NewWeighted(int64(parallel))
+	hostSems := map[string]*semaphore.Weighted{}
 	statesLock := &sync.Mutex{}
 	stateLocks := map[string]*sync.Mutex{}
 	for name := range hosts {
-		hostSems[name] = make(chan struct{}, perHostParallel)
+		hostSems[name] = semaphore.NewWeighted(int64(perHostParallel))
 		stateLocks[name] = &sync.Mutex{}
 	}
 
@@ -1396,7 +1397,7 @@ func (e Engine) runExecutionWaves(ctx context.Context, hosts map[string]ir.HostS
 	return firstErr
 }
 
-func runExecutionWave(ctx context.Context, e Engine, hosts map[string]ir.HostSpec, states map[string]corestate.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, globalSem chan struct{}, hostSems map[string]chan struct{}, perHostParallel int, progress *progressLogger, wave []executionItem) map[string]error {
+func runExecutionWave(ctx context.Context, e Engine, hosts map[string]ir.HostSpec, states map[string]corestate.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, globalSem *semaphore.Weighted, hostSems map[string]*semaphore.Weighted, perHostParallel int, progress *progressLogger, wave []executionItem) map[string]error {
 	type result struct {
 		address string
 		err     error
@@ -1657,23 +1658,12 @@ func blockedDependency(deps []string, failed map[string]error, blocked map[strin
 	return ""
 }
 
-func acquire(ctx context.Context, sem chan struct{}, slots int) (func(), error) {
-	acquired := 0
-	for acquired < slots {
-		select {
-		case sem <- struct{}{}:
-			acquired++
-		case <-ctx.Done():
-			for acquired > 0 {
-				<-sem
-				acquired--
-			}
-			return nil, ctx.Err()
-		}
+func acquire(ctx context.Context, sem *semaphore.Weighted, slots int) (func(), error) {
+	weight := int64(slots)
+	if err := sem.Acquire(ctx, weight); err != nil {
+		return nil, err
 	}
 	return func() {
-		for ; acquired > 0; acquired-- {
-			<-sem
-		}
+		sem.Release(weight)
 	}, nil
 }

@@ -24,6 +24,7 @@ import (
 	corestate "github.com/mofelee/debianform/internal/core/state"
 	"github.com/mofelee/debianform/internal/core/termstyle"
 	"github.com/mofelee/debianform/internal/core/testassert"
+	"golang.org/x/sync/semaphore"
 )
 
 func TestCompareActionMatrix(t *testing.T) {
@@ -1640,6 +1641,80 @@ func TestApplyAllowsSafeParallelWithinHostWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestApplyAcquiresUnsafeHostCapacityAtomically(t *testing.T) {
+	host := "server1"
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: host}}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{
+		packageNode(host, "curl"),
+		packageNode(host, "git"),
+	}}
+	provider := &concurrencyProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if _, err := engine.Apply(ctx, program, resourceGraph, Options{Parallel: 2, PerHostParallel: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if provider.maxActive != 1 {
+		t.Fatalf("max concurrent applies = %d, want unsafe resources to be exclusive", provider.maxActive)
+	}
+	if len(provider.Applied) != 2 {
+		t.Fatalf("applied resources = %#v, want both unsafe resources", provider.Applied)
+	}
+}
+
+func TestApplyExcludesSafeAndUnsafeItemsOnSameHost(t *testing.T) {
+	host := "server1"
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: host}}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{
+		fileNode(host, "/tmp/example", nil),
+		packageNode(host, "curl"),
+	}}
+	provider := &concurrencyProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{Parallel: 2, PerHostParallel: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if provider.maxActive != 1 {
+		t.Fatalf("max concurrent applies = %d, want unsafe resource to exclude safe resource", provider.maxActive)
+	}
+}
+
+func TestAcquireCancellationDoesNotLeakWeightedCapacity(t *testing.T) {
+	sem := semaphore.NewWeighted(2)
+	releaseOne, err := acquire(context.Background(), sem, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	waitCtx, cancelWait := context.WithCancel(context.Background())
+	waitResult := make(chan error, 1)
+	go func() {
+		_, err := acquire(waitCtx, sem, 2)
+		waitResult <- err
+	}()
+	select {
+	case err := <-waitResult:
+		t.Fatalf("exclusive acquire returned before cancellation: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	cancelWait()
+	if err := <-waitResult; !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled acquire error = %v, want context.Canceled", err)
+	}
+	releaseOne()
+
+	retryCtx, cancelRetry := context.WithTimeout(context.Background(), time.Second)
+	defer cancelRetry()
+	releaseAll, err := acquire(retryCtx, sem, 2)
+	if err != nil {
+		t.Fatalf("capacity leaked after cancellation: %v", err)
+	}
+	releaseAll()
+}
+
 func TestApplyGlobalParallelLimit(t *testing.T) {
 	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}, {Name: "server2"}, {Name: "server3"}}}
 	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{
@@ -1938,6 +2013,19 @@ func fileNode(host, path string, deps []string) graph.Node {
 			"group":   "root",
 			"mode":    "0644",
 			"ensure":  "present",
+		},
+	}
+}
+
+func packageNode(host, name string) graph.Node {
+	return graph.Node{
+		Host:    host,
+		Address: "host." + host + ".packages.install[" + fmt.Sprintf("%q", name) + "]",
+		Kind:    "package",
+		Summary: "install package " + name,
+		Desired: map[string]any{
+			"name":   name,
+			"ensure": "present",
 		},
 	}
 }

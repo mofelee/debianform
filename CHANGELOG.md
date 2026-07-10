@@ -6,6 +6,8 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+- Fixed per-host execution capacity acquisition so unsafe resources reserve all
+  host slots atomically instead of deadlocking through partial reservations.
 - Fixed state revision tracking so every successful backend write advances and
   returns exactly one committed serial, while failed writes leave the visible
   revision unchanged.

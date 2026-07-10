@@ -115,6 +115,9 @@ active 节点，会保证顺序。
 - safe parallel 资源占 1 个 host slot。
 - 非 safe parallel 资源占满该 host 的所有 slots，相当于同 host 串行。
 
+两层限制都使用 weighted semaphore。非 safe parallel item 会原子获取该 host 的全部容量，不能与
+另一个 waiter 各自占住部分 slots 后互相等待；context 取消时，尚未成功的请求不会占用或泄漏容量。
+
 在当前默认每 host parallel 为 1 的情况下，同一 host 上实际仍偏串行；全局并发主要用于多 host。
 
 ## 失败传播
