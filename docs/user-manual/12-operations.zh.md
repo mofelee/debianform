@@ -201,15 +201,19 @@ operations baseline
 ```text
 /var/lock/debianform/manual/12-state.lock
 /var/lock/debianform/manual/12-state.lock.d/
+/var/lock/debianform/manual/12-state.lock.d/owner.v2
+/var/lock/debianform/manual/12-state.lock.guard
 ```
 
-lock 文件是一个租约 JSON，包含 owner、pid、token 和过期时间。运行中的 apply 结束后会删除 lock。
+lock 文件是 version 2 租约 JSON，包含 owner、pid、token、独立过期时间和完整性校验。holder 默认
+每 30 秒续租一次 2 分钟 lease；`--lock-timeout` 只控制 contender 最长等待时间。运行中的 apply
+结束后会删除 lock 和 lock dir，但保留内部 guard 文件以维持稳定 inode。
 如果没有变更，`apply` 会在打印 no-op plan 后退出，不进入持锁执行阶段。
 
 模拟一个未过期锁：
 
 ```bash
-ssh manual1 'mkdir -p /var/lock/debianform/manual/12-state.lock.d; exp=$(( $(date +%s) + 600 )); printf "{\"owner\":\"manual-lock-demo\",\"pid\":\"manual\",\"token\":\"manual\",\"expires_at\":\"manual\",\"expires_at_unix\":%s}\n" "$exp" > /var/lock/debianform/manual/12-state.lock'
+ssh manual1 'lock=/var/lock/debianform/manual/12-state.lock; mkdir -p "$lock.d"; owner=$(printf %s manual-lock-demo | base64 -w0); pid=$$; token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; marker_payload="2|$token"; marker_checksum=$(printf %s "$marker_payload" | sha256sum | awk "{print \$1}"); printf "{\"protocol_version\":2,\"token\":\"%s\",\"checksum\":\"%s\"}\n" "$token" "$marker_checksum" > "$lock.d/owner.v2"; exp=$(( $(date +%s) + 600 )); payload="2|$owner|$pid|$token|$exp|0"; checksum=$(printf %s "$payload" | sha256sum | awk "{print \$1}"); printf "{\"protocol_version\":2,\"owner\":\"%s\",\"owner_encoding\":\"base64\",\"pid\":\"%s\",\"token\":\"%s\",\"lease_expires_at_unix\":%s,\"expires_at_unix\":0,\"checksum\":\"%s\"}\n" "$owner" "$pid" "$token" "$exp" "$checksum" > "$lock"'
 ssh manual1 'printf "lock demo drift\n" > /etc/debianform-manual/operations.txt'
 dbf apply --auto-approve --lock-timeout 2s
 ```
@@ -234,7 +238,8 @@ dbf apply --auto-approve
 dbf check
 ```
 
-如果 lock 已过期，DebianForm 会接管 stale lock 并在 stderr 打印提示。
+如果有效的 version 2 lock 已过期，DebianForm 会在 guard 内重新校验后原子接管，并在 stderr
+打印提示。legacy 或未知格式不会自动接管；必须先确认没有仍在运行的 holder，再备份并人工清理。
 
 ## 常见故障处理
 
@@ -321,7 +326,7 @@ dbf apply --auto-approve
 dbf check
 ssh manual1 'cat /etc/debianform-manual/operations.txt'
 
-ssh manual1 'mkdir -p /var/lock/debianform/manual/12-state.lock.d; exp=$(( $(date +%s) + 600 )); printf "{\"owner\":\"manual-lock-demo\",\"pid\":\"manual\",\"token\":\"manual\",\"expires_at\":\"manual\",\"expires_at_unix\":%s}\n" "$exp" > /var/lock/debianform/manual/12-state.lock'
+ssh manual1 'lock=/var/lock/debianform/manual/12-state.lock; mkdir -p "$lock.d"; owner=$(printf %s manual-lock-demo | base64 -w0); pid=$$; token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; marker_payload="2|$token"; marker_checksum=$(printf %s "$marker_payload" | sha256sum | awk "{print \$1}"); printf "{\"protocol_version\":2,\"token\":\"%s\",\"checksum\":\"%s\"}\n" "$token" "$marker_checksum" > "$lock.d/owner.v2"; exp=$(( $(date +%s) + 600 )); payload="2|$owner|$pid|$token|$exp|0"; checksum=$(printf %s "$payload" | sha256sum | awk "{print \$1}"); printf "{\"protocol_version\":2,\"owner\":\"%s\",\"owner_encoding\":\"base64\",\"pid\":\"%s\",\"token\":\"%s\",\"lease_expires_at_unix\":%s,\"expires_at_unix\":0,\"checksum\":\"%s\"}\n" "$owner" "$pid" "$token" "$exp" "$checksum" > "$lock"'
 ssh manual1 'printf "lock demo drift\n" > /etc/debianform-manual/operations.txt'
 dbf apply --auto-approve --lock-timeout 2s || true
 ssh manual1 'cat /var/lock/debianform/manual/12-state.lock; rm -f /var/lock/debianform/manual/12-state.lock; rm -rf /var/lock/debianform/manual/12-state.lock.d'

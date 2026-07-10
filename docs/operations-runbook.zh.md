@@ -56,11 +56,13 @@ dbf: remote state does not match configuration
 /var/lib/debianform/state/<host>.json
 ```
 
-默认 lock 文件和原子锁目录：
+默认 lock 文件、兼容锁目录和内部 guard：
 
 ```text
 /var/lock/debianform/state/<host>.lock
 /var/lock/debianform/state/<host>.lock.d/
+/var/lock/debianform/state/<host>.lock.d/owner.v2
+/var/lock/debianform/state/<host>.lock.guard
 ```
 
 配置中可以覆盖：
@@ -94,19 +96,22 @@ timed out waiting for state lock /var/lock/debianform/state/server1.lock
    ssh root@"$DBF_TARGET" "cat '$DBF_LOCK' 2>/dev/null || true"
    ```
 
-2. 如果只是等待时间不足，重新运行并加大超时：
+2. 如果只是等待时间不足，重新运行并加大超时。`--lock-timeout` 只控制等待，不会改变 holder
+   默认 2 分钟 lease；运行中的 holder 会每 30 秒续租：
 
    ```bash
    dbf apply -f "$DBF_FILE" --host "$DBF_HOST" --lock-timeout 10m
    ```
 
-3. 如果 lease 已过期，DebianForm 会自动接管，并在 stderr 输出：
+3. 如果有效的 version 2 lease 已过期，DebianForm 会在 guard 下重新校验后自动接管，并在 stderr 输出：
 
    ```text
    taking over stale lock /var/lock/debianform/state/server1.lock
    ```
 
-4. 只有在确认没有任何 apply 进程仍在执行、且 lock 明显无法自动接管时，才手动移除 lock：
+4. 无 `.d/owner.v2` marker 的 lock dir、legacy/未知 lease 不会自动接管，因为旧 holder 可能仍在
+   创建目录后写 metadata。只有在确认没有任何 apply 进程仍在执行、且 lock 明显无法自动
+   接管时，才手动移除 lock；不要同时删除 `.guard`，因为其他进程可能已经打开它等待：
 
    ```bash
    ssh root@"$DBF_TARGET" "cp -a '$DBF_LOCK' '$DBF_LOCK.manual-backup.$(date -u +%Y%m%dT%H%M%SZ)' 2>/dev/null || true"

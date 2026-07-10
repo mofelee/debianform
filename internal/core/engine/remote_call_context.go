@@ -8,6 +8,7 @@ type RemoteCallContext struct {
 	Action          string
 	Summary         string
 	Cleanup         bool
+	Maintenance     bool
 	onFailurePrompt func()
 }
 
@@ -47,6 +48,9 @@ func mergeRemoteCallContext(current RemoteCallContext, next RemoteCallContext) R
 	}
 	if next.Cleanup {
 		out.Cleanup = true
+	}
+	if next.Maintenance {
+		out.Maintenance = true
 	}
 	if next.onFailurePrompt != nil {
 		out.onFailurePrompt = next.onFailurePrompt

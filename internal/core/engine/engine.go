@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -239,7 +240,7 @@ func (e Engine) planNodes(ctx context.Context, hosts []ir.HostSpec, parallel int
 	return plans, nil
 }
 
-func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
+func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (result Plan, resultErr error) {
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := hostsByName(program)
 	selectedHosts := selectedProgramHosts(program, opts)
@@ -248,7 +249,12 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 	if err != nil {
 		return Plan{}, err
 	}
+	leaseMonitor := newLockLeaseMonitor(ctx, locks)
+	defer func() {
+		resultErr = errors.Join(resultErr, leaseMonitor.stop())
+	}()
 	defer unlockHosts(ctx, locks)
+	ctx = leaseMonitor.context()
 
 	applyOpts := opts
 	if applyOpts.Parallel < 1 {
@@ -390,6 +396,72 @@ func (e Engine) planNodesByHost(ctx context.Context, hosts []ir.HostSpec, parall
 type heldLock struct {
 	host ir.HostSpec
 	lock Lock
+}
+
+type renewableLockLease interface {
+	Lost() <-chan struct{}
+	Err() error
+}
+
+type lockLeaseMonitor struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	leases []renewableLockLease
+	wg     sync.WaitGroup
+
+	mu  sync.Mutex
+	err error
+}
+
+func newLockLeaseMonitor(ctx context.Context, locks []heldLock) *lockLeaseMonitor {
+	monitorCtx, cancel := context.WithCancel(ctx)
+	monitor := &lockLeaseMonitor{ctx: monitorCtx, cancel: cancel}
+	for _, held := range locks {
+		lease, ok := held.lock.(renewableLockLease)
+		if !ok {
+			continue
+		}
+		monitor.leases = append(monitor.leases, lease)
+		monitor.wg.Add(1)
+		go func() {
+			defer monitor.wg.Done()
+			select {
+			case <-lease.Lost():
+				monitor.record(lease.Err())
+			case <-monitorCtx.Done():
+			}
+		}()
+	}
+	return monitor
+}
+
+func (m *lockLeaseMonitor) context() context.Context {
+	return m.ctx
+}
+
+func (m *lockLeaseMonitor) record(err error) {
+	if err == nil {
+		err = fmt.Errorf("state lock lease was lost")
+	}
+	m.mu.Lock()
+	if m.err == nil {
+		m.err = err
+	}
+	m.mu.Unlock()
+	m.cancel()
+}
+
+func (m *lockLeaseMonitor) stop() error {
+	m.cancel()
+	m.wg.Wait()
+	for _, lease := range m.leases {
+		if err := lease.Err(); err != nil {
+			m.record(err)
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.err
 }
 
 func (e Engine) lockHosts(ctx context.Context, hosts []ir.HostSpec, parallel int, opts Options, progress *progressLogger) ([]heldLock, error) {

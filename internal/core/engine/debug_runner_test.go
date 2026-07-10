@@ -836,6 +836,39 @@ func TestDebugRunnerCleanupCallDoesNotPrompt(t *testing.T) {
 	}
 }
 
+func TestDebugRunnerMaintenanceCallBypassesInteractiveSession(t *testing.T) {
+	inner := &debugRecordingRunner{}
+	var out bytes.Buffer
+	runner := DebugRunner{
+		Inner: inner,
+		Session: NewDebugSession(DebugSessionOptions{
+			Writer: &out,
+			Input:  strings.NewReader("quit\n"),
+		}),
+	}
+	maintenanceCtx := WithRemoteCallContext(context.Background(), RemoteCallContext{
+		Phase:       "state lock renew",
+		Action:      "renew",
+		Maintenance: true,
+	})
+	if _, err := runner.Run(maintenanceCtx, "server1", "renew\n"); err != nil {
+		t.Fatal(err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("maintenance call entered debugger output:\n%s", out.String())
+	}
+	if len(inner.calls) != 1 || inner.calls[0].script != "renew\n" {
+		t.Fatalf("inner calls = %#v, want one maintenance call", inner.calls)
+	}
+
+	if _, err := runner.Run(context.Background(), "server1", "normal\n"); !errors.Is(err, ErrDebugCancelled) {
+		t.Fatalf("normal call error = %v, want unread quit command to cancel", err)
+	}
+	if len(inner.calls) != 1 {
+		t.Fatalf("normal call reached inner runner after quit: %#v", inner.calls)
+	}
+}
+
 type debugRecordingRunner struct {
 	calls    []debugRecordedCall
 	contexts []RemoteCallContext

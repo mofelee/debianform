@@ -6,14 +6,16 @@ DebianForm 为每台 host 保存独立的远端 JSON state：
 /var/lib/debianform/state/<host>.json
 ```
 
-对应的租约文件和原子锁目录为：
+对应的租约文件、兼容锁目录和内部 guard 文件为：
 
 ```text
 /var/lock/debianform/state/<host>.lock
 /var/lock/debianform/state/<host>.lock.d/
+/var/lock/debianform/state/<host>.lock.d/owner.v2
+/var/lock/debianform/state/<host>.lock.guard
 ```
 
-这两个路径是默认值；通常不需要在配置中写 `state` block。需要自定义远端 state 或 lock
+这些路径由默认 lock path 派生；通常不需要在配置中写 `state` block。需要自定义远端 state 或 lock
 位置时，可以在 host 中覆盖：
 
 ```hcl
@@ -64,11 +66,23 @@ delete 和 destroy。
 
 ## Locking
 
-获取锁时，DebianForm 在远端原子创建 `<lock_path>.d`。成功后写入 JSON 租约文件，
-包含 owner、pid、随机 token 和过期时间。
+获取锁时，DebianForm 使用不会在正常 unlock 时删除的 `<lock_path>.guard` 和 `flock`
+串行化 lease 的读取、续租、接管和删除。version 2 JSON lease 先完整写入同目录临时文件，再通过
+`mv` 原子发布；其中包含 base64 编码的 owner、pid、随机 token、`lease_expires_at_unix` 和完整性校验值。
+fresh acquisition 仍用排他的 `mkdir <lock_path>.d` 作为旧版/新版共同识别的原子桥，赢家随后写入
+带 token 和 checksum 的 `.d/owner.v2` marker。获取 SSH 调用返回后还会同步续租并重新验证一次
+lease 与 marker，确认远端 lease 仍归当前 token 才把 lock 返回给 engine。
+每次成功续租也会刷新 marker 的 mtime，使 incomplete recovery 的宽限期从最近一次 holder 活动计算。
+
+等待锁的 timeout 与 lease TTL 相互独立。默认 lease TTL 是 2 分钟，每 30 秒续租一次；因此长时间
+apply 不会因为 `--lock-timeout` 到期而丢锁。兼容字段 `expires_at_unix` 固定为 `0`，防止不认识
+version 2 协议的旧客户端把仍在续租的 lease 当成 stale lock。
 
 - 同一 host 的第二个 apply 会等待并在 lock timeout 后失败。
-- lock 过期后可以接管，并向 stderr 输出 stale lock 提示。
+- version 2 lock 过期后只能在 guard 临界区内重新校验并原子接管，同时向 stderr 输出 stale lock 提示。
+- 新鲜的半写或损坏 version 2 lease 会保守等待；只有 `.d/owner.v2` 可验证的 incomplete lock
+  才能在超过恢复宽限期后接管。
+- 无 marker 的 lock dir、legacy 或未知格式 lease 不会自动接管，必须先确认没有 holder，再人工备份和清理。
 - unlock 必须匹配 token；token 不匹配时不会删除 lock 文件或目录。
 - lock 文件不参与 plan diff，也不写入 state。
 

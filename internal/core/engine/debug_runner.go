@@ -122,14 +122,17 @@ func (r DebugRunner) RunCommand(ctx context.Context, host, remoteCommand string)
 }
 
 func (r DebugRunner) run(ctx context.Context, call debugCall, fn func() (Result, error)) (Result, error) {
+	if remoteContext, ok := RemoteCallContextFromContext(ctx); ok {
+		call.Context = remoteContext
+		if remoteContext.Maintenance {
+			return fn()
+		}
+	}
 	session := r.Session
 	if session == nil {
 		return fn()
 	}
 	var err error
-	if remoteContext, ok := RemoteCallContextFromContext(ctx); ok {
-		call.Context = remoteContext
-	}
 	call.Diagnose = func(remoteCommand string) (Result, error) {
 		if r.Inner == nil {
 			return Result{}, fmt.Errorf("debug runner inner runner is required")

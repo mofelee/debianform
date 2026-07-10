@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -116,6 +117,46 @@ func TestApplyWithMemoryProviderIsIdempotent(t *testing.T) {
 	}
 	if secret.Kind != "secret" || secret.ProviderType != "file" {
 		t.Fatalf("state secret kind/provider = %s/%s, want secret/file", secret.Kind, secret.ProviderType)
+	}
+}
+
+func TestApplyCancelsWorkAndReturnsLeaseLossCause(t *testing.T) {
+	leaseCause := errors.New("injected lease renewal failure")
+	lease := &testRenewableLock{lost: make(chan struct{})}
+	backend := &testRenewableBackend{MemoryBackend: NewMemoryBackend(), lock: lease}
+	provider := &leaseBlockingProvider{
+		MemoryProvider: NewMemoryProvider(),
+		started:        make(chan struct{}),
+	}
+	engine := Engine{Backend: backend, Provider: provider}
+	program := &ir.Program{Hosts: []ir.HostSpec{{Name: "server1"}}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{fileNode("server1", "/tmp/lease-loss", nil)}}
+
+	resultCh := make(chan error, 1)
+	go func() {
+		_, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+		resultCh <- err
+	}()
+	select {
+	case <-provider.started:
+	case <-time.After(time.Second):
+		t.Fatal("provider apply did not start")
+	}
+	lease.fail(leaseCause)
+
+	select {
+	case err := <-resultCh:
+		if !errors.Is(err, leaseCause) {
+			t.Fatalf("apply error = %v, want lease renewal root cause", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("apply did not stop after lease loss")
+	}
+	lease.mu.Lock()
+	unlocked := lease.unlocked
+	lease.mu.Unlock()
+	if !unlocked {
+		t.Fatal("lease was not unlocked after renewal failure")
 	}
 }
 
@@ -1753,6 +1794,58 @@ func writeEngineConfig(t *testing.T, content string) string {
 
 type planErrorProvider struct {
 	*MemoryProvider
+}
+
+type testRenewableBackend struct {
+	*MemoryBackend
+	lock *testRenewableLock
+}
+
+func (b *testRenewableBackend) Lock(ctx context.Context, host ir.HostSpec, timeout time.Duration) (Lock, error) {
+	return b.lock, nil
+}
+
+type testRenewableLock struct {
+	mu       sync.Mutex
+	lost     chan struct{}
+	err      error
+	unlocked bool
+}
+
+func (l *testRenewableLock) Unlock(ctx context.Context) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.unlocked = true
+	return nil
+}
+
+func (l *testRenewableLock) Lost() <-chan struct{} {
+	return l.lost
+}
+
+func (l *testRenewableLock) Err() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.err
+}
+
+func (l *testRenewableLock) fail(err error) {
+	l.mu.Lock()
+	l.err = err
+	close(l.lost)
+	l.mu.Unlock()
+}
+
+type leaseBlockingProvider struct {
+	*MemoryProvider
+	started chan struct{}
+	once    sync.Once
+}
+
+func (p *leaseBlockingProvider) Apply(ctx context.Context, step Step) (map[string]any, error) {
+	p.once.Do(func() { close(p.started) })
+	<-ctx.Done()
+	return nil, ctx.Err()
 }
 
 func (p planErrorProvider) Plan(ctx context.Context, node graph.Node, prior *corestate.Resource) (ProviderPlan, error) {
