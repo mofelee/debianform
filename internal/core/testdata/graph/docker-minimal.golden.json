@@ -299,6 +299,7 @@
   ],
   "operations": [
     {
+      "host": "docker1",
       "address": "host.docker1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",

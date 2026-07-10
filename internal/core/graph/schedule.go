@@ -187,6 +187,9 @@ func (g *ResourceGraph) scheduleEntries() (map[string]scheduleEntry, error) {
 		if op.Address == "" {
 			return nil, fmt.Errorf("resource graph operation has empty address")
 		}
+		if op.Host == "" {
+			return nil, fmt.Errorf("resource graph operation %q has empty host", op.Address)
+		}
 		if _, exists := entries[op.Address]; exists {
 			return nil, fmt.Errorf("duplicate resource graph address %q", op.Address)
 		}
@@ -194,7 +197,7 @@ func (g *ResourceGraph) scheduleEntries() (map[string]scheduleEntry, error) {
 		entries[op.Address] = scheduleEntry{
 			item: ScheduleItem{
 				Address:   op.Address,
-				Host:      hostFromAddress(op.Address),
+				Host:      op.Host,
 				Kind:      "operation",
 				Operation: true,
 			},
@@ -330,15 +333,4 @@ func sortScheduleItems(items []ScheduleItem) {
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].Address < items[j].Address
 	})
-}
-
-func hostFromAddress(address string) string {
-	if !strings.HasPrefix(address, "host.") {
-		return ""
-	}
-	rest := strings.TrimPrefix(address, "host.")
-	if idx := strings.Index(rest, "."); idx >= 0 {
-		return rest[:idx]
-	}
-	return ""
 }

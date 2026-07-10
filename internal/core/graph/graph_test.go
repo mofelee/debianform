@@ -58,6 +58,11 @@ func TestCompileFoundationResourceGraphGolden(t *testing.T) {
 			t.Fatalf("service deps = %#v, want %q", serviceDeps, want)
 		}
 	}
+	for _, operation := range resourceGraph.Operations {
+		if operation.Host != "foundation1" {
+			t.Fatalf("operation %s host = %q, want foundation1", operation.Address, operation.Host)
+		}
+	}
 }
 
 func TestCompileSystemHostnameResourceRequiresExplicitHostname(t *testing.T) {

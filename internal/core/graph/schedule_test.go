@@ -24,6 +24,7 @@ func TestResourceGraphWaves(t *testing.T) {
 		},
 		Operations: []Operation{
 			{
+				Host:        "server1",
 				Address:     "host.server1.services.service[\"app\"].restart",
 				DependsOn:   []string{"host.server1.services.service[\"app\"]"},
 				TriggeredBy: []string{"host.server1.services.service[\"app\"]"},
@@ -98,6 +99,7 @@ func TestResourceGraphActiveWavesWithOperationAliases(t *testing.T) {
 		},
 		Operations: []Operation{
 			{
+				Host:        "server1",
 				Address:     baseOperation,
 				DependsOn:   []string{firstFile, secondFile},
 				TriggeredBy: []string{firstFile, secondFile},
@@ -149,7 +151,7 @@ func TestResourceGraphRejectsDuplicateAddress(t *testing.T) {
 			{Address: "host.server1.files.file[\"/tmp/a\"]", Host: "server1", Kind: "file"},
 		},
 		Operations: []Operation{
-			{Address: "host.server1.files.file[\"/tmp/a\"]"},
+			{Host: "server1", Address: "host.server1.files.file[\"/tmp/a\"]"},
 		},
 	}
 
@@ -181,6 +183,7 @@ func TestResourceGraphRejectsUnknownTrigger(t *testing.T) {
 	resourceGraph := &ResourceGraph{
 		Operations: []Operation{
 			{
+				Host:        "server1",
 				Address:     "host.server1.systemd.daemon_reload",
 				TriggeredBy: []string{"host.server1.systemd.unit[\"missing\"]"},
 			},
@@ -190,6 +193,32 @@ func TestResourceGraphRejectsUnknownTrigger(t *testing.T) {
 	err := resourceGraph.Validate()
 	if err == nil || !strings.Contains(err.Error(), "triggered by unknown resource graph address") {
 		t.Fatalf("error = %v, want unknown trigger", err)
+	}
+}
+
+func TestResourceGraphOperationPreservesExplicitHost(t *testing.T) {
+	resourceGraph := &ResourceGraph{Operations: []Operation{{
+		Host:    "web.example.com",
+		Address: "host.web.example.com.operations.reload",
+	}}}
+
+	waves, err := resourceGraph.Waves()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(waves) != 1 || len(waves[0]) != 1 || waves[0][0].Host != "web.example.com" {
+		t.Fatalf("operation waves = %#v, want explicit FQDN host", waves)
+	}
+}
+
+func TestResourceGraphRejectsOperationWithoutHost(t *testing.T) {
+	resourceGraph := &ResourceGraph{Operations: []Operation{{
+		Address: "host.server1.operations.reload",
+	}}}
+
+	err := resourceGraph.Validate()
+	if err == nil || !strings.Contains(err.Error(), "has empty host") {
+		t.Fatalf("error = %v, want empty operation host", err)
 	}
 }
 

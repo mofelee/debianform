@@ -68,6 +68,7 @@
   ],
   "operations": [
     {
+      "host": "docker-none1",
       "address": "host.docker-none1.docker.daemon.restart",
       "action": "run",
       "summary": "restart docker service",

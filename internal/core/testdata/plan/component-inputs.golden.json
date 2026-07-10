@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "input1",
       "address": "host.input1.components.proxy.files.file[\"/etc/reverse-proxy/environment.json\"]",
       "action": "create",
       "summary": "create file /etc/reverse-proxy/environment.json",
@@ -107,6 +108,7 @@
       }
     },
     {
+      "host": "input1",
       "address": "host.input1.components.proxy.files.file[\"/etc/reverse-proxy/listeners.json\"]",
       "action": "create",
       "summary": "create file /etc/reverse-proxy/listeners.json",

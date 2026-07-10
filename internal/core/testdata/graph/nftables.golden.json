@@ -229,6 +229,7 @@
   ],
   "operations": [
     {
+      "host": "edge1",
       "address": "host.edge1.nftables.activate",
       "action": "run",
       "summary": "activate nftables ruleset",
@@ -249,6 +250,7 @@
       }
     },
     {
+      "host": "edge1",
       "address": "host.edge1.nftables.validate",
       "action": "run",
       "summary": "validate nftables ruleset",

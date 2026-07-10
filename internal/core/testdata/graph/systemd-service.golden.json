@@ -114,6 +114,7 @@
   ],
   "operations": [
     {
+      "host": "service1",
       "address": "host.service1.systemd.daemon_reload",
       "action": "run",
       "summary": "reload systemd manager configuration",

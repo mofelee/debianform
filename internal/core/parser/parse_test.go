@@ -85,6 +85,71 @@ profile {}
 	}
 }
 
+func TestParseAcceptsValidHCLIdentifierLabels(t *testing.T) {
+	file := writeConfig(t, `
+profile "配置一" {}
+
+component "模板一" {}
+
+host "edge-1" {
+  component "实例一" {
+    source = component.模板一
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cfg.Profiles["配置一"]; !ok {
+		t.Fatalf("Unicode profile label was not parsed: %#v", cfg.Profiles)
+	}
+	if _, ok := cfg.Components["模板一"]; !ok {
+		t.Fatalf("Unicode component label was not parsed: %#v", cfg.Components)
+	}
+	host, ok := cfg.Hosts["edge-1"]
+	if !ok || len(host.Components) != 1 || host.Components[0].Name != "实例一" {
+		t.Fatalf("hyphen host or Unicode component instance was not parsed: %#v", cfg.Hosts)
+	}
+}
+
+func TestParseRejectsInvalidLabeledBlockIdentifiers(t *testing.T) {
+	tests := []struct {
+		name  string
+		hcl   string
+		label string
+	}{
+		{name: "empty", hcl: `host "" {}`, label: ""},
+		{name: "fqdn", hcl: `host "web.example.com" {}`, label: "web.example.com"},
+		{name: "single dot", hcl: `profile "." {}`, label: "."},
+		{name: "double dot", hcl: `profile ".." {}`, label: ".."},
+		{name: "parent path", hcl: `component "../base" {}`, label: "../base"},
+		{name: "slash", hcl: `component "web/prod" {}`, label: "web/prod"},
+		{name: "quote", hcl: `host "web\"prod" {}`, label: `web"prod`},
+		{
+			name: "component instance",
+			hcl: `component "base" {}
+host "server1" {
+  component "bad/instance" {
+    source = component.base
+  }
+}`,
+			label: "bad/instance",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := writeConfig(t, tt.hcl)
+			_, err := ParseFiles([]string{file})
+			if err == nil || !strings.Contains(err.Error(), "must be a valid HCL identifier") {
+				t.Fatalf("ParseFiles() error = %v, want invalid label %q", err, tt.label)
+			}
+		})
+	}
+}
+
 func TestParseRejectsDuplicateHost(t *testing.T) {
 	file := writeConfig(t, `
 host "web1" {}

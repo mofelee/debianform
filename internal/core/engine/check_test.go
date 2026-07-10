@@ -24,6 +24,7 @@ func TestCheckHoldsEverySelectedHostLockAndStaysReadOnly(t *testing.T) {
 	resourceGraph := &graph.ResourceGraph{
 		Nodes: []graph.Node{node1, node2},
 		Operations: []graph.Operation{{
+			Host:        "server1",
 			Address:     "host.server1.operations.after_check",
 			TriggeredBy: []string{node1.Address},
 		}},

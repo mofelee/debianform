@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "compose1",
       "address": "host.compose1.docker.apt.repository[\"docker-official\"]",
       "action": "create",
       "summary": "manage docker official apt repository",
@@ -128,6 +129,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.apt.signing_key[\"docker-official\"]",
       "action": "create",
       "summary": "manage docker official apt signing key",
@@ -218,6 +220,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.compose[\"app\"].directory",
       "action": "create",
       "summary": "create docker compose directory /opt/app",
@@ -281,6 +284,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.compose[\"app\"].env_file[\"app\"]",
       "action": "create",
       "summary": "manage docker compose env file app",
@@ -374,6 +378,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.compose[\"app\"].file",
       "action": "create",
       "summary": "manage docker compose file",
@@ -523,6 +528,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.compose[\"app\"].project",
       "action": "create",
       "summary": "converge docker compose project app",
@@ -644,6 +650,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.compose[\"app\"].service",
       "action": "create",
       "summary": "manage docker compose service debianform-compose-app",
@@ -698,6 +705,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.compose[\"app\"].systemd_unit",
       "action": "create",
       "summary": "create docker compose systemd unit debianform-compose-app.service",
@@ -878,6 +886,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.package[\"containerd.io\"]",
       "action": "create",
       "summary": "install docker package containerd.io",
@@ -934,6 +943,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.package[\"docker-buildx-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-buildx-plugin",
@@ -990,6 +1000,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.package[\"docker-ce\"]",
       "action": "create",
       "summary": "install docker package docker-ce",
@@ -1046,6 +1057,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.package[\"docker-ce-cli\"]",
       "action": "create",
       "summary": "install docker package docker-ce-cli",
@@ -1102,6 +1114,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.package[\"docker-compose-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-compose-plugin",
@@ -1158,6 +1171,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.package_conflicts",
       "action": "create",
       "summary": "remove docker conflict packages",
@@ -1264,6 +1278,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.service[\"docker\"]",
       "action": "create",
       "summary": "manage docker service",
@@ -1320,6 +1335,7 @@
   ],
   "operations": [
     {
+      "host": "compose1",
       "address": "host.compose1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",
@@ -1339,6 +1355,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.compose[\"app\"].daemon_reload",
       "action": "run",
       "summary": "reload systemd manager configuration",
@@ -1356,6 +1373,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.compose[\"app\"].validate",
       "action": "run",
       "summary": "validate docker compose project app",

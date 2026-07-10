@@ -17,6 +17,19 @@
 | `component "<name>"` | 可复用资源模板，可带 typed input 和 artifact 安装。 |
 | `host "<name>"` | 目标主机配置入口。 |
 
+`profile`、`component`、`host` 和显式 `host.component` instance 的 `<name>` 必须是合法的 HCL
+native identifier。Unicode identifier 和首字符之后的连字符可用，例如 `主机一`、`edge-1`；空字符串、
+`.`、`..`、FQDN、斜杠、引号或空白不能作为 label。host label 是稳定的逻辑名称，并会进入 resource
+address 及默认 state/lock 文件名。远端 FQDN 或 IP 应写在 `ssh.host`，例如：
+
+```hcl
+host "web-prod" {
+  ssh {
+    host = "web.example.com"
+  }
+}
+```
+
 `profile` 和 `host` 都支持 `imports = [profile.name]`，导入顺序在前，当前 block 在后。
 map 递归合并，list 去重追加，标量由后者覆盖。`profile` 不能声明
 `system.hostname`、`platform.architecture`、`platform.codename`，也不能挂载 component。

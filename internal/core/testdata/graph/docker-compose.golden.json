@@ -532,6 +532,7 @@
   ],
   "operations": [
     {
+      "host": "compose1",
       "address": "host.compose1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",
@@ -551,6 +552,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.compose[\"app\"].daemon_reload",
       "action": "run",
       "summary": "reload systemd manager configuration",
@@ -568,6 +570,7 @@
       }
     },
     {
+      "host": "compose1",
       "address": "host.compose1.docker.compose[\"app\"].validate",
       "action": "run",
       "summary": "validate docker compose project app",

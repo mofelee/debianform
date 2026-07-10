@@ -6,6 +6,8 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+- Restricted host/profile/component labels to valid HCL identifiers and carried
+  explicit operation hosts through graph, execution, state outputs, and plans.
 - Fixed per-host execution capacity acquisition so unsafe resources reserve all
   host slots atomically instead of deadlocking through partial reservations.
 - Fixed state revision tracking so every successful backend write advances and

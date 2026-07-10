@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.apt.repository[\"docker-official\"]",
       "action": "create",
       "summary": "manage docker official apt repository",
@@ -128,6 +129,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.apt.signing_key[\"docker-official\"]",
       "action": "create",
       "summary": "manage docker official apt signing key",
@@ -218,6 +220,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.compose[\"firecrawl\"].directory",
       "action": "create",
       "summary": "create docker compose directory /opt/firecrawl",
@@ -281,6 +284,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.compose[\"firecrawl\"].env_file[\"app\"]",
       "action": "create",
       "summary": "manage docker compose env file app",
@@ -374,6 +378,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.compose[\"firecrawl\"].file",
       "action": "create",
       "summary": "manage docker compose file",
@@ -507,6 +512,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.compose[\"firecrawl\"].project",
       "action": "create",
       "summary": "converge docker compose project firecrawl",
@@ -628,6 +634,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.compose[\"firecrawl\"].service",
       "action": "create",
       "summary": "manage docker compose service debianform-compose-firecrawl",
@@ -682,6 +689,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.compose[\"firecrawl\"].systemd_unit",
       "action": "create",
       "summary": "create docker compose systemd unit debianform-compose-firecrawl.service",
@@ -862,6 +870,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.package[\"containerd.io\"]",
       "action": "create",
       "summary": "install docker package containerd.io",
@@ -918,6 +927,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.package[\"docker-buildx-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-buildx-plugin",
@@ -974,6 +984,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.package[\"docker-ce\"]",
       "action": "create",
       "summary": "install docker package docker-ce",
@@ -1030,6 +1041,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.package[\"docker-ce-cli\"]",
       "action": "create",
       "summary": "install docker package docker-ce-cli",
@@ -1086,6 +1098,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.package[\"docker-compose-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-compose-plugin",
@@ -1142,6 +1155,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.package_conflicts",
       "action": "create",
       "summary": "remove docker conflict packages",
@@ -1248,6 +1262,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.service[\"docker\"]",
       "action": "create",
       "summary": "manage docker service",
@@ -1304,6 +1319,7 @@
   ],
   "operations": [
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",
@@ -1323,6 +1339,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.compose[\"firecrawl\"].daemon_reload",
       "action": "run",
       "summary": "reload systemd manager configuration",
@@ -1340,6 +1357,7 @@
       }
     },
     {
+      "host": "localsvar1",
       "address": "host.localsvar1.docker.compose[\"firecrawl\"].validate",
       "action": "run",
       "summary": "validate docker compose project firecrawl",

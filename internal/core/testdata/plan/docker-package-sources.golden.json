@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "docker-sources1",
       "address": "host.docker-sources1.docker.package[\"docker-compose-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-compose-plugin",
@@ -50,6 +51,7 @@
       }
     },
     {
+      "host": "docker-sources1",
       "address": "host.docker-sources1.docker.package[\"docker.io\"]",
       "action": "create",
       "summary": "install docker package docker.io",
@@ -86,6 +88,7 @@
       }
     },
     {
+      "host": "docker-sources1",
       "address": "host.docker-sources1.docker.service[\"docker\"]",
       "action": "create",
       "summary": "manage docker service",

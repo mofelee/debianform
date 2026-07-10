@@ -212,6 +212,7 @@
   ],
   "operations": [
     {
+      "host": "docker-custom1",
       "address": "host.docker-custom1.docker.compose[\"app\"].daemon_reload",
       "action": "run",
       "summary": "reload systemd manager configuration",
@@ -229,6 +230,7 @@
       }
     },
     {
+      "host": "docker-custom1",
       "address": "host.docker-custom1.docker.compose[\"app\"].validate",
       "action": "run",
       "summary": "validate docker compose project app",

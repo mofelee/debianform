@@ -37,6 +37,7 @@ online:
 
 `plan.Change` 表示一个资源动作：
 
+- `Host`
 - `Address`
 - `Action`
 - `Summary`
@@ -49,6 +50,7 @@ online:
 - `LowLevelActions`
 
 `ProviderAddress` 只有在 `--debug` 时输出，用于维护 provider 映射，不是普通用户入口。
+Change 和 Operation 都携带显式 `Host`，供 JSON 消费者及 HTML host filter 使用，不依赖 address 字符串解析。
 删除行为字段只在 `delete`、`destroy`、`forget` 类动作中输出，用于让 JSON、文本和 HTML renderer
 复用同一份删除风险语义。
 

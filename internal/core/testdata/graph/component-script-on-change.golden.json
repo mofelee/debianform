@@ -72,6 +72,7 @@
   ],
   "operations": [
     {
+      "host": "app1",
       "address": "host.app1.components.app.script[\"reload\"]",
       "action": "run",
       "summary": "run component script reload",

@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "foundation1",
       "address": "host.foundation1.directories.directory[\"/etc/myapp\"]",
       "action": "create",
       "summary": "create directory /etc/myapp",
@@ -77,6 +78,7 @@
       }
     },
     {
+      "host": "foundation1",
       "address": "host.foundation1.files.file[\"/etc/myapp/config.yaml\"]",
       "action": "create",
       "summary": "create file /etc/myapp/config.yaml",
@@ -201,6 +203,7 @@
       }
     },
     {
+      "host": "foundation1",
       "address": "host.foundation1.groups.group[\"deploy\"]",
       "action": "create",
       "summary": "create group deploy",
@@ -255,6 +258,7 @@
       }
     },
     {
+      "host": "foundation1",
       "address": "host.foundation1.packages.install[\"curl\"]",
       "action": "create",
       "summary": "create package curl",
@@ -291,6 +295,7 @@
       }
     },
     {
+      "host": "foundation1",
       "address": "host.foundation1.secrets.file[\"/etc/myapp/token\"]",
       "action": "create",
       "summary": "create secret file /etc/myapp/token",
@@ -375,6 +380,7 @@
       }
     },
     {
+      "host": "foundation1",
       "address": "host.foundation1.services.service[\"myapp\"]",
       "action": "create",
       "summary": "manage service myapp",
@@ -438,6 +444,7 @@
       }
     },
     {
+      "host": "foundation1",
       "address": "host.foundation1.system.hostname",
       "action": "create",
       "summary": "manage system hostname foundation1",
@@ -465,6 +472,7 @@
       }
     },
     {
+      "host": "foundation1",
       "address": "host.foundation1.systemd.unit[\"myapp.service\"]",
       "action": "create",
       "summary": "create systemd unit myapp.service",
@@ -614,6 +622,7 @@
       }
     },
     {
+      "host": "foundation1",
       "address": "host.foundation1.users.user[\"deploy\"]",
       "action": "create",
       "summary": "create user deploy",
@@ -723,6 +732,7 @@
       }
     },
     {
+      "host": "foundation1",
       "address": "host.foundation1.users.user[\"deploy\"].ssh_authorized_key[\"ab6a85a3317fb10f\"]",
       "action": "create",
       "summary": "create authorized key for deploy",
@@ -770,6 +780,7 @@
   ],
   "operations": [
     {
+      "host": "foundation1",
       "address": "host.foundation1.systemd.daemon_reload",
       "action": "run",
       "summary": "reload systemd manager configuration",

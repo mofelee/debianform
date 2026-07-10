@@ -162,6 +162,7 @@ func TestRecordMultipleOperationOutputsUsesOneCommittedSerial(t *testing.T) {
 	step := OperationStep{
 		Address: `host.server1.components.app.script["render"]`,
 		Operation: graph.Operation{
+			Host:    "server1",
 			Address: `host.server1.components.app.script["render"]`,
 			ScriptPayload: &graph.ScriptPayload{
 				Name:          "render",
@@ -193,6 +194,35 @@ func TestRecordMultipleOperationOutputsUsesOneCommittedSerial(t *testing.T) {
 	}
 	if read.Serial != 11 || len(read.Resources) != 2 {
 		t.Fatalf("backend state = serial %d resources %d, want 11 and 2", read.Serial, len(read.Resources))
+	}
+}
+
+func TestRecordOperationOutputsUsesExplicitHost(t *testing.T) {
+	host := ir.HostSpec{Name: "web.example.com"}
+	initial := corestate.Empty(host.Name)
+	backend := newScriptedCommitBackend(initial, 0)
+	engine := Engine{Backend: backend, Provider: NewMemoryProvider()}
+	states := map[string]corestate.State{host.Name: cloneState(initial)}
+	statesLock := &sync.Mutex{}
+	stateLocks := map[string]*sync.Mutex{host.Name: {}}
+	outputAddress := `host.web.example.com.components.app.script["render"].outputs["/tmp/result"]`
+	step := OperationStep{
+		Address: `host.web.example.com.components.app.script["render"]`,
+		Operation: graph.Operation{
+			Host:    host.Name,
+			Address: `host.web.example.com.components.app.script["render"]`,
+		},
+	}
+	result := OperationResult{Outputs: map[string]map[string]any{
+		outputAddress: {"exists": true, "path": "/tmp/result"},
+	}}
+
+	if err := engine.recordOperationOutputs(context.Background(), map[string]ir.HostSpec{host.Name: host}, states, statesLock, stateLocks, step, result); err != nil {
+		t.Fatal(err)
+	}
+	resource := states[host.Name].Resources[outputAddress]
+	if resource.Host != host.Name {
+		t.Fatalf("output resource host = %q, want explicit host %q", resource.Host, host.Name)
 	}
 }
 

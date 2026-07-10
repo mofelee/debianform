@@ -287,6 +287,7 @@ func TestEngineApplyAddsResourceAndOperationRemoteCallContexts(t *testing.T) {
 		},
 	}
 	operation := graph.Operation{
+		Host:        "server1",
 		Address:     "host.server1.operations.reload",
 		Action:      ActionRun,
 		Summary:     "reload app",

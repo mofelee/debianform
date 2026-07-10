@@ -56,6 +56,7 @@ func nodeSensitive(n Node) bool {
 }
 
 type Operation struct {
+	Host           string         `json:"host"`
 	Address        string         `json:"address"`
 	Action         string         `json:"action"`
 	Summary        string         `json:"summary"`
@@ -1749,6 +1750,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 	}
 
+	for i := range operations {
+		operations[i].Host = host.Name
+	}
 	sort.SliceStable(nodes, func(i, j int) bool {
 		return nodes[i].Address < nodes[j].Address
 	})

@@ -122,6 +122,7 @@
   ],
   "operations": [
     {
+      "host": "apt1",
       "address": "host.apt1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",

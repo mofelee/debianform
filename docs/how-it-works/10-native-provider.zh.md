@@ -93,7 +93,8 @@ provider plan 的核心是读取当前主机状态。例如：
 
 ## RunOperation
 
-`RunOperation` 当前根据 operation address 推断 host，然后执行 `operation.CommandPreview`。
+`RunOperation` 使用 `operation.Host` 作为远端目标，然后执行 `operation.CommandPreview`。Host 缺失时会
+保守失败；address 只作为稳定身份和诊断上下文，不参与 SSH 路由。
 
 这意味着 graph 生成的 command preview 不是纯展示字符串，它也是当前 native operation 的执行命令。
 新增 operation 时要确保 command preview 可执行、幂等，并且不包含敏感明文。

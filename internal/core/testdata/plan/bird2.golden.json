@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "router1",
       "address": "host.router1.components.bird2.apt.repository[\"cznic_bird2\"]",
       "action": "create",
       "summary": "manage apt repository cznic_bird2",
@@ -133,6 +134,7 @@
       }
     },
     {
+      "host": "router1",
       "address": "host.router1.components.bird2.apt.signing_key[\"cznic_bird2\"]",
       "action": "create",
       "summary": "manage apt signing key cznic_bird2",
@@ -232,6 +234,7 @@
       }
     },
     {
+      "host": "router1",
       "address": "host.router1.components.bird2.packages.install[\"bird2\"]",
       "action": "create",
       "summary": "create package bird2",
@@ -297,6 +300,7 @@
       }
     },
     {
+      "host": "router1",
       "address": "host.router1.components.bird2.services.service[\"bird\"]",
       "action": "create",
       "summary": "manage service bird",
@@ -371,6 +375,7 @@
   ],
   "operations": [
     {
+      "host": "router1",
       "address": "host.router1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",

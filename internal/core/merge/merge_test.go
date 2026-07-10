@@ -1315,6 +1315,23 @@ host "server1" {}
 	}
 }
 
+func TestCompileHyphenHostUsesSafeDefaultTargets(t *testing.T) {
+	program := compileInline(t, `host "edge-1" {}`)
+	if len(program.Hosts) != 1 {
+		t.Fatalf("hosts = %#v, want one", program.Hosts)
+	}
+	host := program.Hosts[0]
+	if host.SSH.Host != "edge-1" {
+		t.Fatalf("ssh host = %q, want edge-1", host.SSH.Host)
+	}
+	if host.State.Path != "/var/lib/debianform/state/edge-1.json" {
+		t.Fatalf("state path = %q", host.State.Path)
+	}
+	if host.State.LockPath != "/var/lock/debianform/state/edge-1.lock" {
+		t.Fatalf("state lock path = %q", host.State.LockPath)
+	}
+}
+
 func TestValidateRuntimeTemplatesAllowsMissingRuntimeFacts(t *testing.T) {
 	cfg := parseInline(t, `
 component "tools" {

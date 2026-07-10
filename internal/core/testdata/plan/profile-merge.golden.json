@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "merge1",
       "address": "host.merge1.kernel.module[\"tcp_bbr\"]",
       "action": "create",
       "summary": "create kernel module tcp_bbr",
@@ -59,6 +60,7 @@
       }
     },
     {
+      "host": "merge1",
       "address": "host.merge1.kernel.sysctl[\"net.core.default_qdisc\"]",
       "action": "create",
       "summary": "create sysctl net.core.default_qdisc",
@@ -113,6 +115,7 @@
       }
     },
     {
+      "host": "merge1",
       "address": "host.merge1.kernel.sysctl[\"net.ipv4.tcp_congestion_control\"]",
       "action": "create",
       "summary": "create sysctl net.ipv4.tcp_congestion_control",
@@ -167,6 +170,7 @@
       }
     },
     {
+      "host": "merge1",
       "address": "host.merge1.packages.install[\"curl\"]",
       "action": "create",
       "summary": "create package curl",
@@ -203,6 +207,7 @@
       }
     },
     {
+      "host": "merge1",
       "address": "host.merge1.packages.install[\"git\"]",
       "action": "create",
       "summary": "create package git",
@@ -239,6 +244,7 @@
       }
     },
     {
+      "host": "merge1",
       "address": "host.merge1.packages.install[\"htop\"]",
       "action": "create",
       "summary": "create package htop",
@@ -275,6 +281,7 @@
       }
     },
     {
+      "host": "merge1",
       "address": "host.merge1.packages.install[\"vim\"]",
       "action": "create",
       "summary": "create package vim",
@@ -311,6 +318,7 @@
       }
     },
     {
+      "host": "merge1",
       "address": "host.merge1.system.locale",
       "action": "create",
       "summary": "manage system locale en_US.UTF-8",
@@ -338,6 +346,7 @@
       }
     },
     {
+      "host": "merge1",
       "address": "host.merge1.system.timezone",
       "action": "create",
       "summary": "manage system timezone Asia/Shanghai",

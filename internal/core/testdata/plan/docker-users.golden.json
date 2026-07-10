@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.apt.repository[\"docker-official\"]",
       "action": "create",
       "summary": "manage docker official apt repository",
@@ -128,6 +129,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.apt.signing_key[\"docker-official\"]",
       "action": "create",
       "summary": "manage docker official apt signing key",
@@ -218,6 +220,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.group[\"docker\"]",
       "action": "create",
       "summary": "create docker group",
@@ -272,6 +275,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.package[\"containerd.io\"]",
       "action": "create",
       "summary": "install docker package containerd.io",
@@ -328,6 +332,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.package[\"docker-buildx-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-buildx-plugin",
@@ -384,6 +389,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.package[\"docker-ce\"]",
       "action": "create",
       "summary": "install docker package docker-ce",
@@ -440,6 +446,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.package[\"docker-ce-cli\"]",
       "action": "create",
       "summary": "install docker package docker-ce-cli",
@@ -496,6 +503,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.package[\"docker-compose-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-compose-plugin",
@@ -552,6 +560,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.package_conflicts",
       "action": "create",
       "summary": "remove docker conflict packages",
@@ -658,6 +667,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.service[\"docker\"]",
       "action": "create",
       "summary": "manage docker service",
@@ -712,6 +722,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.docker.user_group_membership[\"deploy:docker\"]",
       "action": "create",
       "summary": "add user deploy to docker group",
@@ -766,6 +777,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.groups.group[\"deploy\"]",
       "action": "create",
       "summary": "create group deploy",
@@ -820,6 +832,7 @@
       }
     },
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.users.user[\"deploy\"]",
       "action": "create",
       "summary": "create user deploy",
@@ -919,6 +932,7 @@
   ],
   "operations": [
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",

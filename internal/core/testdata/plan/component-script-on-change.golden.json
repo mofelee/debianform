@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "app1",
       "address": "host.app1.components.app.files.file[\"/etc/managed-app/config.env\"]",
       "action": "create",
       "summary": "create file /etc/managed-app/config.env",
@@ -147,6 +148,7 @@
       }
     },
     {
+      "host": "app1",
       "address": "host.app1.components.app.script[\"reload\"].outputs[\"/etc/managed-app/rendered.env\"]",
       "action": "create",
       "summary": "check script output /etc/managed-app/rendered.env",
@@ -203,6 +205,7 @@
   ],
   "operations": [
     {
+      "host": "app1",
       "address": "host.app1.components.app.script[\"reload\"]",
       "action": "run",
       "summary": "run component script reload",

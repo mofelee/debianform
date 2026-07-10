@@ -1770,6 +1770,25 @@ func TestApplySkipsDependentsAfterFailure(t *testing.T) {
 	}
 }
 
+func TestOperationStepsFilterUsesExplicitHost(t *testing.T) {
+	trigger := `host.server1.files.file["/tmp/example"]`
+	operation := graph.Operation{
+		Host:        "server1",
+		Address:     "host.address-prefix-must-not-route.operations.reload",
+		TriggeredBy: []string{trigger},
+	}
+	changed := map[string]struct{}{trigger: {}}
+	steps := map[string]Step{trigger: {Address: trigger, Host: "server1"}}
+
+	selected := operationSteps([]graph.Operation{operation}, changed, steps, Options{Host: "server1"})
+	if len(selected) != 1 || selected[0].Operation.Host != "server1" {
+		t.Fatalf("selected operations = %#v, want explicit server1 host", selected)
+	}
+	if got := operationSteps([]graph.Operation{operation}, changed, steps, Options{Host: "address-prefix-must-not-route"}); len(got) != 0 {
+		t.Fatalf("address prefix incorrectly selected operation: %#v", got)
+	}
+}
+
 func TestPreventDestroyBlocksOrphanDestroy(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `
 host "server1" {

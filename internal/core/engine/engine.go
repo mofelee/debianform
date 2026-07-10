@@ -656,6 +656,7 @@ func (p Plan) Document(opts coreplan.Options) coreplan.Document {
 			after = nil
 		}
 		change := coreplan.Change{
+			Host:    step.Host,
 			Address: step.Address,
 			Action:  step.Action,
 			Summary: step.Summary,
@@ -683,6 +684,7 @@ func (p Plan) Document(opts coreplan.Options) coreplan.Document {
 			address = op.Address
 		}
 		operations = append(operations, coreplan.OperationNode{
+			Host:           op.Host,
 			Address:        address,
 			Action:         op.Action,
 			Summary:        op.Summary,
@@ -1014,7 +1016,7 @@ func stepByAddress(steps []Step) map[string]Step {
 func operationSteps(operations []graph.Operation, changed map[string]struct{}, steps map[string]Step, opts Options) []OperationStep {
 	var out []OperationStep
 	for _, op := range operations {
-		if opts.Host != "" && !strings.HasPrefix(op.Address, "host."+opts.Host+".") {
+		if opts.Host != "" && op.Host != opts.Host {
 			continue
 		}
 		var triggered []string
@@ -1494,7 +1496,7 @@ func (e Engine) recordOperationOutputs(ctx context.Context, hosts map[string]ir.
 	if len(result.Outputs) == 0 {
 		return nil
 	}
-	hostName := hostFromAddress(step.Operation.Address)
+	hostName := step.Operation.Host
 	host, ok := hosts[hostName]
 	if !ok {
 		return fmt.Errorf("%s references unknown host %q", step.Address, hostName)
@@ -1558,9 +1560,8 @@ func scriptOutputNodeForOperation(operation graph.Operation, address string) (gr
 		if output.ScriptDigest != "" {
 			desired["script_digest"] = output.ScriptDigest
 		}
-		hostName := hostFromAddress(operation.Address)
 		return graph.Node{
-			Host:            hostName,
+			Host:            operation.Host,
 			Address:         address,
 			Kind:            "component_script_output",
 			Source:          operation.Source,

@@ -301,6 +301,7 @@
   ],
   "operations": [
     {
+      "host": "foundation1",
       "address": "host.foundation1.systemd.daemon_reload",
       "action": "run",
       "summary": "reload systemd manager configuration",

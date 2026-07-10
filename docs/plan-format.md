@@ -69,6 +69,7 @@ run
 
 ```json
 {
+  "host": "server1",
   "address": "host.server1.nftables.file[\"20-services\"]",
   "action": "update",
   "summary": "update nftables snippet 20-services",
@@ -92,6 +93,7 @@ run
 要求：
 
 - `address` 使用用户可理解的稳定地址。
+- `host` 是资源所属的显式逻辑 host，不需要从 `address` 反解析。
 - `provider_address` 只在 `dbf plan --debug` 时输出；普通 JSON、终端和 HTML 输出省略。
 - `source` 指向用户 DSL 的来源位置。
 - `delete_behavior`、`delete_notes`、`delete_risk` 只在 `delete`、`destroy`、`forget` 类动作中输出。
@@ -209,6 +211,7 @@ sensitive
 
 ```json
 {
+  "host": "server1",
   "address": "host.server1.nftables.activate",
   "action": "run",
   "summary": "activate nftables ruleset",
@@ -228,6 +231,8 @@ sensitive
 ```
 
 OperationNode 只描述有语义的执行动作，不是任意 shell hook。典型地址：
+
+`host` 是 operation 的明确执行目标；调度器、provider 和 HTML filter 都使用该字段，address 不承担路由职责。
 
 ```text
 host.server1.apt.cache_refresh

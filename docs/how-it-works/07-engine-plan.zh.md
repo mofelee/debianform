@@ -60,7 +60,8 @@ provider 仍然要观测主机，才能识别漂移和已有资源。
 9. 排序 step 和 operation。
 10. 生成 summary。
 
-`opts.Host` 会在读取 state、遍历 node、处理 orphan 和 operation 时过滤 host。
+`opts.Host` 会在读取 state、遍历 node、处理 orphan 和 operation 时过滤 host。operation 过滤直接比较
+`graph.Operation.Host`，不会从 address 前缀推断执行目标。
 
 ## Engine.Check 的锁周期
 
@@ -133,7 +134,7 @@ orphan 是 state 中存在、但当前 desired graph 中不存在的资源。`or
 - 对每个 step 构造 before/after。
 - destroy/forget 时从 prior desired 展示 before。
 - 使用 `BuildDiff` 生成 diff。
-- 携带 operation 信息。
+- 为 change 和 operation 携带显式 host 及 operation 信息。
 - 使用 engine summary。
 
 如果 `--debug` 开启，它会输出 provider address。prior 中也可能补 provider address。

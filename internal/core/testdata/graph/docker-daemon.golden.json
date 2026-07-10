@@ -344,6 +344,7 @@
   ],
   "operations": [
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",
@@ -363,6 +364,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.daemon.restart",
       "action": "run",
       "summary": "restart docker service",

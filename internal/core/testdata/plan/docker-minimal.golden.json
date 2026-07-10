@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "docker1",
       "address": "host.docker1.docker.apt.repository[\"docker-official\"]",
       "action": "create",
       "summary": "manage docker official apt repository",
@@ -128,6 +129,7 @@
       }
     },
     {
+      "host": "docker1",
       "address": "host.docker1.docker.apt.signing_key[\"docker-official\"]",
       "action": "create",
       "summary": "manage docker official apt signing key",
@@ -218,6 +220,7 @@
       }
     },
     {
+      "host": "docker1",
       "address": "host.docker1.docker.package[\"containerd.io\"]",
       "action": "create",
       "summary": "install docker package containerd.io",
@@ -274,6 +277,7 @@
       }
     },
     {
+      "host": "docker1",
       "address": "host.docker1.docker.package[\"docker-buildx-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-buildx-plugin",
@@ -330,6 +334,7 @@
       }
     },
     {
+      "host": "docker1",
       "address": "host.docker1.docker.package[\"docker-ce\"]",
       "action": "create",
       "summary": "install docker package docker-ce",
@@ -386,6 +391,7 @@
       }
     },
     {
+      "host": "docker1",
       "address": "host.docker1.docker.package[\"docker-ce-cli\"]",
       "action": "create",
       "summary": "install docker package docker-ce-cli",
@@ -442,6 +448,7 @@
       }
     },
     {
+      "host": "docker1",
       "address": "host.docker1.docker.package[\"docker-compose-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-compose-plugin",
@@ -498,6 +505,7 @@
       }
     },
     {
+      "host": "docker1",
       "address": "host.docker1.docker.package_conflicts",
       "action": "create",
       "summary": "remove docker conflict packages",
@@ -604,6 +612,7 @@
       }
     },
     {
+      "host": "docker1",
       "address": "host.docker1.docker.service[\"docker\"]",
       "action": "create",
       "summary": "manage docker service",
@@ -660,6 +669,7 @@
   ],
   "operations": [
     {
+      "host": "docker1",
       "address": "host.docker1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",

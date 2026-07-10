@@ -822,6 +822,30 @@ func TestPlanHTMLDoesNotLeakSecrets(t *testing.T) {
 	testassert.NoSecretLeak(t, "plan HTML", html)
 }
 
+func TestPlanHTMLUsesExplicitHostFields(t *testing.T) {
+	doc := Document{
+		FormatVersion: FormatVersion,
+		Changes: []Change{{
+			Host:    "web.example.com",
+			Address: `host.web.example.com.files.file["/tmp/example"]`,
+			Action:  "create",
+		}},
+		Operations: []OperationNode{{
+			Host:    "web.example.com",
+			Address: "host.web.example.com.operations.reload",
+			Action:  "run",
+		}},
+	}
+	var out bytes.Buffer
+	if err := PrintHTML(&out, doc); err != nil {
+		t.Fatal(err)
+	}
+	html := out.String()
+	if !strings.Contains(html, `value="web.example.com"`) || strings.Count(html, `data-host="web.example.com"`) != 2 {
+		t.Fatalf("HTML did not preserve explicit FQDN host:\n%s", html)
+	}
+}
+
 func TestFilesPlanPreviewHasTextAndSensitiveDiffs(t *testing.T) {
 	doc := planFixture(t, "../../../examples/files-plan-preview.dbf.hcl", Options{
 		CommandFile: "../../../examples/files-plan-preview.dbf.hcl",

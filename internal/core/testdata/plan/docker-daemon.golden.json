@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.apt.repository[\"docker-official\"]",
       "action": "create",
       "summary": "manage docker official apt repository",
@@ -128,6 +129,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.apt.signing_key[\"docker-official\"]",
       "action": "create",
       "summary": "manage docker official apt signing key",
@@ -218,6 +220,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.daemon.file[\"/etc/docker/daemon.json\"]",
       "action": "create",
       "summary": "manage docker daemon configuration",
@@ -369,6 +372,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.package[\"containerd.io\"]",
       "action": "create",
       "summary": "install docker package containerd.io",
@@ -425,6 +429,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.package[\"docker-buildx-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-buildx-plugin",
@@ -481,6 +486,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.package[\"docker-ce\"]",
       "action": "create",
       "summary": "install docker package docker-ce",
@@ -537,6 +543,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.package[\"docker-ce-cli\"]",
       "action": "create",
       "summary": "install docker package docker-ce-cli",
@@ -593,6 +600,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.package[\"docker-compose-plugin\"]",
       "action": "create",
       "summary": "install docker package docker-compose-plugin",
@@ -649,6 +657,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.package_conflicts",
       "action": "create",
       "summary": "remove docker conflict packages",
@@ -755,6 +764,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.service[\"docker\"]",
       "action": "create",
       "summary": "manage docker service",
@@ -811,6 +821,7 @@
   ],
   "operations": [
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",
@@ -830,6 +841,7 @@
       }
     },
     {
+      "host": "docker-daemon1",
       "address": "host.docker-daemon1.docker.daemon.restart",
       "action": "run",
       "summary": "restart docker service",

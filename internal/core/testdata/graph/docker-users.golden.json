@@ -416,6 +416,7 @@
   ],
   "operations": [
     {
+      "host": "docker-users1",
       "address": "host.docker-users1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",

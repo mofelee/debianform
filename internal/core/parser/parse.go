@@ -1109,6 +1109,9 @@ func parseLabeledHeader(file, typ string, block *hclsyntax.Block) (ir.SourceRef,
 		return ir.SourceRef{}, "", fmt.Errorf("%s:%d: %s block requires exactly one label", file, line, typ)
 	}
 	name := block.Labels[0]
+	if !hclsyntax.ValidIdentifier(name) {
+		return ir.SourceRef{}, "", fmt.Errorf("%s:%d: %s block label %q must be a valid HCL identifier", file, line, typ, name)
+	}
 	return ir.SourceRef{File: file, Line: line, Path: typ + "." + name}, name, nil
 }
 

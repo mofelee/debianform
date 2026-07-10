@@ -1112,6 +1112,7 @@ func TestNativeProviderSensitiveOperationRedactsRemoteError(t *testing.T) {
 	runner := &recordingRunner{errors: []error{errors.New("remote failed with " + testassert.SensitiveVariableDefault)}}
 	provider := NewNativeProvider(runner)
 	_, err := provider.RunOperation(context.Background(), graph.Operation{
+		Host:           "server1",
 		Address:        "host.server1.nftables.validate",
 		Action:         "run",
 		Summary:        "validate nftables ruleset",
@@ -1869,6 +1870,7 @@ func TestNativeProviderDockerComposeValidateOperation(t *testing.T) {
 	runner := &recordingRunner{}
 	provider := NewNativeProvider(runner)
 	operation := graph.Operation{
+		Host:           "compose.example.com",
 		Address:        `host.compose1.docker.compose["app"].validate`,
 		Action:         "run",
 		CommandPreview: "docker compose -p app -f /opt/app/compose.yaml config",
@@ -1880,12 +1882,16 @@ func TestNativeProviderDockerComposeValidateOperation(t *testing.T) {
 	if len(runner.scripts) != 1 || runner.scripts[0] != operation.CommandPreview {
 		t.Fatalf("compose validate command = %#v, want %q", runner.scripts, operation.CommandPreview)
 	}
+	if len(runner.hosts) != 1 || runner.hosts[0] != operation.Host {
+		t.Fatalf("compose validate hosts = %#v, want explicit host %q", runner.hosts, operation.Host)
+	}
 }
 
 func TestNativeProviderComponentScriptRunOperation(t *testing.T) {
 	runner := &recordingRunner{}
 	provider := NewNativeProvider(runner)
 	operation := graph.Operation{
+		Host:    "app.example.com",
 		Address: `host.app1.components.app.script["reload"]`,
 		Action:  "run",
 		ScriptPayload: &graph.ScriptPayload{
@@ -1906,12 +1912,16 @@ func TestNativeProviderComponentScriptRunOperation(t *testing.T) {
 	if len(runner.inputs) != 1 || runner.inputs[0] != "systemctl reload app.service\n" {
 		t.Fatalf("script input = %#v, want run body with newline", runner.inputs)
 	}
+	if len(runner.hosts) != 1 || runner.hosts[0] != operation.Host {
+		t.Fatalf("script hosts = %#v, want explicit host %q", runner.hosts, operation.Host)
+	}
 }
 
 func TestNativeProviderComponentScriptContentOperation(t *testing.T) {
 	runner := &recordingRunner{}
 	provider := NewNativeProvider(runner)
 	operation := graph.Operation{
+		Host:    "app1",
 		Address: `host.app1.components.app.script["reload"]`,
 		Action:  "run",
 		ScriptPayload: &graph.ScriptPayload{
@@ -1938,6 +1948,7 @@ func TestNativeProviderComponentScriptCommandsOperation(t *testing.T) {
 	runner := &recordingRunner{}
 	provider := NewNativeProvider(runner)
 	operation := graph.Operation{
+		Host:    "app1",
 		Address: `host.app1.components.app.script["reload"]`,
 		Action:  "run",
 		ScriptPayload: &graph.ScriptPayload{
@@ -1965,6 +1976,7 @@ func TestNativeProviderComponentScriptOperationEnvironment(t *testing.T) {
 	runner := &recordingRunner{}
 	provider := NewNativeProvider(runner)
 	operation := graph.Operation{
+		Host:    "app1",
 		Address: `host.app1.components.app.script["reload"]`,
 		Action:  "run",
 		ScriptPayload: &graph.ScriptPayload{
@@ -2011,6 +2023,7 @@ func TestNativeProviderComponentScriptOperationRecordsOutputs(t *testing.T) {
 	provider := NewNativeProvider(runner)
 	outputAddress := `host.app1.components.app.script["render"].outputs["/tmp/rendered.conf"]`
 	operation := graph.Operation{
+		Host:    "app1",
 		Address: `host.app1.components.app.script["render"]`,
 		Action:  "run",
 		ScriptPayload: &graph.ScriptPayload{
@@ -2071,6 +2084,7 @@ func TestNativeProviderComponentScriptOperationFailure(t *testing.T) {
 	runner := &recordingRunner{errors: []error{errors.New("script failed")}}
 	provider := NewNativeProvider(runner)
 	operation := graph.Operation{
+		Host:    "app1",
 		Address: `host.app1.components.app.script["reload"]`,
 		Action:  "run",
 		ScriptPayload: &graph.ScriptPayload{
@@ -2095,6 +2109,7 @@ func TestNativeProviderDockerComposeDaemonReloadOperation(t *testing.T) {
 	runner := &recordingRunner{}
 	provider := NewNativeProvider(runner)
 	operation := graph.Operation{
+		Host:           "compose1",
 		Address:        `host.compose1.docker.compose["app"].daemon_reload`,
 		Action:         "run",
 		CommandPreview: "systemctl daemon-reload",

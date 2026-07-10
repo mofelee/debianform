@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "users1",
       "address": "host.users1.groups.group[\"deploy\"]",
       "action": "create",
       "summary": "create group deploy",
@@ -68,6 +69,7 @@
       }
     },
     {
+      "host": "users1",
       "address": "host.users1.users.user[\"deploy\"]",
       "action": "create",
       "summary": "create user deploy",
@@ -177,6 +179,7 @@
       }
     },
     {
+      "host": "users1",
       "address": "host.users1.users.user[\"deploy\"].ssh_authorized_key[\"7400392758cd663d\"]",
       "action": "create",
       "summary": "create authorized key for deploy",

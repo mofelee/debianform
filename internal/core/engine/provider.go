@@ -285,9 +285,9 @@ func (p NativeProvider) RunOperation(ctx context.Context, operation graph.Operat
 	if operation.CommandPreview == "" {
 		return OperationResult{}, nil
 	}
-	host := hostFromAddress(operation.Address)
+	host := operation.Host
 	if host == "" {
-		return OperationResult{}, fmt.Errorf("cannot infer host from operation address %s", operation.Address)
+		return OperationResult{}, fmt.Errorf("operation %s is missing its target host", operation.Address)
 	}
 	_, err := p.Runner.RunCommand(ctx, host, operation.CommandPreview)
 	if err != nil && operation.Sensitive {
@@ -297,9 +297,9 @@ func (p NativeProvider) RunOperation(ctx context.Context, operation graph.Operat
 }
 
 func (p NativeProvider) runScriptOperation(ctx context.Context, operation graph.Operation) (OperationResult, error) {
-	host := hostFromAddress(operation.Address)
+	host := operation.Host
 	if host == "" {
-		return OperationResult{}, fmt.Errorf("cannot infer host from operation address %s", operation.Address)
+		return OperationResult{}, fmt.Errorf("operation %s is missing its target host", operation.Address)
 	}
 	payload := operation.ScriptPayload
 	if payload == nil {
@@ -3208,17 +3208,6 @@ func splitAuthorizedKey(key string) (keytype, keyblob string, err error) {
 		return "", "", fmt.Errorf("authorized key must contain a type and body")
 	}
 	return fields[0], fields[1], nil
-}
-
-func hostFromAddress(address string) string {
-	if !strings.HasPrefix(address, "host.") {
-		return ""
-	}
-	rest := strings.TrimPrefix(address, "host.")
-	if idx := strings.Index(rest, "."); idx >= 0 {
-		return rest[:idx]
-	}
-	return ""
 }
 
 func modulePath(name string) string {

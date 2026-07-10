@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "apt1",
       "address": "host.apt1.apt.repository[\"example_tools\"]",
       "action": "create",
       "summary": "manage apt repository example_tools",
@@ -124,6 +125,7 @@
       }
     },
     {
+      "host": "apt1",
       "address": "host.apt1.apt.signing_key[\"example_tools\"]",
       "action": "create",
       "summary": "manage apt signing key example_tools",
@@ -214,6 +216,7 @@
       }
     },
     {
+      "host": "apt1",
       "address": "host.apt1.packages.install[\"curl\"]",
       "action": "create",
       "summary": "create package curl",
@@ -250,6 +253,7 @@
       }
     },
     {
+      "host": "apt1",
       "address": "host.apt1.packages.install[\"example-tool\"]",
       "action": "create",
       "summary": "create package example-tool",
@@ -308,6 +312,7 @@
   ],
   "operations": [
     {
+      "host": "apt1",
       "address": "host.apt1.apt.cache_refresh",
       "action": "run",
       "summary": "refresh apt package cache",

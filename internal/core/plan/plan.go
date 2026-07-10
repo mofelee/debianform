@@ -53,6 +53,7 @@ type Summary struct {
 }
 
 type Change struct {
+	Host            string       `json:"host,omitempty"`
 	Address         string       `json:"address"`
 	Action          string       `json:"action"`
 	Summary         string       `json:"summary"`
@@ -92,6 +93,7 @@ type DiffLine struct {
 }
 
 type OperationNode struct {
+	Host           string       `json:"host,omitempty"`
 	Address        string       `json:"address"`
 	Action         string       `json:"action"`
 	Summary        string       `json:"summary"`
@@ -121,6 +123,7 @@ func New(resourceGraph *graph.ResourceGraph, opts Options) Document {
 	changes := make([]Change, 0, len(nodes))
 	for _, node := range nodes {
 		change := Change{
+			Host:    node.Host,
 			Address: node.Address,
 			Action:  "create",
 			Summary: node.Summary,
@@ -136,6 +139,7 @@ func New(resourceGraph *graph.ResourceGraph, opts Options) Document {
 	operations := make([]OperationNode, 0, len(resourceGraph.Operations))
 	for _, operation := range resourceGraph.Operations {
 		operations = append(operations, OperationNode{
+			Host:           operation.Host,
 			Address:        operation.Address,
 			Action:         operation.Action,
 			Summary:        operation.Summary,
@@ -237,7 +241,6 @@ func PrintJSON(w io.Writer, doc Document) error {
 func PrintHTML(w io.Writer, doc Document) error {
 	tmpl, err := template.New("plan").Funcs(template.FuncMap{
 		"sourceText": sourceText,
-		"hostText":   hostFromAddress,
 		"diffText":   diffText,
 		"actionText": func(action string) string {
 			if action == "" {
@@ -659,13 +662,13 @@ type htmlView struct {
 func collectHosts(doc Document) []string {
 	seen := map[string]struct{}{}
 	for _, change := range doc.Changes {
-		if host := hostFromAddress(change.Address); host != "" {
-			seen[host] = struct{}{}
+		if change.Host != "" {
+			seen[change.Host] = struct{}{}
 		}
 	}
 	for _, op := range doc.Operations {
-		if host := hostFromAddress(op.Address); host != "" {
-			seen[host] = struct{}{}
+		if op.Host != "" {
+			seen[op.Host] = struct{}{}
 		}
 	}
 	return sortedSet(seen)
@@ -693,17 +696,6 @@ func sortedSet(values map[string]struct{}) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func hostFromAddress(address string) string {
-	if !strings.HasPrefix(address, "host.") {
-		return ""
-	}
-	rest := strings.TrimPrefix(address, "host.")
-	if idx := strings.Index(rest, "."); idx >= 0 {
-		return rest[:idx]
-	}
-	return ""
 }
 
 const planHTMLTemplate = `<!doctype html>
@@ -790,7 +782,7 @@ const planHTMLTemplate = `<!doctype html>
       <thead><tr><th>Action</th><th>Address</th><th>Summary</th>{{if .HasDeleteBehaviors}}<th>Delete behavior</th>{{end}}<th>Source</th></tr></thead>
       <tbody>
       {{range .Changes}}
-        <tr data-plan-row data-action="{{.Action}}" data-host="{{hostText .Address}}" data-search="{{.Address}} {{.Summary}} {{.DeleteBehavior}} {{sourceText .Source}}">
+        <tr data-plan-row data-action="{{.Action}}" data-host="{{.Host}}" data-search="{{.Address}} {{.Summary}} {{.DeleteBehavior}} {{sourceText .Source}}">
           <td><span class="action action-{{.Action}}">{{actionText .Action}}</span></td>
           <td><code>{{.Address}}</code></td>
           <td>{{.Summary}}{{if .ProviderAddress}}<div class="source">provider: <code>{{.ProviderAddress}}</code></div>{{end}}{{with diffText .Diff}}<details><summary>Field diff</summary><pre>{{.}}</pre></details>{{end}}</td>
@@ -810,7 +802,7 @@ const planHTMLTemplate = `<!doctype html>
       <thead><tr><th>Action</th><th>Address</th><th>Summary</th><th>Command</th></tr></thead>
       <tbody>
       {{range .Operations}}
-        <tr data-plan-row data-action="{{.Action}}" data-host="{{hostText .Address}}" data-search="{{.Address}} {{.Summary}} {{.CommandPreview}}">
+        <tr data-plan-row data-action="{{.Action}}" data-host="{{.Host}}" data-search="{{.Address}} {{.Summary}} {{.CommandPreview}}">
           <td><span class="action action-{{.Action}}">{{actionText .Action}}</span></td>
           <td><code>{{.Address}}</code></td>
           <td>{{.Summary}}</td>

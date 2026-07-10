@@ -14,6 +14,7 @@
   },
   "changes": [
     {
+      "host": "build1",
       "address": "host.build1.components.hello_from_source.artifact.build[\"/var/cache/debianform/components/hello_from_source/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/build/out/3d38698d9f464df9/hello-from-source\"]",
       "action": "create",
       "summary": "build component hello_from_source from source",
@@ -292,6 +293,7 @@
       }
     },
     {
+      "host": "build1",
       "address": "host.build1.components.hello_from_source.artifact.download[\"amd64\"]",
       "action": "create",
       "summary": "download component hello_from_source source",
@@ -409,6 +411,7 @@
       }
     },
     {
+      "host": "build1",
       "address": "host.build1.components.hello_from_source.artifact.install[\"/usr/local/bin/hello-from-source\"]",
       "action": "create",
       "summary": "install component hello_from_source source /usr/local/bin/hello-from-source",
@@ -553,6 +556,7 @@
       }
     },
     {
+      "host": "build1",
       "address": "host.build1.components.hello_from_source.build.package[\"gcc\"]",
       "action": "create",
       "summary": "install build package gcc",
