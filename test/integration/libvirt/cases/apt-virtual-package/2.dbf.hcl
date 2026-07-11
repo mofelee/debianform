@@ -11,6 +11,6 @@ host "cihost" {
   }
 
   packages {
-    install = ["dnsutils"]
+    install = ["awk"]
   }
 }
