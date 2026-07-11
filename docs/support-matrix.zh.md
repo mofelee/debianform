@@ -46,6 +46,12 @@ CI 当前自动发现 19 个 libvirt cases，并展开为 Debian 12 amd64 和 De
 共 38 个阻断 job；任一版本的任一 case 失败都会使 managed-target gate 失败。Debian 13 仍是
 本地默认值和新功能的最高优先级目标。
 
+Debian 12 amd64 Beta 的首个完整门禁基线是提交
+[`34868ea`](https://github.com/mofelee/debianform/commit/34868eac98f5853365b2093d62f297e349ec7313)：
+[CI run 29148759149](https://github.com/mofelee/debianform/actions/runs/29148759149) 中 Debian 12
+amd64 和 Debian 13 amd64 分别通过 `19/19` 个 libvirt cases，且
+`Managed target matrix gate` 成功。
+
 ## CLI 命令
 
 | 命令 | 当前状态 | 验证范围 |
