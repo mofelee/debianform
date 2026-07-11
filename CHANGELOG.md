@@ -4,7 +4,7 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
-## Unreleased
+## v0.5.0
 
 - Added Debian 12 amd64 as a Beta managed target. CI now runs the same 19
   libvirt cases on Debian 12 and Debian 13 amd64 as a 38-job blocking matrix;
