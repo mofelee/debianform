@@ -6,13 +6,32 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
-- Restricted host/profile/component labels to valid HCL identifiers and carried
-  explicit operation hosts through graph, execution, state outputs, and plans.
-- Fixed per-host execution capacity acquisition so unsafe resources reserve all
-  host slots atomically instead of deadlocking through partial reservations.
+## v0.4.0
+
+- Breaking: restricted host, profile, component, and component instance labels
+  to valid HCL identifiers. Configurations that used an FQDN, IP address, path,
+  whitespace, or punctuation as a label must replace it with a stable logical
+  identifier and keep the remote address in `ssh.host`.
+- Changed `apply` to acquire the state lock and recompute the execution plan
+  after the preview is approved. If the locked plan changed, DebianForm prints
+  it and requests approval again before modifying the host or state.
+- Changed `check` to hold every target host's state lock throughout state reads
+  and provider inspection, preventing it from observing an in-progress apply.
+- Added explicit host fields to graph operations, state records, and plan JSON
+  changes/operations so multi-host plans no longer infer ownership from resource
+  address strings.
+- Fixed SSH state locking with atomic, renewable version 2 leases, guarded stale
+  takeover, precise deadlines, and surfaced renewal or cleanup failures.
+- Fixed state validation to reject unsupported schemas, mismatched top-level
+  hosts, and foreign resource records before provider inspection or writes.
 - Fixed state revision tracking so every successful backend write advances and
   returns exactly one committed serial, while failed writes leave the visible
   revision unchanged.
+- Fixed per-host execution capacity acquisition so unsafe resources reserve all
+  host slots atomically instead of deadlocking through partial reservations.
+- Fixed sensitive APT source, APT signing key, and nftables content so derived
+  plaintext cannot appear in plans, state, debug output, or diagnostics; these
+  fields now reject unsupported ephemeral values.
 
 ## v0.3.0
 
