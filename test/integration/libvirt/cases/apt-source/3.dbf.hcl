@@ -17,12 +17,12 @@ host "cihost" {
       content = <<-EOF
         Types: deb
         URIs: https://mirrors.aliyun.com/debian/
-        Suites: trixie trixie-updates
+        Suites: __DBF_DEBIAN_CODENAME__ __DBF_DEBIAN_CODENAME__-updates
         Components: main contrib non-free non-free-firmware
 
         Types: deb
         URIs: https://mirrors.aliyun.com/debian-security/
-        Suites: trixie-security
+        Suites: __DBF_DEBIAN_CODENAME__-security
         Components: main contrib non-free non-free-firmware
       EOF
 

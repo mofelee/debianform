@@ -126,66 +126,6 @@ func TestDockerMinimalPlanJSONGolden(t *testing.T) {
 	}
 }
 
-func TestDockerPackageSourcesPlanJSONGolden(t *testing.T) {
-	doc := planFixture(t, "../../../examples/docker-package-sources.dbf.hcl", Options{
-		CommandFile: "../../../examples/docker-package-sources.dbf.hcl",
-		Host:        "docker-sources1",
-		Now: func() time.Time {
-			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
-		},
-	})
-	data, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := string(data) + "\n"
-	assertGolden(t, "../testdata/plan/docker-package-sources.golden.json", got)
-
-	if doc.Summary.Create != 3 {
-		t.Fatalf("create count = %d, want 3", doc.Summary.Create)
-	}
-	if doc.Summary.Operations != 0 {
-		t.Fatalf("operations = %d, want 0", doc.Summary.Operations)
-	}
-	for _, want := range []string{
-		`host.docker-sources1.docker.package["docker.io"]`,
-		`host.docker-sources1.docker.package["docker-compose-plugin"]`,
-		`host.docker-sources1.docker.service["docker"]`,
-	} {
-		if !hasChange(doc, want) {
-			t.Fatalf("docker package sources plan missing change %q", want)
-		}
-	}
-	if hasChange(doc, `host.docker-sources1.docker.apt.repository["docker-official"]`) {
-		t.Fatalf("debian source plan generated docker official repository")
-	}
-}
-
-func TestDockerPackageSourcesPlanTextGolden(t *testing.T) {
-	doc := planFixture(t, "../../../examples/docker-package-sources.dbf.hcl", Options{
-		CommandFile: "../../../examples/docker-package-sources.dbf.hcl",
-		Host:        "docker-sources1",
-		Now: func() time.Time {
-			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
-		},
-	})
-
-	var text bytes.Buffer
-	PrintText(&text, doc)
-	assertGolden(t, "../testdata/plan/docker-package-sources.golden.txt", text.String())
-	for _, want := range []string{
-		`host.docker-sources1.docker.package["docker.io"]`,
-		`host.docker-sources1.docker.package["docker-compose-plugin"]`,
-	} {
-		if !strings.Contains(text.String(), want) {
-			t.Fatalf("docker package sources text plan missing %q:\n%s", want, text.String())
-		}
-	}
-	if strings.Contains(text.String(), "docker-official") {
-		t.Fatalf("debian source text plan mentioned docker official repository:\n%s", text.String())
-	}
-}
-
 func TestDockerMinimalPlanTextGolden(t *testing.T) {
 	doc := planFixture(t, "../../../examples/docker-minimal.dbf.hcl", Options{
 		CommandFile: "../../../examples/docker-minimal.dbf.hcl",
@@ -1299,7 +1239,6 @@ func testHostFacts() map[string]ir.HostFacts {
 		"compose1",
 		"docker-daemon1",
 		"docker1",
-		"docker-sources1",
 		"docker-users1",
 		"edge1",
 		"foundation1",

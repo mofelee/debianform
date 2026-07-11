@@ -6,6 +6,18 @@ This project follows semantic versioning after the public beta line begins.
 
 ## Unreleased
 
+- Added Debian 12 amd64 as a Beta managed target. CI now runs the same 19
+  libvirt cases on Debian 12 and Debian 13 amd64 as a 38-job blocking matrix;
+  Debian 13 remains the primary and default target.
+- Breaking: removed `docker.package.source = "debian"`. Existing configurations
+  using that value now fail local validation before SSH or state access. Omit
+  `source` to use the default Docker official repository, or use `"none"` or
+  `"custom"` when DebianForm should not install Docker packages.
+- Migration: changing from Debian's Docker packages to Docker's official
+  packages can replace installed packages and interrupt the daemon. Run an
+  online plan first, review downtime and package changes, and back up Docker
+  data before applying.
+
 ## v0.4.0
 
 - Breaking: restricted host, profile, component, and component instance labels

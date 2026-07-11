@@ -126,12 +126,16 @@ func dockerPackageSpec(docker parser.Value) (ir.DockerPackageSpec, error) {
 			removeConflicts = value
 		}
 	}
-	if !stringIn(source, "official", "debian", "none", "custom") {
+	if source == "debian" {
+		errSource := packageBlock.Map["source"].Source
+		return ir.DockerPackageSpec{}, fmt.Errorf("%s:%d:%s: docker package source %q is no longer supported; omit source for Docker's official repository, or use source = \"none\" or source = \"custom\"", errSource.File, errSource.Line, errSource.Path, source)
+	}
+	if !stringIn(source, "official", "none", "custom") {
 		errSource := sourceRef
 		if ok {
 			errSource = packageBlock.Map["source"].Source
 		}
-		return ir.DockerPackageSpec{}, enumError(errSource, "official, debian, none, or custom")
+		return ir.DockerPackageSpec{}, enumError(errSource, "official, none, or custom")
 	}
 	if channel == "" {
 		return ir.DockerPackageSpec{}, fmt.Errorf("%s:%d:%s.channel: docker package channel must be non-empty", sourceRef.File, sourceRef.Line, sourceRef.Path)

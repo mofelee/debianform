@@ -93,6 +93,17 @@
     ]
   },
   {
+    "fixture": "../../../examples/debian12-amd64.dbf.hcl",
+    "hosts": [
+      {
+        "name": "debian12_amd64",
+        "body_keys": [
+          "platform"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/docker-compose.dbf.hcl",
     "hosts": [
       {
@@ -130,17 +141,6 @@
     "hosts": [
       {
         "name": "docker-mirror1",
-        "body_keys": [
-          "docker"
-        ]
-      }
-    ]
-  },
-  {
-    "fixture": "../../../examples/docker-package-sources.dbf.hcl",
-    "hosts": [
-      {
-        "name": "docker-sources1",
         "body_keys": [
           "docker"
         ]

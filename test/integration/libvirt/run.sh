@@ -2,12 +2,17 @@
 
 set -euo pipefail
 
-readonly DEBIAN_CLOUD_URL="https://cloud.debian.org/images/cloud/trixie/latest"
-readonly DEBIAN_CLOUD_IMAGE="debian-13-genericcloud-amd64.qcow2"
-
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SCRIPT_DIR="$ROOT_DIR/test/integration/libvirt"
 CASES_DIR="$SCRIPT_DIR/cases"
+source "$SCRIPT_DIR/debian-target.sh"
+if [[ -n "${DBF_INTEGRATION_DEBIAN_VERSION+x}" ]]; then
+  dbf_integration_resolve_debian_target "$DBF_INTEGRATION_DEBIAN_VERSION"
+else
+  dbf_integration_resolve_debian_target
+fi
+DEBIAN_CLOUD_URL="$DBF_INTEGRATION_DEBIAN_CLOUD_URL"
+DEBIAN_CLOUD_IMAGE="$DBF_INTEGRATION_DEBIAN_CLOUD_IMAGE"
 WORK_ROOT="${DBF_INTEGRATION_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/debianform-core-integration.XXXXXX")}"
 ARTIFACT_ROOT="${DBF_INTEGRATION_ARTIFACT_DIR:-${TMPDIR:-/tmp}/debianform-core-integration-artifacts}"
 DBF_BIN="$WORK_ROOT/dbf"
@@ -59,7 +64,7 @@ log "building dbf"
   go build -trimpath -o "$DBF_BIN" ./cmd/dbf
 )
 
-log "resolving Debian 13 genericcloud image"
+log "resolving Debian $DBF_INTEGRATION_DEBIAN_VERSION $DBF_INTEGRATION_DEBIAN_ARCHITECTURE genericcloud image"
 curl --fail --location --retry 3 --show-error --silent \
   "$DEBIAN_CLOUD_URL/SHA512SUMS" \
   --output "$WORK_ROOT/SHA512SUMS"
@@ -85,7 +90,8 @@ fi
 
 printf '%s  %s\n' "$EXPECTED_SHA512" "$BASE_IMAGE" | sha512sum --check
 
-if [[ -n "$CACHED_IMAGE" && ! -f "$CACHED_IMAGE" ]]; then
+if [[ -n "$CACHED_IMAGE" ]] &&
+  { [[ ! -f "$CACHED_IMAGE" ]] || ! printf '%s  %s\n' "$EXPECTED_SHA512" "$CACHED_IMAGE" | sha512sum --check --status; }; then
   mkdir -p "$IMAGE_CACHE_DIR"
   cp "$BASE_IMAGE" "$CACHED_IMAGE.partial"
   mv "$CACHED_IMAGE.partial" "$CACHED_IMAGE"
@@ -113,7 +119,7 @@ fi
 
 for case_dir in "${CASE_DIRS[@]}"; do
   case_name="$(basename "$case_dir")"
-  log "running case $case_name in a fresh VM"
+  log "running case $case_name in a fresh Debian $DBF_INTEGRATION_DEBIAN_VERSION VM"
   runner="$SCRIPT_DIR/run-case.sh"
   if [[ -f "$case_dir/three-host.case" ]]; then
     runner="$SCRIPT_DIR/run-three-host-case.sh"
@@ -122,6 +128,7 @@ for case_dir in "${CASE_DIRS[@]}"; do
   fi
   DBF_INTEGRATION_DBF_BIN="$DBF_BIN" \
   DBF_INTEGRATION_BASE_IMAGE="$BASE_IMAGE" \
+  DBF_INTEGRATION_BASE_IMAGE_SHA512="$EXPECTED_SHA512" \
   DBF_INTEGRATION_CASE_WORK="$WORK_ROOT/cases/$case_name" \
   DBF_INTEGRATION_CASE_ARTIFACTS="$ARTIFACT_ROOT/$case_name" \
     "$runner" "$case_dir"

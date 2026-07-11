@@ -4,12 +4,17 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CASES_DIR="$ROOT_DIR/test/integration/libvirt/cases"
+EXPECTED_CASE_COUNT=19
 DBF_BIN="${DBF_INTEGRATION_DBF_BIN:-}"
 TEMP_DBF=""
+TEMP_PLAN=""
 
 cleanup() {
   if [[ -n "$TEMP_DBF" ]]; then
     rm -f "$TEMP_DBF"
+  fi
+  if [[ -n "$TEMP_PLAN" ]]; then
+    rm -f "$TEMP_PLAN"
   fi
 }
 trap cleanup EXIT
@@ -26,9 +31,39 @@ fi
 bash -n "$ROOT_DIR/test/integration/libvirt/run-case.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/run-two-host-case.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/run-three-host-case.sh"
+bash -n "$ROOT_DIR/test/integration/libvirt/debian-target.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/network.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
 bash "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
+
+target_12="$(bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 12)"
+target_13="$(bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 13)"
+grep -qx 'codename=bookworm' <<<"$target_12"
+grep -qx 'cloud_image=debian-12-genericcloud-amd64.qcow2' <<<"$target_12"
+grep -qx 'codename=trixie' <<<"$target_13"
+grep -qx 'cloud_image=debian-13-genericcloud-amd64.qcow2' <<<"$target_13"
+if bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 11 >/dev/null 2>&1; then
+  printf 'debian-target.sh unexpectedly accepted Debian 11\n' >&2
+  exit 1
+fi
+if bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" "" >/dev/null 2>&1; then
+  printf 'debian-target.sh unexpectedly accepted an empty Debian version\n' >&2
+  exit 1
+fi
+
+TEMP_PLAN="$(mktemp "${TMPDIR:-/tmp}/dbf-core-noop-plan.XXXXXX.json")"
+printf '%s\n' '{"format_version":"debianform.plan.alpha1","summary":{"create":0,"update":0,"delete":0,"no_op":1,"operations":0}}' >"$TEMP_PLAN"
+python3 "$ROOT_DIR/test/integration/libvirt/assert-noop-plan.py" "$TEMP_PLAN"
+printf '%s\n' '{"format_version":"debianform.plan.alpha1","summary":{"create":0,"update":1,"delete":0,"no_op":0,"operations":0}}' >"$TEMP_PLAN"
+if python3 "$ROOT_DIR/test/integration/libvirt/assert-noop-plan.py" "$TEMP_PLAN" >/dev/null 2>&1; then
+  printf 'assert-noop-plan.py unexpectedly accepted an update plan\n' >&2
+  exit 1
+fi
+printf '%s\n' '{}' >"$TEMP_PLAN"
+if python3 "$ROOT_DIR/test/integration/libvirt/assert-noop-plan.py" "$TEMP_PLAN" >/dev/null 2>&1; then
+  printf 'assert-noop-plan.py unexpectedly accepted a document without a summary\n' >&2
+  exit 1
+fi
 
 load_step_source_args() {
   local case_dir=$1
@@ -145,8 +180,9 @@ while IFS= read -r case_dir; do
   done
 done < <(find "$CASES_DIR" -mindepth 1 -maxdepth 1 -type d | sort)
 
-if (( case_count == 0 )); then
-  printf 'no integration cases found under %s\n' "$CASES_DIR" >&2
+if (( case_count != EXPECTED_CASE_COUNT )); then
+  printf 'expected %d integration cases under %s, found %d\n' \
+    "$EXPECTED_CASE_COUNT" "$CASES_DIR" "$case_count" >&2
   exit 1
 fi
 

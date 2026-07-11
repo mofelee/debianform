@@ -7,8 +7,12 @@ CASE_SOURCE="${1:?usage: run-three-host-case.sh CASE_DIR}"
 CASE_NAME="$(basename "$CASE_SOURCE")"
 DBF_BIN="${DBF_INTEGRATION_DBF_BIN:?missing DBF_INTEGRATION_DBF_BIN}"
 BASE_IMAGE="${DBF_INTEGRATION_BASE_IMAGE:?missing DBF_INTEGRATION_BASE_IMAGE}"
+BASE_IMAGE_SHA512="${DBF_INTEGRATION_BASE_IMAGE_SHA512:?missing DBF_INTEGRATION_BASE_IMAGE_SHA512}"
 CASE_WORK="${DBF_INTEGRATION_CASE_WORK:?missing DBF_INTEGRATION_CASE_WORK}"
 ARTIFACT_DIR="${DBF_INTEGRATION_CASE_ARTIFACTS:?missing DBF_INTEGRATION_CASE_ARTIFACTS}"
+EXPECTED_DEBIAN_VERSION="${DBF_INTEGRATION_DEBIAN_VERSION:?missing DBF_INTEGRATION_DEBIAN_VERSION}"
+EXPECTED_DEBIAN_CODENAME="${DBF_INTEGRATION_DEBIAN_CODENAME:?missing DBF_INTEGRATION_DEBIAN_CODENAME}"
+EXPECTED_DEBIAN_ARCHITECTURE="${DBF_INTEGRATION_DEBIAN_ARCHITECTURE:?missing DBF_INTEGRATION_DEBIAN_ARCHITECTURE}"
 CASE_DIR="$CASE_WORK/scenario"
 LOG_DIR="$CASE_WORK/logs"
 DBF_HOME="$CASE_WORK/home"
@@ -21,23 +25,23 @@ REMOTE_BASE_IMAGE="${DBF_INTEGRATION_REMOTE_BASE_IMAGE:-}"
 
 RUN_SUFFIX="${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 SAFE_CASE_NAME="$(tr -c 'a-zA-Z0-9' '-' <<<"$CASE_NAME" | sed 's/-*$//')"
-NETWORK_NAME="dbf-core-${SAFE_CASE_NAME}-${RUN_SUFFIX}-net"
+NETWORK_NAME="dbf-test-debian${EXPECTED_DEBIAN_VERSION}-${SAFE_CASE_NAME}-${RUN_SUFFIX}-net"
 BRIDGE_NAME=""
 SUBNET_OCTET=""
 VIRT_TYPE="qemu"
 NETWORK_DEFINED=0
+INTERRUPTED=0
 CURRENT_STEP=""
 ASSERTION_COUNT=0
 
 HOST_LABELS=(a b c)
 HOST_ALIASES=(wg-a wg-b wg-c)
-declare -A VM_NAMES VM_MACS VM_IPS VM_DISKS VM_SEEDS VM_DOMAINS VM_CONSOLES VM_DEFINED VM_STARTED
+declare -A VM_NAMES VM_MACS VM_IPS VM_DISKS VM_SEEDS VM_DOMAINS VM_CONSOLES VM_DEFINED
 for label in "${HOST_LABELS[@]}"; do
-  VM_NAMES[$label]="dbf-core-${SAFE_CASE_NAME}-${label}-${RUN_SUFFIX}"
+  VM_NAMES[$label]="dbf-test-debian${EXPECTED_DEBIAN_VERSION}-${SAFE_CASE_NAME}-${label}-${RUN_SUFFIX}"
   printf -v "VM_MACS[$label]" '52:54:00:%02x:%02x:%02x' \
     "$((RANDOM % 256))" "$((RANDOM % 256))" "$((RANDOM % 256))"
   VM_DEFINED[$label]=0
-  VM_STARTED[$label]=0
 done
 
 log() {
@@ -122,22 +126,26 @@ emulator_path() {
   printf '/usr/bin/qemu-system-x86_64\n'
 }
 
+sync_remote_base_image() {
+  local remote_sha=""
+  remote_sha="$(remote_exec sha512sum "$REMOTE_BASE_IMAGE" 2>/dev/null | awk '{print $1}')" || true
+  if [[ "$remote_sha" == "$BASE_IMAGE_SHA512" ]]; then
+    return
+  fi
+
+  log "copying verified Debian base image to $REMOTE_HYPERVISOR:$REMOTE_BASE_IMAGE"
+  local partial="$REMOTE_TMP_DIR/base-image.partial"
+  scp -q "$BASE_IMAGE" "$REMOTE_HYPERVISOR:$partial"
+  remote_exec chmod 0644 "$partial"
+  remote_exec mv -f "$partial" "$REMOTE_BASE_IMAGE"
+}
+
 prepare_vm_paths() {
   local pool_dir=""
   if is_remote_libvirt; then
     pool_dir="$(pool_path)"
-    REMOTE_TMP_DIR="$pool_dir/.dbf-core-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
     if [[ -z "$REMOTE_BASE_IMAGE" ]]; then
       REMOTE_BASE_IMAGE="$pool_dir/$(basename "$BASE_IMAGE")"
-    fi
-    log "remote libvirt URI: $LIBVIRT_URI"
-    log "remote hypervisor: $REMOTE_HYPERVISOR"
-    log "remote storage pool: $REMOTE_POOL ($pool_dir)"
-    remote_exec mkdir -p "$REMOTE_TMP_DIR"
-    if ! remote_exec test -f "$REMOTE_BASE_IMAGE"; then
-      log "copying verified Debian base image to $REMOTE_HYPERVISOR:$REMOTE_BASE_IMAGE"
-      scp -q "$BASE_IMAGE" "$REMOTE_HYPERVISOR:$REMOTE_BASE_IMAGE"
-      remote_exec chmod 0644 "$REMOTE_BASE_IMAGE"
     fi
   fi
 
@@ -153,10 +161,19 @@ prepare_vm_paths() {
     fi
     VM_DOMAINS[$label]="$CASE_WORK/domain-${label}.xml"
   done
+
+  if is_remote_libvirt; then
+    REMOTE_TMP_DIR="$pool_dir/.dbf-test-debian${EXPECTED_DEBIAN_VERSION}-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
+    log "remote libvirt URI: $LIBVIRT_URI"
+    log "remote hypervisor: $REMOTE_HYPERVISOR"
+    log "remote storage pool: $REMOTE_POOL ($pool_dir)"
+    remote_exec mkdir -p "$REMOTE_TMP_DIR"
+    sync_remote_base_image
+  fi
 }
 
 cleanup_vm_files() {
-  if is_remote_libvirt; then
+  if is_remote_libvirt && [[ -n "$REMOTE_TMP_DIR" ]]; then
     for label in "${HOST_LABELS[@]}"; do
       remote_exec rm -f "${VM_DISKS[$label]}" "${VM_SEEDS[$label]}" "${VM_CONSOLES[$label]}" >/dev/null 2>&1 || true
     done
@@ -242,9 +259,9 @@ collect_diagnostics() {
 
 cleanup() {
   local status=$?
-  trap - EXIT
+  trap - EXIT INT TERM
 
-  if (( status != 0 )); then
+  if (( status != 0 && INTERRUPTED == 0 )); then
     for label in "${HOST_LABELS[@]}"; do
       if (( VM_DEFINED[$label] == 1 )); then
         log "case failed; collecting diagnostics in $ARTIFACT_DIR"
@@ -254,25 +271,20 @@ cleanup() {
     done
   fi
   for label in "${HOST_LABELS[@]}"; do
-    if (( VM_STARTED[$label] == 1 )); then
-      virsh_system destroy "${VM_NAMES[$label]}" >/dev/null 2>&1 || true
-    fi
+    virsh_system destroy "${VM_NAMES[$label]}" >/dev/null 2>&1 || true
   done
   for label in "${HOST_LABELS[@]}"; do
-    if (( VM_DEFINED[$label] == 1 )); then
-      virsh_system undefine "${VM_NAMES[$label]}" --nvram >/dev/null 2>&1 ||
-        virsh_system undefine "${VM_NAMES[$label]}" >/dev/null 2>&1 || true
-    fi
+    virsh_system undefine "${VM_NAMES[$label]}" --nvram >/dev/null 2>&1 ||
+      virsh_system undefine "${VM_NAMES[$label]}" >/dev/null 2>&1 || true
   done
-  if (( NETWORK_DEFINED == 1 )); then
-    virsh_system net-destroy "$NETWORK_NAME" >/dev/null 2>&1 || true
-    virsh_system net-undefine "$NETWORK_NAME" >/dev/null 2>&1 || true
-  fi
+  virsh_system net-destroy "$NETWORK_NAME" >/dev/null 2>&1 || true
+  virsh_system net-undefine "$NETWORK_NAME" >/dev/null 2>&1 || true
   cleanup_vm_files
 
   exit "$status"
 }
 trap cleanup EXIT
+trap 'INTERRUPTED=1; exit 130' INT TERM
 
 wait_for_vm_ip() {
   local label=$1
@@ -393,10 +405,10 @@ write_domain() {
       <source file='${VM_DISKS[$label]}'/>
       <target dev='vda' bus='virtio'/>
     </disk>
-    <disk type='file' device='cdrom'>
+    <disk type='file' device='disk'>
       <driver name='qemu' type='raw'/>
       <source file='${VM_SEEDS[$label]}'/>
-      <target dev='sda' bus='sata'/>
+      <target dev='vdb' bus='virtio'/>
       <readonly/>
     </disk>
     <interface type='network'>
@@ -468,7 +480,6 @@ for label in "${HOST_LABELS[@]}"; do
 done
 for label in "${HOST_LABELS[@]}"; do
   virsh_system start "${VM_NAMES[$label]}" >/dev/null
-  VM_STARTED[$label]=1
 done
 
 for label in "${HOST_LABELS[@]}"; do
@@ -506,7 +517,7 @@ chmod 0600 "$DBF_HOME/.ssh/config"
 for alias in "${HOST_ALIASES[@]}"; do
   wait_for_ssh "$alias"
   ssh_host "$alias" "cloud-init status --wait >/dev/null && test -e /run/debianform-cloud-init-ready"
-  ssh_host "$alias" ". /etc/os-release && test \"\$ID\" = debian && test \"\$VERSION_ID\" = 13"
+  ssh_host "$alias" ". /etc/os-release && test \"\$ID\" = debian && test \"\$VERSION_ID\" = '$EXPECTED_DEBIAN_VERSION' && test \"\${VERSION_CODENAME:-}\" = '$EXPECTED_DEBIAN_CODENAME' && test \"\$(dpkg --print-architecture)\" = '$EXPECTED_DEBIAN_ARCHITECTURE'"
 done
 
 DBF_WG_A_HOST="${VM_IPS[a]}"
@@ -526,6 +537,7 @@ while IFS= read -r config; do
     -e "s/__DBF_WG_B_VM_IP__/${VM_IPS[b]}/g" \
     -e "s/__DBF_WG_C_VM_IP__/${VM_IPS[c]}/g" \
     -e "s/__DBF_VM_IP__/$DBF_WG_A_HOST/g" \
+    -e "s/__DBF_DEBIAN_CODENAME__/$EXPECTED_DEBIAN_CODENAME/g" \
     "$config"
 done < <(find "$CASE_DIR" -maxdepth 3 -type f \( -name '[0-9]*.dbf.hcl' -o -name '*.conf' -o -name '*.sh' \))
 
@@ -556,6 +568,9 @@ for config in "${CONFIGS[@]}"; do
   log "step $CURRENT_STEP: validating $filename"
   dbf validate -f "$config" | tee "$LOG_DIR/$CURRENT_STEP.validate.log"
 
+  log "step $CURRENT_STEP: planning before apply"
+  dbf plan -f "$config" --format json | tee "$LOG_DIR/$CURRENT_STEP.pre-apply-plan.json"
+
   if [[ -f "$drift_hook" ]]; then
     run_hook "$drift_hook"
     log "step $CURRENT_STEP: verifying dbf check rejects drift"
@@ -568,6 +583,10 @@ for config in "${CONFIGS[@]}"; do
 
   log "step $CURRENT_STEP: applying"
   dbf apply -f "$config" --parallel 3 --auto-approve | tee "$LOG_DIR/$CURRENT_STEP.apply.log"
+
+  log "step $CURRENT_STEP: verifying no-op plan after apply"
+  dbf plan -f "$config" --format json | tee "$LOG_DIR/$CURRENT_STEP.noop-plan.json"
+  python3 "$SCRIPT_DIR/assert-noop-plan.py" "$LOG_DIR/$CURRENT_STEP.noop-plan.json"
 
   log "step $CURRENT_STEP: checking convergence"
   dbf check -f "$config" | tee "$LOG_DIR/$CURRENT_STEP.check.log"

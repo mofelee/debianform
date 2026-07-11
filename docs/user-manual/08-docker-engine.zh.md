@@ -106,7 +106,7 @@ gpg_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 自定义 `gpg_url` 且省略 `gpg_sha256` 时，DebianForm 不校验 key 文件内容的 checksum；需要内容校验和
 key 内容漂移检测时应设置 `gpg_sha256`。
 
-这些字段只对 `package.source = "official"` 有效；`debian`、`none`、`custom` 下设置会报错。
+这些字段只对 `package.source = "official"` 有效；`none`、`custom` 下设置会报错。
 它们和 `get.docker.com --mirror` 都是为了把 Docker 安装来源切到镜像站，但 DebianForm 不运行
 `get.docker.com` 脚本，而是管理 APT source、key、package、service 和 state。
 

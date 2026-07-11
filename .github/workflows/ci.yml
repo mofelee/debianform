@@ -2,13 +2,7 @@ name: CI
 
 on:
   push:
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "**/*.md"
   workflow_dispatch:
   schedule:
     - cron: "17 3 * * 1"
@@ -68,8 +62,8 @@ jobs:
           from pathlib import Path
 
           cases = sorted(path.name for path in Path("test/integration/libvirt/cases").iterdir() if path.is_dir())
-          if not cases:
-              raise SystemExit("no libvirt integration cases discovered")
+          if len(cases) != 19:
+              raise SystemExit(f"expected 19 libvirt integration cases, discovered {len(cases)}")
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               print("cases=" + json.dumps(cases), file=output)
@@ -85,13 +79,17 @@ jobs:
           PY
 
   integration:
-    name: Debian 13 libvirt (${{ matrix.case }})
+    name: Debian ${{ matrix.debian_version }} amd64 libvirt (${{ matrix.case }})
     needs: unit
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
+      max-parallel: 19
       matrix:
+        debian_version:
+          - 12
+          - 13
         case: ${{ fromJSON(needs.unit.outputs.integration_cases) }}
 
     steps:
@@ -106,6 +104,17 @@ jobs:
           cache-dependency-path: |
             go.mod
             go.sum
+
+      - name: Resolve Debian target metadata
+        id: debian-target
+        env:
+          DEBIAN_VERSION: ${{ matrix.debian_version }}
+        run: |
+          source test/integration/libvirt/debian-target.sh
+          dbf_integration_resolve_debian_target "$DEBIAN_VERSION"
+          echo "codename=$DBF_INTEGRATION_DEBIAN_CODENAME" >> "$GITHUB_OUTPUT"
+          echo "cloud_url=$DBF_INTEGRATION_DEBIAN_CLOUD_URL" >> "$GITHUB_OUTPUT"
+          echo "cloud_image=$DBF_INTEGRATION_DEBIAN_CLOUD_IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Cache apt packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -136,30 +145,33 @@ jobs:
             sudo chmod 0666 /dev/kvm
           fi
 
-      - name: Resolve Debian 13 image checksum
+      - name: Resolve Debian cloud image checksum
         id: debian-image
+        env:
+          DEBIAN_CLOUD_URL: ${{ steps.debian-target.outputs.cloud_url }}
+          DEBIAN_CLOUD_IMAGE: ${{ steps.debian-target.outputs.cloud_image }}
         run: |
           sha512="$(
             curl --fail --location --retry 3 --show-error --silent \
-              https://cloud.debian.org/images/cloud/trixie/latest/SHA512SUMS |
-              awk '$2 == "debian-13-genericcloud-amd64.qcow2" { print $1; exit }'
+              "$DEBIAN_CLOUD_URL/SHA512SUMS" |
+              awk -v image="$DEBIAN_CLOUD_IMAGE" '$2 == image { print $1; exit }'
           )"
           test -n "$sha512"
           echo "sha512=$sha512" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Debian 13 cloud image
+      - name: Cache Debian cloud image
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/debian-image-cache
-          key: debian13-genericcloud-${{ steps.debian-image.outputs.sha512 }}
+          key: debian${{ matrix.debian_version }}-genericcloud-amd64-${{ steps.debian-image.outputs.sha512 }}
 
-      - name: Run Debian 13 VM integration test
+      - name: Run Debian VM integration test
         run: |
           artifact_root="${DBF_INTEGRATION_ARTIFACT_DIR:?}"
           for attempt in 1 2; do
             export DBF_INTEGRATION_ARTIFACT_DIR="$artifact_root/attempt-$attempt"
             echo "Running libvirt integration attempt $attempt for case ${DBF_INTEGRATION_CASE}"
-            if make test-integration; then
+            if make test-integration DEBIAN_VERSION="$DEBIAN_VERSION"; then
               exit 0
             else
               status=$?
@@ -171,15 +183,32 @@ jobs:
             sleep 10
           done
         env:
+          DEBIAN_VERSION: ${{ matrix.debian_version }}
           DBF_INTEGRATION_CASE: ${{ matrix.case }}
-          DBF_INTEGRATION_ARTIFACT_DIR: ${{ runner.temp }}/debianform-integration-artifacts
+          DBF_INTEGRATION_ARTIFACT_DIR: ${{ runner.temp }}/debianform-integration-artifacts/debian-${{ matrix.debian_version }}
           DBF_INTEGRATION_IMAGE_CACHE: ${{ runner.temp }}/debian-image-cache
 
       - name: Upload libvirt diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: debianform-libvirt-${{ matrix.case }}-diagnostics
+          name: debianform-libvirt-debian-${{ matrix.debian_version }}-${{ matrix.case }}-diagnostics
           path: ${{ runner.temp }}/debianform-integration-artifacts
           if-no-files-found: ignore
           retention-days: 7
+
+  managed-target-gate:
+    name: Managed target matrix gate
+    if: always()
+    needs:
+      - unit
+      - integration
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require unit and managed target matrices
+        env:
+          UNIT_RESULT: ${{ needs.unit.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+        run: |
+          test "$UNIT_RESULT" = success
+          test "$INTEGRATION_RESULT" = success

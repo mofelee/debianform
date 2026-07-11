@@ -155,18 +155,31 @@ func TestStateNormalizeDoesNotMutateInputResourceHost(t *testing.T) {
 	}
 }
 
-func TestStateEncodesRuntimeFacts(t *testing.T) {
+func TestStateRoundTripsBookwormRuntimeFacts(t *testing.T) {
 	st := Empty("server1")
 	st.Facts = &ir.HostFacts{System: ir.SystemFacts{
+		Hostname:     "server1",
 		Architecture: "amd64",
-		Codename:     "trixie",
+		Codename:     "bookworm",
+		DetectedAt:   "2026-07-11T12:00:00Z",
 	}}
 	data, err := Encode(st)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"facts"`) || !strings.Contains(string(data), `"architecture": "amd64"`) {
+	if !strings.Contains(string(data), `"facts"`) || !strings.Contains(string(data), `"architecture": "amd64"`) || !strings.Contains(string(data), `"codename": "bookworm"`) {
 		t.Fatalf("encoded state missing facts:\n%s", data)
+	}
+	decoded, err := Decode(data, "server1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Facts == nil {
+		t.Fatal("decoded state facts are nil")
+	}
+	got := decoded.Facts.System
+	if got.Hostname != "server1" || got.Architecture != "amd64" || got.Codename != "bookworm" || got.DetectedAt != "2026-07-11T12:00:00Z" {
+		t.Fatalf("decoded state facts = %#v", got)
 	}
 }
 

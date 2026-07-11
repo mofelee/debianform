@@ -1465,6 +1465,29 @@ host "docker1" {
 	}
 }
 
+func TestOnlinePlanRejectsRemovedDockerDebianSourceBeforeSSH(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "removed-docker-source.dbf.hcl")
+	writeTestFile(t, file, `
+host "docker1" {
+  ssh {
+    host = "127.0.0.1"
+    port = 1
+  }
+
+  docker {
+    package {
+      source = "debian"
+    }
+  }
+}
+`)
+
+	err := run([]string{"plan", "-f", file})
+	if err == nil || !strings.Contains(err.Error(), `docker package source "debian" is no longer supported`) {
+		t.Fatalf("online plan error = %v, want local removed-source validation before SSH", err)
+	}
+}
+
 func TestOfflinePlanUsesDeclaredPlatformFacts(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "docker.dbf.hcl")
@@ -1472,7 +1495,7 @@ func TestOfflinePlanUsesDeclaredPlatformFacts(t *testing.T) {
 host "docker1" {
   platform {
     architecture = "amd64"
-    codename     = "trixie"
+    codename     = "bookworm"
   }
 
   docker {
@@ -1483,8 +1506,15 @@ host "docker1" {
 		t.Fatal(err)
 	}
 
-	if err := run([]string{"plan", "-f", file, "--offline"}); err != nil {
-		t.Fatalf("plan --offline error = %v, want declared platform facts to resolve", err)
+	output := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", file, "--offline", "--format", "json"}); err != nil {
+			t.Fatalf("plan --offline error = %v, want declared platform facts to resolve", err)
+		}
+	})
+	for _, want := range []string{"Suites: bookworm", "Architectures: amd64"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("plan --offline output missing %q:\n%s", want, output)
+		}
 	}
 }
 

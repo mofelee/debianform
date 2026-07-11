@@ -181,7 +181,6 @@ func TestCompileDockerHostSpecGoldens(t *testing.T) {
 	assertHostSpecGolden(t, "../../../examples/docker-minimal.dbf.hcl", "../testdata/hostspec/docker-minimal.golden.json")
 	assertHostSpecGolden(t, "../../../examples/docker-daemon.dbf.hcl", "../testdata/hostspec/docker-daemon.golden.json")
 	assertHostSpecGolden(t, "../../../examples/docker-compose.dbf.hcl", "../testdata/hostspec/docker-compose.golden.json")
-	assertHostSpecGolden(t, "../../../examples/docker-package-sources.dbf.hcl", "../testdata/hostspec/docker-package-sources.golden.json")
 	assertHostSpecGolden(t, "../testdata/fixtures/docker-package-source-none.dbf.hcl", "../testdata/hostspec/docker-package-source-none.golden.json")
 	assertHostSpecGolden(t, "../testdata/fixtures/docker-package-source-custom.dbf.hcl", "../testdata/hostspec/docker-package-source-custom.golden.json")
 	assertHostSpecGolden(t, "../../../examples/docker-users.dbf.hcl", "../testdata/hostspec/docker-users.golden.json")
@@ -206,7 +205,20 @@ host "docker1" {
   }
 }
 `,
-			want: "must be official, debian, none, or custom",
+			want: "must be official, none, or custom",
+		},
+		{
+			name: "removed debian package source",
+			hcl: `
+host "docker1" {
+  docker {
+    package {
+      source = "debian"
+    }
+  }
+}
+`,
+			want: `docker package source "debian" is no longer supported; omit source for Docker's official repository, or use source = "none" or source = "custom"`,
 		},
 		{
 			name: "invalid remove conflicts",
@@ -220,20 +232,6 @@ host "docker1" {
 }
 `,
 			want: "must be auto, true, or false",
-		},
-		{
-			name: "repository url with debian source",
-			hcl: `
-host "docker1" {
-  docker {
-    package {
-      source         = "debian"
-      repository_url = "https://mirrors.aliyun.com/docker-ce/linux/debian"
-    }
-  }
-}
-`,
-			want: `repository_url is only valid when source = "official"`,
 		},
 		{
 			name: "gpg url with custom source",

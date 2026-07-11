@@ -44,7 +44,7 @@ host "server1" {
 			"server1": {System: ir.SystemFacts{
 				Hostname:     "server1",
 				Architecture: "amd64",
-				Codename:     "trixie",
+				Codename:     "bookworm",
 			}},
 		},
 	})
@@ -55,14 +55,14 @@ host "server1" {
 	if host.Platform == nil {
 		t.Fatalf("platform facts were not applied: platform is nil")
 	}
-	if host.Platform.Architecture != "amd64" || host.Platform.Codename != "trixie" {
+	if host.Platform.Architecture != "amd64" || host.Platform.Codename != "bookworm" {
 		t.Fatalf("platform facts were not applied: %#v", host.Platform)
 	}
 	component := host.Components[0]
 	if component.SelectedSource == nil || component.SelectedSource.Architecture != "amd64" {
 		t.Fatalf("selected source = %#v", component.SelectedSource)
 	}
-	if got := component.APT.Repositories["tools_repo"].Suites; !reflect.DeepEqual(got, []string{"trixie"}) {
+	if got := component.APT.Repositories["tools_repo"].Suites; !reflect.DeepEqual(got, []string{"bookworm"}) {
 		t.Fatalf("repository suites = %#v", got)
 	}
 }
@@ -250,12 +250,12 @@ host "server1" {
 host "server1" {
   platform {
     architecture = "amd64"
-    codename     = "bookworm"
+    codename     = "trixie"
   }
 }
 `,
-			facts: ir.SystemFacts{Architecture: "amd64", Codename: "trixie"},
-			want:  `declared platform.codename "bookworm" does not match detected codename "trixie"`,
+			facts: ir.SystemFacts{Architecture: "amd64", Codename: "bookworm"},
+			want:  `declared platform.codename "trixie" does not match detected codename "bookworm"`,
 		},
 	}
 

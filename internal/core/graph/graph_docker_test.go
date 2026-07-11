@@ -204,39 +204,6 @@ host "docker1" {
 	}
 }
 
-func TestCompileDockerPackageSourcesResourceGraphGolden(t *testing.T) {
-	resourceGraph := compileGraphFixture(t, "../../../examples/docker-package-sources.dbf.hcl")
-
-	data, err := json.MarshalIndent(resourceGraph, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := string(data) + "\n"
-	assertGolden(t, "../testdata/graph/docker-package-sources.golden.json", got)
-
-	for _, unexpected := range []string{
-		`host.docker-sources1.docker.apt.signing_key["docker-official"]`,
-		`host.docker-sources1.docker.apt.repository["docker-official"]`,
-		`host.docker-sources1.docker.package_conflicts`,
-		`host.docker-sources1.apt.cache_refresh`,
-	} {
-		if nodeFor(resourceGraph, unexpected) != nil || operationFor(resourceGraph, unexpected) != nil {
-			t.Fatalf("package source debian generated %s", unexpected)
-		}
-	}
-	for _, want := range []string{
-		`host.docker-sources1.docker.package["docker.io"]`,
-		`host.docker-sources1.docker.package["docker-compose-plugin"]`,
-	} {
-		if nodeFor(resourceGraph, want) == nil {
-			t.Fatalf("package source debian missing %s", want)
-		}
-		if !containsString(dependsOnFor(resourceGraph, `host.docker-sources1.docker.service["docker"]`), want) {
-			t.Fatalf("docker service deps = %#v, want %q", dependsOnFor(resourceGraph, `host.docker-sources1.docker.service["docker"]`), want)
-		}
-	}
-}
-
 func TestCompileDockerPackageSourceNoneResourceGraphGolden(t *testing.T) {
 	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/docker-package-source-none.dbf.hcl")
 
@@ -731,47 +698,6 @@ host "server1" {
 	for _, operation := range resourceGraph.Operations {
 		if strings.Contains(operation.Address, ".docker.") {
 			t.Fatalf("docker disabled generated operation %s", operation.Address)
-		}
-	}
-}
-
-func TestCompileDockerPackageSourceDebianUsesDebianPackages(t *testing.T) {
-	resourceGraph := compileGraphInline(t, `
-host "server1" {
-  platform {
-    architecture = "amd64"
-    codename     = "trixie"
-  }
-
-  docker {
-    enable = true
-
-    package {
-      source = "debian"
-    }
-  }
-}
-`)
-
-	for _, unexpected := range []string{
-		`host.server1.docker.apt.signing_key["docker-official"]`,
-		`host.server1.docker.apt.repository["docker-official"]`,
-		`host.server1.docker.package_conflicts`,
-		`host.server1.apt.cache_refresh`,
-	} {
-		if nodeFor(resourceGraph, unexpected) != nil || operationFor(resourceGraph, unexpected) != nil {
-			t.Fatalf("package source debian generated %s", unexpected)
-		}
-	}
-	for _, want := range []string{
-		`host.server1.docker.package["docker.io"]`,
-		`host.server1.docker.package["docker-compose-plugin"]`,
-	} {
-		if nodeFor(resourceGraph, want) == nil {
-			t.Fatalf("package source debian missing %s", want)
-		}
-		if !containsString(dependsOnFor(resourceGraph, `host.server1.docker.service["docker"]`), want) {
-			t.Fatalf("docker service deps = %#v, want %q", dependsOnFor(resourceGraph, `host.server1.docker.service["docker"]`), want)
 		}
 	}
 }

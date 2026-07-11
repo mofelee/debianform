@@ -21,11 +21,6 @@ var dockerOfficialPackages = []string{
 	"docker-compose-plugin",
 }
 
-var dockerDebianPackages = []string{
-	"docker.io",
-	"docker-compose-plugin",
-}
-
 var dockerConflictPackages = []string{
 	"docker.io",
 	"docker-doc",
@@ -64,7 +59,6 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 		installPackages = false
 	case "custom":
 		installPackages = false
-	case "debian":
 	default:
 		return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: docker package source %q is not supported", docker.Package.SourceRef.File, docker.Package.SourceRef.Line, docker.Package.SourceRef.Path, docker.Package.Source)
 	}
@@ -194,26 +188,6 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 				Source:          docker.Package.SourceRef,
 				Desired:         desired,
 				DependsOn:       []string{repositoryAddress, conflictAddress},
-				ProviderType:    "package",
-				ProviderAddress: "package." + providerName(host.Name, "docker", name),
-				ProviderPayload: desired,
-			})
-			out.PackageAddresses = append(out.PackageAddresses, address)
-		}
-	case "debian":
-		for _, name := range dockerDebianPackages {
-			address := fmt.Sprintf("host.%s.docker.package[%s]", host.Name, strconv.Quote(name))
-			desired := map[string]any{
-				"name":   name,
-				"ensure": "present",
-			}
-			out.Nodes = append(out.Nodes, Node{
-				Host:            host.Name,
-				Address:         address,
-				Kind:            "package",
-				Summary:         "install docker package " + name,
-				Source:          docker.Package.SourceRef,
-				Desired:         desired,
 				ProviderType:    "package",
 				ProviderAddress: "package." + providerName(host.Name, "docker", name),
 				ProviderPayload: desired,

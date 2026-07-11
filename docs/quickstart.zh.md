@@ -1,7 +1,8 @@
 # DebianForm Quickstart
 
-本文档是一条从零到第一次 apply/check 的最短路径，面向低风险 Debian 13 测试主机。
-DebianForm 仍处于 public preview / beta 阶段；不要把第一轮试用目标设为生产主机。
+本文档是一条从零到第一次 apply/check 的最短路径，面向最高优先级的低风险 Debian 13
+amd64 测试主机。Debian 12 amd64 也属于 Beta 支持范围；DebianForm 仍处于 public preview /
+beta 阶段，不要把第一轮试用目标设为生产主机。
 
 ## 1. 安装 CLI
 
@@ -22,6 +23,8 @@ dbf version
 ## 2. 准备目标主机
 
 准备一台低风险 Debian 13 amd64 主机，并在控制机的 `~/.ssh/config` 里给它一个稳定名字。
+针对 Debian 12 bookworm amd64 的纯本地 platform assertion/offline smoke，见
+[`examples/debian12-amd64.dbf.hcl`](../examples/debian12-amd64.dbf.hcl)。
 
 这里必须使用 root：DebianForm 需要安装包、写 `/etc`、管理 systemd，并在
 `/var/lib/debianform` 和 `/var/lock/debianform` 写 state/lock。当前不支持 sudo、become
@@ -75,6 +78,9 @@ host "server1" {
 - `host "server1"` 默认通过 `ssh server1` 连接。
 - state 默认写到目标主机的 `/var/lib/debianform/state/server1.json`。
 - lock 默认写到目标主机的 `/var/lock/debianform/state/server1.lock`。
+
+它也不需要写 `platform`：在线 `plan` / `apply` / `check` 会从真实主机探测 architecture 和
+codename。只有离线预览依赖这些 facts，或像 Debian 12 smoke 那样专门断言平台时才显式声明。
 
 只有需要覆盖连接名、端口、identity file 或 state 路径时，才写 `ssh` 或 `state` block。
 

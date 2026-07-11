@@ -19,12 +19,30 @@
 4. 运行基础检查：
 
    ```bash
+   test -z "$(gofmt -l $(git ls-files '*.go'))"
    go vet ./...
-   go test ./...
+   go test -race -count=1 ./...
+   make build
+   make vulncheck
+   make test-integration-layout
    goreleaser check
+   git diff --check
    ```
 
-5. 触发 dry-run workflow，并确认通过：
+5. 确认 release commit 的 managed-target CI gate 通过：
+
+   ```bash
+   SHA="$(git rev-parse HEAD)"
+   gh run list --workflow ci.yml --commit "$SHA" --limit 1 \
+     --json databaseId,headSha,conclusion,url
+   gh run view <ci-run-id>
+   ```
+
+   必须确认同一提交上的 Debian 12 amd64 为 19/19、Debian 13 amd64 为 19/19，且
+   `Managed target matrix gate` 成功。把两个版本各自的结果和 CI run URL 分开写入 release
+   notes；不能只记录一个合并后的“libvirt passed”。
+
+6. 触发 dry-run workflow，并确认通过：
 
    ```bash
    gh workflow run release-dry-run.yml --ref main

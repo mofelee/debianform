@@ -13,7 +13,7 @@ import (
 )
 
 func TestDiscoverHostFacts(t *testing.T) {
-	runner := factRunner{stdout: "hostname=server1\narchitecture=x86_64\ncodename=trixie\n"}
+	runner := factRunner{stdout: "hostname=server1\narchitecture=x86_64\ncodename=bookworm\n"}
 	facts, err := DiscoverHostFacts(context.Background(), runner, ir.HostSpec{Name: "server1"}, func() time.Time {
 		return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
 	})
@@ -21,7 +21,7 @@ func TestDiscoverHostFacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	system := facts.System
-	if system.Hostname != "server1" || system.Architecture != "amd64" || system.Codename != "trixie" {
+	if system.Hostname != "server1" || system.Architecture != "amd64" || system.Codename != "bookworm" {
 		t.Fatalf("facts = %#v", facts)
 	}
 	if system.DetectedAt != "2026-06-20T12:00:00Z" {

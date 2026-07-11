@@ -7,8 +7,12 @@ CASE_SOURCE="${1:?usage: run-case.sh CASE_DIR}"
 CASE_NAME="$(basename "$CASE_SOURCE")"
 DBF_BIN="${DBF_INTEGRATION_DBF_BIN:?missing DBF_INTEGRATION_DBF_BIN}"
 BASE_IMAGE="${DBF_INTEGRATION_BASE_IMAGE:?missing DBF_INTEGRATION_BASE_IMAGE}"
+BASE_IMAGE_SHA512="${DBF_INTEGRATION_BASE_IMAGE_SHA512:?missing DBF_INTEGRATION_BASE_IMAGE_SHA512}"
 CASE_WORK="${DBF_INTEGRATION_CASE_WORK:?missing DBF_INTEGRATION_CASE_WORK}"
 ARTIFACT_DIR="${DBF_INTEGRATION_CASE_ARTIFACTS:?missing DBF_INTEGRATION_CASE_ARTIFACTS}"
+EXPECTED_DEBIAN_VERSION="${DBF_INTEGRATION_DEBIAN_VERSION:?missing DBF_INTEGRATION_DEBIAN_VERSION}"
+EXPECTED_DEBIAN_CODENAME="${DBF_INTEGRATION_DEBIAN_CODENAME:?missing DBF_INTEGRATION_DEBIAN_CODENAME}"
+EXPECTED_DEBIAN_ARCHITECTURE="${DBF_INTEGRATION_DEBIAN_ARCHITECTURE:?missing DBF_INTEGRATION_DEBIAN_ARCHITECTURE}"
 CASE_DIR="$CASE_WORK/scenario"
 LOG_DIR="$CASE_WORK/logs"
 DBF_HOME="$CASE_WORK/home"
@@ -25,7 +29,7 @@ REMOTE_BASE_IMAGE="${DBF_INTEGRATION_REMOTE_BASE_IMAGE:-}"
 
 RUN_SUFFIX="${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 SAFE_CASE_NAME="$(tr -c 'a-zA-Z0-9' '-' <<<"$CASE_NAME" | sed 's/-*$//')"
-VM_NAME="dbf-core-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
+VM_NAME="dbf-test-debian${EXPECTED_DEBIAN_VERSION}-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
 NETWORK_NAME="${VM_NAME}-net"
 BRIDGE_NAME=""
 SUBNET_OCTET=""
@@ -36,7 +40,7 @@ VM_IP=""
 VIRT_TYPE="qemu"
 NETWORK_DEFINED=0
 VM_DEFINED=0
-VM_STARTED=0
+INTERRUPTED=0
 CURRENT_STEP=""
 ASSERTION_COUNT=0
 
@@ -122,6 +126,20 @@ emulator_path() {
   printf '/usr/bin/qemu-system-x86_64\n'
 }
 
+sync_remote_base_image() {
+  local remote_sha=""
+  remote_sha="$(remote_exec sha512sum "$REMOTE_BASE_IMAGE" 2>/dev/null | awk '{print $1}')" || true
+  if [[ "$remote_sha" == "$BASE_IMAGE_SHA512" ]]; then
+    return
+  fi
+
+  log "copying verified Debian base image to $REMOTE_HYPERVISOR:$REMOTE_BASE_IMAGE"
+  local partial="$REMOTE_TMP_DIR/base-image.partial"
+  scp -q "$BASE_IMAGE" "$REMOTE_HYPERVISOR:$partial"
+  remote_exec chmod 0644 "$partial"
+  remote_exec mv -f "$partial" "$REMOTE_BASE_IMAGE"
+}
+
 prepare_vm_paths() {
   if ! is_remote_libvirt; then
     return
@@ -133,7 +151,7 @@ prepare_vm_paths() {
   SEED_IMAGE="$pool_dir/$VM_NAME-seed.img"
   CONSOLE_LOG="$pool_dir/$VM_NAME-console.log"
   DOMAIN_XML="$CASE_WORK/domain.xml"
-  REMOTE_TMP_DIR="$pool_dir/.dbf-core-$VM_NAME"
+  REMOTE_TMP_DIR="$pool_dir/.$VM_NAME"
   if [[ -z "$REMOTE_BASE_IMAGE" ]]; then
     REMOTE_BASE_IMAGE="$pool_dir/$(basename "$BASE_IMAGE")"
   fi
@@ -142,15 +160,11 @@ prepare_vm_paths() {
   log "remote hypervisor: $REMOTE_HYPERVISOR"
   log "remote storage pool: $REMOTE_POOL ($pool_dir)"
   remote_exec mkdir -p "$REMOTE_TMP_DIR"
-  if ! remote_exec test -f "$REMOTE_BASE_IMAGE"; then
-    log "copying verified Debian base image to $REMOTE_HYPERVISOR:$REMOTE_BASE_IMAGE"
-    scp -q "$BASE_IMAGE" "$REMOTE_HYPERVISOR:$REMOTE_BASE_IMAGE"
-    remote_exec chmod 0644 "$REMOTE_BASE_IMAGE"
-  fi
+  sync_remote_base_image
 }
 
 cleanup_vm_files() {
-  if is_remote_libvirt; then
+  if is_remote_libvirt && [[ -n "$REMOTE_TMP_DIR" ]]; then
     remote_exec rm -rf "$VM_DISK" "$SEED_IMAGE" "$CONSOLE_LOG" "$REMOTE_TMP_DIR" >/dev/null 2>&1 || true
   fi
 }
@@ -267,28 +281,23 @@ collect_diagnostics() {
 
 cleanup() {
   local status=$?
-  trap - EXIT
+  trap - EXIT INT TERM
 
-  if (( status != 0 && VM_DEFINED == 1 )); then
+  if (( status != 0 && VM_DEFINED == 1 && INTERRUPTED == 0 )); then
     log "case failed; collecting diagnostics in $ARTIFACT_DIR"
     collect_diagnostics
   fi
-  if (( VM_STARTED == 1 )); then
-    virsh_system destroy "$VM_NAME" >/dev/null 2>&1 || true
-  fi
-  if (( VM_DEFINED == 1 )); then
-    virsh_system undefine "$VM_NAME" --nvram >/dev/null 2>&1 ||
-      virsh_system undefine "$VM_NAME" >/dev/null 2>&1 || true
-  fi
-  if (( NETWORK_DEFINED == 1 )); then
-    virsh_system net-destroy "$NETWORK_NAME" >/dev/null 2>&1 || true
-    virsh_system net-undefine "$NETWORK_NAME" >/dev/null 2>&1 || true
-  fi
+  virsh_system destroy "$VM_NAME" >/dev/null 2>&1 || true
+  virsh_system undefine "$VM_NAME" --nvram >/dev/null 2>&1 ||
+    virsh_system undefine "$VM_NAME" >/dev/null 2>&1 || true
+  virsh_system net-destroy "$NETWORK_NAME" >/dev/null 2>&1 || true
+  virsh_system net-undefine "$NETWORK_NAME" >/dev/null 2>&1 || true
   cleanup_vm_files
 
   exit "$status"
 }
 trap cleanup EXIT
+trap 'INTERRUPTED=1; exit 130' INT TERM
 
 wait_for_vm_ip() {
   local deadline=$((SECONDS + 240))
@@ -457,10 +466,10 @@ cat >"$DOMAIN_XML" <<EOF
       <source file='$VM_DISK'/>
       <target dev='vda' bus='virtio'/>
     </disk>
-    <disk type='file' device='cdrom'>
+    <disk type='file' device='disk'>
       <driver name='qemu' type='raw'/>
       <source file='$SEED_IMAGE'/>
-      <target dev='sda' bus='sata'/>
+      <target dev='vdb' bus='virtio'/>
       <readonly/>
     </disk>
     <interface type='network'>
@@ -484,7 +493,6 @@ dbf_integration_start_network "$CASE_WORK/network.xml"
 virsh_system define "$DOMAIN_XML" >/dev/null
 VM_DEFINED=1
 virsh_system start "$VM_NAME" >/dev/null
-VM_STARTED=1
 
 wait_for_vm_ip
 log "VM acquired address $VM_IP"
@@ -502,14 +510,17 @@ chmod 0600 "$DBF_HOME/.ssh/config"
 
 wait_for_ssh
 ssh_vm "cloud-init status --wait >/dev/null && test -e /run/debianform-cloud-init-ready"
-ssh_vm ". /etc/os-release && test \"\$ID\" = debian && test \"\$VERSION_ID\" = 13"
+ssh_vm ". /etc/os-release && test \"\$ID\" = debian && test \"\$VERSION_ID\" = '$EXPECTED_DEBIAN_VERSION' && test \"\${VERSION_CODENAME:-}\" = '$EXPECTED_DEBIAN_CODENAME' && test \"\$(dpkg --print-architecture)\" = '$EXPECTED_DEBIAN_ARCHITECTURE'"
 
 DBF_CONFIG_HOST="$VM_IP"
 if is_remote_libvirt; then
   DBF_CONFIG_HOST="cihost"
 fi
 while IFS= read -r config; do
-  sed -i "s/__DBF_VM_IP__/$DBF_CONFIG_HOST/g" "$config"
+  sed -i \
+    -e "s/__DBF_VM_IP__/$DBF_CONFIG_HOST/g" \
+    -e "s/__DBF_DEBIAN_CODENAME__/$EXPECTED_DEBIAN_CODENAME/g" \
+    "$config"
 done < <(find "$CASE_DIR" -maxdepth 3 -type f \( -name '*.dbf.hcl' -o -name '*.dbfvars' -o -name '*.dbfvars.json' \))
 
 declare -a CONFIGS=()
@@ -541,6 +552,9 @@ for config in "${CONFIGS[@]}"; do
   log "step $CURRENT_STEP: validating $filename"
   dbf validate "${source_args[@]}" | tee "$LOG_DIR/$CURRENT_STEP.validate.log"
 
+  log "step $CURRENT_STEP: planning before apply"
+  dbf plan "${source_args[@]}" --format json | tee "$LOG_DIR/$CURRENT_STEP.pre-apply-plan.json"
+
   if [[ -f "$drift_hook" ]]; then
     run_hook "$drift_hook"
     log "step $CURRENT_STEP: verifying dbf check rejects drift"
@@ -553,6 +567,10 @@ for config in "${CONFIGS[@]}"; do
 
   log "step $CURRENT_STEP: applying"
   dbf apply "${source_args[@]}" --auto-approve | tee "$LOG_DIR/$CURRENT_STEP.apply.log"
+
+  log "step $CURRENT_STEP: verifying no-op plan after apply"
+  dbf plan "${source_args[@]}" --format json | tee "$LOG_DIR/$CURRENT_STEP.noop-plan.json"
+  python3 "$SCRIPT_DIR/assert-noop-plan.py" "$LOG_DIR/$CURRENT_STEP.noop-plan.json"
 
   log "step $CURRENT_STEP: checking convergence"
   dbf check "${source_args[@]}" | tee "$LOG_DIR/$CURRENT_STEP.check.log"

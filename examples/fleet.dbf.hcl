@@ -455,11 +455,6 @@ host "fleet1" {
     enable = true
     users  = ["deploy"]
 
-    package {
-      source           = "debian"
-      remove_conflicts = "auto"
-    }
-
     daemon {
       settings = {
         "log-driver" = "json-file"

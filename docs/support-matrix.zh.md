@@ -32,12 +32,19 @@ Linux Homebrew best-effort 规则见
 | CLI on Linux arm64 | Preview | release artifact 已构建；真实 arm64 curl installer 仍需人工或 runner 验证。 |
 | CLI on macOS amd64 | Beta | release artifact、curl installer 和 Homebrew install/test/upgrade 已验证。 |
 | CLI on macOS arm64 | Beta | release artifact、curl installer 和 Homebrew install/test/upgrade 已验证。 |
-| Target Debian 13 amd64 | Beta | 最高优先级目标；libvirt integration cases 使用 Debian 13 cloud VM。 |
+| Target Debian 13 amd64 | Beta | 最高优先级目标；19 个 libvirt cases 全部作为阻断门禁。 |
 | Target Debian 13 arm64 | Preview | runtime facts 和架构选择支持 arm64，但缺少真实 arm64 目标主机矩阵。 |
-| Target Debian 12 或更早版本 | Preview | 部分 DSL 可能可用，但不是当前最高优先级验证目标。 |
+| Target Debian 12 amd64 | Beta | 19 个 libvirt cases 与 Debian 13 使用同一阻断门禁。 |
+| Target Debian 12 arm64 | Preview | runtime facts 可识别 arm64，但缺少 Debian 12 arm64 apply/check 矩阵。 |
+| Target Debian 11 或更早版本 | Unsupported | 不进入当前版本支持承诺或 release gate。 |
+| Debian testing/unstable | Unsupported | 不进入当前 beta 支持承诺。 |
 | 非 Debian 目标系统 | Unsupported | 当前项目定位是 Debian 主机配置。 |
 | root SSH 管理连接 | Beta | `ssh.user` 只能省略或为 `"root"`。 |
 | sudo/become/非 root 管理连接 | Unsupported | 当前不支持 sudo 提权、become 或非 root 管理连接。 |
+
+CI 当前自动发现 19 个 libvirt cases，并展开为 Debian 12 amd64 和 Debian 13 amd64 两套，
+共 38 个阻断 job；任一版本的任一 case 失败都会使 managed-target gate 失败。Debian 13 仍是
+本地默认值和新功能的最高优先级目标。
 
 ## CLI 命令
 
@@ -120,7 +127,6 @@ Linux Homebrew best-effort 规则见
 | `docker { enable = true }` | Beta | 默认使用 Docker 官方 APT 源和官方 packages。 |
 | `package.source = "official"` | Beta | 默认值；安装 `docker-ce`、CLI、containerd、buildx、compose plugin。 |
 | `package.repository_url` / `package.gpg_url` | Beta | official source 下覆盖 Docker official APT repo/key URL；自定义 `gpg_url` 可选配 `gpg_sha256`。 |
-| `package.source = "debian"` | Beta | 使用 Debian 仓库中的 `docker.io` 和 `docker-compose-plugin`。 |
 | `package.source = "none"` | Beta | 不安装 Docker package，但仍可管理 daemon/service/Compose。 |
 | `package.source = "custom"` | Beta | 用户自行声明 repo/key/package；Docker block 不生成 package 节点。 |
 | `package.channel = "stable"` | Beta | 当前唯一实现 channel。 |
@@ -163,7 +169,8 @@ Linux Homebrew best-effort 规则见
 | `examples/component-source-build.dbf.hcl` | Beta | source build component。 |
 | `examples/component-inputs.dbf.hcl` | Beta | typed input、validation、sensitive。 |
 | `examples/component-script-on-change.dbf.hcl` | Beta | component 内 `files.file.on_change` 触发 script operation。 |
-| `examples/docker-*.dbf.hcl` | Beta | Docker minimal、official mirror、daemon、Compose、users、package source。 |
+| `examples/debian12-amd64.dbf.hcl` | Beta | Bookworm amd64 platform assertion 和 `plan --offline` smoke。 |
+| `examples/docker-*.dbf.hcl` | Beta | Docker minimal、official mirror、daemon、Compose 和 users。 |
 | `examples/fleet.dbf.hcl` | Preview | 当前语法速查，覆盖 profile/component/host、systemd timer/resolved/journald、Docker、nftables 等组合用法。 |
 | `examples/nftables.dbf.hcl` | Beta | nftables validate/activate。 |
 | `examples/realistic-systemd-app.dbf.hcl` | Beta | 低权限 systemd app 部署模板，覆盖 user/group、目录、文件、unit 和 service。 |
@@ -174,7 +181,7 @@ Linux Homebrew best-effort 规则见
 | `examples/wireguard-networkd.dbf.hcl` | Preview | WireGuard networkd component，多 peer 和多 interface 复用，需准备本地 secrets。 |
 | `test/integration/libvirt/cases/systemd-extensions` | Preview | `service_config`、timer enable/state 和实际触发、resolved/journald drop-in、漂移修复和删除。 |
 | `test/integration/libvirt/cases/script-on-change` | Beta | component file 变更触发 script、no-op 不重复触发、配置更新再次触发。 |
-| `test/integration/libvirt/cases/*` | Beta | Debian 13 VM 上 validate/apply/check/drift/remove/restore 覆盖。 |
+| `test/integration/libvirt/cases/*` | Beta | Debian 12/13 amd64 各 19 个 case，覆盖 platform assertion、validate、online plan、drift check、apply、JSON no-op plan、check 和 case-specific assertions。 |
 
 ## 当前不支持或尚未承诺
 

@@ -108,11 +108,13 @@ dbf --version
 打 tag 前必须通过：
 
 ```bash
+test -z "$(gofmt -l $(git ls-files '*.go'))"
 go vet ./...
 go test -race -count=1 ./...
 make build
+make vulncheck
 make test-integration-layout
-make test-integration
+git diff --check
 ```
 
 发布 commit 必须满足：
@@ -123,8 +125,17 @@ make test-integration
 - compatibility policy 已检查破坏性 DSL/state/plan JSON 变更、state migration 和
   plan JSON format version 影响。
 - GitHub Actions 在目标 commit 上全绿。
-- 至少一个真实或 libvirt Debian 13 flow 完成 `validate`、`apply`、再次 `plan`
-  no-op 和 `check`。
+- 同一目标 commit 的 managed-target CI 证据分别记录 Debian 12 amd64 `19/19`、Debian 13
+  amd64 `19/19`，并确认 `Managed target matrix gate` 通过。
+- 两个版本的每个 libvirt case 都完成 `validate`、online `plan`、`apply`、再次 JSON
+  `plan` no-op 和 `check`；存在 drift hook 的 case 还必须拒绝 drift。
+
+需要本地复现 managed-target case 时，显式选择版本：
+
+```bash
+make test-integration-case CASE=files DEBIAN_VERSION=12
+make test-integration-case CASE=files DEBIAN_VERSION=13
+```
 
 ## GitHub Release 流程
 

@@ -247,7 +247,7 @@ Docker 官方源和按架构选择的 component source。在线 `plan` / `apply`
 | 字段 | 说明 |
 | --- | --- |
 | `architecture` | Debian architecture，例如 `amd64`、`arm64`。 |
-| `codename` | Debian codename，例如 `trixie`。 |
+| `codename` | Debian codename，例如 Debian 12 的 `bookworm` 或 Debian 13 的 `trixie`。 |
 
 ### kernel
 
@@ -518,7 +518,7 @@ service unit 名会自动补 `.service`。支持 `lifecycle { prevent_destroy = 
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
-| `source` | `"official"` | `"official"`、`"debian"`、`"none"`、`"custom"`。 |
+| `source` | `"official"` | `"official"`、`"none"`、`"custom"`。省略时使用 Docker 官方 APT 源。 |
 | `channel` | `"stable"` | 当前只实际使用 stable。 |
 | `version` | `null` | 已解析但版本 pinning 尚未实现。 |
 | `repository_url` | `"https://download.docker.com/linux/debian"` | 仅 `source = "official"` 可用；替换 Docker official APT repository base URL。 |
@@ -989,7 +989,6 @@ host "reference1" {
     enable = true
 
     package {
-      source           = "debian"
       remove_conflicts = false
     }
 
