@@ -4,6 +4,21 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
+## v0.6.0
+
+- Added top-level `script` declarations and explicit
+  `global.script.<name>` references so files owned by separate components can
+  share one host-scoped `mode = "once"` operation.
+- Shared-script operations are identified by the resolved declaration and
+  target host, union and deduplicate every triggering resource, run once when
+  any trigger changes, and do not run on a no-op apply.
+- Preserved existing component-local script addresses and behavior, and added
+  source-oriented validation for unknown references, unsupported root-script
+  fields, and component-input scope violations.
+- Added a reusable raw systemd-networkd example and real Debian 12/13 libvirt
+  coverage. CI now gates all 20 cases on each managed target as a 40-job
+  matrix.
+
 ## v0.5.0
 
 - Added Debian 12 amd64 as a Beta managed target. CI now runs the same 19
