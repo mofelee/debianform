@@ -29,6 +29,25 @@ func scriptOutputPayloads(hostName, componentName, scriptName string, script ir.
 	return out
 }
 
+func hostScriptOutputPayloads(hostName, scriptName string, script ir.ComponentScriptSpec) []ScriptOutputPayload {
+	paths := script.Outputs
+	if len(paths) == 0 {
+		return nil
+	}
+	out := make([]ScriptOutputPayload, 0, len(paths))
+	prefix := fmt.Sprintf("host.%s.script[%s]", hostName, strconv.Quote(scriptName))
+	digest := componentScriptDigest(script)
+	for _, path := range paths {
+		out = append(out, ScriptOutputPayload{
+			Address:         fmt.Sprintf("%s.outputs[%s]", prefix, strconv.Quote(path)),
+			Path:            path,
+			ScriptDigest:    digest,
+			ProviderAddress: "component_script_output." + providerName(hostName, "host", scriptName, path),
+		})
+	}
+	return out
+}
+
 func componentScriptDigest(script ir.ComponentScriptSpec) string {
 	data, err := json.Marshal(map[string]any{
 		"name":        script.Name,

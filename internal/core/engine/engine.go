@@ -1553,9 +1553,13 @@ func scriptOutputNodeForOperation(operation graph.Operation, address string) (gr
 			continue
 		}
 		desired := map[string]any{
-			"path":      output.Path,
-			"component": payload.ComponentName,
-			"script":    payload.Name,
+			"path":   output.Path,
+			"script": payload.Name,
+		}
+		if payload.ComponentName == "" {
+			desired["scope"] = "host"
+		} else {
+			desired["component"] = payload.ComponentName
 		}
 		if output.ScriptDigest != "" {
 			desired["script_digest"] = output.ScriptDigest

@@ -1,0 +1,108 @@
+{
+  "nodes": [
+    {
+      "host": "router1",
+      "address": "host.router1.components.policy_route.files.file[\"/etc/systemd/network/30-policy-routing.network\"]",
+      "kind": "file",
+      "summary": "create file /etc/systemd/network/30-policy-routing.network",
+      "source": {
+        "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+        "line": 29,
+        "path": "component.policy_route.files.file[\"/etc/systemd/network/30-policy-routing.network\"]"
+      },
+      "desired": {
+        "component": "policy_route",
+        "content": "[Match]\nName=enp2s0\n\n[Network]\nAddress=192.0.2.2/24\n\n[Route]\nGateway=192.0.2.1\nTable=100\n\n[RoutingPolicyRule]\nFrom=192.0.2.2/32\nTable=100\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/systemd/network/30-policy-routing.network",
+        "sensitive": false,
+        "summary": {
+          "sha256": "b904732ae18de4147a6437e6db9a3bc6f02e1d516a9b45c984a3ec43c74707b8",
+          "bytes": 138
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.router1_policy_route__etc_systemd_network_30_policy_routing_network",
+      "provider_payload": {
+        "component": "policy_route",
+        "content": "[Match]\nName=enp2s0\n\n[Network]\nAddress=192.0.2.2/24\n\n[Route]\nGateway=192.0.2.1\nTable=100\n\n[RoutingPolicyRule]\nFrom=192.0.2.2/32\nTable=100\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/systemd/network/30-policy-routing.network",
+        "sensitive": false,
+        "summary": {
+          "sha256": "b904732ae18de4147a6437e6db9a3bc6f02e1d516a9b45c984a3ec43c74707b8",
+          "bytes": 138
+        }
+      }
+    },
+    {
+      "host": "router1",
+      "address": "host.router1.components.wan_network.files.file[\"/etc/systemd/network/20-wan.network\"]",
+      "kind": "file",
+      "summary": "create file /etc/systemd/network/20-wan.network",
+      "source": {
+        "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+        "line": 13,
+        "path": "component.wan_network.files.file[\"/etc/systemd/network/20-wan.network\"]"
+      },
+      "desired": {
+        "component": "wan_network",
+        "content": "[Match]\nName=enp1s0\n\n[Network]\nDHCP=yes\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/systemd/network/20-wan.network",
+        "sensitive": false,
+        "summary": {
+          "sha256": "a091f97aec9abd68437d2106cdda3983531c1106feb456656e7d7bb4ce2362c1",
+          "bytes": 40
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.router1_wan_network__etc_systemd_network_20_wan_network",
+      "provider_payload": {
+        "component": "wan_network",
+        "content": "[Match]\nName=enp1s0\n\n[Network]\nDHCP=yes\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "owner": "root",
+        "path": "/etc/systemd/network/20-wan.network",
+        "sensitive": false,
+        "summary": {
+          "sha256": "a091f97aec9abd68437d2106cdda3983531c1106feb456656e7d7bb4ce2362c1",
+          "bytes": 40
+        }
+      }
+    }
+  ],
+  "operations": [
+    {
+      "host": "router1",
+      "address": "host.router1.script[\"reload_networkd\"]",
+      "action": "run",
+      "summary": "run host script reload_networkd",
+      "depends_on": [
+        "host.router1.components.wan_network.files.file[\"/etc/systemd/network/20-wan.network\"]",
+        "host.router1.components.policy_route.files.file[\"/etc/systemd/network/30-policy-routing.network\"]"
+      ],
+      "triggered_by": [
+        "host.router1.components.wan_network.files.file[\"/etc/systemd/network/20-wan.network\"]",
+        "host.router1.components.policy_route.files.file[\"/etc/systemd/network/30-policy-routing.network\"]"
+      ],
+      "command_preview": "script reload_networkd (once)",
+      "source": {
+        "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+        "line": 3,
+        "path": "script[\"reload_networkd\"]"
+      }
+    }
+  ]
+}

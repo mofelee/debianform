@@ -93,6 +93,25 @@
     ]
   },
   {
+    "fixture": "../../../examples/shared-networkd-reload.dbf.hcl",
+    "components": [
+      "policy_route",
+      "wan_network"
+    ],
+    "hosts": [
+      {
+        "name": "router1",
+        "components": [
+          "wan_network=wan_network",
+          "policy_route=policy_route"
+        ],
+        "body_keys": [
+          "platform"
+        ]
+      }
+    ]
+  },
+  {
     "fixture": "../../../examples/debian12-amd64.dbf.hcl",
     "hosts": [
       {

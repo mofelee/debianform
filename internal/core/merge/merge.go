@@ -47,10 +47,15 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 	if err != nil {
 		return nil, err
 	}
+	scripts, err := rootScriptDefinitionSpecs(cfg.Scripts)
+	if err != nil {
+		return nil, err
+	}
 	program := &ir.Program{
 		Hosts:      make([]ir.HostSpec, 0, len(names)),
 		Variables:  variables,
 		Components: components,
+		Scripts:    scripts,
 	}
 	for _, name := range names {
 		if opts.HostFilter != "" && name != opts.HostFilter {
@@ -85,6 +90,11 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 				return nil, err
 			}
 		}
+		hostScripts, err := compiler.hostScriptSpecs(spec)
+		if err != nil {
+			return nil, err
+		}
+		spec.Scripts = hostScripts
 		if opts.ValidateRuntimeTemplates {
 			if err := compiler.validateRuntimeComponentTemplates(host.Components, spec); err != nil {
 				return nil, err

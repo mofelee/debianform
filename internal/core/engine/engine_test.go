@@ -1329,6 +1329,94 @@ func TestComponentScriptOnceRunsOnceForMultipleChangedFiles(t *testing.T) {
 	}
 }
 
+func TestRootScriptRunsOnceForAllOneAndNoChangedTriggers(t *testing.T) {
+	initialProgram, initialGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, rootScriptFixture("wan-v1", "policy-v1")))
+	backend := NewMemoryBackend()
+	provider := &recordingOperationProvider{MemoryProvider: NewMemoryProvider()}
+	engine := Engine{Backend: backend, Provider: provider}
+	address := `host.router.script["reload"]`
+
+	initial, err := engine.Apply(context.Background(), initialProgram, initialGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(initial.Operations) != 1 || len(provider.ScriptPayloads[address]) != 1 {
+		t.Fatalf("initial operations/payloads = %#v / %#v", initial.Operations, provider.ScriptPayloads[address])
+	}
+	if got := provider.ScriptPayloads[address][0].TriggerPaths; !reflect.DeepEqual(got, []string{"/etc/wan", "/etc/policy"}) {
+		t.Fatalf("initial root script triggers = %#v", got)
+	}
+
+	noop, err := engine.Apply(context.Background(), initialProgram, initialGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(noop.Operations) != 0 || len(provider.ScriptPayloads[address]) != 1 {
+		t.Fatalf("no-op operations/payloads = %#v / %#v", noop.Operations, provider.ScriptPayloads[address])
+	}
+
+	updatedProgram, updatedGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, rootScriptFixture("wan-v2", "policy-v1")))
+	updated, err := engine.Apply(context.Background(), updatedProgram, updatedGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Operations) != 1 || len(provider.ScriptPayloads[address]) != 2 {
+		t.Fatalf("single-trigger operations/payloads = %#v / %#v", updated.Operations, provider.ScriptPayloads[address])
+	}
+	if got := provider.ScriptPayloads[address][1].TriggerPaths; !reflect.DeepEqual(got, []string{"/etc/wan"}) {
+		t.Fatalf("single root script trigger = %#v", got)
+	}
+}
+
+func TestRootScriptFailureReportedOnceAtHostAddress(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, rootScriptFixture("wan", "policy")))
+	provider := &recordingOperationProvider{MemoryProvider: NewMemoryProvider(), OperationError: errors.New("injected root script failure")}
+	engine := Engine{Backend: NewMemoryBackend(), Provider: provider}
+	address := `host.router.script["reload"]`
+
+	_, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err == nil || !strings.Contains(err.Error(), address+" failed: injected root script failure") {
+		t.Fatalf("apply error = %v", err)
+	}
+	if len(provider.ScriptPayloads[address]) != 1 {
+		t.Fatalf("failed root script payloads = %#v, want one", provider.ScriptPayloads[address])
+	}
+}
+
+func TestRootScriptOutputRecordsHostScopedState(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `
+script "render" {
+  outputs = ["/tmp/rendered"]
+  run     = "printf rendered > /tmp/rendered"
+}
+component "app" {
+  files {
+    file "/etc/app" {
+      content   = "app"
+      on_change = script.render
+    }
+  }
+}
+host "server1" { components = [component.app] }
+`))
+	backend := NewMemoryBackend()
+	provider := &recordingOperationProvider{MemoryProvider: NewMemoryProvider(), OutputSHA: "root-output-sha"}
+	engine := Engine{Backend: backend, Provider: provider}
+
+	if _, err := engine.Apply(context.Background(), program, resourceGraph, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	outputAddress := `host.server1.script["render"].outputs["/tmp/rendered"]`
+	state, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := state.Resources[outputAddress]
+	if output.Desired["scope"] != "host" || output.Desired["component"] != nil || output.Observed["sha256"] != "root-output-sha" {
+		t.Fatalf("root script output state = %#v", output)
+	}
+}
+
 func TestComponentScriptEachRunsForEveryChangedFile(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, componentScriptModeFixture("each")))
 	provider := &recordingOperationProvider{MemoryProvider: NewMemoryProvider()}
@@ -2078,6 +2166,37 @@ host "app1" {
 `, mode)
 }
 
+func rootScriptFixture(wanContent, policyContent string) string {
+	return fmt.Sprintf(`
+script "reload" {
+  mode = "once"
+  run  = "networkctl reload"
+}
+
+component "wan" {
+  files {
+    file "/etc/wan" {
+      content   = %q
+      on_change = script.reload
+    }
+  }
+}
+
+component "policy" {
+  files {
+    file "/etc/policy" {
+      content   = %q
+      on_change = script.reload
+    }
+  }
+}
+
+host "router" {
+  components = [component.wan, component.policy]
+}
+`, wanContent, policyContent)
+}
+
 func cloneCommandMatrix(in [][]string) [][]string {
 	out := make([][]string, len(in))
 	for i := range in {
@@ -2324,6 +2443,7 @@ type recordingOperationProvider struct {
 	*MemoryProvider
 	ScriptPayloads map[string][]graph.ScriptPayload
 	OutputSHA      string
+	OperationError error
 }
 
 func (p *recordingOperationProvider) RunOperation(ctx context.Context, operation graph.Operation) (OperationResult, error) {
@@ -2337,6 +2457,9 @@ func (p *recordingOperationProvider) RunOperation(ctx context.Context, operation
 		payload.TriggerAddresses = append([]string(nil), payload.TriggerAddresses...)
 		payload.TriggerPaths = append([]string(nil), payload.TriggerPaths...)
 		p.ScriptPayloads[operation.Address] = append(p.ScriptPayloads[operation.Address], payload)
+	}
+	if p.OperationError != nil {
+		return OperationResult{}, p.OperationError
 	}
 	result, err := p.MemoryProvider.RunOperation(ctx, operation)
 	if err != nil || operation.ScriptPayload == nil || len(operation.ScriptPayload.Outputs) == 0 {

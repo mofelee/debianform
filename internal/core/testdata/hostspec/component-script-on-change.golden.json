@@ -77,6 +77,7 @@
       "scripts": {
         "reload": {
           "name": "reload",
+          "declaration_id": "component.managed_app.script[\"reload\"]",
           "mode": "once",
           "body": "run",
           "interpreter": [
@@ -109,15 +110,19 @@
             "group": "root",
             "mode": "0644",
             "ensure": "present",
-            "on_change": "reload",
+            "on_change": {
+              "scope": "component",
+              "name": "reload",
+              "declaration_id": "component.managed_app.script[\"reload\"]",
+              "source": {
+                "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
+                "line": 20,
+                "path": "component.managed_app.files.file[\"/etc/managed-app/config.env\"].on_change"
+              }
+            },
             "summary": {
               "sha256": "467fe02f238d90a1534ed2d9383219a82ca29a788e76975288233c9aad83569f",
               "bytes": 27
-            },
-            "on_change_source": {
-              "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",
-              "line": 20,
-              "path": "component.managed_app.files.file[\"/etc/managed-app/config.env\"].on_change"
             },
             "source": {
               "file": "../testdata/fixtures/component-script-on-change.dbf.hcl",

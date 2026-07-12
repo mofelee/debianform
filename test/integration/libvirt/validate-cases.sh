@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CASES_DIR="$ROOT_DIR/test/integration/libvirt/cases"
-EXPECTED_CASE_COUNT=19
+EXPECTED_CASE_COUNT=20
 DBF_BIN="${DBF_INTEGRATION_DBF_BIN:-}"
 TEMP_DBF=""
 TEMP_PLAN=""

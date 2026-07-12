@@ -1353,6 +1353,84 @@ component "app" {
 	}
 }
 
+func TestParseRootScriptAndStructuredReferences(t *testing.T) {
+	file := writeConfig(t, `
+script "reload" {
+  mode = "once"
+  run  = "networkctl reload"
+}
+
+component "wan" {
+  files {
+    file "/etc/systemd/network/20-wan.network" {
+      content   = "wan"
+      on_change = script.reload
+    }
+  }
+}
+
+component "policy" {
+  script "reload" {
+    run = "local reload"
+  }
+
+  files {
+    file "/etc/systemd/network/30-policy.network" {
+      content   = "policy"
+      on_change = global.script.reload
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if script := cfg.Scripts["reload"]; script.Source.Path != `script["reload"]` {
+		t.Fatalf("root script = %#v", script)
+	}
+	wan, err := ParseComponentBody(cfg.Components["wan"], EvalContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wanRef := wan.Map["files"].Map["file"].Map["/etc/systemd/network/20-wan.network"].Map["on_change"].ScriptReference
+	if wanRef == nil || wanRef.Scope != ScriptReferenceAuto || wanRef.Name != "reload" {
+		t.Fatalf("wan reference = %#v", wanRef)
+	}
+	policy, err := ParseComponentBody(cfg.Components["policy"], EvalContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyRef := policy.Map["files"].Map["file"].Map["/etc/systemd/network/30-policy.network"].Map["on_change"].ScriptReference
+	if policyRef == nil || policyRef.Scope != ScriptReferenceGlobal || policyRef.Name != "reload" {
+		t.Fatalf("policy reference = %#v", policyRef)
+	}
+}
+
+func TestParseRejectsRootScriptComponentInputReference(t *testing.T) {
+	file := writeConfig(t, `
+script "reload" {
+  run = "echo ${input.service}"
+}
+`)
+	_, err := ParseFiles([]string{file})
+	if err == nil || !strings.Contains(err.Error(), "root script cannot reference component input.*") {
+		t.Fatalf("ParseFiles() error = %v", err)
+	}
+}
+
+func TestParseRejectsDuplicateRootScriptDeclarations(t *testing.T) {
+	file := writeConfig(t, `
+script "reload" { run = "one" }
+script "reload" { run = "two" }
+`)
+	_, err := ParseFiles([]string{file})
+	if err == nil || !strings.Contains(err.Error(), `duplicate root script "reload"`) || !strings.Contains(err.Error(), "first defined at") {
+		t.Fatalf("ParseFiles() error = %v", err)
+	}
+}
+
 func TestParseLifecycleBlock(t *testing.T) {
 	file := writeConfig(t, `
 host "web1" {
@@ -1688,6 +1766,7 @@ func runnableExampleFixtures() []string {
 		"../../../examples/component-binary.dbf.hcl",
 		"../../../examples/component-inputs.dbf.hcl",
 		"../../../examples/component-source-build.dbf.hcl",
+		"../../../examples/shared-networkd-reload.dbf.hcl",
 		"../../../examples/debian12-amd64.dbf.hcl",
 		"../../../examples/docker-compose.dbf.hcl",
 		"../../../examples/docker-daemon.dbf.hcl",

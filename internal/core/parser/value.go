@@ -30,16 +30,17 @@ const (
 )
 
 type Value struct {
-	Kind      Kind
-	String    string
-	Bool      bool
-	Number    string
-	List      []Value
-	Map       map[string]Value
-	Source    ir.SourceRef
-	Modifier  Modifier
-	Sensitive bool
-	Ephemeral bool
+	Kind            Kind
+	String          string
+	Bool            bool
+	Number          string
+	List            []Value
+	Map             map[string]Value
+	ScriptReference *ScriptReference
+	Source          ir.SourceRef
+	Modifier        Modifier
+	Sensitive       bool
+	Ephemeral       bool
 }
 
 const SensitiveMark = "debianform:sensitive"

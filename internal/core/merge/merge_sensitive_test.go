@@ -147,6 +147,42 @@ host "app1" {
 	}
 }
 
+func TestCompileSensitiveRootScriptRedactsHostSpecJSON(t *testing.T) {
+	program := compileInline(t, `
+variable "token" {
+  type      = string
+  sensitive = true
+  default   = "not-a-real-root-script-secret"
+}
+
+script "reload" {
+  run = "echo ${var.token}"
+}
+
+component "app" {
+  files {
+    file "/etc/app.conf" {
+      content   = "managed"
+      on_change = script.reload
+    }
+  }
+}
+
+host "app1" { components = [component.app] }
+`)
+	script := program.Hosts[0].Scripts["reload"]
+	if !script.Sensitive {
+		t.Fatal("root script sensitive = false")
+	}
+	data, err := json.MarshalIndent(program, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "not-a-real-root-script-secret") {
+		t.Fatalf("HostSpec JSON leaked root script secret: %s", data)
+	}
+}
+
 func TestCompileStructuredServiceEnvironmentMarksUnitSensitive(t *testing.T) {
 	cfg, err := parser.ParseFiles([]string{"../testdata/fixtures/sensitive-service-environment.dbf.hcl"})
 	if err != nil {

@@ -1,0 +1,251 @@
+{
+  "name": "router1",
+  "source": {
+    "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+    "line": 51,
+    "path": "host.router1"
+  },
+  "facts": {
+    "system": {
+      "hostname": "router1",
+      "architecture": "amd64",
+      "codename": "trixie"
+    }
+  },
+  "ssh": {
+    "host": "router1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+      "line": 51,
+      "path": "host.router1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/router1.json",
+    "lock_path": "/var/lock/debianform/state/router1.lock",
+    "source": {
+      "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+      "line": 51,
+      "path": "host.router1"
+    }
+  },
+  "platform": {
+    "architecture": "amd64",
+    "codename": "trixie",
+    "source": {
+      "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+      "line": 54,
+      "path": "host.router1.platform"
+    }
+  },
+  "system": {
+    "source": {
+      "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+      "line": 51,
+      "path": "host.router1"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  },
+  "scripts": {
+    "reload_networkd": {
+      "name": "reload_networkd",
+      "declaration_id": "script[\"reload_networkd\"]",
+      "mode": "once",
+      "body": "commands",
+      "interpreter": [
+        "/bin/sh",
+        "-eu"
+      ],
+      "commands": [
+        [
+          "systemctl",
+          "start",
+          "systemd-networkd.service"
+        ],
+        [
+          "networkctl",
+          "reload"
+        ]
+      ],
+      "source": {
+        "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+        "line": 3,
+        "path": "script[\"reload_networkd\"]"
+      }
+    }
+  },
+  "components": [
+    {
+      "name": "wan_network",
+      "template": "wan_network",
+      "apt": {
+        "source": {}
+      },
+      "packages": {
+        "source": {}
+      },
+      "files": {
+        "files": {
+          "/etc/systemd/network/20-wan.network": {
+            "path": "/etc/systemd/network/20-wan.network",
+            "content": "[Match]\nName=enp1s0\n\n[Network]\nDHCP=yes\n",
+            "owner": "root",
+            "group": "root",
+            "mode": "0644",
+            "ensure": "present",
+            "on_change": {
+              "scope": "root",
+              "name": "reload_networkd",
+              "declaration_id": "script[\"reload_networkd\"]",
+              "source": {
+                "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+                "line": 22,
+                "path": "component.wan_network.files.file[\"/etc/systemd/network/20-wan.network\"].on_change"
+              }
+            },
+            "summary": {
+              "sha256": "a091f97aec9abd68437d2106cdda3983531c1106feb456656e7d7bb4ce2362c1",
+              "bytes": 40
+            },
+            "source": {
+              "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+              "line": 13,
+              "path": "component.wan_network.files.file[\"/etc/systemd/network/20-wan.network\"]"
+            }
+          }
+        },
+        "source": {
+          "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+          "line": 12,
+          "path": "component.wan_network.files"
+        }
+      },
+      "secrets": {
+        "source": {}
+      },
+      "directories": {
+        "source": {}
+      },
+      "groups": {
+        "source": {}
+      },
+      "users": {
+        "source": {}
+      },
+      "systemd": {
+        "source": {}
+      },
+      "services": {
+        "source": {}
+      },
+      "source": {
+        "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+        "line": 52,
+        "path": "host.router1.components[0]"
+      }
+    },
+    {
+      "name": "policy_route",
+      "template": "policy_route",
+      "apt": {
+        "source": {}
+      },
+      "packages": {
+        "source": {}
+      },
+      "files": {
+        "files": {
+          "/etc/systemd/network/30-policy-routing.network": {
+            "path": "/etc/systemd/network/30-policy-routing.network",
+            "content": "[Match]\nName=enp2s0\n\n[Network]\nAddress=192.0.2.2/24\n\n[Route]\nGateway=192.0.2.1\nTable=100\n\n[RoutingPolicyRule]\nFrom=192.0.2.2/32\nTable=100\n",
+            "owner": "root",
+            "group": "root",
+            "mode": "0644",
+            "ensure": "present",
+            "on_change": {
+              "scope": "root",
+              "name": "reload_networkd",
+              "declaration_id": "script[\"reload_networkd\"]",
+              "source": {
+                "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+                "line": 46,
+                "path": "component.policy_route.files.file[\"/etc/systemd/network/30-policy-routing.network\"].on_change"
+              }
+            },
+            "summary": {
+              "sha256": "b904732ae18de4147a6437e6db9a3bc6f02e1d516a9b45c984a3ec43c74707b8",
+              "bytes": 138
+            },
+            "source": {
+              "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+              "line": 29,
+              "path": "component.policy_route.files.file[\"/etc/systemd/network/30-policy-routing.network\"]"
+            }
+          }
+        },
+        "source": {
+          "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+          "line": 28,
+          "path": "component.policy_route.files"
+        }
+      },
+      "secrets": {
+        "source": {}
+      },
+      "directories": {
+        "source": {}
+      },
+      "groups": {
+        "source": {}
+      },
+      "users": {
+        "source": {}
+      },
+      "systemd": {
+        "source": {}
+      },
+      "services": {
+        "source": {}
+      },
+      "source": {
+        "file": "../../../examples/shared-networkd-reload.dbf.hcl",
+        "line": 52,
+        "path": "host.router1.components[1]"
+      }
+    }
+  ]
+}

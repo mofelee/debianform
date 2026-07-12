@@ -32,9 +32,9 @@ Linux Homebrew best-effort 规则见
 | CLI on Linux arm64 | Preview | release artifact 已构建；真实 arm64 curl installer 仍需人工或 runner 验证。 |
 | CLI on macOS amd64 | Beta | release artifact、curl installer 和 Homebrew install/test/upgrade 已验证。 |
 | CLI on macOS arm64 | Beta | release artifact、curl installer 和 Homebrew install/test/upgrade 已验证。 |
-| Target Debian 13 amd64 | Beta | 最高优先级目标；19 个 libvirt cases 全部作为阻断门禁。 |
+| Target Debian 13 amd64 | Beta | 最高优先级目标；20 个 libvirt cases 全部作为阻断门禁。 |
 | Target Debian 13 arm64 | Preview | runtime facts 和架构选择支持 arm64，但缺少真实 arm64 目标主机矩阵。 |
-| Target Debian 12 amd64 | Beta | 19 个 libvirt cases 与 Debian 13 使用同一阻断门禁。 |
+| Target Debian 12 amd64 | Beta | 20 个 libvirt cases 与 Debian 13 使用同一阻断门禁。 |
 | Target Debian 12 arm64 | Preview | runtime facts 可识别 arm64，但缺少 Debian 12 arm64 apply/check 矩阵。 |
 | Target Debian 11 或更早版本 | Unsupported | 不进入当前版本支持承诺或 release gate。 |
 | Debian testing/unstable | Unsupported | 不进入当前 beta 支持承诺。 |
@@ -42,8 +42,8 @@ Linux Homebrew best-effort 规则见
 | root SSH 管理连接 | Beta | `ssh.user` 只能省略或为 `"root"`。 |
 | sudo/become/非 root 管理连接 | Unsupported | 当前不支持 sudo 提权、become 或非 root 管理连接。 |
 
-CI 当前自动发现 19 个 libvirt cases，并展开为 Debian 12 amd64 和 Debian 13 amd64 两套，
-共 38 个阻断 job；任一版本的任一 case 失败都会使 managed-target gate 失败。Debian 13 仍是
+CI 当前自动发现 20 个 libvirt cases，并展开为 Debian 12 amd64 和 Debian 13 amd64 两套，
+共 40 个阻断 job；任一版本的任一 case 失败都会使 managed-target gate 失败。Debian 13 仍是
 本地默认值和新功能的最高优先级目标。
 
 Debian 12 amd64 Beta 的首个完整门禁基线是提交
@@ -51,6 +51,10 @@ Debian 12 amd64 Beta 的首个完整门禁基线是提交
 [CI run 29148759149](https://github.com/mofelee/debianform/actions/runs/29148759149) 中 Debian 12
 amd64 和 Debian 13 amd64 分别通过 `19/19` 个 libvirt cases，且
 `Managed target matrix gate` 成功。
+
+host-scoped shared script 新增的 `shared-script-networkd` case 已于 2026-07-12 在真实 Debian 13
+amd64 VM 上通过 14 个断言，覆盖双文件一次 reload、no-op 零 reload、单文件 drift 一次 reload、
+raw policy route/rule 生效和清理。完整 20-case 双版本矩阵仍由上述 CI gate 统一证明。
 
 ## CLI 命令
 
@@ -158,6 +162,7 @@ amd64 和 Debian 13 amd64 分别通过 `19/19` 个 libvirt cases，且
 | Component input type system | Beta | primitive、list/map/set/object/tuple/optional。 |
 | Component input validation | Beta | 当前 input 自校验和受限函数集合。 |
 | Component script/on_change | Beta | component 内文件变更触发 script，支持 `once` / `each` 和触发上下文环境变量。 |
+| Host-scoped shared script/on_change | Beta | 根 script 按声明身份和 host 聚合多个 component 文件触发；仅支持 `once`。 |
 | Sensitive input propagation | Beta | 派生 file/unit content 在 plan/state 中脱敏。 |
 | Top-level variable | Beta | CLI var、var file、auto var file、env var、validation。 |
 | Ephemeral variable | Beta | 不写入 state；结构性字段限制。 |
@@ -175,6 +180,7 @@ amd64 和 Debian 13 amd64 分别通过 `19/19` 个 libvirt cases，且
 | `examples/component-source-build.dbf.hcl` | Beta | source build component。 |
 | `examples/component-inputs.dbf.hcl` | Beta | typed input、validation、sensitive。 |
 | `examples/component-script-on-change.dbf.hcl` | Beta | component 内 `files.file.on_change` 触发 script operation。 |
+| `examples/shared-networkd-reload.dbf.hcl` | Beta | 两个 component 的 raw networkd 文件共享一个 host-scoped reload script。 |
 | `examples/debian12-amd64.dbf.hcl` | Beta | Bookworm amd64 platform assertion 和 `plan --offline` smoke。 |
 | `examples/docker-*.dbf.hcl` | Beta | Docker minimal、official mirror、daemon、Compose 和 users。 |
 | `examples/fleet.dbf.hcl` | Preview | 当前语法速查，覆盖 profile/component/host、systemd timer/resolved/journald、Docker、nftables 等组合用法。 |

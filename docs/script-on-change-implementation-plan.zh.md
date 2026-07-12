@@ -50,12 +50,12 @@
 
 代码：
 
-- [x] parser 增加 `script` block 解析，限制只能出现在 component 内。
+- [x] parser 支持 component-local 和程序根部的 `script` block。
 - [x] parser 增加 `files.file.on_change` 的 HCL traversal 解析。
 - [x] IR 增加 `ComponentScriptSpec`，挂到 `ComponentInstanceSpec`。
 - [x] IR 在 `ManagedFile` 上增加 `OnChange`，保存 script 名称和 source。
 - [x] merge/buildComponentSpec 编译 component script 和 file on_change。
-- [x] validate 校验 `on_change` 引用的 script 存在于同一个 component instance。
+- [x] validate 解析 `on_change` 到 component-local 或 host-scoped 根声明身份。
 - [x] 更新 HostSpec JSON/golden，确保 script 元数据稳定输出且不泄漏敏感内容。
 
 测试：

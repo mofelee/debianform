@@ -23,6 +23,7 @@ type Config struct {
 	Profiles               map[string]Profile
 	Hosts                  map[string]Host
 	Components             map[string]Component
+	Scripts                map[string]ComponentScript
 }
 
 type Profile struct {
@@ -105,6 +106,7 @@ type ComponentInputValidation struct {
 
 type ComponentScript struct {
 	Name              string
+	ModuleDir         string
 	Mode              string
 	Interpreter       []string
 	Outputs           []string
@@ -131,6 +133,19 @@ type ComponentScript struct {
 	ContentSource     ir.SourceRef
 	CommandsSource    ir.SourceRef
 	Source            ir.SourceRef
+}
+
+type ScriptReferenceScope string
+
+const (
+	ScriptReferenceAuto   ScriptReferenceScope = "auto"
+	ScriptReferenceGlobal ScriptReferenceScope = "global"
+)
+
+type ScriptReference struct {
+	Name   string
+	Scope  ScriptReferenceScope
+	Source ir.SourceRef
 }
 
 type ComponentArtifactSource struct {
@@ -208,6 +223,7 @@ func ParseFilesWithOptions(files []string, opts ParseOptions) (*Config, error) {
 		Profiles:               map[string]Profile{},
 		Hosts:                  map[string]Host{},
 		Components:             map[string]Component{},
+		Scripts:                map[string]ComponentScript{},
 	}
 
 	type parsedFile struct {
@@ -436,6 +452,15 @@ func parseTopLevel(cfg *Config, file string, body *hclsyntax.Body) error {
 				return fmt.Errorf("%s:%d: duplicate component %q; first defined at %s:%d", file, component.Source.Line, component.Name, previous.Source.File, previous.Source.Line)
 			}
 			cfg.Components[component.Name] = component
+		case "script":
+			script, err := parseRootScriptBlock(file, block, ctx)
+			if err != nil {
+				return err
+			}
+			if previous, exists := cfg.Scripts[script.Name]; exists {
+				return fmt.Errorf("%s:%d: duplicate root script %q; first defined at %s:%d", file, script.Source.Line, script.Name, previous.Source.File, previous.Source.Line)
+			}
+			cfg.Scripts[script.Name] = script
 		default:
 			return fmt.Errorf("%s:%d: unknown top-level block %q", file, block.TypeRange.Start.Line, block.Type)
 		}
@@ -707,15 +732,44 @@ func parseComponent(file string, block *hclsyntax.Block, ctx EvalContext) (Compo
 }
 
 func parseComponentScriptBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentScript, error) {
+	return parseScriptBlock(file, componentPath, "component script", block, ctx)
+}
+
+func parseRootScriptBlock(file string, block *hclsyntax.Block, ctx EvalContext) (ComponentScript, error) {
+	script, err := parseScriptBlock(file, "", "root script", block, ctx)
+	if err != nil {
+		return ComponentScript{}, err
+	}
+	if !hclsyntax.ValidIdentifier(script.Name) {
+		return ComponentScript{}, fmt.Errorf("%s:%d:%s: root script label %q must be a valid HCL identifier", file, script.Source.Line, script.Source.Path, script.Name)
+	}
+	for _, expr := range []hcl.Expression{script.ModeExpr, script.InterpreterExpr, script.OutputsExpr, script.RunExpr, script.ContentExpr, script.CommandsExpr} {
+		if expr == nil {
+			continue
+		}
+		for _, traversal := range expr.Variables() {
+			root, ok := traversalRoot(traversal)
+			if ok && root == "input" {
+				return ComponentScript{}, fmt.Errorf("%s:%d:%s: root script cannot reference component input.*", file, traversal.SourceRange().Start.Line, script.Source.Path)
+			}
+		}
+	}
+	return script, nil
+}
+
+func parseScriptBlock(file, parentPath, description string, block *hclsyntax.Block, ctx EvalContext) (ComponentScript, error) {
 	if len(block.Labels) != 1 {
-		return ComponentScript{}, fmt.Errorf("%s:%d: component script block requires exactly one label", file, block.TypeRange.Start.Line)
+		return ComponentScript{}, fmt.Errorf("%s:%d: %s block requires exactly one label", file, block.TypeRange.Start.Line, description)
 	}
 	name := block.Labels[0]
-	path := fmt.Sprintf("%s.script[%s]", componentPath, strconv.Quote(name))
+	path := fmt.Sprintf("script[%s]", strconv.Quote(name))
+	if parentPath != "" {
+		path = fmt.Sprintf("%s.script[%s]", parentPath, strconv.Quote(name))
+	}
 	if len(block.Body.Blocks) != 0 {
 		return ComponentScript{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
 	}
-	script := ComponentScript{Name: name, Source: ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}}
+	script := ComponentScript{Name: name, ModuleDir: filepath.Dir(file), Source: ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}}
 	for attrName, attr := range block.Body.Attributes {
 		source := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + attrName}
 		switch attrName {
@@ -1444,23 +1498,27 @@ func parseComponentTraversal(file string, expr hcl.Expression) (string, error) {
 	return attr.Name, nil
 }
 
-func parseScriptTraversal(file string, expr hcl.Expression) (string, error) {
+func parseScriptTraversal(file string, expr hcl.Expression) (ScriptReference, error) {
 	traversal, diags := hcl.AbsTraversalForExpr(expr)
 	if diags.HasErrors() {
-		return "", fmt.Errorf("%s:%d: script reference must be script.<name>", file, expr.Range().Start.Line)
+		return ScriptReference{}, fmt.Errorf("%s:%d: script reference must be script.<name> or global.script.<name>", file, expr.Range().Start.Line)
 	}
-	if len(traversal) != 2 {
-		return "", fmt.Errorf("%s:%d: script reference must be script.<name>", file, expr.Range().Start.Line)
+	if len(traversal) == 2 {
+		root, rootOK := traversal[0].(hcl.TraverseRoot)
+		attr, attrOK := traversal[1].(hcl.TraverseAttr)
+		if rootOK && root.Name == "script" && attrOK && attr.Name != "" {
+			return ScriptReference{Name: attr.Name, Scope: ScriptReferenceAuto}, nil
+		}
 	}
-	root, ok := traversal[0].(hcl.TraverseRoot)
-	if !ok || root.Name != "script" {
-		return "", fmt.Errorf("%s:%d: script reference must be script.<name>", file, expr.Range().Start.Line)
+	if len(traversal) == 3 {
+		root, rootOK := traversal[0].(hcl.TraverseRoot)
+		script, scriptOK := traversal[1].(hcl.TraverseAttr)
+		name, nameOK := traversal[2].(hcl.TraverseAttr)
+		if rootOK && root.Name == "global" && scriptOK && script.Name == "script" && nameOK && name.Name != "" {
+			return ScriptReference{Name: name.Name, Scope: ScriptReferenceGlobal}, nil
+		}
 	}
-	attr, ok := traversal[1].(hcl.TraverseAttr)
-	if !ok || attr.Name == "" {
-		return "", fmt.Errorf("%s:%d: script reference must be script.<name>", file, expr.Range().Start.Line)
-	}
-	return attr.Name, nil
+	return ScriptReference{}, fmt.Errorf("%s:%d: script reference must be script.<name> or global.script.<name>", file, expr.Range().Start.Line)
 }
 
 func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentInput, error) {
@@ -2437,7 +2495,8 @@ func parseLabeledObjectBlock(file, domain, path string, block *hclsyntax.Block, 
 			if err != nil {
 				return Value{}, err
 			}
-			values[name] = Value{Kind: KindString, String: ref, Source: attrSource}
+			ref.Source = attrSource
+			values[name] = Value{Kind: KindString, String: ref.Name, ScriptReference: &ref, Source: attrSource}
 			continue
 		}
 		value, err := evalValue(attr.Expr, ctx, attrSource)

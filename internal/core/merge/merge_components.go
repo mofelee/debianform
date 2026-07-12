@@ -128,6 +128,7 @@ func componentInstanceScriptSpecs(template parser.Component, ctx parser.EvalCont
 		if err != nil {
 			return nil, err
 		}
+		spec.DeclarationID = script.Source.Path
 		out[name] = spec
 	}
 	return out, nil
@@ -223,7 +224,11 @@ func validateComponentScriptShape(script parser.ComponentScript) error {
 		}
 	}
 	if bodies != 1 {
-		return fmt.Errorf("%s:%d:%s: component script requires exactly one of run, content, or commands", script.Source.File, script.Source.Line, script.Source.Path)
+		description := "component script"
+		if strings.HasPrefix(script.Source.Path, "script[") {
+			description = "root script"
+		}
+		return fmt.Errorf("%s:%d:%s: %s requires exactly one of run, content, or commands", script.Source.File, script.Source.Line, script.Source.Path, description)
 	}
 	return nil
 }
@@ -308,7 +313,7 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 		if err != nil {
 			return nil, fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
-		component, err := c.buildComponentSpec(instance, template, componentCtx, raw)
+		component, err := c.buildComponentSpec(instance, template, componentCtx, raw, target.Scripts)
 		if err != nil {
 			return nil, err
 		}
@@ -396,7 +401,7 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 			}
 			return fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
-		component, err := c.buildComponentSpec(instance, template, componentCtx, raw)
+		component, err := c.buildComponentSpec(instance, template, componentCtx, raw, target.Scripts)
 		if err != nil {
 			if isRuntimeUnknownError(err) {
 				if install != nil {
@@ -1061,7 +1066,7 @@ func inferArtifactFormat(sourceURL string) string {
 	}
 }
 
-func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, template parser.Component, ctx parser.EvalContext, raw parser.Value) (ir.ComponentInstanceSpec, error) {
+func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, template parser.Component, ctx parser.EvalContext, raw parser.Value, rootScripts map[string]ir.ComponentScriptSpec) (ir.ComponentInstanceSpec, error) {
 	spec := ir.ComponentInstanceSpec{
 		Name:     instance.Name,
 		Template: instance.Template,
@@ -1136,7 +1141,7 @@ func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, templat
 		if err != nil {
 			return spec, err
 		}
-		if err := validateFileOnChangeRefs(managedFiles, spec.Scripts); err != nil {
+		if err := validateFileOnChangeRefs(managedFiles, spec.Scripts, rootScripts); err != nil {
 			return spec, err
 		}
 		spec.Files.Files = managedFiles

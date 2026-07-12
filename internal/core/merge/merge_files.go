@@ -82,7 +82,7 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 		if err != nil {
 			return nil, err
 		}
-		onChange, hasOnChange, err := stringField(item, "on_change")
+		onChangeName, hasOnChange, err := stringField(item, "on_change")
 		if err != nil {
 			return nil, err
 		}
@@ -97,13 +97,17 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 			Mode:             mode,
 			Sensitive:        sensitive,
 			Ensure:           ensure,
-			OnChange:         onChange,
 			Lifecycle:        lifecycle,
 			Source:           item.Source,
 		}
 		if hasOnChange {
-			source := item.Map["on_change"].Source
-			managed.OnChangeSource = &source
+			value := item.Map["on_change"]
+			scope := string(parser.ScriptReferenceAuto)
+			if value.ScriptReference != nil {
+				scope = string(value.ScriptReference.Scope)
+				onChangeName = value.ScriptReference.Name
+			}
+			managed.OnChange = &ir.ScriptReferenceSpec{Name: onChangeName, Scope: scope, Source: value.Source}
 		}
 		if hasContent {
 			managed.Summary = contentSummary([]byte(content))
@@ -122,13 +126,11 @@ func fileSpecs(files parser.Value) (map[string]ir.ManagedFile, error) {
 func rejectHostFileOnChange(files map[string]ir.ManagedFile) error {
 	for _, path := range sortedKeys(files) {
 		file := files[path]
-		if file.OnChange == "" {
+		if file.OnChange == nil {
 			continue
 		}
 		source := file.Source
-		if file.OnChangeSource != nil {
-			source = *file.OnChangeSource
-		}
+		source = file.OnChange.Source
 		if source.Path == "" {
 			source = file.Source
 		}
@@ -137,22 +139,34 @@ func rejectHostFileOnChange(files map[string]ir.ManagedFile) error {
 	return nil
 }
 
-func validateFileOnChangeRefs(files map[string]ir.ManagedFile, scripts map[string]ir.ComponentScriptSpec) error {
+func validateFileOnChangeRefs(files map[string]ir.ManagedFile, localScripts, rootScripts map[string]ir.ComponentScriptSpec) error {
 	for _, path := range sortedKeys(files) {
 		file := files[path]
-		if file.OnChange == "" {
+		if file.OnChange == nil {
 			continue
 		}
-		if _, ok := scripts[file.OnChange]; !ok {
-			source := file.Source
-			if file.OnChangeSource != nil {
-				source = *file.OnChangeSource
+		ref := *file.OnChange
+		if ref.Scope != string(parser.ScriptReferenceGlobal) {
+			if script, ok := localScripts[ref.Name]; ok {
+				ref.Scope = "component"
+				ref.DeclarationID = script.DeclarationID
+				file.OnChange = &ref
+				files[path] = file
+				continue
 			}
-			if source.Path == "" {
-				source = file.Source
-			}
-			return fmt.Errorf("%s:%d:%s: files.file.on_change references unknown script.%s", source.File, source.Line, source.Path, file.OnChange)
 		}
+		if script, ok := rootScripts[ref.Name]; ok {
+			ref.Scope = "root"
+			ref.DeclarationID = script.DeclarationID
+			file.OnChange = &ref
+			files[path] = file
+			continue
+		}
+		traversal := "script." + ref.Name
+		if ref.Scope == string(parser.ScriptReferenceGlobal) {
+			traversal = "global.script." + ref.Name
+		}
+		return fmt.Errorf("%s:%d:%s: files.file.on_change references unknown %s", ref.Source.File, ref.Source.Line, ref.Source.Path, traversal)
 	}
 	return nil
 }

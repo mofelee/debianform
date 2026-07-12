@@ -899,6 +899,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	}
 
 	componentScriptTriggers := map[string]map[string][]string{}
+	rootScriptTriggers := map[string][]string{}
+	rootScriptNames := map[string]string{}
 	for _, component := range host.Components {
 		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
 		for _, path := range sortedKeys(component.Files.Files) {
@@ -931,13 +933,21 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				ProviderAddress: "file." + providerName(host.Name, component.Name, item.Path),
 				ProviderPayload: payload,
 			})
-			if item.OnChange != "" {
+			if item.OnChange != nil {
+				if item.OnChange.Scope == "root" {
+					if item.OnChange.DeclarationID == "" {
+						return nil, nil, fmt.Errorf("%s has unresolved root script reference %q", address, item.OnChange.Name)
+					}
+					rootScriptTriggers[item.OnChange.DeclarationID] = append(rootScriptTriggers[item.OnChange.DeclarationID], address)
+					rootScriptNames[item.OnChange.DeclarationID] = item.OnChange.Name
+					continue
+				}
 				triggers, ok := componentScriptTriggers[component.Name]
 				if !ok {
 					triggers = map[string][]string{}
 					componentScriptTriggers[component.Name] = triggers
 				}
-				triggers[item.OnChange] = append(triggers[item.OnChange], address)
+				triggers[item.OnChange.Name] = append(triggers[item.OnChange.Name], address)
 			}
 		}
 	}
@@ -985,6 +995,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				DependsOn:      append([]string(nil), triggeredBy...),
 				TriggeredBy:    append([]string(nil), triggeredBy...),
 				CommandPreview: "script " + name + " (" + script.Mode + ")",
+				Sensitive:      script.Sensitive,
 				ScriptPayload: &ScriptPayload{
 					Name:          script.Name,
 					ComponentName: component.Name,
@@ -999,6 +1010,59 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				Source: script.Source,
 			})
 		}
+	}
+	for _, declarationID := range sortedKeys(rootScriptTriggers) {
+		name := rootScriptNames[declarationID]
+		script, ok := host.Scripts[name]
+		if !ok || script.DeclarationID != declarationID {
+			return nil, nil, fmt.Errorf("host %s root script reference %q has no matching declaration %q", host.Name, name, declarationID)
+		}
+		triggeredBy := dedupeStrings(rootScriptTriggers[declarationID])
+		outputs := hostScriptOutputPayloads(host.Name, name, script)
+		for _, output := range outputs {
+			desired := map[string]any{
+				"path":   output.Path,
+				"scope":  "host",
+				"script": name,
+			}
+			if output.ScriptDigest != "" {
+				desired["script_digest"] = output.ScriptDigest
+			}
+			nodes = append(nodes, Node{
+				Host:            host.Name,
+				Address:         output.Address,
+				Kind:            "component_script_output",
+				Summary:         "check host script output " + output.Path,
+				Source:          script.Source,
+				Desired:         desired,
+				DependsOn:       append([]string(nil), triggeredBy...),
+				ProviderType:    "component_script_output",
+				ProviderAddress: output.ProviderAddress,
+				ProviderPayload: desired,
+			})
+			triggeredBy = append(triggeredBy, output.Address)
+		}
+		triggeredBy = dedupeStrings(triggeredBy)
+		operations = append(operations, Operation{
+			Address:        fmt.Sprintf("host.%s.script[%s]", host.Name, strconv.Quote(name)),
+			Action:         "run",
+			Summary:        "run host script " + name,
+			Sensitive:      script.Sensitive,
+			DependsOn:      append([]string(nil), triggeredBy...),
+			TriggeredBy:    append([]string(nil), triggeredBy...),
+			CommandPreview: "script " + name + " (once)",
+			ScriptPayload: &ScriptPayload{
+				Name:        script.Name,
+				Mode:        "once",
+				Kind:        scriptPayloadKind(script),
+				Interpreter: append([]string(nil), script.Interpreter...),
+				Outputs:     outputs,
+				Run:         script.Run,
+				Content:     script.Content,
+				Commands:    cloneCommandMatrix(script.Commands),
+			},
+			Source: script.Source,
+		})
 	}
 
 	for _, path := range sortedKeys(host.Secrets.Files) {

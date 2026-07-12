@@ -869,7 +869,6 @@ component "app" {
     }
   }
 }
-
 host "app1" {
   component "app" {
     source = component.app
@@ -903,11 +902,107 @@ host "app1" {
 		t.Fatalf("commands = %#v", reindex.Commands)
 	}
 	file := component.Files.Files["/etc/app.conf"]
-	if file.OnChange != "reload" {
+	if file.OnChange == nil || file.OnChange.Name != "reload" || file.OnChange.Scope != "component" {
 		t.Fatalf("file on_change = %#v", file)
 	}
-	if file.OnChangeSource == nil || file.OnChangeSource.Path != `component.app.files.file["/etc/app.conf"].on_change` {
-		t.Fatalf("on_change source = %#v", file.OnChangeSource)
+	if file.OnChange.DeclarationID != `component.app.script["reload"]` {
+		t.Fatalf("on_change declaration identity = %q", file.OnChange.DeclarationID)
+	}
+	if file.OnChange.Source.Path != `component.app.files.file["/etc/app.conf"].on_change` {
+		t.Fatalf("on_change source = %#v", file.OnChange.Source)
+	}
+}
+
+func TestCompileRootScriptReferencesResolveByDeclaration(t *testing.T) {
+	program := compileInline(t, `
+script "reload" {
+  mode = "once"
+  run  = "echo ${target.platform.codename}"
+}
+
+component "wan" {
+  files {
+    file "/etc/wan" {
+      content   = "wan"
+      on_change = script.reload
+    }
+  }
+}
+
+component "policy" {
+  script "reload" {
+    run = "local"
+  }
+
+  files {
+    file "/etc/policy" {
+      content   = "policy"
+      on_change = global.script.reload
+    }
+    file "/etc/local" {
+      content   = "local"
+      on_change = script.reload
+    }
+  }
+}
+
+host "router" {
+  components = [component.wan, component.policy]
+  platform { codename = "trixie" }
+}
+`)
+	host := program.Hosts[0]
+	if script := host.Scripts["reload"]; script.Run != "echo trixie" || script.DeclarationID != `script["reload"]` {
+		t.Fatalf("host script = %#v", script)
+	}
+	wan := host.Components[0].Files.Files["/etc/wan"].OnChange
+	policy := host.Components[1].Files.Files["/etc/policy"].OnChange
+	local := host.Components[1].Files.Files["/etc/local"].OnChange
+	if wan == nil || policy == nil || wan.DeclarationID != policy.DeclarationID || wan.Scope != "root" {
+		t.Fatalf("root references = %#v %#v", wan, policy)
+	}
+	if local == nil || local.Scope != "component" || local.DeclarationID == wan.DeclarationID {
+		t.Fatalf("local collision reference = %#v", local)
+	}
+}
+
+func TestCompileRejectsInvalidRootScriptsAndReferences(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "each mode",
+			hcl: `script "reload" {
+  mode = "each"
+  run  = "true"
+}
+host "server1" {}`,
+			want: "root script mode must be once",
+		},
+		{
+			name: "explicit root does not fall back to local",
+			hcl: `component "app" {
+  script "reload" { run = "true" }
+  files {
+    file "/etc/app" {
+      content   = "app"
+      on_change = global.script.reload
+    }
+  }
+}
+host "server1" { components = [component.app] }`,
+			want: "references unknown global.script.reload",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 
@@ -1522,6 +1617,10 @@ func TestCompileComponentInputsHostSpecGolden(t *testing.T) {
 
 func TestCompileComponentScriptOnChangeHostSpecGolden(t *testing.T) {
 	assertHostSpecGolden(t, "../testdata/fixtures/component-script-on-change.dbf.hcl", "../testdata/hostspec/component-script-on-change.golden.json")
+}
+
+func TestCompileSharedNetworkdReloadHostSpecGolden(t *testing.T) {
+	assertHostSpecGolden(t, "../../../examples/shared-networkd-reload.dbf.hcl", "../testdata/hostspec/shared-networkd-reload.golden.json")
 }
 
 func TestCompileWireGuardComponentUsesStructuredInputsForRouteTable(t *testing.T) {

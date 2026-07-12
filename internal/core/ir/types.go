@@ -4,6 +4,13 @@ type Program struct {
 	Hosts      []HostSpec                       `json:"hosts"`
 	Variables  map[string]VariableSpec          `json:"variables,omitempty"`
 	Components map[string]ComponentTemplateSpec `json:"components,omitempty"`
+	Scripts    map[string]ScriptDefinitionSpec  `json:"scripts,omitempty"`
+}
+
+type ScriptDefinitionSpec struct {
+	Name          string    `json:"name"`
+	DeclarationID string    `json:"declaration_id"`
+	Source        SourceRef `json:"source,omitempty"`
 }
 
 type Warning struct {
@@ -12,26 +19,27 @@ type Warning struct {
 }
 
 type HostSpec struct {
-	Name        string                  `json:"name"`
-	Source      SourceRef               `json:"source"`
-	Facts       HostFacts               `json:"facts,omitempty"`
-	SSH         SSHSpec                 `json:"ssh"`
-	State       StateSpec               `json:"state"`
-	Platform    *PlatformSpec           `json:"platform,omitempty"`
-	System      SystemSpec              `json:"system"`
-	Kernel      KernelSpec              `json:"kernel"`
-	Packages    PackageSpec             `json:"packages"`
-	APT         APTSpec                 `json:"apt"`
-	Files       FileSpec                `json:"files"`
-	Secrets     SecretSpec              `json:"secrets"`
-	Directories DirectorySpec           `json:"directories"`
-	Groups      GroupSpec               `json:"groups"`
-	Users       UserSpec                `json:"users"`
-	Systemd     SystemdSpec             `json:"systemd"`
-	Services    ServiceSpec             `json:"services"`
-	Nftables    NftablesSpec            `json:"nftables"`
-	Docker      *DockerSpec             `json:"docker,omitempty"`
-	Components  []ComponentInstanceSpec `json:"components,omitempty"`
+	Name        string                         `json:"name"`
+	Source      SourceRef                      `json:"source"`
+	Facts       HostFacts                      `json:"facts,omitempty"`
+	SSH         SSHSpec                        `json:"ssh"`
+	State       StateSpec                      `json:"state"`
+	Platform    *PlatformSpec                  `json:"platform,omitempty"`
+	System      SystemSpec                     `json:"system"`
+	Kernel      KernelSpec                     `json:"kernel"`
+	Packages    PackageSpec                    `json:"packages"`
+	APT         APTSpec                        `json:"apt"`
+	Files       FileSpec                       `json:"files"`
+	Secrets     SecretSpec                     `json:"secrets"`
+	Directories DirectorySpec                  `json:"directories"`
+	Groups      GroupSpec                      `json:"groups"`
+	Users       UserSpec                       `json:"users"`
+	Systemd     SystemdSpec                    `json:"systemd"`
+	Services    ServiceSpec                    `json:"services"`
+	Nftables    NftablesSpec                   `json:"nftables"`
+	Docker      *DockerSpec                    `json:"docker,omitempty"`
+	Scripts     map[string]ComponentScriptSpec `json:"scripts,omitempty"`
+	Components  []ComponentInstanceSpec        `json:"components,omitempty"`
 }
 
 func (h HostSpec) PlatformArchitecture() string {
@@ -182,21 +190,27 @@ type FileSpec struct {
 }
 
 type ManagedFile struct {
-	Path             string         `json:"path"`
-	Content          string         `json:"content,omitempty"`
-	ContentVersion   string         `json:"content_version,omitempty"`
-	ContentWriteOnly bool           `json:"content_write_only,omitempty"`
-	SourcePath       string         `json:"source_path,omitempty"`
-	Owner            string         `json:"owner"`
-	Group            string         `json:"group"`
-	Mode             string         `json:"mode"`
-	Sensitive        bool           `json:"sensitive,omitempty"`
-	Ensure           string         `json:"ensure"`
-	OnChange         string         `json:"on_change,omitempty"`
-	Lifecycle        *LifecycleSpec `json:"lifecycle,omitempty"`
-	Summary          ContentSummary `json:"summary,omitempty"`
-	OnChangeSource   *SourceRef     `json:"on_change_source,omitempty"`
-	Source           SourceRef      `json:"source,omitempty"`
+	Path             string               `json:"path"`
+	Content          string               `json:"content,omitempty"`
+	ContentVersion   string               `json:"content_version,omitempty"`
+	ContentWriteOnly bool                 `json:"content_write_only,omitempty"`
+	SourcePath       string               `json:"source_path,omitempty"`
+	Owner            string               `json:"owner"`
+	Group            string               `json:"group"`
+	Mode             string               `json:"mode"`
+	Sensitive        bool                 `json:"sensitive,omitempty"`
+	Ensure           string               `json:"ensure"`
+	OnChange         *ScriptReferenceSpec `json:"on_change,omitempty"`
+	Lifecycle        *LifecycleSpec       `json:"lifecycle,omitempty"`
+	Summary          ContentSummary       `json:"summary,omitempty"`
+	Source           SourceRef            `json:"source,omitempty"`
+}
+
+type ScriptReferenceSpec struct {
+	Scope         string    `json:"scope"`
+	Name          string    `json:"name"`
+	DeclarationID string    `json:"declaration_id"`
+	Source        SourceRef `json:"source,omitempty"`
 }
 
 type SecretSpec struct {
@@ -522,16 +536,17 @@ type ComponentInputValidationSpec struct {
 }
 
 type ComponentScriptSpec struct {
-	Name        string     `json:"name"`
-	Mode        string     `json:"mode"`
-	Body        string     `json:"body,omitempty"`
-	Interpreter []string   `json:"interpreter,omitempty"`
-	Outputs     []string   `json:"outputs,omitempty"`
-	Run         string     `json:"run,omitempty"`
-	Content     string     `json:"content,omitempty"`
-	Commands    [][]string `json:"commands,omitempty"`
-	Sensitive   bool       `json:"sensitive,omitempty"`
-	Source      SourceRef  `json:"source,omitempty"`
+	Name          string     `json:"name"`
+	DeclarationID string     `json:"declaration_id,omitempty"`
+	Mode          string     `json:"mode"`
+	Body          string     `json:"body,omitempty"`
+	Interpreter   []string   `json:"interpreter,omitempty"`
+	Outputs       []string   `json:"outputs,omitempty"`
+	Run           string     `json:"run,omitempty"`
+	Content       string     `json:"content,omitempty"`
+	Commands      [][]string `json:"commands,omitempty"`
+	Sensitive     bool       `json:"sensitive,omitempty"`
+	Source        SourceRef  `json:"source,omitempty"`
 }
 
 type ComponentInputTypeSpec struct {

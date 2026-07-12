@@ -120,6 +120,141 @@ func TestCompileComponentScriptOnChangeResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileSharedNetworkdReloadResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../../../examples/shared-networkd-reload.dbf.hcl")
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertGolden(t, "../testdata/graph/shared-networkd-reload.golden.json", string(data)+"\n")
+}
+
+func TestCompileRootScriptAggregatesCrossComponentTriggers(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+script "reload" {
+  run = "networkctl reload"
+}
+
+component "wan" {
+  files {
+    file "/etc/wan" {
+      content   = "wan"
+      on_change = script.reload
+    }
+    file "/etc/wan-extra" {
+      content   = "wan-extra"
+      on_change = script.reload
+    }
+  }
+}
+
+component "policy" {
+  files {
+    file "/etc/policy" {
+      content   = "policy"
+      on_change = script.reload
+    }
+  }
+}
+
+host "router" { components = [component.wan, component.policy] }
+`)
+	operation := operationFor(resourceGraph, `host.router.script["reload"]`)
+	if operation == nil {
+		t.Fatal("host-scoped root script operation missing")
+	}
+	for _, address := range []string{
+		`host.router.components.wan.files.file["/etc/wan"]`,
+		`host.router.components.wan.files.file["/etc/wan-extra"]`,
+		`host.router.components.policy.files.file["/etc/policy"]`,
+	} {
+		if !containsString(operation.TriggeredBy, address) || !containsString(operation.DependsOn, address) {
+			t.Fatalf("operation triggers/dependencies = %#v / %#v, want %s", operation.TriggeredBy, operation.DependsOn, address)
+		}
+	}
+	if len(operation.TriggeredBy) != 3 || operation.ScriptPayload == nil || operation.ScriptPayload.ComponentName != "" {
+		t.Fatalf("host operation = %#v", operation)
+	}
+}
+
+func TestUnreferencedRootScriptDoesNotGenerateOperation(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+script "unused" { run = "true" }
+host "server1" {}
+`)
+	if operationFor(resourceGraph, `host.server1.script["unused"]`) != nil {
+		t.Fatalf("unreferenced root definition generated operation: %#v", resourceGraph.Operations)
+	}
+}
+
+func TestCompileRootScriptsKeepDeclarationIdentity(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+script "one" { run = "same command" }
+script "two" { run = "same command" }
+
+component "files" {
+  files {
+    file "/etc/one" {
+      content   = "one"
+      on_change = script.one
+    }
+    file "/etc/two" {
+      content   = "two"
+      on_change = script.two
+    }
+  }
+}
+
+host "a" { components = [component.files] }
+host "b" { components = [component.files] }
+`)
+	for _, host := range []string{"a", "b"} {
+		for _, name := range []string{"one", "two"} {
+			if operationFor(resourceGraph, `host.`+host+`.script["`+name+`"]`) == nil {
+				t.Fatalf("missing independent operation for host=%s script=%s", host, name)
+			}
+		}
+	}
+	if len(resourceGraph.Operations) != 4 {
+		t.Fatalf("operations = %d, want 4", len(resourceGraph.Operations))
+	}
+}
+
+func TestComponentLocalScriptsWithSameLabelAndCommandRemainDistinct(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+component "one" {
+  script "reload" { run = "same command" }
+  files {
+    file "/etc/one" {
+      content   = "one"
+      on_change = script.reload
+    }
+  }
+}
+component "two" {
+  script "reload" { run = "same command" }
+  files {
+    file "/etc/two" {
+      content   = "two"
+      on_change = script.reload
+    }
+  }
+}
+host "server1" { components = [component.one, component.two] }
+`)
+	for _, address := range []string{
+		`host.server1.components.one.script["reload"]`,
+		`host.server1.components.two.script["reload"]`,
+	} {
+		if operationFor(resourceGraph, address) == nil {
+			t.Fatalf("missing component-local operation %s", address)
+		}
+	}
+	if len(resourceGraph.Operations) != 2 {
+		t.Fatalf("component-local operations = %#v", resourceGraph.Operations)
+	}
+}
+
 func TestCompileComponentScriptWithoutOnChangeDoesNotGenerateOperation(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 component "app" {
