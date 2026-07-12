@@ -125,8 +125,8 @@ git diff --check
 - compatibility policy 已检查破坏性 DSL/state/plan JSON 变更、state migration 和
   plan JSON format version 影响。
 - GitHub Actions 在目标 commit 上全绿。
-- 同一目标 commit 的 managed-target CI 证据分别记录 Debian 12 amd64 `19/19`、Debian 13
-  amd64 `19/19`，并确认 `Managed target matrix gate` 通过。
+- 同一目标 commit 的 managed-target CI 证据分别记录 Debian 12 amd64 `20/20`、Debian 13
+  amd64 `20/20`，并确认 `Managed target matrix gate` 通过。
 - 两个版本的每个 libvirt case 都完成 `validate`、online `plan`、`apply`、再次 JSON
   `plan` no-op 和 `check`；存在 drift hook 的 case 还必须拒绝 drift。
 

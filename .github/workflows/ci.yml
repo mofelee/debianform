@@ -62,8 +62,8 @@ jobs:
           from pathlib import Path
 
           cases = sorted(path.name for path in Path("test/integration/libvirt/cases").iterdir() if path.is_dir())
-          if len(cases) != 19:
-              raise SystemExit(f"expected 19 libvirt integration cases, discovered {len(cases)}")
+          if len(cases) != 20:
+              raise SystemExit(f"expected 20 libvirt integration cases, discovered {len(cases)}")
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               print("cases=" + json.dumps(cases), file=output)
@@ -85,7 +85,7 @@ jobs:
     timeout-minutes: 25
     strategy:
       fail-fast: false
-      max-parallel: 19
+      max-parallel: 20
       matrix:
         debian_version:
           - 12

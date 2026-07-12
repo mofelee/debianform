@@ -38,7 +38,7 @@
    gh run view <ci-run-id>
    ```
 
-   必须确认同一提交上的 Debian 12 amd64 为 19/19、Debian 13 amd64 为 19/19，且
+   必须确认同一提交上的 Debian 12 amd64 为 20/20、Debian 13 amd64 为 20/20，且
    `Managed target matrix gate` 成功。把两个版本各自的结果和 CI run URL 分开写入 release
    notes；不能只记录一个合并后的“libvirt passed”。
 

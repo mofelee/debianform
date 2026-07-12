@@ -70,8 +70,8 @@ section after post-release verification jobs finish.
   - `make vulncheck`: <pass | fail | skipped with reason>
   - `make test-integration-layout`: <pass | fail | skipped with reason>
 - Managed-target CI evidence for this commit:
-  - Debian 12 amd64 libvirt matrix (19/19): <pass | fail; CI run URL>
-  - Debian 13 amd64 libvirt matrix (19/19): <pass | fail; CI run URL>
+  - Debian 12 amd64 libvirt matrix (20/20): <pass | fail; CI run URL>
+  - Debian 13 amd64 libvirt matrix (20/20): <pass | fail; CI run URL>
   - `Managed target matrix gate`: <pass | fail; CI run URL>
 - Optional local managed-target checks:
   - `make test-integration DEBIAN_VERSION=12`: <pass | fail | skipped with reason>
@@ -107,7 +107,7 @@ Before creating the release tag, check that:
 - `Migration Notes` explains required user action, including state handling and
   rollback guidance for breaking releases.
 - Debian 12 and Debian 13 managed-target evidence is listed separately as
-  `19/19`, points to the release commit's CI run, and the aggregate gate passed.
+  `20/20`, points to the release commit's CI run, and the aggregate gate passed.
 - The release notes do not use stable/GA/production-ready language unless the
   release has passed the stable gates in
   [project maturity checklist](archive/legacy-design/project-maturity-and-launch-checklist.zh.md).
