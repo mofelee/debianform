@@ -80,7 +80,14 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 		if codename == "" {
 			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.platform.codename: host %q must declare platform.codename to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
 		}
-		if distribution != "" && distribution != "debian" {
+		officialRepositoryURL := ir.DockerOfficialRepositoryURL
+		officialGPGURL := ir.DockerOfficialGPGURL
+		switch distribution {
+		case "", "debian":
+		case "ubuntu":
+			officialRepositoryURL = ir.DockerOfficialUbuntuRepositoryURL
+			officialGPGURL = ir.DockerOfficialUbuntuGPGURL
+		default:
 			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.platform.distribution: docker official repository for platform.distribution %q is not implemented", host.Source.File, host.Source.Line, host.Source.Path, distribution)
 		}
 		if _, exists := host.APT.Repositories[dockerOfficialRepositoryName]; exists {
@@ -94,15 +101,15 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 		repositoryAddress = fmt.Sprintf("host.%s.docker.apt.repository[%s]", host.Name, strconv.Quote(dockerOfficialRepositoryName))
 		sourcePath := aptRepositorySourcePath(dockerOfficialRepositoryName)
 		repositoryURL := docker.Package.RepositoryURL
-		if repositoryURL == "" {
-			repositoryURL = ir.DockerOfficialRepositoryURL
+		if !docker.Package.RepositoryURLSet {
+			repositoryURL = officialRepositoryURL
 		}
 		gpgURL := docker.Package.GPGURL
-		if gpgURL == "" {
-			gpgURL = ir.DockerOfficialGPGURL
+		if !docker.Package.GPGURLSet {
+			gpgURL = officialGPGURL
 		}
 		gpgSHA256 := docker.Package.GPGSHA256
-		if gpgSHA256 == "" && gpgURL == ir.DockerOfficialGPGURL {
+		if gpgSHA256 == "" && (gpgURL == ir.DockerOfficialGPGURL || gpgURL == ir.DockerOfficialUbuntuGPGURL) {
 			gpgSHA256 = ir.DockerOfficialGPGSHA256
 		}
 

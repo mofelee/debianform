@@ -168,14 +168,16 @@ func dockerPackageSpec(docker parser.Value) (ir.DockerPackageSpec, error) {
 		}
 	}
 	return ir.DockerPackageSpec{
-		Source:          source,
-		Channel:         channel,
-		Version:         version,
-		RepositoryURL:   repositoryURL,
-		GPGURL:          gpgURL,
-		GPGSHA256:       gpgSHA256,
-		RemoveConflicts: removeConflicts,
-		SourceRef:       sourceRef,
+		Source:           source,
+		Channel:          channel,
+		Version:          version,
+		RepositoryURL:    repositoryURL,
+		GPGURL:           gpgURL,
+		GPGSHA256:        gpgSHA256,
+		RemoveConflicts:  removeConflicts,
+		SourceRef:        sourceRef,
+		RepositoryURLSet: hasRepositoryURL,
+		GPGURLSet:        hasGPGURL,
 	}, nil
 }
 

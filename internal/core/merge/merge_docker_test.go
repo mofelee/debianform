@@ -26,6 +26,9 @@ host "docker1" {
 	if docker.Package.RepositoryURL != ir.DockerOfficialRepositoryURL || docker.Package.GPGURL != ir.DockerOfficialGPGURL || docker.Package.GPGSHA256 != ir.DockerOfficialGPGSHA256 {
 		t.Fatalf("docker package official URLs = %#v, want official defaults", docker.Package)
 	}
+	if docker.Package.RepositoryURLSet || docker.Package.GPGURLSet {
+		t.Fatalf("docker package default URLs unexpectedly marked explicit: %#v", docker.Package)
+	}
 	if !docker.Service.Enable || docker.Service.State != "running" || docker.Service.Name != "docker.service" {
 		t.Fatalf("docker service defaults = %#v", docker.Service)
 	}
@@ -53,6 +56,9 @@ host "docker1" {
 	}
 	if docker.Package.GPGSHA256 != "" {
 		t.Fatalf("gpg_sha256 = %q, want empty for custom gpg_url without explicit hash", docker.Package.GPGSHA256)
+	}
+	if !docker.Package.RepositoryURLSet || !docker.Package.GPGURLSet {
+		t.Fatalf("docker package custom URLs not marked explicit: %#v", docker.Package)
 	}
 }
 

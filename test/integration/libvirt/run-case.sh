@@ -552,8 +552,11 @@ if is_remote_libvirt; then
 fi
 while IFS= read -r config; do
   sed -i \
-    -e "s/__DBF_VM_IP__/$DBF_CONFIG_HOST/g" \
-    -e "s/__DBF_TARGET_CODENAME__/$EXPECTED_CODENAME/g" \
+    -e "s|__DBF_VM_IP__|$DBF_CONFIG_HOST|g" \
+    -e "s|__DBF_TARGET_CODENAME__|$EXPECTED_CODENAME|g" \
+    -e "s|__DBF_TARGET_APT_MIRROR__|$DBF_INTEGRATION_TARGET_APT_MIRROR|g" \
+    -e "s|__DBF_TARGET_APT_SECURITY_MIRROR__|$DBF_INTEGRATION_TARGET_APT_SECURITY_MIRROR|g" \
+    -e "s|__DBF_TARGET_APT_COMPONENTS__|$DBF_INTEGRATION_TARGET_APT_COMPONENTS|g" \
     "$config"
 done < <(find "$CASE_DIR" -maxdepth 3 -type f \( -name '*.dbf.hcl' -o -name '*.dbfvars' -o -name '*.dbfvars.json' \))
 

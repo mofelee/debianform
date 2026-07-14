@@ -571,7 +571,10 @@ while IFS= read -r config; do
     -e "s/__DBF_WG_B_VM_IP__/${VM_IPS[b]}/g" \
     -e "s/__DBF_WG_C_VM_IP__/${VM_IPS[c]}/g" \
     -e "s/__DBF_VM_IP__/$DBF_WG_A_HOST/g" \
-    -e "s/__DBF_TARGET_CODENAME__/$EXPECTED_CODENAME/g" \
+    -e "s|__DBF_TARGET_CODENAME__|$EXPECTED_CODENAME|g" \
+    -e "s|__DBF_TARGET_APT_MIRROR__|$DBF_INTEGRATION_TARGET_APT_MIRROR|g" \
+    -e "s|__DBF_TARGET_APT_SECURITY_MIRROR__|$DBF_INTEGRATION_TARGET_APT_SECURITY_MIRROR|g" \
+    -e "s|__DBF_TARGET_APT_COMPONENTS__|$DBF_INTEGRATION_TARGET_APT_COMPONENTS|g" \
     "$config"
 done < <(find "$CASE_DIR" -maxdepth 3 -type f \( -name '[0-9]*.dbf.hcl' -o -name '*.conf' -o -name '*.sh' \))
 

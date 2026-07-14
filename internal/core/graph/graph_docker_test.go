@@ -163,6 +163,12 @@ func TestCompileDockerOfficialRepositoryDoesNotInferUbuntuFromCodename(t *testin
 		t.Fatalf("legacy repository = %#v, want historical Debian default", legacyRepository)
 	}
 
+	if strings.Contains(legacyContent, "/linux/ubuntu") {
+		t.Fatalf("legacy repository unexpectedly inferred Ubuntu from noble codename:\n%s", legacyContent)
+	}
+}
+
+func TestCompileDockerOfficialRepositoryUsesUbuntuPlatformFacts(t *testing.T) {
 	program := &ir.Program{Hosts: []ir.HostSpec{{
 		Name:   "docker1",
 		Source: ir.SourceRef{File: "inline.dbf.hcl", Line: 1, Path: "host.docker1"},
@@ -183,9 +189,84 @@ func TestCompileDockerOfficialRepositoryDoesNotInferUbuntuFromCodename(t *testin
 			},
 		},
 	}}}
-	_, err = Compile(program)
-	if err == nil || !strings.Contains(err.Error(), `docker official repository for platform.distribution "ubuntu" is not implemented`) {
-		t.Fatalf("Compile() error = %v, want explicit Ubuntu repository guard", err)
+	resourceGraph, err := Compile(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := nodeFor(resourceGraph, `host.docker1.docker.apt.repository["docker-official"]`)
+	if repository == nil {
+		t.Fatal("Ubuntu docker repository node missing")
+	}
+	wantContent := "Types: deb\nURIs: https://download.docker.com/linux/ubuntu\nSuites: noble\nComponents: stable\nArchitectures: amd64\nSigned-By: /etc/apt/keyrings/docker.asc\n"
+	if got, _ := repository.Desired["content"].(string); got != wantContent {
+		t.Fatalf("Ubuntu docker repository content:\n%s\nwant:\n%s", got, wantContent)
+	}
+	key := nodeFor(resourceGraph, `host.docker1.docker.apt.signing_key["docker-official"]`)
+	if key == nil {
+		t.Fatal("Ubuntu docker signing key node missing")
+	}
+	if key.Desired["url"] != ir.DockerOfficialUbuntuGPGURL || key.Desired["sha256"] != ir.DockerOfficialGPGSHA256 {
+		t.Fatalf("Ubuntu docker key desired = %#v", key.Desired)
+	}
+}
+
+func TestCompileDockerOfficialRepositoryRejectsUnsupportedDistribution(t *testing.T) {
+	program := &ir.Program{Hosts: []ir.HostSpec{{
+		Name:   "docker1",
+		Source: ir.SourceRef{File: "inline.dbf.hcl", Line: 1, Path: "host.docker1"},
+		Platform: &ir.PlatformSpec{
+			Distribution: "fedora",
+			Version:      "42",
+			Architecture: "amd64",
+			Codename:     "rawhide",
+		},
+		Docker: &ir.DockerSpec{
+			Enable: true,
+			Package: ir.DockerPackageSpec{
+				Source:          "official",
+				Channel:         "stable",
+				RemoveConflicts: "auto",
+			},
+		},
+	}}}
+	_, err := Compile(program)
+	if err == nil || !strings.Contains(err.Error(), `docker official repository for platform.distribution "fedora" is not implemented`) {
+		t.Fatalf("Compile() error = %v, want unsupported distribution error", err)
+	}
+}
+
+func TestCompileDockerOfficialUbuntuKeepsExplicitMirrorURLs(t *testing.T) {
+	resourceGraph, err := Compile(&ir.Program{Hosts: []ir.HostSpec{{
+		Name: "docker1",
+		Platform: &ir.PlatformSpec{
+			Distribution: "ubuntu",
+			Version:      "24.04",
+			Architecture: "amd64",
+			Codename:     "noble",
+		},
+		Docker: &ir.DockerSpec{
+			Enable: true,
+			Package: ir.DockerPackageSpec{
+				Source:           "official",
+				Channel:          "stable",
+				RepositoryURL:    "https://mirror.example/docker/ubuntu",
+				GPGURL:           "https://mirror.example/docker/ubuntu/gpg",
+				RemoveConflicts:  "auto",
+				RepositoryURLSet: true,
+				GPGURLSet:        true,
+			},
+		},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := nodeFor(resourceGraph, `host.docker1.docker.apt.repository["docker-official"]`)
+	if repository == nil || !strings.Contains(repository.Desired["content"].(string), "URIs: https://mirror.example/docker/ubuntu") {
+		t.Fatalf("Ubuntu explicit mirror repository = %#v", repository)
+	}
+	key := nodeFor(resourceGraph, `host.docker1.docker.apt.signing_key["docker-official"]`)
+	if key == nil || key.Desired["url"] != "https://mirror.example/docker/ubuntu/gpg" {
+		t.Fatalf("Ubuntu explicit mirror key = %#v", key)
 	}
 }
 

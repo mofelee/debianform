@@ -12,18 +12,18 @@ host "cihost" {
 
   apt {
     source_file "main" {
-      path = "/etc/apt/sources.list.d/debian.sources"
+      path = "/etc/apt/sources.list.d/debianform-integration.sources"
 
       content = <<-EOF
         Types: deb
-        URIs: https://mirrors.aliyun.com/debian/
+        URIs: __DBF_TARGET_APT_MIRROR__
         Suites: __DBF_TARGET_CODENAME__ __DBF_TARGET_CODENAME__-updates
-        Components: main contrib non-free non-free-firmware
+        Components: __DBF_TARGET_APT_COMPONENTS__
 
         Types: deb
-        URIs: https://mirrors.aliyun.com/debian-security/
+        URIs: __DBF_TARGET_APT_SECURITY_MIRROR__
         Suites: __DBF_TARGET_CODENAME__-security
-        Components: main contrib non-free non-free-firmware
+        Components: __DBF_TARGET_APT_COMPONENTS__
       EOF
 
       on_destroy = "restore"

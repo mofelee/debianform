@@ -435,20 +435,24 @@ type DockerSpec struct {
 }
 
 const (
-	DockerOfficialRepositoryURL = "https://download.docker.com/linux/debian"
-	DockerOfficialGPGURL        = "https://download.docker.com/linux/debian/gpg"
-	DockerOfficialGPGSHA256     = "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
+	DockerOfficialRepositoryURL       = "https://download.docker.com/linux/debian"
+	DockerOfficialGPGURL              = "https://download.docker.com/linux/debian/gpg"
+	DockerOfficialUbuntuRepositoryURL = "https://download.docker.com/linux/ubuntu"
+	DockerOfficialUbuntuGPGURL        = "https://download.docker.com/linux/ubuntu/gpg"
+	DockerOfficialGPGSHA256           = "1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
 )
 
 type DockerPackageSpec struct {
-	Source          string    `json:"source"`
-	Channel         string    `json:"channel,omitempty"`
-	Version         *string   `json:"version,omitempty"`
-	RepositoryURL   string    `json:"repository_url,omitempty"`
-	GPGURL          string    `json:"gpg_url,omitempty"`
-	GPGSHA256       string    `json:"gpg_sha256,omitempty"`
-	RemoveConflicts string    `json:"remove_conflicts"`
-	SourceRef       SourceRef `json:"source_ref,omitempty"`
+	Source           string    `json:"source"`
+	Channel          string    `json:"channel,omitempty"`
+	Version          *string   `json:"version,omitempty"`
+	RepositoryURL    string    `json:"repository_url,omitempty"`
+	GPGURL           string    `json:"gpg_url,omitempty"`
+	GPGSHA256        string    `json:"gpg_sha256,omitempty"`
+	RemoveConflicts  string    `json:"remove_conflicts"`
+	SourceRef        SourceRef `json:"source_ref,omitempty"`
+	RepositoryURLSet bool      `json:"-"`
+	GPGURLSet        bool      `json:"-"`
 }
 
 type DockerServiceSpec struct {

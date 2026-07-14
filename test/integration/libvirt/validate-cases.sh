@@ -39,16 +39,21 @@ bash "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
 
 target_12="$(bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 12)"
 target_13="$(bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 13)"
+target_13_generic="$(bash "$ROOT_DIR/test/integration/libvirt/target.sh" debian-13)"
 target_ubuntu="$(bash "$ROOT_DIR/test/integration/libvirt/target.sh" ubuntu-24.04)"
 grep -qx 'codename=bookworm' <<<"$target_12"
 grep -qx 'cloud_image=debian-12-genericcloud-amd64.qcow2' <<<"$target_12"
 grep -qx 'codename=trixie' <<<"$target_13"
 grep -qx 'cloud_image=debian-13-genericcloud-amd64.qcow2' <<<"$target_13"
+grep -qx 'apt_source_path=/etc/apt/sources.list.d/debian.sources' <<<"$target_13_generic"
+grep -qx 'apt_mirror=https://mirrors.aliyun.com/debian/' <<<"$target_13_generic"
 grep -qx 'distribution=ubuntu' <<<"$target_ubuntu"
 grep -qx 'version=24.04' <<<"$target_ubuntu"
 grep -qx 'codename=noble' <<<"$target_ubuntu"
 grep -qx 'cloud_image=noble-server-cloudimg-amd64.img' <<<"$target_ubuntu"
 grep -qx 'checksum_algorithm=sha256' <<<"$target_ubuntu"
+grep -qx 'apt_source_path=/etc/apt/sources.list.d/ubuntu.sources' <<<"$target_ubuntu"
+grep -qx 'apt_mirror=https://mirrors.aliyun.com/ubuntu/' <<<"$target_ubuntu"
 if bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 11 >/dev/null 2>&1; then
   printf 'debian-target.sh unexpectedly accepted Debian 11\n' >&2
   exit 1

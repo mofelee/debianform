@@ -1,5 +1,5 @@
 assert_remote "docker official repository source exists" \
-  "grep -F 'URIs: https://download.docker.com/linux/debian' /etc/apt/sources.list.d/docker_official.sources && grep -F 'Suites: ${DBF_INTEGRATION_TARGET_CODENAME}' /etc/apt/sources.list.d/docker_official.sources"
+  "grep -F 'URIs: https://download.docker.com/linux/${DBF_INTEGRATION_TARGET_DISTRIBUTION}' /etc/apt/sources.list.d/docker_official.sources && grep -F 'Suites: ${DBF_INTEGRATION_TARGET_CODENAME}' /etc/apt/sources.list.d/docker_official.sources"
 assert_remote "docker official signing key exists with expected mode" \
   "test \"\$(stat -c '%a %U %G' /etc/apt/keyrings/docker.asc)\" = '644 root root'"
 assert_remote "docker official packages are installed" \
