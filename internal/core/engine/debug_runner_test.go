@@ -210,7 +210,7 @@ func TestDebugRunnerPrintsFallbackRemoteCallPhase(t *testing.T) {
 }
 
 func TestDiscoverHostFactsAddsRemoteCallContext(t *testing.T) {
-	inner := &debugRecordingRunner{result: Result{Stdout: "hostname=server1\narchitecture=amd64\ncodename=trixie\n"}}
+	inner := &debugRecordingRunner{result: Result{Stdout: "hostname=server1\ndistribution=debian\nversion=13\narchitecture=amd64\ncodename=trixie\n"}}
 
 	_, err := DiscoverHostFacts(context.Background(), inner, ir.HostSpec{Name: "server1"}, func() time.Time {
 		return time.Unix(0, 0)

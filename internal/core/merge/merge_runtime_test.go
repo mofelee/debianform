@@ -43,6 +43,8 @@ host "server1" {
 		HostFacts: map[string]ir.HostFacts{
 			"server1": {System: ir.SystemFacts{
 				Hostname:     "server1",
+				Distribution: "debian",
+				Version:      "12",
 				Architecture: "amd64",
 				Codename:     "bookworm",
 			}},
@@ -55,7 +57,7 @@ host "server1" {
 	if host.Platform == nil {
 		t.Fatalf("platform facts were not applied: platform is nil")
 	}
-	if host.Platform.Architecture != "amd64" || host.Platform.Codename != "bookworm" {
+	if host.Platform.Distribution != "debian" || host.Platform.Version != "12" || host.Platform.Architecture != "amd64" || host.Platform.Codename != "bookworm" {
 		t.Fatalf("platform facts were not applied: %#v", host.Platform)
 	}
 	component := host.Components[0]
@@ -82,6 +84,8 @@ component "tools" {
 
 host "server1" {
   platform {
+    distribution = "debian"
+    version      = "13"
     architecture = "amd64"
     codename     = "trixie"
   }
@@ -89,7 +93,7 @@ host "server1" {
   components = [component.tools]
 
   assert {
-    condition = self.platform.architecture == "amd64" && self.platform.codename == "trixie"
+    condition = self.platform.distribution == "debian" && self.platform.version == "13" && self.platform.architecture == "amd64" && self.platform.codename == "trixie"
     message   = "platform facts should resolve"
   }
 }
@@ -102,8 +106,8 @@ host "server1" {
 	if host.Platform == nil {
 		t.Fatalf("platform = nil, want explicit platform spec")
 	}
-	if host.Platform.Architecture != "amd64" || host.Platform.Codename != "trixie" {
-		t.Fatalf("platform = %#v, want amd64/trixie", host.Platform)
+	if host.Platform.Distribution != "debian" || host.Platform.Version != "13" || host.Platform.Architecture != "amd64" || host.Platform.Codename != "trixie" {
+		t.Fatalf("platform = %#v, want debian/13/amd64/trixie", host.Platform)
 	}
 	component := host.Components[0]
 	if got := component.APT.Repositories["platform_repo"].Suites; !reflect.DeepEqual(got, []string{"trixie"}) {
@@ -209,10 +213,18 @@ host "server1" {
 }
 
 func TestParseRejectsPlatformFactsInProfile(t *testing.T) {
-	_, err := parseOrCompileInline(t, `
+	fields := map[string]string{
+		"distribution": "ubuntu",
+		"version":      "24.04",
+		"architecture": "amd64",
+		"codename":     "noble",
+	}
+	for field, value := range fields {
+		t.Run(field, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, `
 profile "base" {
   platform {
-    architecture = "amd64"
+	`+field+` = "`+value+`"
   }
 }
 
@@ -220,8 +232,10 @@ host "server1" {
   imports = [profile.base]
 }
 `)
-	if err == nil || !strings.Contains(err.Error(), "host-only and cannot be declared in profile") {
-		t.Fatalf("parseOrCompileInline error = %v, want host-only platform error", err)
+			if err == nil || !strings.Contains(err.Error(), "host-only and cannot be declared in profile") {
+				t.Fatalf("parseOrCompileInline error = %v, want host-only platform error", err)
+			}
+		})
 	}
 }
 
@@ -232,6 +246,30 @@ func TestCompileRejectsDeclaredRuntimeFactMismatch(t *testing.T) {
 		facts ir.SystemFacts
 		want  string
 	}{
+		{
+			name: "platform distribution",
+			body: `
+host "server1" {
+  platform {
+    distribution = "ubuntu"
+  }
+}
+`,
+			facts: ir.SystemFacts{Distribution: "debian", Version: "13", Architecture: "amd64", Codename: "trixie"},
+			want:  `declared platform.distribution "ubuntu" does not match detected distribution "debian"`,
+		},
+		{
+			name: "platform version",
+			body: `
+host "server1" {
+  platform {
+    version = "24.04"
+  }
+}
+`,
+			facts: ir.SystemFacts{Distribution: "debian", Version: "13", Architecture: "amd64", Codename: "trixie"},
+			want:  `declared platform.version "24.04" does not match detected version "13"`,
+		},
 		{
 			name: "platform architecture",
 			body: `
@@ -271,6 +309,23 @@ host "server1" {
 				t.Fatalf("CompileWithOptions error = %v, want %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestCompileRejectsUnsupportedDeclaredPlatformTuple(t *testing.T) {
+	cfg := parseInline(t, `
+host "server1" {
+  platform {
+    distribution = "ubuntu"
+    version      = "22.04"
+    architecture = "amd64"
+    codename     = "jammy"
+  }
+}
+`)
+	_, err := CompileWithOptions(cfg, CompileOptions{})
+	if err == nil || !strings.Contains(err.Error(), `unsupported Ubuntu platform.version "22.04"`) {
+		t.Fatalf("CompileWithOptions error = %v, want unsupported Ubuntu version", err)
 	}
 }
 

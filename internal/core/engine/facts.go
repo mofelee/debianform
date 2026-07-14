@@ -129,16 +129,23 @@ if [ -z "$arch" ]; then
   esac
 fi
 codename=""
+distribution=""
+version=""
 if [ -r /etc/os-release ]; then
-  codename="$(
+  os_release="$({
     . /etc/os-release
-    printf '%s' "${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}"
-  )"
+    printf '%s\n' "${ID:-}" "${VERSION_ID:-}" "${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}"
+  })"
+  distribution="$(printf '%s\n' "$os_release" | sed -n '1p')"
+  version="$(printf '%s\n' "$os_release" | sed -n '2p')"
+  codename="$(printf '%s\n' "$os_release" | sed -n '3p')"
 fi
 if [ -z "$codename" ] && command -v lsb_release >/dev/null 2>&1; then
   codename="$(lsb_release -sc 2>/dev/null || true)"
 fi
 printf 'hostname=%s\n' "$host_name"
+printf 'distribution=%s\n' "$distribution"
+printf 'version=%s\n' "$version"
 printf 'architecture=%s\n' "$arch"
 printf 'codename=%s\n' "$codename"
 `
@@ -152,7 +159,15 @@ printf 'codename=%s\n' "$codename"
 		return ir.HostFacts{}, fmt.Errorf("discover host facts for %s: %w", host.Name, err)
 	}
 	values := parseFactLines(result.Stdout)
-	arch := normalizeDebianArchitecture(values["architecture"])
+	distribution := strings.ToLower(strings.TrimSpace(values["distribution"]))
+	if distribution == "" {
+		return ir.HostFacts{}, fmt.Errorf("discover host facts for %s: distribution is empty", host.Name)
+	}
+	version := strings.TrimSpace(values["version"])
+	if version == "" {
+		return ir.HostFacts{}, fmt.Errorf("discover host facts for %s: version is empty", host.Name)
+	}
+	arch := normalizeTargetArchitecture(values["architecture"])
 	if arch == "" {
 		return ir.HostFacts{}, fmt.Errorf("discover host facts for %s: architecture is empty", host.Name)
 	}
@@ -160,12 +175,17 @@ printf 'codename=%s\n' "$codename"
 	if codename == "" {
 		return ir.HostFacts{}, fmt.Errorf("discover host facts for %s: codename is empty", host.Name)
 	}
+	if err := ir.ValidateTargetPlatform(distribution, version, arch, codename); err != nil {
+		return ir.HostFacts{}, fmt.Errorf("discover host facts for %s: %w", host.Name, err)
+	}
 	if now == nil {
 		now = time.Now
 	}
 	return ir.HostFacts{
 		System: ir.SystemFacts{
 			Hostname:     values["hostname"],
+			Distribution: distribution,
+			Version:      version,
 			Architecture: arch,
 			Codename:     codename,
 			DetectedAt:   now().UTC().Format(time.RFC3339),
@@ -189,7 +209,7 @@ func parseFactLines(output string) map[string]string {
 	return values
 }
 
-func normalizeDebianArchitecture(value string) string {
+func normalizeTargetArchitecture(value string) string {
 	switch strings.TrimSpace(value) {
 	case "x86_64":
 		return "amd64"

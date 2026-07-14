@@ -933,6 +933,12 @@ func isRuntimeFactCompileError(err error) bool {
 	if strings.Contains(msg, "must declare platform.codename") {
 		return true
 	}
+	if strings.Contains(msg, "must declare platform.distribution") {
+		return true
+	}
+	if strings.Contains(msg, "must declare platform.version") {
+		return true
+	}
 	return strings.Contains(msg, ".suites") && strings.Contains(msg, "non-empty")
 }
 

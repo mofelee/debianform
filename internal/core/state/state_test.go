@@ -159,6 +159,8 @@ func TestStateRoundTripsBookwormRuntimeFacts(t *testing.T) {
 	st := Empty("server1")
 	st.Facts = &ir.HostFacts{System: ir.SystemFacts{
 		Hostname:     "server1",
+		Distribution: "debian",
+		Version:      "12",
 		Architecture: "amd64",
 		Codename:     "bookworm",
 		DetectedAt:   "2026-07-11T12:00:00Z",
@@ -167,7 +169,7 @@ func TestStateRoundTripsBookwormRuntimeFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"facts"`) || !strings.Contains(string(data), `"architecture": "amd64"`) || !strings.Contains(string(data), `"codename": "bookworm"`) {
+	if !strings.Contains(string(data), `"facts"`) || !strings.Contains(string(data), `"distribution": "debian"`) || !strings.Contains(string(data), `"version": "12"`) || !strings.Contains(string(data), `"architecture": "amd64"`) || !strings.Contains(string(data), `"codename": "bookworm"`) {
 		t.Fatalf("encoded state missing facts:\n%s", data)
 	}
 	decoded, err := Decode(data, "server1")
@@ -178,8 +180,34 @@ func TestStateRoundTripsBookwormRuntimeFacts(t *testing.T) {
 		t.Fatal("decoded state facts are nil")
 	}
 	got := decoded.Facts.System
-	if got.Hostname != "server1" || got.Architecture != "amd64" || got.Codename != "bookworm" || got.DetectedAt != "2026-07-11T12:00:00Z" {
+	if got.Hostname != "server1" || got.Distribution != "debian" || got.Version != "12" || got.Architecture != "amd64" || got.Codename != "bookworm" || got.DetectedAt != "2026-07-11T12:00:00Z" {
 		t.Fatalf("decoded state facts = %#v", got)
+	}
+}
+
+func TestStateDecodesLegacyFactsWithoutPlatformIdentity(t *testing.T) {
+	data := []byte(`{
+  "version": 2,
+  "host": "server1",
+  "serial": 1,
+  "facts": {
+    "system": {
+      "hostname": "server1",
+      "architecture": "amd64",
+      "codename": "bookworm"
+    }
+  },
+  "resources": {}
+}`)
+	st, err := Decode(data, "server1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Facts == nil {
+		t.Fatal("decoded state facts are nil")
+	}
+	if st.Facts.System.Distribution != "" || st.Facts.System.Version != "" {
+		t.Fatalf("legacy facts unexpectedly gained identity: %#v", st.Facts.System)
 	}
 }
 

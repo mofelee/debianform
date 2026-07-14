@@ -67,12 +67,22 @@ func effectivePlatformArchitecture(host ir.HostSpec) string {
 	return host.PlatformArchitecture()
 }
 
+func effectivePlatformDistribution(host ir.HostSpec) string {
+	return host.PlatformDistribution()
+}
+
+func effectivePlatformVersion(host ir.HostSpec) string {
+	return host.PlatformVersion()
+}
+
 func effectivePlatformCodename(host ir.HostSpec) string {
 	return host.PlatformCodename()
 }
 
 func platformSpecToCty(host ir.HostSpec) cty.Value {
 	return cty.ObjectVal(map[string]cty.Value{
+		"distribution": cty.StringVal(effectivePlatformDistribution(host)),
+		"version":      cty.StringVal(effectivePlatformVersion(host)),
 		"architecture": cty.StringVal(effectivePlatformArchitecture(host)),
 		"codename":     cty.StringVal(effectivePlatformCodename(host)),
 	})

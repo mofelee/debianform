@@ -445,6 +445,16 @@ func validateComponentAgainstHost(target ir.HostSpec, component ir.ComponentInst
 }
 
 func runtimeValidationTargetValue(host ir.HostSpec) cty.Value {
+	distributionValue := effectivePlatformDistribution(host)
+	distribution := cty.StringVal(distributionValue)
+	if distributionValue == "" {
+		distribution = cty.UnknownVal(cty.String)
+	}
+	versionValue := effectivePlatformVersion(host)
+	version := cty.StringVal(versionValue)
+	if versionValue == "" {
+		version = cty.UnknownVal(cty.String)
+	}
 	architectureValue := effectivePlatformArchitecture(host)
 	architecture := cty.StringVal(architectureValue)
 	if architectureValue == "" {
@@ -456,6 +466,8 @@ func runtimeValidationTargetValue(host ir.HostSpec) cty.Value {
 		codename = cty.UnknownVal(cty.String)
 	}
 	platform := cty.ObjectVal(map[string]cty.Value{
+		"distribution": distribution,
+		"version":      version,
 		"architecture": architecture,
 		"codename":     codename,
 	})

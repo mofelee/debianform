@@ -2635,7 +2635,7 @@ func allowedDomainAttrs(domain string) map[string]struct{} {
 	case "state":
 		return attrSet("path", "lock_path")
 	case "platform":
-		return attrSet("architecture", "codename")
+		return attrSet("distribution", "version", "architecture", "codename")
 	case "system":
 		return attrSet("hostname", "architecture", "codename", "timezone", "locale")
 	case "kernel":
@@ -2716,7 +2716,7 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 
 func validateProfileBody(profile ir.SourceRef, body Value) error {
 	if platform, ok := body.Map["platform"]; ok {
-		for _, name := range []string{"architecture", "codename"} {
+		for _, name := range []string{"distribution", "version", "architecture", "codename"} {
 			if value, exists := platform.Map[name]; exists {
 				return fmt.Errorf("%s:%d: %s is host-only and cannot be declared in profile %s", value.Source.File, value.Source.Line, value.Source.Path, profile.Path)
 			}

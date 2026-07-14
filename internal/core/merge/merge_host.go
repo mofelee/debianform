@@ -144,15 +144,40 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 		return spec, err
 	} else if ok {
 		spec.Platform = &ir.PlatformSpec{Source: platform.Source}
+		if value, ok, err := stringField(platform, "distribution"); err != nil {
+			return spec, err
+		} else if ok {
+			if value == "" {
+				return spec, fmt.Errorf("%s:%d:%s.distribution: platform.distribution must be non-empty", platform.Source.File, platform.Source.Line, platform.Source.Path)
+			}
+			spec.Platform.Distribution = value
+		}
+		if value, ok, err := stringField(platform, "version"); err != nil {
+			return spec, err
+		} else if ok {
+			if value == "" {
+				return spec, fmt.Errorf("%s:%d:%s.version: platform.version must be non-empty", platform.Source.File, platform.Source.Line, platform.Source.Path)
+			}
+			spec.Platform.Version = value
+		}
 		if value, ok, err := stringField(platform, "architecture"); err != nil {
 			return spec, err
 		} else if ok {
+			if value == "" {
+				return spec, fmt.Errorf("%s:%d:%s.architecture: platform.architecture must be non-empty", platform.Source.File, platform.Source.Line, platform.Source.Path)
+			}
 			spec.Platform.Architecture = value
 		}
 		if value, ok, err := stringField(platform, "codename"); err != nil {
 			return spec, err
 		} else if ok {
+			if value == "" {
+				return spec, fmt.Errorf("%s:%d:%s.codename: platform.codename must be non-empty", platform.Source.File, platform.Source.Line, platform.Source.Path)
+			}
 			spec.Platform.Codename = value
+		}
+		if err := validateDeclaredPlatform(*spec.Platform); err != nil {
+			return spec, err
 		}
 	}
 
@@ -326,6 +351,24 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 
 func applyHostFacts(spec *ir.HostSpec, facts ir.HostFacts) error {
 	system := facts.System
+	if system.Distribution != "" {
+		if spec.Platform != nil && spec.Platform.Distribution != "" && spec.Platform.Distribution != system.Distribution {
+			return fmt.Errorf("%s:%d:%s.distribution: declared platform.distribution %q does not match detected distribution %q", spec.Platform.Source.File, spec.Platform.Source.Line, spec.Platform.Source.Path, spec.Platform.Distribution, system.Distribution)
+		}
+		if spec.Platform == nil {
+			spec.Platform = &ir.PlatformSpec{Source: spec.Source}
+		}
+		spec.Platform.Distribution = system.Distribution
+	}
+	if system.Version != "" {
+		if spec.Platform != nil && spec.Platform.Version != "" && spec.Platform.Version != system.Version {
+			return fmt.Errorf("%s:%d:%s.version: declared platform.version %q does not match detected version %q", spec.Platform.Source.File, spec.Platform.Source.Line, spec.Platform.Source.Path, spec.Platform.Version, system.Version)
+		}
+		if spec.Platform == nil {
+			spec.Platform = &ir.PlatformSpec{Source: spec.Source}
+		}
+		spec.Platform.Version = system.Version
+	}
 	if system.Architecture != "" {
 		if spec.Platform != nil && spec.Platform.Architecture != "" && spec.Platform.Architecture != system.Architecture {
 			return fmt.Errorf("%s:%d:%s.architecture: declared platform.architecture %q does not match detected architecture %q", spec.Platform.Source.File, spec.Platform.Source.Line, spec.Platform.Source.Path, spec.Platform.Architecture, system.Architecture)
@@ -344,6 +387,55 @@ func applyHostFacts(spec *ir.HostSpec, facts ir.HostFacts) error {
 		}
 		spec.Platform.Codename = system.Codename
 	}
+	if system.Distribution != "" && system.Version != "" && system.Architecture != "" && system.Codename != "" {
+		if err := ir.ValidateTargetPlatform(system.Distribution, system.Version, system.Architecture, system.Codename); err != nil {
+			return fmt.Errorf("host %q: %w", spec.Name, err)
+		}
+	}
 	spec.Facts = facts
+	return nil
+}
+
+func validateDeclaredPlatform(spec ir.PlatformSpec) error {
+	source := spec.Source
+	fieldError := func(field, format string, args ...any) error {
+		return fmt.Errorf("%s:%d:%s.%s: %s", source.File, source.Line, source.Path, field, fmt.Sprintf(format, args...))
+	}
+
+	switch spec.Distribution {
+	case "", "debian", "ubuntu":
+	default:
+		return fieldError("distribution", "unsupported platform.distribution %q", spec.Distribution)
+	}
+	if spec.Distribution == "ubuntu" {
+		if spec.Version != "" && spec.Version != "24.04" {
+			return fieldError("version", "unsupported Ubuntu platform.version %q; only %q is supported", spec.Version, "24.04")
+		}
+		if spec.Architecture != "" && spec.Architecture != "amd64" {
+			return fieldError("architecture", "unsupported Ubuntu platform.architecture %q; only %q is supported", spec.Architecture, "amd64")
+		}
+		if spec.Codename != "" && spec.Codename != "noble" {
+			return fieldError("codename", "Ubuntu 24.04 platform.codename must be %q, got %q", "noble", spec.Codename)
+		}
+	}
+	if spec.Distribution == "debian" {
+		if spec.Version != "" && spec.Version != "12" && spec.Version != "13" {
+			return fieldError("version", "unsupported Debian platform.version %q; supported versions are 12 and 13", spec.Version)
+		}
+		if spec.Architecture != "" && spec.Architecture != "amd64" && spec.Architecture != "arm64" {
+			return fieldError("architecture", "unsupported Debian platform.architecture %q", spec.Architecture)
+		}
+		if spec.Version == "12" && spec.Codename != "" && spec.Codename != "bookworm" {
+			return fieldError("codename", "Debian 12 platform.codename must be %q, got %q", "bookworm", spec.Codename)
+		}
+		if spec.Version == "13" && spec.Codename != "" && spec.Codename != "trixie" {
+			return fieldError("codename", "Debian 13 platform.codename must be %q, got %q", "trixie", spec.Codename)
+		}
+	}
+	if spec.Distribution != "" && spec.Version != "" && spec.Architecture != "" && spec.Codename != "" {
+		if err := ir.ValidateTargetPlatform(spec.Distribution, spec.Version, spec.Architecture, spec.Codename); err != nil {
+			return fieldError("distribution", "%v", err)
+		}
+	}
 	return nil
 }

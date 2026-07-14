@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -13,19 +14,68 @@ import (
 )
 
 func TestDiscoverHostFacts(t *testing.T) {
-	runner := factRunner{stdout: "hostname=server1\narchitecture=x86_64\ncodename=bookworm\n"}
-	facts, err := DiscoverHostFacts(context.Background(), runner, ir.HostSpec{Name: "server1"}, func() time.Time {
-		return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
-	})
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name         string
+		stdout       string
+		distribution string
+		version      string
+		architecture string
+		codename     string
+	}{
+		{
+			name:         "Debian 12",
+			stdout:       "hostname=server1\ndistribution=debian\nversion=12\narchitecture=x86_64\ncodename=bookworm\n",
+			distribution: "debian",
+			version:      "12",
+			architecture: "amd64",
+			codename:     "bookworm",
+		},
+		{
+			name:         "Ubuntu 24.04",
+			stdout:       "hostname=server1\ndistribution=ubuntu\nversion=24.04\narchitecture=amd64\ncodename=noble\n",
+			distribution: "ubuntu",
+			version:      "24.04",
+			architecture: "amd64",
+			codename:     "noble",
+		},
 	}
-	system := facts.System
-	if system.Hostname != "server1" || system.Architecture != "amd64" || system.Codename != "bookworm" {
-		t.Fatalf("facts = %#v", facts)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			facts, err := DiscoverHostFacts(context.Background(), factRunner{stdout: tt.stdout}, ir.HostSpec{Name: "server1"}, func() time.Time {
+				return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			system := facts.System
+			if system.Hostname != "server1" || system.Distribution != tt.distribution || system.Version != tt.version || system.Architecture != tt.architecture || system.Codename != tt.codename {
+				t.Fatalf("facts = %#v", facts)
+			}
+			if system.DetectedAt != "2026-06-20T12:00:00Z" {
+				t.Fatalf("detected_at = %q", system.DetectedAt)
+			}
+		})
 	}
-	if system.DetectedAt != "2026-06-20T12:00:00Z" {
-		t.Fatalf("detected_at = %q", system.DetectedAt)
+}
+
+func TestDiscoverHostFactsRejectsUnsupportedTargets(t *testing.T) {
+	tests := []struct {
+		name    string
+		stdout  string
+		wantErr string
+	}{
+		{name: "missing distribution", stdout: "hostname=server1\nversion=24.04\narchitecture=amd64\ncodename=noble\n", wantErr: "distribution is empty"},
+		{name: "Ubuntu 22.04", stdout: "hostname=server1\ndistribution=ubuntu\nversion=22.04\narchitecture=amd64\ncodename=jammy\n", wantErr: "unsupported target platform"},
+		{name: "Fedora", stdout: "hostname=server1\ndistribution=fedora\nversion=42\narchitecture=amd64\ncodename=rawhide\n", wantErr: "unsupported target platform"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := DiscoverHostFacts(context.Background(), factRunner{stdout: tt.stdout}, ir.HostSpec{Name: "server1"}, time.Now)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("DiscoverHostFacts() error = %v, want containing %q", err, tt.wantErr)
+			}
+		})
 	}
 }
 
@@ -95,8 +145,10 @@ func TestApplyPersistsRuntimeFactsWithoutResourceChanges(t *testing.T) {
 		Name: "server1",
 		Facts: ir.HostFacts{System: ir.SystemFacts{
 			Hostname:     "server1",
+			Distribution: "ubuntu",
+			Version:      "24.04",
 			Architecture: "amd64",
-			Codename:     "trixie",
+			Codename:     "noble",
 			DetectedAt:   "2026-06-20T12:00:00Z",
 		}},
 	}
@@ -110,7 +162,7 @@ func TestApplyPersistsRuntimeFactsWithoutResourceChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Facts == nil || st.Facts.System.Architecture != "amd64" || st.Facts.System.Codename != "trixie" {
+	if st.Facts == nil || st.Facts.System.Distribution != "ubuntu" || st.Facts.System.Version != "24.04" || st.Facts.System.Architecture != "amd64" || st.Facts.System.Codename != "noble" {
 		t.Fatalf("state facts = %#v", st.Facts)
 	}
 	if st.Serial != 1 {
@@ -159,7 +211,7 @@ func (r *concurrencyFactRunner) Run(ctx context.Context, host, script string) (R
 	case <-ctx.Done():
 		return Result{}, ctx.Err()
 	}
-	return Result{Stdout: "hostname=" + host + "\narchitecture=amd64\ncodename=trixie\n"}, nil
+	return Result{Stdout: "hostname=" + host + "\ndistribution=debian\nversion=13\narchitecture=amd64\ncodename=trixie\n"}, nil
 }
 
 func (r *concurrencyFactRunner) RunInput(ctx context.Context, host, remoteCommand string, input io.Reader) (Result, error) {

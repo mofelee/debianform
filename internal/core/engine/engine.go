@@ -125,6 +125,9 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	if e.Provider == nil {
 		return Plan{}, fmt.Errorf("engine provider is required")
 	}
+	if err := validateProgramTargetPlatforms(program, opts); err != nil {
+		return Plan{}, err
+	}
 	if err := resourceGraph.Validate(); err != nil {
 		return Plan{}, err
 	}
@@ -256,6 +259,9 @@ func (e Engine) planNodes(ctx context.Context, hosts []ir.HostSpec, parallel int
 }
 
 func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
+	if err := validateProgramTargetPlatforms(program, opts); err != nil {
+		return Plan{}, err
+	}
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := hostsByName(program)
 	selectedHosts := selectedProgramHosts(program, opts)
@@ -363,9 +369,34 @@ func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts 
 
 func hasHostFacts(facts ir.HostFacts) bool {
 	return facts.System.Hostname != "" ||
+		facts.System.Distribution != "" ||
+		facts.System.Version != "" ||
 		facts.System.Architecture != "" ||
 		facts.System.Codename != "" ||
 		facts.System.DetectedAt != ""
+}
+
+func validateProgramTargetPlatforms(program *ir.Program, opts Options) error {
+	for _, host := range selectedProgramHosts(program, opts) {
+		system := host.Facts.System
+		if system.Distribution == "" && system.Version == "" {
+			continue
+		}
+		if system.Distribution == "" || system.Version == "" || system.Architecture == "" || system.Codename == "" {
+			return fmt.Errorf(
+				"host %q has incomplete target platform facts distribution=%q version=%q codename=%q architecture=%q",
+				host.Name,
+				system.Distribution,
+				system.Version,
+				system.Codename,
+				system.Architecture,
+			)
+		}
+		if err := ir.ValidateTargetPlatform(system.Distribution, system.Version, system.Architecture, system.Codename); err != nil {
+			return fmt.Errorf("host %q: %w", host.Name, err)
+		}
+	}
+	return nil
 }
 
 func selectedProgramHosts(program *ir.Program, opts Options) []ir.HostSpec {

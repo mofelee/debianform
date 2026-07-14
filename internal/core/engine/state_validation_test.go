@@ -76,6 +76,46 @@ func TestEngineRejectsIncompatibleOrForeignStateBeforeProviderOrWrite(t *testing
 	}
 }
 
+func TestEngineRejectsUnsupportedTargetBeforeBackendOrProvider(t *testing.T) {
+	host := ir.HostSpec{
+		Name: "server1",
+		Facts: ir.HostFacts{System: ir.SystemFacts{
+			Distribution: "ubuntu",
+			Version:      "22.04",
+			Architecture: "amd64",
+			Codename:     "jammy",
+		}},
+	}
+	program := &ir.Program{Hosts: []ir.HostSpec{host}}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{fileNode("server1", "/tmp/example", nil)}}
+
+	for _, mode := range []string{"plan", "apply"} {
+		t.Run(mode, func(t *testing.T) {
+			backend := newStateValidationBackend(corestate.Empty(host.Name))
+			provider := &stateValidationProvider{}
+			engine := Engine{Backend: backend, Provider: provider}
+			var err error
+			if mode == "plan" {
+				_, err = engine.Plan(context.Background(), program, resourceGraph, Options{})
+			} else {
+				_, err = engine.Apply(context.Background(), program, resourceGraph, Options{})
+			}
+			if err == nil || !strings.Contains(err.Error(), "unsupported target platform") {
+				t.Fatalf("%s error = %v, want unsupported target", mode, err)
+			}
+			if got := backend.readCount(); got != 0 {
+				t.Fatalf("backend reads = %d, want 0", got)
+			}
+			if got := backend.writeCount(); got != 0 {
+				t.Fatalf("backend writes = %d, want 0", got)
+			}
+			if got := provider.callCount(); got != 0 {
+				t.Fatalf("provider calls = %d, want 0", got)
+			}
+		})
+	}
+}
+
 func TestApplyValidatesStateAgainBeforePersistingFacts(t *testing.T) {
 	host := ir.HostSpec{
 		Name: "server1",
@@ -206,6 +246,12 @@ func (b *stateValidationBackend) writeCount() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.writes
+}
+
+func (b *stateValidationBackend) readCount() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.reads
 }
 
 type stateValidationProvider struct {

@@ -133,6 +133,62 @@ func TestCompileDockerOfficialRepositoryUsesPlatformFacts(t *testing.T) {
 	}
 }
 
+func TestCompileDockerOfficialRepositoryDoesNotInferUbuntuFromCodename(t *testing.T) {
+	legacyProgram := &ir.Program{Hosts: []ir.HostSpec{{
+		Name:   "legacy1",
+		Source: ir.SourceRef{File: "inline.dbf.hcl", Line: 1, Path: "host.legacy1"},
+		Platform: &ir.PlatformSpec{
+			Architecture: "amd64",
+			Codename:     "noble",
+		},
+		Docker: &ir.DockerSpec{
+			Enable: true,
+			Package: ir.DockerPackageSpec{
+				Source:          "official",
+				Channel:         "stable",
+				RemoveConflicts: "auto",
+			},
+		},
+	}}}
+	legacyGraph, err := Compile(legacyProgram)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyRepository := nodeFor(legacyGraph, `host.legacy1.docker.apt.repository["docker-official"]`)
+	legacyContent := ""
+	if legacyRepository != nil {
+		legacyContent, _ = legacyRepository.Desired["content"].(string)
+	}
+	if !strings.Contains(legacyContent, "URIs: https://download.docker.com/linux/debian") {
+		t.Fatalf("legacy repository = %#v, want historical Debian default", legacyRepository)
+	}
+
+	program := &ir.Program{Hosts: []ir.HostSpec{{
+		Name:   "docker1",
+		Source: ir.SourceRef{File: "inline.dbf.hcl", Line: 1, Path: "host.docker1"},
+		Platform: &ir.PlatformSpec{
+			Distribution: "ubuntu",
+			Version:      "24.04",
+			Architecture: "amd64",
+			Codename:     "noble",
+			Source:       ir.SourceRef{File: "inline.dbf.hcl", Line: 2, Path: "host.docker1.platform"},
+		},
+		Docker: &ir.DockerSpec{
+			Enable: true,
+			Package: ir.DockerPackageSpec{
+				Source:          "official",
+				Channel:         "stable",
+				RemoveConflicts: "auto",
+				SourceRef:       ir.SourceRef{File: "inline.dbf.hcl", Line: 5, Path: "host.docker1.docker.package"},
+			},
+		},
+	}}}
+	_, err = Compile(program)
+	if err == nil || !strings.Contains(err.Error(), `docker official repository for platform.distribution "ubuntu" is not implemented`) {
+		t.Fatalf("Compile() error = %v, want explicit Ubuntu repository guard", err)
+	}
+}
+
 func TestCompileDockerOfficialMirrorResourceGraph(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "docker1" {

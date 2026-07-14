@@ -49,6 +49,20 @@ func (h HostSpec) PlatformArchitecture() string {
 	return ""
 }
 
+func (h HostSpec) PlatformDistribution() string {
+	if h.Platform != nil && h.Platform.Distribution != "" {
+		return h.Platform.Distribution
+	}
+	return ""
+}
+
+func (h HostSpec) PlatformVersion() string {
+	if h.Platform != nil && h.Platform.Version != "" {
+		return h.Platform.Version
+	}
+	return ""
+}
+
 func (h HostSpec) PlatformCodename() string {
 	if h.Platform != nil && h.Platform.Codename != "" {
 		return h.Platform.Codename
@@ -68,6 +82,8 @@ type HostFacts struct {
 
 type SystemFacts struct {
 	Hostname     string `json:"hostname,omitempty"`
+	Distribution string `json:"distribution,omitempty"`
+	Version      string `json:"version,omitempty"`
 	Architecture string `json:"architecture,omitempty"`
 	Codename     string `json:"codename,omitempty"`
 	DetectedAt   string `json:"detected_at,omitempty"`
@@ -93,6 +109,8 @@ type StateSpec struct {
 }
 
 type PlatformSpec struct {
+	Distribution string    `json:"distribution,omitempty"`
+	Version      string    `json:"version,omitempty"`
 	Architecture string    `json:"architecture,omitempty"`
 	Codename     string    `json:"codename,omitempty"`
 	Source       SourceRef `json:"source,omitempty"`

@@ -1465,6 +1465,32 @@ host "docker1" {
 	}
 }
 
+func TestOfflinePlanExplainsUbuntuDockerVersionDependency(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "docker-ubuntu.dbf.hcl")
+	writeTestFile(t, file, `
+host "docker1" {
+  platform {
+    distribution = "ubuntu"
+    architecture = "amd64"
+    codename     = "noble"
+  }
+
+  docker {
+    enable = true
+  }
+}
+`)
+
+	err := run([]string{"plan", "-f", file, "--offline"})
+	if err == nil || !strings.Contains(err.Error(), "offline plan cannot resolve runtime facts") {
+		t.Fatalf("Ubuntu docker plan --offline error = %v, want runtime facts explanation", err)
+	}
+	if !strings.Contains(err.Error(), "must declare platform.version") {
+		t.Fatalf("Ubuntu docker plan --offline error = %v, want missing version detail", err)
+	}
+}
+
 func TestOnlinePlanRejectsRemovedDockerDebianSourceBeforeSSH(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "removed-docker-source.dbf.hcl")
 	writeTestFile(t, file, `
@@ -1533,7 +1559,7 @@ case "$input" in
     exit 0
     ;;
   *"printf 'hostname=%s\n'"*)
-    printf 'hostname=server1\narchitecture=amd64\ncodename=trixie\n'
+    printf 'hostname=server1\ndistribution=debian\nversion=13\narchitecture=amd64\ncodename=trixie\n'
     exit 0
     ;;
   *"/var/lock/debianform/state/server1.lock"*)
@@ -1588,7 +1614,7 @@ case "$input" in
     exit 0
     ;;
   *"printf 'hostname=%s\n'"*)
-    printf 'hostname=server1\narchitecture=amd64\ncodename=trixie\n'
+    printf 'hostname=server1\ndistribution=debian\nversion=13\narchitecture=amd64\ncodename=trixie\n'
     exit 0
     ;;
   *'deadline_ns=$(( $(date +%s%N) + 1000000 ))'*)
@@ -1634,7 +1660,7 @@ func TestCheckDockerServiceDriftReturnsError(t *testing.T) {
 input="$(cat)"
 case "$input" in
   *"printf 'hostname=%s\n'"*)
-    printf 'hostname=docker1\narchitecture=amd64\ncodename=trixie\n'
+    printf 'hostname=docker1\ndistribution=debian\nversion=13\narchitecture=amd64\ncodename=trixie\n'
     exit 0
     ;;
   *"/var/lib/debianform/state/docker1.json"*)
@@ -1710,7 +1736,7 @@ func TestCheckDockerComposeProjectStoppedDriftReturnsError(t *testing.T) {
 input="$(cat)"
 case "$input" in
   *"printf 'hostname=%s\n'"*)
-    printf 'hostname=compose1\narchitecture=amd64\ncodename=trixie\n'
+    printf 'hostname=compose1\ndistribution=debian\nversion=13\narchitecture=amd64\ncodename=trixie\n'
     exit 0
     ;;
   *"/var/lib/debianform/state/compose1.json"*)
@@ -1817,7 +1843,7 @@ func TestCheckDockerComposeProjectOrphanDriftReturnsError(t *testing.T) {
 input="$(cat)"
 case "$input" in
   *"printf 'hostname=%s\n'"*)
-    printf 'hostname=compose1\narchitecture=amd64\ncodename=trixie\n'
+    printf 'hostname=compose1\ndistribution=debian\nversion=13\narchitecture=amd64\ncodename=trixie\n'
     exit 0
     ;;
   *"/var/lib/debianform/state/compose1.json"*)
@@ -1985,7 +2011,7 @@ trap 'rmdir %s' EXIT
 sleep 0.02
 case "$input" in
   *"printf 'hostname=%%s\n'"*)
-    printf 'hostname=test\narchitecture=amd64\ncodename=trixie\n'
+    printf 'hostname=test\ndistribution=debian\nversion=13\narchitecture=amd64\ncodename=trixie\n'
     exit 0
     ;;
   *"/var/lib/debianform/state/server1.json"*|*"/var/lib/debianform/state/server2.json"*)
@@ -2034,7 +2060,7 @@ if [ -z "$input" ]; then
 fi
 case "$input" in
   *"printf 'hostname=%s\n'"*)
-    printf 'hostname=test\narchitecture=amd64\ncodename=trixie\n'
+    printf 'hostname=test\ndistribution=debian\nversion=13\narchitecture=amd64\ncodename=trixie\n'
     exit 0
     ;;
   *"/var/lib/debianform/state/server1.json"*)

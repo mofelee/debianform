@@ -68,6 +68,10 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 
 	switch docker.Package.Source {
 	case "official":
+		distribution := host.PlatformDistribution()
+		if distribution == "ubuntu" && host.PlatformVersion() == "" {
+			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.platform.version: host %q must declare platform.version to compile Ubuntu docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
+		}
 		architecture := host.PlatformArchitecture()
 		if architecture == "" {
 			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.platform.architecture: host %q must declare platform.architecture to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
@@ -75,6 +79,9 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 		codename := host.PlatformCodename()
 		if codename == "" {
 			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.platform.codename: host %q must declare platform.codename to compile docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
+		}
+		if distribution != "" && distribution != "debian" {
+			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.platform.distribution: docker official repository for platform.distribution %q is not implemented", host.Source.File, host.Source.Line, host.Source.Path, distribution)
 		}
 		if _, exists := host.APT.Repositories[dockerOfficialRepositoryName]; exists {
 			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s: apt repository %q conflicts with docker official repository", host.Source.File, host.Source.Line, host.Source.Path, dockerOfficialRepositoryName)
