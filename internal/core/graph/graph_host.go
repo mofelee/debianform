@@ -23,6 +23,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	userAddresses := map[string]string{}
 	unitAddresses := map[string]string{}
 	componentArtifactInstallAddresses := map[string]string{}
+	managedFileAddresses := map[string]string{}
 
 	for _, name := range sortedKeys(host.Groups.Groups) {
 		groupAddresses[name] = fmt.Sprintf("host.%s.groups.group[%s]", host.Name, strconv.Quote(name))
@@ -49,6 +50,21 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
 		for _, name := range sortedKeys(component.Systemd.Units) {
 			unitAddresses[name] = fmt.Sprintf("%s.systemd.unit[%s]", componentPrefix, strconv.Quote(name))
+		}
+	}
+	for _, path := range sortedKeys(host.Files.Files) {
+		managedFileAddresses[path] = fmt.Sprintf("host.%s.files.file[%s]", host.Name, strconv.Quote(path))
+	}
+	for _, path := range sortedKeys(host.Secrets.Files) {
+		managedFileAddresses[path] = fmt.Sprintf("host.%s.secrets.file[%s]", host.Name, strconv.Quote(path))
+	}
+	for _, component := range host.Components {
+		componentPrefix := fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)
+		for _, path := range sortedKeys(component.Files.Files) {
+			managedFileAddresses[path] = fmt.Sprintf("%s.files.file[%s]", componentPrefix, strconv.Quote(path))
+		}
+		for _, path := range sortedKeys(component.Secrets.Files) {
+			managedFileAddresses[path] = fmt.Sprintf("%s.secrets.file[%s]", componentPrefix, strconv.Quote(path))
 		}
 	}
 	networkdAddresses := map[string]string{}
@@ -675,6 +691,13 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			"mode":         "0644",
 			"ensure":       "present",
 		}
+		downloadDeps := []string{}
+		if strings.HasPrefix(component.SelectedSource.URL, "file://") {
+			sourcePath := strings.TrimPrefix(component.SelectedSource.URL, "file://")
+			if address, ok := managedFileAddresses[sourcePath]; ok {
+				downloadDeps = append(downloadDeps, address)
+			}
+		}
 		nodes = append(nodes, Node{
 			Host:            host.Name,
 			Address:         downloadAddress,
@@ -682,6 +705,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			Summary:         "download component " + component.Name + " source",
 			Source:          component.SelectedSource.Source,
 			Desired:         downloadDesired,
+			DependsOn:       downloadDeps,
 			ProviderType:    "component_download",
 			ProviderAddress: "component_download." + providerName(host.Name, component.Name, sourceLabel),
 			ProviderPayload: downloadDesired,

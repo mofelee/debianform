@@ -70,6 +70,39 @@ func TestCompileComponentSourceBuildResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileComponentFileSourceDependsOnManagedFile(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+component "local_tool" {
+  type    = "file"
+  version = "1.0.0"
+
+  source {
+    url    = "file:///var/lib/debianform/local-tool"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/usr/local/bin/local-tool"
+  }
+}
+
+host "server1" {
+  files {
+    file "/var/lib/debianform/local-tool" {
+      content = "local tool"
+    }
+  }
+
+  components = [component.local_tool]
+}
+`)
+	downloadAddress := `host.server1.components.local_tool.artifact.download["default"]`
+	fileAddress := `host.server1.files.file["/var/lib/debianform/local-tool"]`
+	if deps := dependsOnFor(resourceGraph, downloadAddress); !containsString(deps, fileAddress) {
+		t.Fatalf("local component download deps = %#v, want managed file %q", deps, fileAddress)
+	}
+}
+
 func TestCompileComponentInputsResourceGraphGolden(t *testing.T) {
 	resourceGraph := compileGraphFixture(t, "../../../examples/component-inputs.dbf.hcl")
 
