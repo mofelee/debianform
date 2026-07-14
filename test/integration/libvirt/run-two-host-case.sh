@@ -267,6 +267,25 @@ assert_remote() {
   fi
 }
 
+collect_host_diagnostics() {
+  local host=$1
+  local label=$2
+  local guest_dir="$ARTIFACT_DIR/guest-$label"
+  mkdir -p "$guest_dir"
+  ssh_host "$host" "set +e; hostnamectl; printf '\n'; uname -a; printf '\n'; uptime; printf '\n'; cat /etc/os-release" >"$guest_dir/system.txt" 2>&1 || true
+  ssh_host "$host" "systemctl --failed --no-pager --full" >"$guest_dir/systemctl-failed.txt" 2>&1 || true
+  ssh_host "$host" "systemctl list-units --all --no-pager --full 'debianform*' 'dbf*' '*docker*' '*networkd*'" >"$guest_dir/systemd-units.txt" 2>&1 || true
+  ssh_host "$host" "dpkg-query -W | LC_ALL=C sort" >"$guest_dir/packages.txt" 2>&1 || true
+  ssh_host "$host" "journalctl --no-pager -n 500" >"$guest_dir/journal.log" 2>&1 || true
+  ssh_host "$host" 'set +e
+for state_path in /var/lib/debianform-integration/*.json; do
+  test -f "$state_path" || continue
+  printf "===== %s =====\n" "$state_path"
+  cat "$state_path"
+  printf "\n"
+done' >"$guest_dir/state.json.log" 2>&1 || true
+}
+
 collect_diagnostics() {
   mkdir -p "$ARTIFACT_DIR"
   virsh_system list --all >"$ARTIFACT_DIR/virsh-list.txt" 2>&1 || true
@@ -275,6 +294,8 @@ collect_diagnostics() {
   virsh_system dumpxml "$VM_B_NAME" >"$ARTIFACT_DIR/domain-b.xml" 2>&1 || true
   virsh_system domifaddr "$VM_A_NAME" --source lease >"$ARTIFACT_DIR/domifaddr-a.txt" 2>&1 || true
   virsh_system domifaddr "$VM_B_NAME" --source lease >"$ARTIFACT_DIR/domifaddr-b.txt" 2>&1 || true
+  collect_host_diagnostics wg-a a
+  collect_host_diagnostics wg-b b
   if is_remote_libvirt; then
     ssh "$REMOTE_HYPERVISOR" "journalctl -u libvirtd --no-pager -n 300" >"$ARTIFACT_DIR/libvirtd.log" 2>&1 || true
     ssh "$REMOTE_HYPERVISOR" "cat /var/log/libvirt/qemu/$VM_A_NAME.log" >"$ARTIFACT_DIR/qemu-a.log" 2>&1 || true
@@ -290,6 +311,8 @@ collect_diagnostics() {
   fi
   cp -a "$LOG_DIR" "$ARTIFACT_DIR/logs" 2>/dev/null || true
   cp -a "$CASE_DIR" "$ARTIFACT_DIR/scenario" 2>/dev/null || true
+  rm -f "$ARTIFACT_DIR/scenario/id_ed25519"
+  rm -rf "$ARTIFACT_DIR/scenario/secrets"
 }
 
 cleanup() {

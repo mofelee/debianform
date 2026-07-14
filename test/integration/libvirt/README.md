@@ -2,9 +2,9 @@
 
 These tests boot fresh Debian 12, Debian 13, or Ubuntu 24.04 amd64 cloud VMs
 with libvirt and exercise the full managed-target lifecycle against real remote
-state. Debian 13 is the default and primary target; Debian 12 and Debian 13 are
-blocking CI targets. Ubuntu is an implementation target until its complete
-matrix is promoted by the support policy.
+state. Debian 13 is the default and primary target. Debian 12, Debian 13, and
+Ubuntu 24.04 each have a blocking CI matrix; Ubuntu's initial support tier is
+Preview.
 
 Run all cases on the default Debian 13 target or explicitly select either
 supported version:
@@ -41,10 +41,10 @@ version, codename, and architecture before executing a case.
 
 Every numbered case step runs `validate`, an online JSON plan, drift rejection
 when the case provides a drift hook, `apply`, an asserted JSON no-op plan,
-`check`, and its case-specific post-apply checks. CI currently discovers 19
-case directories and expands them across both versions: 2 versions x 19 cases,
-or 38 blocking jobs. The `Managed target matrix gate` requires the complete
-matrix to pass.
+`check`, and its case-specific post-apply checks. CI currently discovers 20
+case directories. The unchanged Debian matrix expands to 2 versions x 20 cases,
+or 40 jobs guarded by `Managed target matrix gate`. The separate Ubuntu matrix
+runs the same 20 cases and is guarded by `Ubuntu 24.04 target matrix gate`.
 
 `wireguard` uses the two-host runner and `wireguard-three-host` uses the
 three-host runner. On Ubuntu, these cases and `shared-script-networkd` carry a

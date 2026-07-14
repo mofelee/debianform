@@ -262,8 +262,16 @@ collect_guest_diagnostics() {
   ssh_vm "set +e; hostnamectl; printf '\n'; uname -a; printf '\n'; uptime; printf '\n'; cat /etc/os-release" >"$guest_dir/system.txt" 2>&1 || true
   ssh_vm "systemctl --failed --no-pager --full" >"$guest_dir/systemctl-failed.txt" 2>&1 || true
   ssh_vm "systemctl list-units --all --no-pager --full 'debianform*' 'dbf*' '*docker*'" >"$guest_dir/systemd-units.txt" 2>&1 || true
+  ssh_vm "dpkg-query -W | LC_ALL=C sort" >"$guest_dir/packages.txt" 2>&1 || true
   ssh_vm "journalctl --no-pager -n 500" >"$guest_dir/journal.log" 2>&1 || true
   ssh_vm "journalctl -u docker.service --no-pager -n 300" >"$guest_dir/docker.service.log" 2>&1 || true
+  ssh_vm 'set +e
+for state_path in /var/lib/debianform-integration/*.json; do
+  test -f "$state_path" || continue
+  printf "===== %s =====\n" "$state_path"
+  cat "$state_path"
+  printf "\n"
+done' >"$guest_dir/state.json.log" 2>&1 || true
   ssh_vm "set +e
 for unit_path in /etc/systemd/system/debianform*.service /etc/systemd/system/dbf*.service; do
   test -e \"\$unit_path\" || continue
@@ -310,6 +318,8 @@ collect_diagnostics() {
   fi
   cp -a "$LOG_DIR" "$ARTIFACT_DIR/logs" 2>/dev/null || true
   cp -a "$CASE_DIR" "$ARTIFACT_DIR/scenario" 2>/dev/null || true
+  rm -f "$ARTIFACT_DIR/scenario/id_ed25519"
+  rm -rf "$ARTIFACT_DIR/scenario/secrets"
 }
 
 cleanup() {
