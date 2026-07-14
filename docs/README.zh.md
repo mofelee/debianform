@@ -28,6 +28,8 @@
 ## 设计中的需求
 
 - [script / on_change 实施计划](script-on-change-implementation-plan.zh.md)：把变更钩子拆成可执行开发循环。
+- [Ubuntu 24.04 目标兼容实施契约](ubuntu-24.04-support-contract.zh.md)：锁定 #43 的 platform、
+  provider、network ownership 和 20-case 验证边界；完整矩阵通过前不构成支持声明。
 
 ## 运维排障
 
