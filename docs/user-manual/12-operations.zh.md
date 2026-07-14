@@ -260,7 +260,8 @@ dbf check
 确认没有其他 apply 仍在运行，再清理 `lock_path` 和 `lock_path.d/`。不要在不确认进程状态时直接删除锁。
 
 离线 plan 报 runtime facts：
-给 host 显式声明需要的 `platform.architecture`、`platform.codename` 等 facts，或者运行在线 `dbf plan`。
+给 host 显式声明需要的 `platform.distribution`、`platform.version`、`platform.architecture`、
+`platform.codename` 等 facts，或者运行在线 `dbf plan`。
 
 ## 本章完整命令
 

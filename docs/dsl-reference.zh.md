@@ -32,7 +32,8 @@ host "web-prod" {
 
 `profile` 和 `host` 都支持 `imports = [profile.name]`，导入顺序在前，当前 block 在后。
 map 递归合并，list 去重追加，标量由后者覆盖。`profile` 不能声明
-`system.hostname`、`platform.architecture`、`platform.codename`，也不能挂载 component。
+`system.hostname`、`platform.distribution`、`platform.version`、`platform.architecture`、
+`platform.codename`，也不能挂载 component。
 
 `host` 支持两种 component 挂载方式。简写会用 component 名作为 instance 名；显式写法可
 自定义 instance 名并传入 input。
@@ -105,7 +106,8 @@ assert 在合并后的 host spec 上求值，只能读取 `self`，当前支持 
 `component input` 字段与 variable 类似，但不支持 `ephemeral` 和 `const`，validation 只能读取
 当前 `input.<name>`。component 资源表达式可读取 `input.<name>`、顶层 `var.<name>` 和
 `target`；`target` 是挂载目标 host 的合并后 spec，常用字段包括 `target.name`、
-`target.platform.architecture` 和 `target.platform.codename`。旧的
+`target.platform.distribution`、`target.platform.version`、`target.platform.architecture` 和
+`target.platform.codename`。旧的
 `target.system.architecture` / `target.system.codename` 已移除，继续使用会报错并提示迁移到
 `target.platform.*`。
 
@@ -241,13 +243,30 @@ host "force_example" {
 ### platform
 
 `host` 可用，`profile` 不可用。描述目标主机 platform facts，主要用于离线 plan、assert、
-Docker 官方源和按架构选择的 component source。在线 `plan` / `apply` / `check` 会探测这些 facts；
-真实主机配置通常不需要手写。
+目标 allowlist 校验、Docker 官方源和按架构选择的 component source。在线 `plan` / `apply` /
+`check` 会探测这些 facts；真实主机配置通常不需要手写。显式声明的字段是 assertion，与探测值
+不一致会在 provider observation 或 mutation 前失败。
 
 | 字段 | 说明 |
 | --- | --- |
-| `architecture` | Debian architecture，例如 `amd64`、`arm64`。 |
-| `codename` | Debian codename，例如 Debian 12 的 `bookworm` 或 Debian 13 的 `trixie`。 |
+| `distribution` | `/etc/os-release` identity，例如 `debian` 或 `ubuntu`；不能从 codename 推断。 |
+| `version` | 发行版版本，例如 Debian `12`/`13` 或 Ubuntu `24.04`。 |
+| `architecture` | dpkg architecture，例如 `amd64`、`arm64`。 |
+| `codename` | 发行版 codename，例如 `bookworm`、`trixie` 或 `noble`。 |
+
+Ubuntu 发行版分派的离线 plan 必须声明完整四元组：
+
+```hcl
+platform {
+  distribution = "ubuntu"
+  version      = "24.04"
+  architecture = "amd64"
+  codename     = "noble"
+}
+```
+
+为兼容已有 Debian fixture，离线配置省略 `distribution/version` 时仍保留历史 Debian repository
+默认；该兼容不会从 `noble` 等 codename 猜测 Ubuntu。
 
 ### kernel
 
@@ -521,8 +540,8 @@ service unit 名会自动补 `.service`。支持 `lifecycle { prevent_destroy = 
 | `source` | `"official"` | `"official"`、`"none"`、`"custom"`。省略时使用 Docker 官方 APT 源。 |
 | `channel` | `"stable"` | 当前只实际使用 stable。 |
 | `version` | `null` | 已解析但版本 pinning 尚未实现。 |
-| `repository_url` | `"https://download.docker.com/linux/debian"` | 仅 `source = "official"` 可用；替换 Docker official APT repository base URL。 |
-| `gpg_url` | `"https://download.docker.com/linux/debian/gpg"` | 仅 `source = "official"` 可用；替换 Docker official APT signing key URL。 |
+| `repository_url` | 根据已验证 distribution 选择 `linux/debian` 或 `linux/ubuntu` | 仅 `source = "official"` 可用；替换 Docker official APT repository base URL。 |
+| `gpg_url` | 根据已验证 distribution 选择对应 official repository 的 `/gpg` | 仅 `source = "official"` 可用；替换 Docker official APT signing key URL。 |
 | `gpg_sha256` | 默认 `gpg_url` 时为 Docker official key SHA256；自定义 `gpg_url` 时为空 | 仅 `source = "official"` 可用；可选。自定义 `gpg_url` 时不会自动套用官方 SHA，可显式设置此字段启用 checksum 校验。 |
 | `remove_conflicts` | `"auto"` | `"auto"`、`true`/`"true"`、`false`/`"false"`。 |
 
@@ -537,6 +556,8 @@ docker {
 }
 ```
 
+默认 official source 使用在线 facts 或完整离线 platform tuple 选择 Debian/Ubuntu URL，不能从
+codename 猜测发行版。显式 `repository_url` / `gpg_url` 不会自动从 Debian mirror 改写为 Ubuntu。
 这些字段只控制 Docker Engine 官方 APT 源和 signing key，不是 Docker registry mirror。它们和
 `get.docker.com --mirror` 的目标相近，都是让 Docker 安装来源使用镜像站；区别是 DebianForm
 不会运行 `get.docker.com` 安装脚本，而是声明式管理 APT source、key、package、service 和 state。

@@ -33,7 +33,7 @@ parse config
 
 其中许多阶段都会通过 SSH 在远端执行脚本：
 
-- runtime facts discovery 会读取 hostname、Debian architecture、codename。
+- runtime facts discovery 会读取 hostname、distribution、version、architecture、codename。
 - online plan 会读取远端 state 和 observed 状态，例如文件 hash、package 状态、service 状态。
 - apply 会运行 provider 生成的修改脚本，例如写文件、安装包、重启服务、执行 component script。
 - apply 成功后会写回远端 state。
@@ -191,7 +191,7 @@ logs into issues, CI artifacts, or shared chat without review.
 
 | 阶段 | 是否暂停 | 说明 |
 | --- | --- | --- |
-| facts discovery | 是 | 展示收集 hostname、architecture、codename 的脚本和输出。 |
+| facts discovery | 是 | 展示收集 hostname、distribution、version、architecture、codename 的脚本和输出。 |
 | state lock | 是 | 展示获取 lock 的脚本和输出。 |
 | state read | 是 | 展示读取 state 的脚本和输出。 |
 | state write | 是 | 展示写 state 的脚本和 payload。 |

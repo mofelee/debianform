@@ -21,7 +21,7 @@
 
 - `dbf version` 输出。
 - 控制机 OS/arch。
-- 目标主机 Debian 版本和架构。
+- 目标主机 distribution、version、architecture 和 codename。
 - 安装方式：Homebrew、curl installer、source build 或本地开发构建。
 - 执行的命令：`validate`、`plan`、`apply`、`check`、`fmt`、inspect。
 - 最小可复现 `.dbf.hcl` 片段，移除 secrets。

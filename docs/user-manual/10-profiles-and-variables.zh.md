@@ -153,7 +153,8 @@ settings = {
 - map 会递归合并。
 - list 会去重追加。
 - 标量值由后合入的一侧覆盖。
-- profile 不能声明 host-only 字段，例如 `system.hostname`、`platform.architecture`、`platform.codename`。
+- profile 不能声明 host-only 字段，例如 `system.hostname`、`platform.distribution`、
+  `platform.version`、`platform.architecture`、`platform.codename`。
 
 本章的 `common.json` 来自 `manual_base`，`service.txt` 来自 `manual_service`，`host.json` 来自 host 自己。
 

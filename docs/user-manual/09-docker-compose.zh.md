@@ -77,7 +77,8 @@ host "manual1" {
 - `remove_orphans = true` 会在收敛时清理多余服务容器。
 
 本章同样会通过 Docker 官方源安装 Docker Engine。在线 `dbf plan` 会自动发现 platform facts；
-如需纯离线预览，可按第 8 章的方式临时声明 `platform.architecture` / `platform.codename`。
+如需纯离线预览，可按第 8 章的方式声明所需 facts。Ubuntu 必须提供完整的
+`platform.distribution`、`platform.version`、`platform.architecture` 和 `platform.codename`。
 
 ## 应用配置
 

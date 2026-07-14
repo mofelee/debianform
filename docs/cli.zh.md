@@ -2,7 +2,7 @@
 
 本文档说明 `dbf` 命令行工具的主要功能、可用选项和常见用法。
 
-`dbf` 读取 `.dbf.hcl` 配置文件，用于校验、预览、应用和检查 Debian 主机配置。
+`dbf` 读取 `.dbf.hcl` 配置文件，用于校验、预览、应用和检查受支持 Debian/Ubuntu 目标主机配置。
 
 第一次使用建议先走 [quickstart](quickstart.zh.md)，它覆盖准备 root SSH 测试主机、
 写第一份配置、`validate`、在线 `plan`、`apply`、再次 `plan` no-op 和 `check`。

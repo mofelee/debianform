@@ -13,7 +13,7 @@ DSL、CLI、state schema 和 plan JSON 的兼容性规则见
 完整用户能力、DSL block、resource/domain 类型和验证覆盖见
 [support matrix](support-matrix.zh.md)。本节只列 release artifact 平台。
 
-DebianForm 的 CLI 可以运行在控制机或 CI runner 上，通过 SSH 管理目标 Debian 主机。
+DebianForm 的 CLI 可以运行在控制机或 CI runner 上，通过 SSH 管理受支持 Debian/Ubuntu 目标主机。
 CLI 运行平台和被管理目标系统是两个不同概念。
 
 CLI 发布产物覆盖：
@@ -25,8 +25,8 @@ CLI 发布产物覆盖：
 | macOS | amd64 | `dbf_<tag>_darwin_amd64.tar.gz` |
 | macOS | arm64 | `dbf_<tag>_darwin_arm64.tar.gz` |
 
-目标主机支持优先级仍以 Debian 13 为第一目标。目标主机架构优先级由 runtime facts
-和集成测试覆盖决定，不等同于 CLI 运行平台支持矩阵。更完整的 Debian 版本和架构策略见
+目标主机支持优先级仍以 Debian 13 为第一目标；Ubuntu 24.04 LTS amd64 为独立门禁的 Preview。
+目标主机支持由完整 platform tuple 和集成测试覆盖决定，不等同于 CLI 运行平台支持矩阵。更完整的策略见
 [platform support strategy](platform-support-strategy.zh.md)。
 
 ## 版本策略
@@ -125,9 +125,10 @@ git diff --check
 - compatibility policy 已检查破坏性 DSL/state/plan JSON 变更、state migration 和
   plan JSON format version 影响。
 - GitHub Actions 在目标 commit 上全绿。
-- 同一目标 commit 的 managed-target CI 证据分别记录 Debian 12 amd64 `20/20`、Debian 13
-  amd64 `20/20`，并确认 `Managed target matrix gate` 通过。
-- 两个版本的每个 libvirt case 都完成 `validate`、online `plan`、`apply`、再次 JSON
+- 同一目标 commit 的 CI 证据分别记录 Ubuntu 24.04 LTS amd64、Debian 12 amd64、Debian 13
+  amd64 各 `20/20`，并确认 `Ubuntu 24.04 target matrix gate` 和
+  `Managed target matrix gate` 都通过。
+- 三个目标的每个 libvirt case 都完成 `validate`、online `plan`、`apply`、再次 JSON
   `plan` no-op 和 `check`；存在 drift hook 的 case 还必须拒绝 drift。
 
 需要本地复现 managed-target case 时，显式选择版本：
@@ -135,6 +136,7 @@ git diff --check
 ```bash
 make test-integration-case CASE=files DEBIAN_VERSION=12
 make test-integration-case CASE=files DEBIAN_VERSION=13
+make test-integration-case CASE=files TARGET=ubuntu-24.04
 ```
 
 ## GitHub Release 流程
@@ -312,7 +314,7 @@ curl -fsSL https://raw.githubusercontent.com/mofelee/debianform/main/scripts/ins
 并说明：
 
 - `dbf` 安装在控制机或 CI runner 上。
-- 被管理目标主机需要 SSH 可达，并且当前最高优先级目标是 Debian 13。
+- 被管理目标主机需要 SSH 可达；Debian 13 是最高优先级目标，Ubuntu 24.04 LTS amd64 为 Preview。
 - `dbf version` 用于确认安装成功。
 - `brew upgrade dbf` 或重新运行 installer 用于升级。
 

@@ -369,6 +369,8 @@ must declare platform.codename
 
 ```text
 platform {
+  distribution = "debian"
+  version      = "13"
   architecture = "amd64"
   codename     = "trixie"
 }
@@ -383,8 +385,8 @@ declared platform.architecture "arm64" does not match detected architecture "amd
 declared platform.codename "bookworm" does not match detected codename "trixie"
 ```
 
-处理：如果管理真实主机，优先删除手写 `platform.architecture` / `platform.codename`，让在线探测填充；
-如果是 fixture，修正为目标环境的真实值。
+处理：如果管理真实主机，优先删除手写 platform facts，让在线探测填充；如果是离线 fixture，
+把 `distribution`、`version`、`architecture` 和 `codename` 修正为目标环境的真实值。
 
 ### 目标系统 facts 探测失败
 
@@ -395,14 +397,15 @@ discover host facts for server1: architecture is empty
 discover host facts for server1: codename is empty
 ```
 
-处理：确认目标主机是当前支持范围内的 Debian 系统，并且 `dpkg --print-architecture` 和
+处理：确认目标主机 tuple 在当前支持范围内，并且 `dpkg --print-architecture` 和
 `/etc/os-release` 可读：
 
 ```bash
-ssh root@"$DBF_TARGET" 'dpkg --print-architecture && . /etc/os-release && printf "%s\n" "$VERSION_CODENAME"'
+ssh root@"$DBF_TARGET" 'dpkg --print-architecture; . /etc/os-release; printf "%s %s %s\n" "$ID" "$VERSION_ID" "$VERSION_CODENAME"'
 ```
 
-如果输出为空，先修复目标系统基础环境；如果目标不是 Debian，当前 beta 不建议作为 DebianForm 管理目标。
+如果输出为空，先修复目标系统基础环境。当前 allowlist 包含 Debian 12/13 和 Ubuntu 24.04 的
+已列架构；其他 tuple 会在 provider observation 前被拒绝。
 
 ### Check 失败
 

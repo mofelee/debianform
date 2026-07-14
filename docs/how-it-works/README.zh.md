@@ -167,7 +167,7 @@ HTML。重点说明 `plan.Document` 的格式版本、summary 统计、diff tree
 
 ### [10. Native Provider 与资源实现](10-native-provider.zh.md)
 
-解释 native provider 如何把 graph node 的 provider payload 转成 Debian 主机上的实际操作。
+解释 native provider 如何把 graph node 的 provider payload 转成受支持目标主机上的实际操作。
 重点说明每种 provider type 的 plan/apply/destroy 边界、observed 值、desired digest 和
 低阶命令预览。
 

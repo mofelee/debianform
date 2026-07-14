@@ -4,6 +4,21 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
+## Unreleased
+
+- Added Ubuntu 24.04 LTS (`noble`) amd64 as a Preview managed target with an
+  independent blocking 20-case libvirt matrix; Debian 13 remains the primary
+  and default target, and Debian 12/13 amd64 remain Beta.
+- Added explicit target `platform.distribution` and `platform.version` facts,
+  Ubuntu-aware Docker official repository selection, and shared provider
+  compatibility across the full managed-target matrix.
+- Added a read-only Ubuntu network ownership preflight. DebianForm does not
+  manage or migrate Netplan; native systemd-networkd targets must be prepared
+  by the operator before DebianForm manages networkd declarations.
+- Added an Ubuntu Preview quickstart and runnable example. This compatibility
+  addition does not change existing resource addresses, plan format, state
+  schema, or Debian offline defaults.
+
 ## v0.6.0
 
 - Added top-level `script` declarations and explicit

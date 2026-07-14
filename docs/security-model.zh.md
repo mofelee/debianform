@@ -6,8 +6,8 @@
 
 ## 执行模型
 
-DebianForm 是一个通过 SSH 管理 Debian 主机的配置工具。当前唯一支持的管理连接模型是
-root SSH：
+DebianForm 是一个通过 SSH 管理受支持 Debian/Ubuntu 目标主机的配置工具。当前唯一支持的
+管理连接模型是 root SSH：
 
 - `ssh.user` 只能省略或设置为 `"root"`。
 - 省略 `ssh.user` 时仍按 root 连接。
@@ -118,7 +118,7 @@ https://github.com/mofelee/debianform/security/advisories/new
 
 - 受影响版本和 commit。
 - 控制机 OS/arch。
-- 目标主机 Debian 版本和架构。
+- 目标主机 distribution、version、architecture 和 codename。
 - 最小复现配置，移除 secret。
 - 影响范围：secret 泄露、错误 destructive apply、权限边界绕过、release artifact 校验失败等。
 - 已知 workaround 或是否已经公开。

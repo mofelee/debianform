@@ -3,6 +3,8 @@
 本文档是一条从零到第一次 apply/check 的最短路径，面向最高优先级的低风险 Debian 13
 amd64 测试主机。Debian 12 amd64 也属于 Beta 支持范围；DebianForm 仍处于 public preview /
 beta 阶段，不要把第一轮试用目标设为生产主机。
+Ubuntu 24.04 LTS amd64 的独立 Preview 路径见
+[Ubuntu 24.04 Preview Quickstart](ubuntu-24.04-quickstart.zh.md)。
 
 ## 1. 安装 CLI
 
@@ -79,8 +81,9 @@ host "server1" {
 - state 默认写到目标主机的 `/var/lib/debianform/state/server1.json`。
 - lock 默认写到目标主机的 `/var/lock/debianform/state/server1.lock`。
 
-它也不需要写 `platform`：在线 `plan` / `apply` / `check` 会从真实主机探测 architecture 和
-codename。只有离线预览依赖这些 facts，或像 Debian 12 smoke 那样专门断言平台时才显式声明。
+它也不需要写 `platform`：在线 `plan` / `apply` / `check` 会从真实主机探测 distribution、
+version、architecture 和 codename。只有离线预览依赖这些 facts，或像 Debian 12 smoke 那样
+专门断言平台时才显式声明。Ubuntu 的发行版分派离线 plan 需要完整四元组。
 
 只有需要覆盖连接名、端口、identity file 或 state 路径时，才写 `ssh` 或 `state` block。
 
@@ -165,6 +168,7 @@ dbf check
 
 - `ssh: connect ...`：先用普通 `ssh server1` 排查网络、SSH config、密钥和 root 登录权限。
 - `offline plan cannot resolve runtime facts`：当前配置依赖远端 facts。改用在线 plan，
-  或在 fixture 中显式声明 `platform.architecture` / `platform.codename`。
+  或在 fixture 中显式声明所需的 `platform.distribution` / `platform.version` /
+  `platform.architecture` / `platform.codename`。
 - `remote state does not match configuration`：`check` 检测到 drift 或尚未 apply 的
   变更。先读 plan，再决定 apply、修正配置或恢复远端状态。

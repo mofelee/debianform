@@ -1,7 +1,7 @@
 # 10. Native Provider 与资源实现
 
-本章解释 `NativeProvider` 如何把 graph node 转成 Debian 主机上的实际观测和修改。provider 是最接近
-操作系统的一层。
+本章解释 `NativeProvider` 如何把 graph node 转成受支持目标主机上的实际观测和修改。
+provider 是最接近操作系统的一层。
 
 ## 数据流
 
