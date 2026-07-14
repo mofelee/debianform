@@ -214,16 +214,17 @@ rm -f /etc/netplan/*.yaml
 systemctl enable systemd-networkd.service
 sync
 systemctl reboot' >/dev/null 2>&1 || true
-  deadline=$((SECONDS + 300))
+  deadline=$((SECONDS + 330))
   while (( SECONDS < deadline )); do
     current="$(ssh_host "$alias" cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)"
     if [[ -n "$current" && "$current" != "$boot_id" ]]; then
-      ssh_host "$alias" 'systemctl is-active --quiet systemd-networkd.service && test -z "$(find /etc/netplan -maxdepth 1 -type f -name "*.yaml" -print -quit 2>/dev/null)" && test -z "$(find /run/systemd/network -maxdepth 1 -type f -name "*netplan*" -print -quit 2>/dev/null)" && ip route show default | grep -q .'
-      return
+      if ssh_host "$alias" 'systemctl is-active --quiet systemd-networkd.service && test -z "$(find /etc/netplan -maxdepth 1 -type f -name "*.yaml" -print -quit 2>/dev/null)" && test -z "$(find /run/systemd/network -maxdepth 1 -type f -name "*netplan*" -print -quit 2>/dev/null)" && ip route show default | grep -q .'; then
+        return
+      fi
     fi
     sleep 3
   done
-  fail "native-networkd fixture $alias did not return after reboot"
+  fail "native-networkd fixture $alias did not become ready after reboot"
 }
 
 dbf() {
