@@ -10,7 +10,7 @@ host "cihost" {
   }
   platform {
     architecture = "amd64"
-    codename     = "__DBF_DEBIAN_CODENAME__"
+    codename     = "__DBF_TARGET_CODENAME__"
   }
   components = [component.wan_network, component.policy_route]
 }

@@ -13,4 +13,4 @@ assert_remote "shadowsocks-rust listens on TCP port 18388" \
 assert_remote "shadowsocks-rust state records artifact install and service resources" \
   "grep -F 'host.cihost.components.shadowsocks_rust.artifact.install[\\\"/usr/local/bin/ssserver\\\"]' /var/lib/debianform-integration/shadowsocks-rust-state.json && grep -F 'host.cihost.components.shadowsocks_rust.services.service[\\\"shadowsocks-rust\\\"]' /var/lib/debianform-integration/shadowsocks-rust-state.json"
 assert_remote "shadowsocks-rust runtime facts were discovered from the target host" \
-  "grep -F '\"architecture\": \"${DBF_INTEGRATION_DEBIAN_ARCHITECTURE}\"' /var/lib/debianform-integration/shadowsocks-rust-state.json && grep -F '\"codename\": \"${DBF_INTEGRATION_DEBIAN_CODENAME}\"' /var/lib/debianform-integration/shadowsocks-rust-state.json"
+  "grep -F '\"architecture\": \"${DBF_INTEGRATION_TARGET_ARCHITECTURE}\"' /var/lib/debianform-integration/shadowsocks-rust-state.json && grep -F '\"codename\": \"${DBF_INTEGRATION_TARGET_CODENAME}\"' /var/lib/debianform-integration/shadowsocks-rust-state.json"

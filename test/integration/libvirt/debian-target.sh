@@ -1,28 +1,24 @@
 #!/usr/bin/env bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/target.sh"
+
 dbf_integration_resolve_debian_target() {
   local version=13
   if (( $# > 0 )); then
     version=$1
   fi
+  if [[ "$version" != "12" && "$version" != "13" ]]; then
+    printf 'unsupported Debian integration version: %s (expected 12 or 13)\n' "$version" >&2
+    return 1
+  fi
+  dbf_integration_resolve_target "debian-$version"
 
-  case "$version" in
-    12)
-      DBF_INTEGRATION_DEBIAN_CODENAME="bookworm"
-      ;;
-    13)
-      DBF_INTEGRATION_DEBIAN_CODENAME="trixie"
-      ;;
-    *)
-      printf 'unsupported Debian integration version: %s (expected 12 or 13)\n' "$version" >&2
-      return 1
-      ;;
-  esac
-
-  DBF_INTEGRATION_DEBIAN_VERSION="$version"
-  DBF_INTEGRATION_DEBIAN_ARCHITECTURE="amd64"
-  DBF_INTEGRATION_DEBIAN_CLOUD_URL="https://cloud.debian.org/images/cloud/$DBF_INTEGRATION_DEBIAN_CODENAME/latest"
-  DBF_INTEGRATION_DEBIAN_CLOUD_IMAGE="debian-$version-genericcloud-amd64.qcow2"
+  DBF_INTEGRATION_DEBIAN_VERSION="$DBF_INTEGRATION_TARGET_VERSION"
+  DBF_INTEGRATION_DEBIAN_CODENAME="$DBF_INTEGRATION_TARGET_CODENAME"
+  DBF_INTEGRATION_DEBIAN_ARCHITECTURE="$DBF_INTEGRATION_TARGET_ARCHITECTURE"
+  DBF_INTEGRATION_DEBIAN_CLOUD_URL="$DBF_INTEGRATION_TARGET_CLOUD_URL"
+  DBF_INTEGRATION_DEBIAN_CLOUD_IMAGE="$DBF_INTEGRATION_TARGET_CLOUD_IMAGE"
 
   export DBF_INTEGRATION_DEBIAN_VERSION
   export DBF_INTEGRATION_DEBIAN_CODENAME

@@ -5,18 +5,22 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SCRIPT_DIR="$ROOT_DIR/test/integration/libvirt"
 CASES_DIR="$SCRIPT_DIR/cases"
-source "$SCRIPT_DIR/debian-target.sh"
-if [[ -n "${DBF_INTEGRATION_DEBIAN_VERSION+x}" ]]; then
-  dbf_integration_resolve_debian_target "$DBF_INTEGRATION_DEBIAN_VERSION"
+source "$SCRIPT_DIR/target.sh"
+if [[ -n "${DBF_INTEGRATION_TARGET:-}" ]]; then
+  dbf_integration_resolve_target "$DBF_INTEGRATION_TARGET"
+elif [[ -n "${DBF_INTEGRATION_DEBIAN_VERSION+x}" ]]; then
+  dbf_integration_resolve_target "debian-$DBF_INTEGRATION_DEBIAN_VERSION"
 else
-  dbf_integration_resolve_debian_target
+  dbf_integration_resolve_target
 fi
-DEBIAN_CLOUD_URL="$DBF_INTEGRATION_DEBIAN_CLOUD_URL"
-DEBIAN_CLOUD_IMAGE="$DBF_INTEGRATION_DEBIAN_CLOUD_IMAGE"
+TARGET_CLOUD_URL="$DBF_INTEGRATION_TARGET_CLOUD_URL"
+TARGET_CLOUD_IMAGE="$DBF_INTEGRATION_TARGET_CLOUD_IMAGE"
+TARGET_CHECKSUM_FILE="$DBF_INTEGRATION_TARGET_CHECKSUM_FILE"
+TARGET_CHECKSUM_ALGORITHM="$DBF_INTEGRATION_TARGET_CHECKSUM_ALGORITHM"
 WORK_ROOT="${DBF_INTEGRATION_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/debianform-core-integration.XXXXXX")}"
 ARTIFACT_ROOT="${DBF_INTEGRATION_ARTIFACT_DIR:-${TMPDIR:-/tmp}/debianform-core-integration-artifacts}"
 DBF_BIN="$WORK_ROOT/dbf"
-BASE_IMAGE="$WORK_ROOT/$DEBIAN_CLOUD_IMAGE"
+BASE_IMAGE="$WORK_ROOT/$TARGET_CLOUD_IMAGE"
 
 log() {
   printf '[integration] %s\n' "$*"
@@ -41,7 +45,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for command in curl go python3 sha512sum ssh ssh-keygen virsh; do
+for command in curl go python3 "${TARGET_CHECKSUM_ALGORITHM}sum" ssh ssh-keygen virsh; do
   require_command "$command"
 done
 if [[ -z "${DBF_LIBVIRT_URI:-${VIRSH_DEFAULT_CONNECT_URI:-${LIBVIRT_DEFAULT_URI:-}}}" ]]; then
@@ -64,34 +68,34 @@ log "building dbf"
   go build -trimpath -o "$DBF_BIN" ./cmd/dbf
 )
 
-log "resolving Debian $DBF_INTEGRATION_DEBIAN_VERSION $DBF_INTEGRATION_DEBIAN_ARCHITECTURE genericcloud image"
+log "resolving $DBF_INTEGRATION_TARGET $DBF_INTEGRATION_TARGET_ARCHITECTURE cloud image"
 curl --fail --location --retry 3 --show-error --silent \
-  "$DEBIAN_CLOUD_URL/SHA512SUMS" \
-  --output "$WORK_ROOT/SHA512SUMS"
-EXPECTED_SHA512="$(
-  awk -v image="$DEBIAN_CLOUD_IMAGE" '$2 == image { print $1; exit }' \
-    "$WORK_ROOT/SHA512SUMS"
+  "$TARGET_CLOUD_URL/$TARGET_CHECKSUM_FILE" \
+  --output "$WORK_ROOT/$TARGET_CHECKSUM_FILE"
+EXPECTED_DIGEST="$(
+  awk -v image="$TARGET_CLOUD_IMAGE" '{ name=$2; sub(/^\*/, "", name); if (name == image) { print $1; exit } }' \
+    "$WORK_ROOT/$TARGET_CHECKSUM_FILE"
 )"
-test -n "$EXPECTED_SHA512"
+test -n "$EXPECTED_DIGEST"
 
 IMAGE_CACHE_DIR="${DBF_INTEGRATION_IMAGE_CACHE:-}"
-CACHED_IMAGE="${IMAGE_CACHE_DIR:+$IMAGE_CACHE_DIR/$DEBIAN_CLOUD_IMAGE}"
+CACHED_IMAGE="${IMAGE_CACHE_DIR:+$IMAGE_CACHE_DIR/$TARGET_CLOUD_IMAGE}"
 
 if [[ -n "$CACHED_IMAGE" && -f "$CACHED_IMAGE" ]] &&
-  printf '%s  %s\n' "$EXPECTED_SHA512" "$CACHED_IMAGE" | sha512sum --check --status; then
-  log "using cached Debian image from $IMAGE_CACHE_DIR"
+  printf '%s  %s\n' "$EXPECTED_DIGEST" "$CACHED_IMAGE" | "${TARGET_CHECKSUM_ALGORITHM}sum" --check --status; then
+  log "using cached $DBF_INTEGRATION_TARGET image from $IMAGE_CACHE_DIR"
   cp "$CACHED_IMAGE" "$BASE_IMAGE"
 else
-  log "downloading official Debian image"
+  log "downloading official $DBF_INTEGRATION_TARGET image"
   curl --fail --location --retry 3 --show-error --silent \
-    "$DEBIAN_CLOUD_URL/$DEBIAN_CLOUD_IMAGE" \
+    "$TARGET_CLOUD_URL/$TARGET_CLOUD_IMAGE" \
     --output "$BASE_IMAGE"
 fi
 
-printf '%s  %s\n' "$EXPECTED_SHA512" "$BASE_IMAGE" | sha512sum --check
+printf '%s  %s\n' "$EXPECTED_DIGEST" "$BASE_IMAGE" | "${TARGET_CHECKSUM_ALGORITHM}sum" --check
 
 if [[ -n "$CACHED_IMAGE" ]] &&
-  { [[ ! -f "$CACHED_IMAGE" ]] || ! printf '%s  %s\n' "$EXPECTED_SHA512" "$CACHED_IMAGE" | sha512sum --check --status; }; then
+  { [[ ! -f "$CACHED_IMAGE" ]] || ! printf '%s  %s\n' "$EXPECTED_DIGEST" "$CACHED_IMAGE" | "${TARGET_CHECKSUM_ALGORITHM}sum" --check --status; }; then
   mkdir -p "$IMAGE_CACHE_DIR"
   cp "$BASE_IMAGE" "$CACHED_IMAGE.partial"
   mv "$CACHED_IMAGE.partial" "$CACHED_IMAGE"
@@ -119,7 +123,7 @@ fi
 
 for case_dir in "${CASE_DIRS[@]}"; do
   case_name="$(basename "$case_dir")"
-  log "running case $case_name in a fresh Debian $DBF_INTEGRATION_DEBIAN_VERSION VM"
+  log "running case $case_name in a fresh $DBF_INTEGRATION_TARGET VM"
   runner="$SCRIPT_DIR/run-case.sh"
   if [[ -f "$case_dir/three-host.case" ]]; then
     runner="$SCRIPT_DIR/run-three-host-case.sh"
@@ -128,7 +132,8 @@ for case_dir in "${CASE_DIRS[@]}"; do
   fi
   DBF_INTEGRATION_DBF_BIN="$DBF_BIN" \
   DBF_INTEGRATION_BASE_IMAGE="$BASE_IMAGE" \
-  DBF_INTEGRATION_BASE_IMAGE_SHA512="$EXPECTED_SHA512" \
+  DBF_INTEGRATION_BASE_IMAGE_DIGEST="$EXPECTED_DIGEST" \
+  DBF_INTEGRATION_BASE_IMAGE_DIGEST_ALGORITHM="$TARGET_CHECKSUM_ALGORITHM" \
   DBF_INTEGRATION_CASE_WORK="$WORK_ROOT/cases/$case_name" \
   DBF_INTEGRATION_CASE_ARTIFACTS="$ARTIFACT_ROOT/$case_name" \
     "$runner" "$case_dir"

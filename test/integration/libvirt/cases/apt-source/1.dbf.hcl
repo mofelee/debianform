@@ -17,12 +17,12 @@ host "cihost" {
       content = <<-EOF
         Types: deb
         URIs: https://mirrors.aliyun.com/debian/
-        Suites: __DBF_DEBIAN_CODENAME__ __DBF_DEBIAN_CODENAME__-updates
+        Suites: __DBF_TARGET_CODENAME__ __DBF_TARGET_CODENAME__-updates
         Components: main contrib non-free non-free-firmware
 
         Types: deb
         URIs: https://mirrors.aliyun.com/debian-security/
-        Suites: __DBF_DEBIAN_CODENAME__-security
+        Suites: __DBF_TARGET_CODENAME__-security
         Components: main contrib non-free non-free-firmware
       EOF
 

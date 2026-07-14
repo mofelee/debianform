@@ -1,0 +1,1 @@
+Ubuntu runs this case only after the test fixture removes Netplan ownership and reboots onto a persistent native systemd-networkd uplink.

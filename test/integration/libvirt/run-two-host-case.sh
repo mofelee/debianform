@@ -7,12 +7,15 @@ CASE_SOURCE="${1:?usage: run-two-host-case.sh CASE_DIR}"
 CASE_NAME="$(basename "$CASE_SOURCE")"
 DBF_BIN="${DBF_INTEGRATION_DBF_BIN:?missing DBF_INTEGRATION_DBF_BIN}"
 BASE_IMAGE="${DBF_INTEGRATION_BASE_IMAGE:?missing DBF_INTEGRATION_BASE_IMAGE}"
-BASE_IMAGE_SHA512="${DBF_INTEGRATION_BASE_IMAGE_SHA512:?missing DBF_INTEGRATION_BASE_IMAGE_SHA512}"
+BASE_IMAGE_DIGEST="${DBF_INTEGRATION_BASE_IMAGE_DIGEST:?missing DBF_INTEGRATION_BASE_IMAGE_DIGEST}"
+BASE_IMAGE_DIGEST_ALGORITHM="${DBF_INTEGRATION_BASE_IMAGE_DIGEST_ALGORITHM:?missing DBF_INTEGRATION_BASE_IMAGE_DIGEST_ALGORITHM}"
 CASE_WORK="${DBF_INTEGRATION_CASE_WORK:?missing DBF_INTEGRATION_CASE_WORK}"
 ARTIFACT_DIR="${DBF_INTEGRATION_CASE_ARTIFACTS:?missing DBF_INTEGRATION_CASE_ARTIFACTS}"
-EXPECTED_DEBIAN_VERSION="${DBF_INTEGRATION_DEBIAN_VERSION:?missing DBF_INTEGRATION_DEBIAN_VERSION}"
-EXPECTED_DEBIAN_CODENAME="${DBF_INTEGRATION_DEBIAN_CODENAME:?missing DBF_INTEGRATION_DEBIAN_CODENAME}"
-EXPECTED_DEBIAN_ARCHITECTURE="${DBF_INTEGRATION_DEBIAN_ARCHITECTURE:?missing DBF_INTEGRATION_DEBIAN_ARCHITECTURE}"
+EXPECTED_DISTRIBUTION="${DBF_INTEGRATION_TARGET_DISTRIBUTION:?missing DBF_INTEGRATION_TARGET_DISTRIBUTION}"
+EXPECTED_VERSION="${DBF_INTEGRATION_TARGET_VERSION:?missing DBF_INTEGRATION_TARGET_VERSION}"
+EXPECTED_CODENAME="${DBF_INTEGRATION_TARGET_CODENAME:?missing DBF_INTEGRATION_TARGET_CODENAME}"
+EXPECTED_ARCHITECTURE="${DBF_INTEGRATION_TARGET_ARCHITECTURE:?missing DBF_INTEGRATION_TARGET_ARCHITECTURE}"
+TARGET_SLUG="${DBF_INTEGRATION_TARGET_SLUG:?missing DBF_INTEGRATION_TARGET_SLUG}"
 CASE_DIR="$CASE_WORK/scenario"
 LOG_DIR="$CASE_WORK/logs"
 DBF_HOME="$CASE_WORK/home"
@@ -33,9 +36,9 @@ VM_B_CONSOLE="$CASE_WORK/console-b.log"
 
 RUN_SUFFIX="${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-1}-${RANDOM}"
 SAFE_CASE_NAME="$(tr -c 'a-zA-Z0-9' '-' <<<"$CASE_NAME" | sed 's/-*$//')"
-VM_A_NAME="dbf-test-debian${EXPECTED_DEBIAN_VERSION}-${SAFE_CASE_NAME}-a-${RUN_SUFFIX}"
-VM_B_NAME="dbf-test-debian${EXPECTED_DEBIAN_VERSION}-${SAFE_CASE_NAME}-b-${RUN_SUFFIX}"
-NETWORK_NAME="dbf-test-debian${EXPECTED_DEBIAN_VERSION}-${SAFE_CASE_NAME}-${RUN_SUFFIX}-net"
+VM_A_NAME="dbf-test-${TARGET_SLUG}-${SAFE_CASE_NAME}-a-${RUN_SUFFIX}"
+VM_B_NAME="dbf-test-${TARGET_SLUG}-${SAFE_CASE_NAME}-b-${RUN_SUFFIX}"
+NETWORK_NAME="dbf-test-${TARGET_SLUG}-${SAFE_CASE_NAME}-${RUN_SUFFIX}-net"
 BRIDGE_NAME=""
 SUBNET_OCTET=""
 printf -v VM_A_MAC '52:54:00:%02x:%02x:%02x' \
@@ -137,12 +140,12 @@ emulator_path() {
 
 sync_remote_base_image() {
   local remote_sha=""
-  remote_sha="$(remote_exec sha512sum "$REMOTE_BASE_IMAGE" 2>/dev/null | awk '{print $1}')" || true
-  if [[ "$remote_sha" == "$BASE_IMAGE_SHA512" ]]; then
+  remote_sha="$(remote_exec "${BASE_IMAGE_DIGEST_ALGORITHM}sum" "$REMOTE_BASE_IMAGE" 2>/dev/null | awk '{print $1}')" || true
+  if [[ "$remote_sha" == "$BASE_IMAGE_DIGEST" ]]; then
     return
   fi
 
-  log "copying verified Debian base image to $REMOTE_HYPERVISOR:$REMOTE_BASE_IMAGE"
+  log "copying verified $DBF_INTEGRATION_TARGET base image to $REMOTE_HYPERVISOR:$REMOTE_BASE_IMAGE"
   local partial="$REMOTE_TMP_DIR/base-image.partial"
   scp -q "$BASE_IMAGE" "$REMOTE_HYPERVISOR:$partial"
   remote_exec chmod 0644 "$partial"
@@ -162,7 +165,7 @@ prepare_vm_paths() {
   VM_B_DISK="$pool_dir/$VM_B_NAME.qcow2"
   VM_B_SEED="$pool_dir/$VM_B_NAME-seed.img"
   VM_B_CONSOLE="$pool_dir/$VM_B_NAME-console.log"
-  REMOTE_TMP_DIR="$pool_dir/.dbf-test-debian${EXPECTED_DEBIAN_VERSION}-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
+  REMOTE_TMP_DIR="$pool_dir/.dbf-test-${TARGET_SLUG}-${SAFE_CASE_NAME}-${RUN_SUFFIX}"
   if [[ -z "$REMOTE_BASE_IMAGE" ]]; then
     REMOTE_BASE_IMAGE="$pool_dir/$(basename "$BASE_IMAGE")"
   fi
@@ -191,6 +194,36 @@ ssh_host() {
     -o BatchMode=yes \
     -o ConnectTimeout=5 \
     "$host" "$@"
+}
+
+prepare_native_networkd_host() {
+  local alias=$1
+  if [[ "$EXPECTED_DISTRIBUTION" != "ubuntu" || ! -f "$CASE_SOURCE/native-networkd.case" ]]; then
+    return
+  fi
+  local boot_id deadline current
+  boot_id="$(ssh_host "$alias" cat /proc/sys/kernel/random/boot_id)"
+  log "preparing explicit native-networkd Ubuntu fixture on $alias"
+  ssh_host "$alias" 'set -eu
+iface="$(ip -o route show default | awk "NR == 1 { print \$5 }")"
+test -n "$iface"
+install -d -m 0755 /etc/systemd/network /etc/cloud/cloud.cfg.d
+printf "[Match]\nName=%s\n\n[Network]\nDHCP=yes\nIPv6AcceptRA=yes\n" "$iface" > /etc/systemd/network/10-dbf-uplink.network
+printf "network: {config: disabled}\n" > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+rm -f /etc/netplan/*.yaml
+systemctl enable systemd-networkd.service
+sync
+systemctl reboot' >/dev/null 2>&1 || true
+  deadline=$((SECONDS + 300))
+  while (( SECONDS < deadline )); do
+    current="$(ssh_host "$alias" cat /proc/sys/kernel/random/boot_id 2>/dev/null || true)"
+    if [[ -n "$current" && "$current" != "$boot_id" ]]; then
+      ssh_host "$alias" 'systemctl is-active --quiet systemd-networkd.service && test -z "$(find /etc/netplan -maxdepth 1 -type f -name "*.yaml" -print -quit 2>/dev/null)" && test -z "$(find /run/systemd/network -maxdepth 1 -type f -name "*netplan*" -print -quit 2>/dev/null)" && ip route show default | grep -q .'
+      return
+    fi
+    sleep 3
+  done
+  fail "native-networkd fixture $alias did not return after reboot"
 }
 
 dbf() {
@@ -467,7 +500,7 @@ EMULATOR_PATH="$(emulator_path)"
 write_domain "$VM_A_NAME" "$VM_A_DISK" "$VM_A_SEED" "$VM_A_MAC" "$VM_A_CONSOLE" "$VM_A_DOMAIN"
 write_domain "$VM_B_NAME" "$VM_B_DISK" "$VM_B_SEED" "$VM_B_MAC" "$VM_B_CONSOLE" "$VM_B_DOMAIN"
 
-log "starting fresh Debian VMs using $VIRT_TYPE"
+log "starting fresh $DBF_INTEGRATION_TARGET VMs using $VIRT_TYPE"
 dbf_integration_start_network "$CASE_WORK/network.xml"
 virsh_system define "$VM_A_DOMAIN" >/dev/null
 VM_A_DEFINED=1
@@ -512,8 +545,10 @@ wait_for_ssh wg-a
 wait_for_ssh wg-b
 ssh_host wg-a "cloud-init status --wait >/dev/null && test -e /run/debianform-cloud-init-ready"
 ssh_host wg-b "cloud-init status --wait >/dev/null && test -e /run/debianform-cloud-init-ready"
-ssh_host wg-a ". /etc/os-release && test \"\$ID\" = debian && test \"\$VERSION_ID\" = '$EXPECTED_DEBIAN_VERSION' && test \"\${VERSION_CODENAME:-}\" = '$EXPECTED_DEBIAN_CODENAME' && test \"\$(dpkg --print-architecture)\" = '$EXPECTED_DEBIAN_ARCHITECTURE'"
-ssh_host wg-b ". /etc/os-release && test \"\$ID\" = debian && test \"\$VERSION_ID\" = '$EXPECTED_DEBIAN_VERSION' && test \"\${VERSION_CODENAME:-}\" = '$EXPECTED_DEBIAN_CODENAME' && test \"\$(dpkg --print-architecture)\" = '$EXPECTED_DEBIAN_ARCHITECTURE'"
+ssh_host wg-a ". /etc/os-release && test \"\$ID\" = '$EXPECTED_DISTRIBUTION' && test \"\$VERSION_ID\" = '$EXPECTED_VERSION' && test \"\${VERSION_CODENAME:-\${UBUNTU_CODENAME:-}}\" = '$EXPECTED_CODENAME' && test \"\$(dpkg --print-architecture)\" = '$EXPECTED_ARCHITECTURE'"
+ssh_host wg-b ". /etc/os-release && test \"\$ID\" = '$EXPECTED_DISTRIBUTION' && test \"\$VERSION_ID\" = '$EXPECTED_VERSION' && test \"\${VERSION_CODENAME:-\${UBUNTU_CODENAME:-}}\" = '$EXPECTED_CODENAME' && test \"\$(dpkg --print-architecture)\" = '$EXPECTED_ARCHITECTURE'"
+prepare_native_networkd_host wg-a
+prepare_native_networkd_host wg-b
 
 DBF_WG_A_HOST="$VM_A_IP"
 DBF_WG_B_HOST="$VM_B_IP"
@@ -528,7 +563,7 @@ while IFS= read -r config; do
     -e "s/__DBF_WG_A_VM_IP__/$VM_A_IP/g" \
     -e "s/__DBF_WG_B_VM_IP__/$VM_B_IP/g" \
     -e "s/__DBF_VM_IP__/$DBF_WG_A_HOST/g" \
-    -e "s/__DBF_DEBIAN_CODENAME__/$EXPECTED_DEBIAN_CODENAME/g" \
+    -e "s/__DBF_TARGET_CODENAME__/$EXPECTED_CODENAME/g" \
     "$config"
 done < <(find "$CASE_DIR" -maxdepth 3 -type f \( -name '[0-9]*.dbf.hcl' -o -name '*.conf' -o -name '*.sh' \))
 

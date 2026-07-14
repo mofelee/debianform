@@ -31,6 +31,7 @@ fi
 bash -n "$ROOT_DIR/test/integration/libvirt/run-case.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/run-two-host-case.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/run-three-host-case.sh"
+bash -n "$ROOT_DIR/test/integration/libvirt/target.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/debian-target.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/network.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
@@ -38,16 +39,41 @@ bash "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
 
 target_12="$(bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 12)"
 target_13="$(bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 13)"
+target_ubuntu="$(bash "$ROOT_DIR/test/integration/libvirt/target.sh" ubuntu-24.04)"
 grep -qx 'codename=bookworm' <<<"$target_12"
 grep -qx 'cloud_image=debian-12-genericcloud-amd64.qcow2' <<<"$target_12"
 grep -qx 'codename=trixie' <<<"$target_13"
 grep -qx 'cloud_image=debian-13-genericcloud-amd64.qcow2' <<<"$target_13"
+grep -qx 'distribution=ubuntu' <<<"$target_ubuntu"
+grep -qx 'version=24.04' <<<"$target_ubuntu"
+grep -qx 'codename=noble' <<<"$target_ubuntu"
+grep -qx 'cloud_image=noble-server-cloudimg-amd64.img' <<<"$target_ubuntu"
+grep -qx 'checksum_algorithm=sha256' <<<"$target_ubuntu"
 if bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 11 >/dev/null 2>&1; then
   printf 'debian-target.sh unexpectedly accepted Debian 11\n' >&2
   exit 1
 fi
 if bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" "" >/dev/null 2>&1; then
   printf 'debian-target.sh unexpectedly accepted an empty Debian version\n' >&2
+  exit 1
+fi
+if bash "$ROOT_DIR/test/integration/libvirt/target.sh" ubuntu-22.04 >/dev/null 2>&1; then
+  printf 'target.sh unexpectedly accepted Ubuntu 22.04\n' >&2
+  exit 1
+fi
+
+for case_name in shared-script-networkd wireguard wireguard-three-host; do
+  test -f "$CASES_DIR/$case_name/native-networkd.case"
+done
+if find "$CASES_DIR" -mindepth 2 -maxdepth 2 -name native-networkd.case -printf '%h\n' |
+  sed 's#.*/##' | sort | diff -u - <(printf '%s\n' shared-script-networkd wireguard wireguard-three-host | sort); then
+  :
+else
+  printf 'native-networkd markers do not match the three planned cases\n' >&2
+  exit 1
+fi
+if grep -R -n -E 'DBF_INTEGRATION_DEBIAN|__DBF_DEBIAN' "$CASES_DIR"; then
+  printf 'case fixtures still contain Debian-specific target variables\n' >&2
   exit 1
 fi
 

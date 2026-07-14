@@ -5,6 +5,8 @@ BINDIR ?= $(PREFIX)/bin
 DATADIR ?= $(PREFIX)/share/debianform
 GOVULNCHECK_VERSION ?= v1.4.0
 DEBIAN_VERSION ?= 13
+TARGET ?=
+INTEGRATION_TARGET = $(if $(strip $(TARGET)),$(TARGET),debian-$(DEBIAN_VERSION))
 DESTDIR ?=
 INSTALL ?= install
 VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || echo dev)
@@ -42,11 +44,11 @@ update-golden:
 	UPDATE_GOLDEN=1 go test ./...
 
 test-integration:
-	DBF_INTEGRATION_DEBIAN_VERSION="$(DEBIAN_VERSION)" ./test/integration/libvirt/run.sh
+	DBF_INTEGRATION_TARGET="$(INTEGRATION_TARGET)" ./test/integration/libvirt/run.sh
 
 test-integration-case:
 	@test -n "$(CASE)" || (echo "CASE is required, for example: make test-integration-case CASE=files" >&2; exit 1)
-	DBF_INTEGRATION_DEBIAN_VERSION="$(DEBIAN_VERSION)" DBF_INTEGRATION_CASE="$(CASE)" ./test/integration/libvirt/run.sh
+	DBF_INTEGRATION_TARGET="$(INTEGRATION_TARGET)" DBF_INTEGRATION_CASE="$(CASE)" ./test/integration/libvirt/run.sh
 
 test-integration-layout:
 	./test/integration/libvirt/validate-cases.sh
