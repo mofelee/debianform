@@ -4,7 +4,7 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
-## Unreleased
+## v0.7.0
 
 - Added Ubuntu 24.04 LTS (`noble`) amd64 as a Preview managed target with an
   independent blocking 20-case libvirt matrix; Debian 13 remains the primary
@@ -18,6 +18,9 @@ This project follows semantic versioning after the public beta line begins.
 - Added an Ubuntu Preview quickstart and runnable example. This compatibility
   addition does not change existing resource addresses, plan format, state
   schema, or Debian offline defaults.
+- Fixed graph ordering for component file sources so a managed source file is
+  applied before another component reads it as input.
+- Updated `golang.org/x/sync` from 0.14.0 to 0.22.0.
 
 ## v0.6.0
 
