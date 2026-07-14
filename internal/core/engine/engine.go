@@ -53,6 +53,10 @@ type HostPlanner interface {
 	PlanHost(ctx context.Context, host ir.HostSpec, nodes []graph.Node, priors map[string]*corestate.Resource) (map[string]ProviderPlan, error)
 }
 
+type HostPreflighter interface {
+	PreflightHost(ctx context.Context, host ir.HostSpec, nodes []graph.Node) error
+}
+
 type ProviderPlan struct {
 	Action    string
 	Summary   string
@@ -163,6 +167,10 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 		priorsByHost[host.Name][node.Address] = prior
 	}
 
+	if err := e.preflightHosts(ctx, selectedHosts, parallel, nodesByHost); err != nil {
+		return Plan{}, err
+	}
+
 	providerPlans, err := e.planNodes(ctx, selectedHosts, parallel, nodes, nodesByHost, priorsByHost, progress)
 	if err != nil {
 		return Plan{}, err
@@ -256,6 +264,20 @@ func (e Engine) planNodes(ctx context.Context, hosts []ir.HostSpec, parallel int
 		plans[node.Address] = providerPlan
 	}
 	return plans, nil
+}
+
+func (e Engine) preflightHosts(ctx context.Context, hosts []ir.HostSpec, parallel int, nodesByHost map[string][]graph.Node) error {
+	preflighter, ok := e.Provider.(HostPreflighter)
+	if !ok {
+		return nil
+	}
+	return runHosts(ctx, hosts, parallel, func(ctx context.Context, host ir.HostSpec) error {
+		nodes := nodesByHost[host.Name]
+		if len(nodes) == 0 {
+			return nil
+		}
+		return preflighter.PreflightHost(ctx, host, nodes)
+	})
 }
 
 func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options) (Plan, error) {
