@@ -19,6 +19,8 @@
 - [支持矩阵](support-matrix.zh.md)：当前支持的平台、配置 block、resource 类型和示例状态。
 - [Ubuntu 24.04 支持契约](ubuntu-24.04-support-contract.zh.md)：Preview 范围、排除项、
   Netplan ownership 边界和三套目标矩阵证据。
+- [Ubuntu 26.04 实施契约](ubuntu-26.04-support-contract.zh.md)：计划中的 Preview tuple、
+  版本差异边界和四套目标矩阵 gate；完整证据交付前仍为 Unsupported。
 - [安全模型](security-model.zh.md)：root SSH、secret 脱敏、state/lock 和漏洞响应边界。
 - [兼容性政策](compatibility-policy.zh.md)：beta/stable 的 CLI、DSL、state 和 plan JSON 兼容规则。
 - [系统如何工作](how-it-works/README.zh.md)：面向后续开发者的内部架构和实现链路系列教程。

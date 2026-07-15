@@ -73,6 +73,11 @@ Ubuntu 24.04 LTS (`noble`) amd64 的 Preview 边界：
 [Ubuntu 24.04 支持契约](ubuntu-24.04-support-contract.zh.md)。Preview 提升到 Beta 不能只依据
 一次绿色矩阵；还要求持续阻断 CI、release 验证、无未解决高风险反馈和显式支持等级决策。
 
+Ubuntu 26.04 LTS amd64 的计划边界见
+[Ubuntu 26.04 实施契约](ubuntu-26.04-support-contract.zh.md)。在精确 platform tuple、released
+image baseline、20-case 独立门禁和文档证据全部交付前，它仍为 Unsupported，不能从 24.04
+的矩阵推导支持。
+
 ### 更早版本
 
 Debian 11 或更早版本当前不进入支持承诺。主要原因：
