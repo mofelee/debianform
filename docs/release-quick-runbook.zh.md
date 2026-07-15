@@ -29,7 +29,7 @@
    git diff --check
    ```
 
-5. 确认 release commit 的两个 target CI gates 通过：
+5. 确认 release commit 的三个 target CI gates 通过：
 
    ```bash
    SHA="$(git rev-parse HEAD)"
@@ -38,10 +38,11 @@
    gh run view <ci-run-id>
    ```
 
-   必须确认同一提交上的 Ubuntu 24.04 LTS amd64、Debian 12 amd64、Debian 13 amd64 均为
-   20/20，且 `Ubuntu 24.04 target matrix gate` 与 `Managed target matrix gate` 都成功。把三个
-   目标各自的结果、exact commit 和 CI run URL 分开写入 release notes；不能只记录一个合并后的
-   “libvirt passed”。
+   必须确认同一提交上的 Ubuntu 24.04 LTS amd64、Ubuntu 26.04 LTS amd64、Debian 12 amd64、
+   Debian 13 amd64 均为 20/20，且 `Ubuntu 24.04 target matrix gate`、
+   `Ubuntu 26.04 target matrix gate` 与 `Managed target matrix gate` 都成功。把四个目标各自的
+   结果、exact commit 和 CI run URL 分开写入 release notes；同时记录 26.04 released-image URL
+   和 SHA-256，不能只写一个合并后的“libvirt passed”。
 
 6. 触发 dry-run workflow，并确认通过：
 

@@ -8,6 +8,8 @@
 - [Quickstart](quickstart.zh.md)：从安装到第一次 `apply/check` 的最短路径。
 - [Ubuntu 24.04 Preview Quickstart](ubuntu-24.04-quickstart.zh.md)：Ubuntu 24.04 LTS amd64 的
   root SSH、platform facts、plan/apply/no-op/check 首跑路径。
+- [Ubuntu 26.04 Preview Quickstart](ubuntu-26.04-quickstart.zh.md)：Ubuntu 26.04 LTS amd64 的
+  `resolute` 完整 tuple、root SSH 和 plan/apply/no-op/check 首跑路径。
 - [用户手册](user-manual/README.zh.md)：由浅入深的可运行教程，覆盖常见运维任务。
 - [CLI 手册](cli.zh.md)：`validate`、`plan`、`apply`、`check`、`fmt` 和 inspect 命令。
 - [DSL Reference](dsl-reference.zh.md)：`.dbf.hcl` 已实现指令、字段、默认值、限制和可测试示例。
@@ -17,10 +19,10 @@
 ## 日常查阅
 
 - [支持矩阵](support-matrix.zh.md)：当前支持的平台、配置 block、resource 类型和示例状态。
-- [Ubuntu 24.04 支持契约](ubuntu-24.04-support-contract.zh.md)：Preview 范围、排除项、
-  Netplan ownership 边界和三套目标矩阵证据。
-- [Ubuntu 26.04 实施契约](ubuntu-26.04-support-contract.zh.md)：计划中的 Preview tuple、
-  版本差异边界和四套目标矩阵 gate；完整证据交付前仍为 Unsupported。
+- [Ubuntu 24.04 支持契约](ubuntu-24.04-support-contract.zh.md)：24.04 Preview 范围、排除项、
+  Netplan ownership 边界和独立门禁。
+- [Ubuntu 26.04 支持契约](ubuntu-26.04-support-contract.zh.md)：26.04 Preview tuple、版本差异、
+  released-image 证据和四套目标矩阵 gate。
 - [安全模型](security-model.zh.md)：root SSH、secret 脱敏、state/lock 和漏洞响应边界。
 - [兼容性政策](compatibility-policy.zh.md)：beta/stable 的 CLI、DSL、state 和 plan JSON 兼容规则。
 - [系统如何工作](how-it-works/README.zh.md)：面向后续开发者的内部架构和实现链路系列教程。

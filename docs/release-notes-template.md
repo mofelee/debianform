@@ -16,7 +16,8 @@ section after post-release verification jobs finish.
 - Supported CLI platforms: <linux/amd64, linux/arm64, darwin/amd64, darwin/arm64>.
 - Primary managed target: Debian 13 amd64.
 - Additional Beta managed target: Debian 12 amd64.
-- Preview managed targets: Ubuntu 24.04 LTS amd64, Debian 12 arm64, and Debian 13 arm64.
+- Preview managed targets: Ubuntu 24.04 LTS amd64, Ubuntu 26.04 LTS amd64,
+  Debian 12 arm64, and Debian 13 arm64.
 - DSL/state/plan JSON compatibility: <compatible | breaking | beta-limited>.
 
 ## Breaking Changes
@@ -56,8 +57,8 @@ section after post-release verification jobs finish.
 
 - CLI artifacts: <list built artifacts or link to assets>.
 - Managed targets: Debian 13 amd64 (primary Beta), Debian 12 amd64 (Beta),
-  Ubuntu 24.04 LTS amd64 (Preview), Debian 12/13 arm64 (Preview); other Ubuntu
-  tuples, desktop environments, Debian 11 and earlier are Unsupported.
+  Ubuntu 24.04/26.04 LTS amd64 (Preview), Debian 12/13 arm64 (Preview); other
+  Ubuntu tuples, desktop environments, Debian 11 and earlier are Unsupported.
 - Ubuntu network boundary: DebianForm does not manage or migrate Netplan;
   networkd requires an operator-prepared native-networkd target.
 - Install paths: <curl/Homebrew/.deb/apt support status>.
@@ -74,12 +75,16 @@ section after post-release verification jobs finish.
   - `make test-integration-layout`: <pass | fail | skipped with reason>
 - Managed-target CI evidence for this commit:
   - Ubuntu 24.04 LTS amd64 libvirt matrix (20/20): <pass | fail; CI run URL>
+  - Ubuntu 26.04 LTS amd64 libvirt matrix (20/20): <pass | fail; CI run URL>
   - Debian 12 amd64 libvirt matrix (20/20): <pass | fail; CI run URL>
   - Debian 13 amd64 libvirt matrix (20/20): <pass | fail; CI run URL>
   - `Ubuntu 24.04 target matrix gate`: <pass | fail; CI run URL>
+  - `Ubuntu 26.04 target matrix gate`: <pass | fail; CI run URL>
   - `Managed target matrix gate`: <pass | fail; CI run URL>
+  - Ubuntu 26.04 released image URL and SHA-256: <URL; digest>
 - Optional local managed-target checks:
   - `make test-integration TARGET=ubuntu-24.04`: <pass | fail | skipped with reason>
+  - `make test-integration TARGET=ubuntu-26.04`: <pass | fail | skipped with reason>
   - `make test-integration DEBIAN_VERSION=12`: <pass | fail | skipped with reason>
   - `make test-integration DEBIAN_VERSION=13`: <pass | fail | skipped with reason>
 - Release workflow: <workflow run URL>.
@@ -112,9 +117,9 @@ Before creating the release tag, check that:
   generated matrix.
 - `Migration Notes` explains required user action, including state handling and
   rollback guidance for breaking releases.
-- Ubuntu 24.04, Debian 12, and Debian 13 managed-target evidence is listed
-  separately as `20/20`, points to the release commit's CI run, and both
-  aggregate gates passed.
+- Ubuntu 24.04, Ubuntu 26.04, Debian 12, and Debian 13 managed-target evidence
+  is listed separately as `20/20`, points to the release commit's CI run, and
+  all three aggregate gates passed. Record the 26.04 released-image URL and digest.
 - The release notes do not use stable/GA/production-ready language unless the
   release has passed the stable gates in
   [project maturity checklist](archive/legacy-design/project-maturity-and-launch-checklist.zh.md).

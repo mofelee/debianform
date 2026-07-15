@@ -23,8 +23,9 @@ It turns common server configuration into readable, auditable, and repeatable HC
 - Keep `.dbf.hcl` direct enough for people to read and for LLMs to generate and modify.
 
 The project is currently in public preview / beta. Debian 13 amd64 is the highest-priority target,
-Debian 12 amd64 has Beta support, and Ubuntu 24.04 LTS amd64 is in Preview. Start with a low-risk test
-host. The CLI, configuration format, state, and plan JSON may still change before the stable release.
+Debian 12 amd64 has Beta support, and Ubuntu 24.04 and 26.04 LTS amd64 are separately gated Preview
+targets. Start with a low-risk test host. The CLI, configuration format, state, and plan JSON may still
+change before the stable release.
 
 <p align="center">
   <img src="./docs/demo/debianform-quickstart.svg" alt="DebianForm quickstart terminal demo" width="820">
@@ -175,9 +176,10 @@ This covers the complete workflow:
 - The second `plan`: should be a no-op.
 - `check`: detect remote drift and return a non-zero status when the host differs.
 
-For a more complete Debian tutorial, see the [Quickstart](docs/quickstart.zh.md) (Chinese). For Ubuntu
-24.04 LTS amd64, start with the [Ubuntu Preview Quickstart](docs/ubuntu-24.04-quickstart.zh.md)
-(Chinese). Continue with the [User Manual](docs/user-manual/README.zh.md) (Chinese). See
+For a more complete Debian tutorial, see the [Quickstart](docs/quickstart.zh.md) (Chinese). Ubuntu
+Preview quickstarts are available separately for [24.04 LTS amd64](docs/ubuntu-24.04-quickstart.zh.md)
+and [26.04 LTS amd64](docs/ubuntu-26.04-quickstart.zh.md) (Chinese). Continue with the
+[User Manual](docs/user-manual/README.zh.md) (Chinese). See
 [`examples/shadowsocks-rust.dbf.hcl`](examples/shadowsocks-rust.dbf.hcl) for the complete
 multi-architecture, least-privilege version.
 
@@ -398,6 +400,8 @@ dbf validate -f examples/debian12-amd64.dbf.hcl
 dbf plan -f examples/debian12-amd64.dbf.hcl --offline
 dbf validate -f examples/ubuntu-24.04-preview.dbf.hcl
 dbf plan -f examples/ubuntu-24.04-preview.dbf.hcl --offline
+dbf validate -f examples/ubuntu-26.04-preview.dbf.hcl
+dbf plan -f examples/ubuntu-26.04-preview.dbf.hcl --offline
 dbf validate -f examples/shadowsocks-rust.dbf.hcl
 dbf validate -f examples/realistic-systemd-app.dbf.hcl
 dbf plan -f examples/realistic-systemd-app.dbf.hcl --offline
@@ -429,6 +433,7 @@ Runnable examples covered by this README:
 - `examples/shadowsocks-rust.dbf.hcl`
 - `examples/systemd-service.dbf.hcl`
 - `examples/ubuntu-24.04-preview.dbf.hcl`
+- `examples/ubuntu-26.04-preview.dbf.hcl`
 - `examples/user-group.dbf.hcl`
 - `examples/variable-secret-file.dbf.hcl`
 
@@ -440,8 +445,8 @@ See the [Support Matrix](docs/support-matrix.zh.md) (Chinese) for complete examp
 - Debian 13 amd64 is currently the highest-priority managed target.
 - Debian 12 amd64 is in Beta and joins Debian 13 amd64 in the blocking libvirt CI matrix. Debian 12
   arm64 remains in Preview.
-- Ubuntu 24.04 LTS amd64 is in Preview with its own blocking 20-case matrix. Other Ubuntu releases,
-  Ubuntu arm64, and desktop environments are unsupported.
+- Ubuntu 24.04 and 26.04 LTS amd64 are Preview targets with separate blocking 20-case matrices and
+  gates. Other Ubuntu releases, Ubuntu arm64, and desktop environments are unsupported.
 - DebianForm does not manage Netplan or NetworkManager. Networkd configuration on Ubuntu requires an
   operator-prepared native-networkd target; ordinary non-network resources are unaffected.
 - Debian 11 and earlier releases are unsupported.
@@ -460,8 +465,10 @@ see the [Security Model](docs/security-model.zh.md) (Chinese).
 The detailed documentation linked below is currently available in Chinese:
 
 - [Quickstart](docs/quickstart.zh.md): from installation to the first `apply` / `check` on Debian.
-- [Ubuntu Preview Quickstart](docs/ubuntu-24.04-quickstart.zh.md): a safe first run on Ubuntu 24.04 LTS
-  amd64.
+- [Ubuntu 24.04 Preview Quickstart](docs/ubuntu-24.04-quickstart.zh.md): a safe first run on Ubuntu
+  24.04 LTS amd64.
+- [Ubuntu 26.04 Preview Quickstart](docs/ubuntu-26.04-quickstart.zh.md): a safe first run on Ubuntu
+  26.04 LTS amd64 with exact `resolute` platform facts.
 - [User Manual](docs/user-manual/README.zh.md): progressive, runnable tutorials.
 - [CLI Manual](docs/cli.zh.md): every command, option, output format, and limitation.
 - [Realistic Deployment Template](docs/realistic-deployment-example.zh.md): a least-privilege systemd

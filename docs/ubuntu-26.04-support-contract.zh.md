@@ -1,10 +1,8 @@
-# Ubuntu 26.04 Preview 实施契约
+# Ubuntu 26.04 Preview 支持契约
 
-本文档锁定 issue [#53](https://github.com/mofelee/debianform/issues/53) 的实现边界，供
-platform、provider、libvirt、CI、文档和 release review 共同遵守。它是实施合同，不是当前
-支持声明：在 [#60](https://github.com/mofelee/debianform/issues/60) 的完整矩阵和
-[#61](https://github.com/mofelee/debianform/issues/61) 的发布证据完成前，Ubuntu 26.04 仍按
-[支持矩阵](support-matrix.zh.md)标记为 Unsupported。
+本文档记录 issue [#53](https://github.com/mofelee/debianform/issues/53) 已交付的实现和支持
+边界，供 platform、provider、libvirt、CI、文档和 release review 共同遵守。Ubuntu 26.04 LTS
+amd64 当前为 Preview；当前状态同时以[支持矩阵](support-matrix.zh.md)为准。
 
 ## 目标和非目标
 
@@ -229,6 +227,28 @@ rejection、`apply`、JSON no-op plan、`check`、case assertion 和 cleanup。#
   即 80 个 target-case 结果全部绿色。
 - 记录 exact commit、CI run URL、released image digest 和成功/失败后的 hypervisor cleanup。
 - Preview 代表成熟度，不代表允许合并已知回归；声明完成后 26.04 gate 是 release blocker。
+
+## 交付证据
+
+Ubuntu 26.04 Preview 的实现门禁基线是提交
+[`0211ab2c98d674182dc91a9af7bd887dc91e5539`](https://github.com/mofelee/debianform/commit/0211ab2c98d674182dc91a9af7bd887dc91e5539)
+和 [CI run 29418825778](https://github.com/mofelee/debianform/actions/runs/29418825778)：
+
+- Debian 12、Debian 13、Ubuntu 24.04 和 Ubuntu 26.04 amd64 分别 `20/20`，共 80 个
+  target-case results。
+- `Managed target matrix gate`、`Ubuntu 24.04 target matrix gate` 和
+  `Ubuntu 26.04 target matrix gate` 均成功；连同 unit 共 `84/84` jobs。
+- 26.04 官方 released image URL 是
+  `https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img`，
+  SHA-256 为 `0826c5005ebc70edcfc4519e5d65eca766782f16426231c4c3e92b811ba8df0b`。
+- 20 个 26.04 jobs 的 target-evidence 和 cleanup steps 全部成功；清理检查覆盖 domain、network、
+  libvirt volume、disk/NVRAM、临时 workdir 和 SSH artifact。
+- 三种 runner 的失败诊断包含 target facts、Netplan ownership、network service/link/address/route、
+  package/service 状态、journals、plan/state/log、libvirt XML/console 和 cleanup evidence。
+
+首跑命令和普通非网络示例见
+[Ubuntu 26.04 Preview Quickstart](ubuntu-26.04-quickstart.zh.md)与
+[`examples/ubuntu-26.04-preview.dbf.hcl`](../examples/ubuntu-26.04-preview.dbf.hcl)。
 
 ## Preview 提升和关闭条件
 

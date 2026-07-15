@@ -250,9 +250,9 @@ host "force_example" {
 | 字段 | 说明 |
 | --- | --- |
 | `distribution` | `/etc/os-release` identity，例如 `debian` 或 `ubuntu`；不能从 codename 推断。 |
-| `version` | 发行版版本，例如 Debian `12`/`13` 或 Ubuntu `24.04`。 |
+| `version` | 发行版版本，例如 Debian `12`/`13` 或 Ubuntu `24.04`/`26.04`。 |
 | `architecture` | dpkg architecture，例如 `amd64`、`arm64`。 |
-| `codename` | 发行版 codename，例如 `bookworm`、`trixie` 或 `noble`。 |
+| `codename` | 发行版 codename，例如 `bookworm`、`trixie`、`noble` 或 `resolute`。 |
 
 Ubuntu 发行版分派的离线 plan 必须声明完整四元组：
 
@@ -265,8 +265,9 @@ platform {
 }
 ```
 
-为兼容已有 Debian fixture，离线配置省略 `distribution/version` 时仍保留历史 Debian repository
-默认；该兼容不会从 `noble` 等 codename 猜测 Ubuntu。
+Ubuntu 26.04 使用同一字段结构，把 `version/codename` 改为 `26.04/resolute`。为兼容已有
+Debian fixture，离线配置省略 `distribution/version` 时仍保留历史 Debian repository 默认；
+该兼容不会从 `noble` 或 `resolute` 等 codename 猜测 Ubuntu。
 
 ### kernel
 
@@ -558,6 +559,7 @@ docker {
 
 默认 official source 使用在线 facts 或完整离线 platform tuple 选择 Debian/Ubuntu URL，不能从
 codename 猜测发行版。显式 `repository_url` / `gpg_url` 不会自动从 Debian mirror 改写为 Ubuntu。
+Ubuntu 26.04 必须选择 `linux/ubuntu` 和 `resolute` suite；不得静默回退到 24.04 的 `noble`。
 这些字段只控制 Docker Engine 官方 APT 源和 signing key，不是 Docker registry mirror。它们和
 `get.docker.com --mirror` 的目标相近，都是让 Docker 安装来源使用镜像站；区别是 DebianForm
 不会运行 `get.docker.com` 安装脚本，而是声明式管理 APT source、key、package、service 和 state。

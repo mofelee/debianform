@@ -15,8 +15,9 @@ Debian 13 amd64 继续是默认和最高优先级目标，Debian 12/13 的现有
 - 继续只允许 root SSH；不增加 sudo、become 或默认 `ubuntu` 用户管理。
 - 不管理 Netplan 或 NetworkManager，不生成或读取 Netplan YAML 内容，不调用 `netplan`，也不修改、
   删除或迁移 `/etc/netplan/*`。
-- 不支持 Ubuntu 22.04/26.04、Ubuntu arm64、桌面、Snap、PPA、Ubuntu Pro 或 cloud-init
-  生命周期管理。
+- Ubuntu 26.04 LTS amd64 由独立支持契约和门禁覆盖；本契约不把 24.04 的结果外推到 26.04。
+- 不支持 Ubuntu 22.04、Ubuntu arm64、桌面、Snap、PPA、Ubuntu Pro 或 cloud-init 生命周期
+  管理。
 - 不因为发行版名称不同而复制 parser、graph、engine 或整套 provider。
 
 ## Platform 字段和优先级
@@ -63,6 +64,7 @@ host "server1" {
 | Debian 12 amd64 | 是 | Beta |
 | Debian 12/13 arm64 | 是 | Preview，保持现状 |
 | Ubuntu 24.04 amd64 | 是 | Preview |
+| Ubuntu 26.04 amd64 | 是 | Preview，使用独立 released-image 矩阵和 gate |
 | 其他 Debian/Ubuntu tuple | 否 | Unsupported |
 | 其他发行版 | 否 | Unsupported |
 
@@ -172,6 +174,10 @@ Ubuntu Preview 的权威实现基线是提交
 - Debian 13 amd64：`20/20`。
 - `Ubuntu 24.04 target matrix gate` 和 `Managed target matrix gate` 均成功。
 - 连同 unit job 共 `63/63`。
+
+这是 24.04 首次交付时的历史基线。当前四目标门禁以[支持矩阵](support-matrix.zh.md)记录的提交
+`0211ab2c98d674182dc91a9af7bd887dc91e5539` 和 CI run `29418825778` 为准，其中 24.04 与
+26.04 分别使用独立的 `20/20` 矩阵和 gate。
 
 Preview 表示成熟度，不允许合并已知 Ubuntu 回归，也不等同于 Beta。未来提升 Beta 至少要求
 持续阻断 CI、release verification 证据、已解决高风险用户反馈，以及显式 support-tier 决策。

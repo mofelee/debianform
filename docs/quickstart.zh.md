@@ -3,8 +3,9 @@
 本文档是一条从零到第一次 apply/check 的最短路径，面向最高优先级的低风险 Debian 13
 amd64 测试主机。Debian 12 amd64 也属于 Beta 支持范围；DebianForm 仍处于 public preview /
 beta 阶段，不要把第一轮试用目标设为生产主机。
-Ubuntu 24.04 LTS amd64 的独立 Preview 路径见
-[Ubuntu 24.04 Preview Quickstart](ubuntu-24.04-quickstart.zh.md)。
+Ubuntu 24.04 和 26.04 LTS amd64 的独立 Preview 路径分别见
+[Ubuntu 24.04 Preview Quickstart](ubuntu-24.04-quickstart.zh.md)与
+[Ubuntu 26.04 Preview Quickstart](ubuntu-26.04-quickstart.zh.md)。
 
 ## 1. 安装 CLI
 

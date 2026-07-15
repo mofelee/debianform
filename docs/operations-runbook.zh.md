@@ -404,8 +404,8 @@ discover host facts for server1: codename is empty
 ssh root@"$DBF_TARGET" 'dpkg --print-architecture; . /etc/os-release; printf "%s %s %s\n" "$ID" "$VERSION_ID" "$VERSION_CODENAME"'
 ```
 
-如果输出为空，先修复目标系统基础环境。当前 allowlist 包含 Debian 12/13 和 Ubuntu 24.04 的
-已列架构；其他 tuple 会在 provider observation 前被拒绝。
+如果输出为空，先修复目标系统基础环境。当前 allowlist 包含 Debian 12/13，以及 Ubuntu 24.04
+和 26.04 的已列架构；其他 tuple 会在 provider observation 前被拒绝。
 
 ### Check 失败
 

@@ -4,6 +4,19 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
+## Unreleased
+
+- Added Ubuntu 26.04 LTS (`resolute`) amd64 Server as a Preview managed target
+  with an independent blocking 20-case libvirt matrix and target gate. The same
+  commit preserves 20/20 coverage for Debian 12, Debian 13, and Ubuntu 24.04.
+- Verified the official released Ubuntu 26.04 cloud image, APT and Docker
+  `resolute` repositories, shared providers, stock Netplan conflict rejection,
+  and operator-prepared native systemd-networkd workflows without a `noble`
+  fallback.
+- Added an Ubuntu 26.04 Preview quickstart and runnable non-network example.
+  Management remains root-only; Ubuntu arm64/desktop, Netplan/NetworkManager
+  management, sudo/become, and in-place Ubuntu upgrades remain unsupported.
+
 ## v0.7.0
 
 - Added Ubuntu 24.04 LTS (`noble`) amd64 as a Preview managed target with an
