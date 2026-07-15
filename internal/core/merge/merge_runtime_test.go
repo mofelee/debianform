@@ -313,7 +313,14 @@ host "server1" {
 }
 
 func TestCompileRejectsUnsupportedDeclaredPlatformTuple(t *testing.T) {
-	cfg := parseInline(t, `
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "Ubuntu 22.04",
+			body: `
 host "server1" {
   platform {
     distribution = "ubuntu"
@@ -322,10 +329,89 @@ host "server1" {
     codename     = "jammy"
   }
 }
+			`,
+			want: `unsupported Ubuntu platform.version "22.04"`,
+		},
+		{
+			name: "Ubuntu 24.04 with resolute",
+			body: `
+host "server1" {
+  platform {
+    distribution = "ubuntu"
+    version      = "24.04"
+    architecture = "amd64"
+    codename     = "resolute"
+  }
+}
+			`,
+			want: `Ubuntu 24.04 platform.codename must be "noble", got "resolute"`,
+		},
+		{
+			name: "Ubuntu 26.04 with noble",
+			body: `
+host "server1" {
+  platform {
+    distribution = "ubuntu"
+    version      = "26.04"
+    architecture = "amd64"
+    codename     = "noble"
+  }
+}
+			`,
+			want: `Ubuntu 26.04 platform.codename must be "resolute", got "noble"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := parseInline(t, tt.body)
+			_, err := CompileWithOptions(cfg, CompileOptions{})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("CompileWithOptions error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompileAcceptsUbuntu2604Platform(t *testing.T) {
+	cfg := parseInline(t, `
+host "server1" {
+  platform {
+    distribution = "ubuntu"
+    version      = "26.04"
+    architecture = "amd64"
+    codename     = "resolute"
+  }
+}
 `)
-	_, err := CompileWithOptions(cfg, CompileOptions{})
-	if err == nil || !strings.Contains(err.Error(), `unsupported Ubuntu platform.version "22.04"`) {
-		t.Fatalf("CompileWithOptions error = %v, want unsupported Ubuntu version", err)
+	program, err := CompileWithOptions(cfg, CompileOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	platform := program.Hosts[0].Platform
+	if platform == nil || platform.Distribution != "ubuntu" || platform.Version != "26.04" || platform.Architecture != "amd64" || platform.Codename != "resolute" {
+		t.Fatalf("platform = %#v, want ubuntu/26.04/amd64/resolute", platform)
+	}
+}
+
+func TestCompileAcceptsUbuntu2604RuntimeFacts(t *testing.T) {
+	cfg := parseInline(t, `host "server1" {}`)
+	program, err := CompileWithOptions(cfg, CompileOptions{
+		HostFacts: map[string]ir.HostFacts{
+			"server1": {System: ir.SystemFacts{
+				Distribution: "ubuntu",
+				Version:      "26.04",
+				Architecture: "amd64",
+				Codename:     "resolute",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	platform := program.Hosts[0].Platform
+	if platform == nil || platform.Distribution != "ubuntu" || platform.Version != "26.04" || platform.Architecture != "amd64" || platform.Codename != "resolute" {
+		t.Fatalf("platform = %#v, want runtime ubuntu/26.04/amd64/resolute", platform)
 	}
 }
 

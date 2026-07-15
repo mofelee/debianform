@@ -168,6 +168,30 @@ func TestCompileDockerOfficialRepositoryDoesNotInferUbuntuFromCodename(t *testin
 	}
 }
 
+func TestCompileDockerOfficialRepositoryRequiresDistributionWithVersion(t *testing.T) {
+	program := &ir.Program{Hosts: []ir.HostSpec{{
+		Name:   "docker1",
+		Source: ir.SourceRef{File: "inline.dbf.hcl", Line: 1, Path: "host.docker1"},
+		Platform: &ir.PlatformSpec{
+			Version:      "26.04",
+			Architecture: "amd64",
+			Codename:     "resolute",
+		},
+		Docker: &ir.DockerSpec{
+			Enable: true,
+			Package: ir.DockerPackageSpec{
+				Source:          "official",
+				Channel:         "stable",
+				RemoveConflicts: "auto",
+			},
+		},
+	}}}
+	_, err := Compile(program)
+	if err == nil || !strings.Contains(err.Error(), "must declare platform.distribution when platform.version is set") {
+		t.Fatalf("Compile() error = %v, want missing platform.distribution error", err)
+	}
+}
+
 func TestCompileDockerOfficialRepositoryUsesUbuntuPlatformFacts(t *testing.T) {
 	program := &ir.Program{Hosts: []ir.HostSpec{{
 		Name:   "docker1",

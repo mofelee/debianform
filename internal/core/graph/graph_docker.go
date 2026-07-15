@@ -69,6 +69,9 @@ func dockerEngineNodes(host ir.HostSpec, repositoryAddresses map[string]string, 
 	switch docker.Package.Source {
 	case "official":
 		distribution := host.PlatformDistribution()
+		if distribution == "" && host.PlatformVersion() != "" {
+			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.platform.distribution: host %q must declare platform.distribution when platform.version is set for docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
+		}
 		if distribution == "ubuntu" && host.PlatformVersion() == "" {
 			return dockerEngineGraph{}, fmt.Errorf("%s:%d:%s.platform.version: host %q must declare platform.version to compile Ubuntu docker official repository", host.Source.File, host.Source.Line, host.Source.Path, host.Name)
 		}

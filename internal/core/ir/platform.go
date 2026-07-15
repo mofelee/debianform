@@ -2,7 +2,7 @@ package ir
 
 import "fmt"
 
-const supportedTargetSummary = "Debian 12/13 on amd64/arm64 or Ubuntu 24.04 on amd64"
+const supportedTargetSummary = "Debian 12/13 on amd64/arm64 or Ubuntu 24.04/26.04 on amd64"
 
 // ValidateTargetPlatform checks the complete identity discovered from a target host.
 func ValidateTargetPlatform(distribution, version, architecture, codename string) error {
@@ -24,8 +24,20 @@ func ValidateTargetPlatform(distribution, version, architecture, codename string
 			return fmt.Errorf("target platform distribution=%q version=%q reports codename %q, want %q", distribution, version, codename, wantCodename)
 		}
 	case "ubuntu":
-		if version != "24.04" || architecture != "amd64" || codename != "noble" {
+		wantCodename := ""
+		switch version {
+		case "24.04":
+			wantCodename = "noble"
+		case "26.04":
+			wantCodename = "resolute"
+		default:
 			return unsupportedTargetError(distribution, version, architecture, codename)
+		}
+		if architecture != "amd64" {
+			return unsupportedTargetError(distribution, version, architecture, codename)
+		}
+		if codename != wantCodename {
+			return fmt.Errorf("target platform distribution=%q version=%q reports codename %q, want %q", distribution, version, codename, wantCodename)
 		}
 	default:
 		return unsupportedTargetError(distribution, version, architecture, codename)

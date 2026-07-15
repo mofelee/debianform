@@ -38,6 +38,14 @@ func TestDiscoverHostFacts(t *testing.T) {
 			architecture: "amd64",
 			codename:     "noble",
 		},
+		{
+			name:         "Ubuntu 26.04",
+			stdout:       "hostname=server1\ndistribution=ubuntu\nversion=26.04\narchitecture=x86_64\ncodename=resolute\n",
+			distribution: "ubuntu",
+			version:      "26.04",
+			architecture: "amd64",
+			codename:     "resolute",
+		},
 	}
 
 	for _, tt := range tests {
@@ -67,6 +75,7 @@ func TestDiscoverHostFactsRejectsUnsupportedTargets(t *testing.T) {
 	}{
 		{name: "missing distribution", stdout: "hostname=server1\nversion=24.04\narchitecture=amd64\ncodename=noble\n", wantErr: "distribution is empty"},
 		{name: "Ubuntu 22.04", stdout: "hostname=server1\ndistribution=ubuntu\nversion=22.04\narchitecture=amd64\ncodename=jammy\n", wantErr: "unsupported target platform"},
+		{name: "Ubuntu 26.04 with noble", stdout: "hostname=server1\ndistribution=ubuntu\nversion=26.04\narchitecture=amd64\ncodename=noble\n", wantErr: `reports codename "noble", want "resolute"`},
 		{name: "Fedora", stdout: "hostname=server1\ndistribution=fedora\nversion=42\narchitecture=amd64\ncodename=rawhide\n", wantErr: "unsupported target platform"},
 	}
 	for _, tt := range tests {
@@ -141,32 +150,44 @@ func TestDiscoverProgramFactsHonorsParallelLimit(t *testing.T) {
 }
 
 func TestApplyPersistsRuntimeFactsWithoutResourceChanges(t *testing.T) {
-	host := ir.HostSpec{
-		Name: "server1",
-		Facts: ir.HostFacts{System: ir.SystemFacts{
-			Hostname:     "server1",
-			Distribution: "ubuntu",
-			Version:      "24.04",
-			Architecture: "amd64",
-			Codename:     "noble",
-			DetectedAt:   "2026-06-20T12:00:00Z",
-		}},
+	tests := []struct {
+		name     string
+		version  string
+		codename string
+	}{
+		{name: "Ubuntu 24.04", version: "24.04", codename: "noble"},
+		{name: "Ubuntu 26.04", version: "26.04", codename: "resolute"},
 	}
-	backend := NewMemoryBackend()
-	engine := Engine{Backend: backend, Provider: NewMemoryProvider()}
-	_, err := engine.Apply(context.Background(), &ir.Program{Hosts: []ir.HostSpec{host}}, &graph.ResourceGraph{}, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	st, err := backend.Read(context.Background(), host)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if st.Facts == nil || st.Facts.System.Distribution != "ubuntu" || st.Facts.System.Version != "24.04" || st.Facts.System.Architecture != "amd64" || st.Facts.System.Codename != "noble" {
-		t.Fatalf("state facts = %#v", st.Facts)
-	}
-	if st.Serial != 1 {
-		t.Fatalf("facts-only state serial = %d, want 1", st.Serial)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host := ir.HostSpec{
+				Name: "server1",
+				Facts: ir.HostFacts{System: ir.SystemFacts{
+					Hostname:     "server1",
+					Distribution: "ubuntu",
+					Version:      tt.version,
+					Architecture: "amd64",
+					Codename:     tt.codename,
+					DetectedAt:   "2026-06-20T12:00:00Z",
+				}},
+			}
+			backend := NewMemoryBackend()
+			engine := Engine{Backend: backend, Provider: NewMemoryProvider()}
+			_, err := engine.Apply(context.Background(), &ir.Program{Hosts: []ir.HostSpec{host}}, &graph.ResourceGraph{}, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			st, err := backend.Read(context.Background(), host)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if st.Facts == nil || st.Facts.System.Distribution != "ubuntu" || st.Facts.System.Version != tt.version || st.Facts.System.Architecture != "amd64" || st.Facts.System.Codename != tt.codename {
+				t.Fatalf("state facts = %#v", st.Facts)
+			}
+			if st.Serial != 1 {
+				t.Fatalf("facts-only state serial = %d, want 1", st.Serial)
+			}
+		})
 	}
 }
 

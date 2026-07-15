@@ -408,14 +408,27 @@ func validateDeclaredPlatform(spec ir.PlatformSpec) error {
 		return fieldError("distribution", "unsupported platform.distribution %q", spec.Distribution)
 	}
 	if spec.Distribution == "ubuntu" {
-		if spec.Version != "" && spec.Version != "24.04" {
-			return fieldError("version", "unsupported Ubuntu platform.version %q; only %q is supported", spec.Version, "24.04")
+		if spec.Version != "" && spec.Version != "24.04" && spec.Version != "26.04" {
+			return fieldError("version", "unsupported Ubuntu platform.version %q; supported versions are 24.04 and 26.04", spec.Version)
 		}
 		if spec.Architecture != "" && spec.Architecture != "amd64" {
 			return fieldError("architecture", "unsupported Ubuntu platform.architecture %q; only %q is supported", spec.Architecture, "amd64")
 		}
-		if spec.Codename != "" && spec.Codename != "noble" {
-			return fieldError("codename", "Ubuntu 24.04 platform.codename must be %q, got %q", "noble", spec.Codename)
+		if spec.Codename != "" {
+			switch spec.Version {
+			case "24.04":
+				if spec.Codename != "noble" {
+					return fieldError("codename", "Ubuntu 24.04 platform.codename must be %q, got %q", "noble", spec.Codename)
+				}
+			case "26.04":
+				if spec.Codename != "resolute" {
+					return fieldError("codename", "Ubuntu 26.04 platform.codename must be %q, got %q", "resolute", spec.Codename)
+				}
+			case "":
+				if spec.Codename != "noble" && spec.Codename != "resolute" {
+					return fieldError("codename", "unsupported Ubuntu platform.codename %q; supported codenames are noble and resolute", spec.Codename)
+				}
+			}
 		}
 	}
 	if spec.Distribution == "debian" {
