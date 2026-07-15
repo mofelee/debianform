@@ -2118,11 +2118,13 @@ func TestREADMEHasLanguageNavigationAndSisterProject(t *testing.T) {
 		"README.md": {
 			"<strong>English</strong>",
 			`href="./README.zh-CN.md"`,
+			`src="./docs/host-profile-component-model.en.svg"`,
 			"https://github.com/mofelee/alpineform",
 		},
 		"README.zh-CN.md": {
 			`href="./README.md"`,
 			"<strong>简体中文</strong>",
+			`src="./docs/host-profile-component-model.svg"`,
 			"https://github.com/mofelee/alpineform",
 		},
 	}

@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="820" viewBox="0 0 1480 820" role="img" aria-labelledby="title desc">
+  <title id="title">DebianForm host profile component model</title>
+  <desc id="desc">Variables and locals feed reusable profiles and components. Profiles are imported and merged into hosts, components are mounted with inputs and instantiated inside hosts, and only hosts compile to HostSpec, ResourceGraph, plan, apply, and check execution.</desc>
+  <defs>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#0f766e"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#b45309"/>
+    </marker>
+    <marker id="arrow-slate" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#475569"/>
+    </marker>
+    <style>
+      .page { fill: #f8fafc; }
+      .band { fill: #eef6f9; stroke: #cbd5e1; stroke-width: 1.5; rx: 10; }
+      .section-title { font: 700 18px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .title { font: 700 28px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .subtitle { font: 17px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #475569; }
+      .card { fill: #ffffff; stroke-width: 2; rx: 8; }
+      .input { stroke: #64748b; }
+      .profile { stroke: #2563eb; fill: #eff6ff; }
+      .component { stroke: #0f766e; fill: #ecfdf5; }
+      .host { stroke: #b45309; fill: #fff7ed; }
+      .runtime { stroke: #7c3aed; fill: #f5f3ff; }
+      .label { font: 700 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #0f172a; }
+      .subhead { font: 700 15px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .body { font: 16px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #334155; }
+      .small { font: 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #64748b; }
+      .code { font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #0f172a; }
+      .badge-text { font: 700 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #ffffff; }
+      .blue-line { stroke: #2563eb; stroke-width: 3; fill: none; marker-end: url(#arrow-blue); }
+      .teal-line { stroke: #0f766e; stroke-width: 3; fill: none; marker-end: url(#arrow-teal); }
+      .amber-line { stroke: #b45309; stroke-width: 3; fill: none; marker-end: url(#arrow-amber); }
+      .slate-line { stroke: #475569; stroke-width: 2.5; fill: none; marker-end: url(#arrow-slate); }
+      .soft-line { stroke: #94a3b8; stroke-width: 2; fill: none; stroke-dasharray: 7 7; marker-end: url(#arrow-slate); }
+      .note { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 7; }
+    </style>
+  </defs>
+
+  <rect class="page" x="0" y="0" width="1480" height="820"/>
+
+  <text class="title" x="52" y="56">DebianForm Configuration Model</text>
+  <text class="subtitle" x="52" y="88">Reusable definitions do not run on their own; each host merges or instantiates them, builds a resource graph, and executes it.</text>
+
+  <rect class="band" x="40" y="116" width="380" height="620" rx="10"/>
+  <text class="section-title" x="66" y="150">Global inputs and reusable definitions</text>
+
+  <rect class="card input" x="70" y="176" width="320" height="96" rx="8"/>
+  <text class="label" x="98" y="212">locals / variable</text>
+  <text class="body" x="98" y="240">Expressions + environment inputs</text>
+  <text class="small" x="98" y="262">Used by profiles / components / hosts</text>
+
+  <rect class="card profile" x="70" y="312" width="320" height="166" rx="8"/>
+  <rect x="98" y="334" width="64" height="24" rx="5" fill="#2563eb"/>
+  <text class="badge-text" x="111" y="351">merge</text>
+  <text class="label" x="98" y="390">profile</text>
+  <text class="body" x="98" y="418">Parameterless base configuration</text>
+  <text class="small" x="98" y="440">Imports are merged first</text>
+  <text class="small" x="98" y="462">Current profile / host overrides later</text>
+
+  <rect class="card component" x="70" y="526" width="320" height="146" rx="8"/>
+  <rect x="98" y="548" width="78" height="24" rx="5" fill="#0f766e"/>
+  <text class="badge-text" x="110" y="565">template</text>
+  <text class="label" x="98" y="604">component</text>
+  <text class="body" x="98" y="632">Deployment template with inputs</text>
+  <text class="small" x="98" y="654">inputs + resources + artifact</text>
+
+  <rect class="band" x="505" y="116" width="470" height="620" rx="10"/>
+  <text class="section-title" x="532" y="150">Compile boundary for each host</text>
+
+  <rect class="card host" x="545" y="176" width="390" height="386" rx="8"/>
+  <text class="label" x="580" y="218">host &quot;app1&quot;</text>
+  <text class="body" x="580" y="248">Final execution unit</text>
+
+  <rect class="note" x="580" y="276" width="320" height="68" rx="7"/>
+  <text class="subhead" x="600" y="301">1. Merge profiles</text>
+  <text class="small" x="600" y="323">Recursive maps; unique list append</text>
+  <text class="small" x="600" y="341">Later scalar values override</text>
+
+  <rect class="note" x="580" y="362" width="320" height="68" rx="7"/>
+  <text class="subhead" x="600" y="387">2. Mount components</text>
+  <text class="small" x="600" y="409">Pass typed inputs; expand per target</text>
+  <text class="small" x="600" y="427">Create resources inside the host</text>
+
+  <rect class="note" x="580" y="448" width="320" height="62" rx="7"/>
+  <text class="subhead" x="600" y="473">3. Build HostSpec</text>
+  <text class="small" x="600" y="495">Host resources + component instances</text>
+
+  <text class="small" x="565" y="600">Each host owns its SSH, facts, state, and lock.</text>
+  <text class="code" x="565" y="628">host.app1.components.web.files.file[&quot;/etc/app&quot;]</text>
+
+  <rect class="note" x="545" y="660" width="390" height="58" rx="7"/>
+  <text class="small" x="568" y="685">script / on_change are component runtime hooks;</text>
+  <text class="small" x="568" y="706">resource changes trigger them as operations.</text>
+
+  <rect class="band" x="1060" y="116" width="380" height="620" rx="10"/>
+  <text class="section-title" x="1088" y="150">Build plans and execute</text>
+
+  <rect class="card runtime" x="1095" y="180" width="310" height="92" rx="8"/>
+  <text class="label" x="1125" y="218">ResourceGraph</text>
+  <text class="body" x="1125" y="246">Resource nodes + dependencies</text>
+  <text class="small" x="1125" y="266">Operation trigger relationships</text>
+
+  <rect class="card runtime" x="1095" y="324" width="310" height="128" rx="8"/>
+  <text class="label" x="1125" y="364">plan / check</text>
+  <text class="body" x="1125" y="394">Read state and observed state</text>
+  <text class="small" x="1125" y="418">create / update / delete / no-op</text>
+
+  <rect class="card runtime" x="1095" y="506" width="310" height="104" rx="8"/>
+  <text class="label" x="1125" y="546">apply</text>
+  <text class="body" x="1125" y="576">Execute in dependency order</text>
+  <text class="small" x="1125" y="598">Write state after success</text>
+
+  <path class="soft-line" d="M 390 224 C 442 224 466 232 525 246"/>
+  <text class="small" x="432" y="214">references</text>
+
+  <path class="blue-line" d="M 390 386 C 454 386 480 318 545 312"/>
+  <text class="small" x="432" y="334" fill="#2563eb">imports</text>
+  <text class="small" x="432" y="354" fill="#2563eb">merge first</text>
+
+  <path class="teal-line" d="M 390 594 C 470 594 480 408 545 396"/>
+  <text class="small" x="432" y="534" fill="#0f766e">mount</text>
+  <text class="small" x="432" y="554" fill="#0f766e">instantiate</text>
+
+  <path class="amber-line" d="M 935 356 C 990 356 1018 232 1095 226"/>
+  <text class="small" x="988" y="332" fill="#b45309">HostSpec</text>
+
+  <path class="slate-line" d="M 1250 272 L 1250 322"/>
+  <path class="slate-line" d="M 1250 452 L 1250 504"/>
+</svg>

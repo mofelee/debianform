@@ -237,7 +237,7 @@ DebianForm 的用户层只写 `host`、`profile`、`component`、`locals`、`var
 这几个顶层概念的边界是：
 
 <p align="center">
-  <img src="./docs/host-profile-component-model.svg" alt="DebianForm host profile component model" width="1080">
+  <img src="./docs/host-profile-component-model.svg" alt="DebianForm host、profile 和 component 配置模型" width="1080">
 </p>
 
 - `host` 是最终执行单元。`plan`、`apply`、`check` 都以 host 为目标；每台 host 有自己的

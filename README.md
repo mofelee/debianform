@@ -241,7 +241,7 @@ At the user level, DebianForm configurations contain `host`, `profile`, `compone
 The top-level concepts have these boundaries:
 
 <p align="center">
-  <img src="./docs/host-profile-component-model.svg" alt="DebianForm host profile component model" width="1080">
+  <img src="./docs/host-profile-component-model.en.svg" alt="DebianForm host profile component model" width="1080">
 </p>
 
 - A `host` is the final execution unit. `plan`, `apply`, and `check` all target hosts, and each host has
