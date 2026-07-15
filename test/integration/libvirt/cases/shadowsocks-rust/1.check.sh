@@ -2,6 +2,8 @@ assert_remote "ssserver binary was installed from the GitHub release asset" \
   "test \"\$(/usr/local/bin/ssserver --version)\" = 'shadowsocks 1.24.0'"
 assert_remote "shadowsocks-rust config was deployed with expected ownership and mode" \
   "test \"\$(stat -c '%a %U %G' /etc/shadowsocks-rust/server.json)\" = '640 root shadowsocks'"
+assert_remote "shadowsocks-rust user has the managed primary and supplementary groups" \
+  "test \"\$(id -gn shadowsocks)\" = 'shadowsocks' && id -nG shadowsocks | tr ' ' '\\n' | grep -qx 'shadowsocks-observers'"
 assert_remote "shadowsocks-rust service unit was generated" \
   "grep -F 'ExecStart=/usr/local/bin/ssserver -c /etc/shadowsocks-rust/server.json' /etc/systemd/system/shadowsocks-rust.service"
 assert_remote "shadowsocks-rust service is active" \

@@ -2,6 +2,8 @@ assert_remote "shadowsocks-rust binary was destroyed after removal from config" 
   "test ! -e /usr/local/bin/ssserver"
 assert_remote "shadowsocks-rust config and unit were destroyed after removal from config" \
   "test ! -e /etc/shadowsocks-rust/server.json && test ! -e /etc/systemd/system/shadowsocks-rust.service"
+assert_remote "shadowsocks-rust user and managed groups were destroyed" \
+  "! getent passwd shadowsocks && ! getent group shadowsocks && ! getent group shadowsocks-observers"
 assert_remote "shadowsocks-rust final state contains no managed resources" \
   "grep -F '\"resources\": {}' /var/lib/debianform-integration/shadowsocks-rust-state.json"
 run_remote "remove shadowsocks-rust integration state and component cache after verification" \

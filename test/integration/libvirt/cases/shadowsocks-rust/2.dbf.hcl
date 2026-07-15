@@ -22,11 +22,16 @@ component "shadowsocks_rust" {
     group "shadowsocks" {
       system = true
     }
+
+    group "shadowsocks-observers" {
+      system = true
+    }
   }
 
   users {
     user "shadowsocks" {
       group  = "shadowsocks"
+      groups = ["shadowsocks-observers"]
       home   = "/var/lib/shadowsocks-rust"
       shell  = "/usr/sbin/nologin"
       system = true

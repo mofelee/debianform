@@ -173,6 +173,33 @@ DebianForm 运行前完成外部准备。
 rejection、`apply`、JSON no-op plan、`check`、case assertion 和 cleanup。#56 先记录首个失败阶段和
 归属，不在 baseline commit 中顺手修 provider；#57-#59 只修有证据的差异。
 
+### 非网络 provider 验证结果
+
+在官方 released image（SHA-256
+`0826c5005ebc70edcfc4519e5d65eca766782f16426231c4c3e92b811ba8df0b`）上，#58 覆盖的
+14 个非网络 case 均通过完整生命周期：
+
+| Case | 显式断言 | 验证域 |
+| --- | ---: | --- |
+| `bbr` | 18 | kernel module、sysctl runtime/persistence、drift 和删除 |
+| `component-inputs` | 6 | component 输入、敏感文件 mode 和 state redaction |
+| `docker-compose` | 16 | Compose project、生成文件、systemd service、stop/forget/delete |
+| `docker-daemon` | 10 | daemon JSON、service restart、drift 和恢复 |
+| `files` | 8 | file/directory ownership、mode、restore/keep 和删除 |
+| `hostname` | 11 | hostname runtime/persistence、drift 和恢复 |
+| `multi-directory` | 9 | 多目录 merge、文件 state 和删除 |
+| `nftables` | 18 | check、activate、drift、rollback 和删除 |
+| `script-on-change` | 11 | operation identity、触发、no-op 和删除 |
+| `shadowsocks-rust` | 19 | artifact、user/group/membership、file、systemd 和 service |
+| `source-build` | 4 | source build、依赖包、CA、artifact 和清理 |
+| `system-settings` | 12 | timezone、locale、resolved、journald 和恢复 |
+| `systemd-extensions` | 18 | raw unit、timer、drop-in、reload、drift 和删除 |
+| `systemd-service-unit` | 22 | structured service unit、环境、restart、drift 和删除 |
+
+基线没有发现 Ubuntu 26.04 专属的非网络 provider 或路径差异，因此没有增加 release 分支。
+共享实现继续保留原有 resource address、plan/state 结构、redaction 和 destroy/forget 语义；敏感
+输出的 text、JSON、HTML、debug 和 state 覆盖由全量 race 测试及 redaction matrix 继续门禁。
+
 ## CI 和支持声明 gate
 
 - 新增独立命名的 20-case Ubuntu 26.04 matrix 和 `Ubuntu 26.04 target matrix gate`。
