@@ -1,4 +1,4 @@
-assert_remote "keep-mode removal leaves Aliyun apt source content in place" \
+assert_remote "keep-mode removal leaves target apt source content in place" \
   "grep -F 'URIs: $DBF_INTEGRATION_TARGET_APT_MIRROR' /etc/apt/sources.list.d/debianform-integration.sources"
 assert_remote "keep-mode removal leaves the source file different from the saved original" \
   "! cmp -s /etc/apt/sources.list.d/debianform-integration.sources /tmp/debianform-original-target.sources"
