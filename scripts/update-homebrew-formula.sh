@@ -109,7 +109,7 @@ class Dbf < Formula
 
   def install
     bin.install "dbf"
-    pkgshare.install "README.md", "docs", "examples"
+    pkgshare.install "README.md", "README.zh-CN.md", "docs", "examples"
   end
 
   test do

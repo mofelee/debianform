@@ -28,6 +28,7 @@ install: build
 	$(INSTALL) -d "$(DESTDIR)$(BINDIR)" "$(DESTDIR)$(DATADIR)/docs" "$(DESTDIR)$(DATADIR)/examples"
 	$(INSTALL) -m 0755 "$(BINARY)" "$(DESTDIR)$(BINDIR)/dbf"
 	$(INSTALL) -m 0644 README.md "$(DESTDIR)$(DATADIR)/README.md"
+	$(INSTALL) -m 0644 README.zh-CN.md "$(DESTDIR)$(DATADIR)/README.zh-CN.md"
 	cp -R docs/. "$(DESTDIR)$(DATADIR)/docs/"
 	cp -R examples/. "$(DESTDIR)$(DATADIR)/examples/"
 

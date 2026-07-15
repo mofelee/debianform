@@ -2113,6 +2113,36 @@ func TestPlanBBRHTML(t *testing.T) {
 	}
 }
 
+func TestREADMEHasLanguageNavigationAndSisterProject(t *testing.T) {
+	pages := map[string][]string{
+		"README.md": {
+			"<strong>English</strong>",
+			`href="./README.zh-CN.md"`,
+			"https://github.com/mofelee/alpineform",
+		},
+		"README.zh-CN.md": {
+			`href="./README.md"`,
+			"<strong>简体中文</strong>",
+			"https://github.com/mofelee/alpineform",
+		},
+	}
+
+	for path, wants := range pages {
+		t.Run(path, func(t *testing.T) {
+			data, err := os.ReadFile("../../" + path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := string(data)
+			for _, want := range wants {
+				if !strings.Contains(text, want) {
+					t.Fatalf("%s does not contain %q", path, want)
+				}
+			}
+		})
+	}
+}
+
 func TestREADMELocalCommandsAreCopyRunnable(t *testing.T) {
 	readme, err := os.ReadFile("../../README.md")
 	if err != nil {

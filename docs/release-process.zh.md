@@ -56,6 +56,7 @@ release notes 必须按 [release notes template](release-notes-template.md)
 
 - `dbf`
 - `README.md`
+- `README.zh-CN.md`
 - `docs/`
 - `examples/`
 - `LICENSE`
@@ -143,7 +144,7 @@ make test-integration-case CASE=files TARGET=ubuntu-24.04
 
 1. 更新 `CHANGELOG.md`。
 2. 按 [release notes template](release-notes-template.md) 准备 GitHub Release notes。
-3. 确认 `README.md` 和 `docs/` 已同步。
+3. 确认 `README.md`、`README.zh-CN.md` 和 `docs/` 已同步。
 4. 确认 CI 全绿。
 5. 创建 tag：
 
@@ -196,7 +197,8 @@ installer 行为：
 - 使用 SHA256 校验 tarball。
 - 解压到临时目录。
 - 先安装为临时文件，再原子替换目标 `dbf`。
-- 安装 `README.md`、`docs/` 和 `examples/` 到 `<prefix>/share/debianform`。
+- 安装 `README.md`、`README.zh-CN.md`、`docs/` 和 `examples/` 到
+  `<prefix>/share/debianform`。
 - 安装完成后运行 `dbf version`。
 
 升级方式就是重新运行 installer：
@@ -271,7 +273,7 @@ class Dbf < Formula
 
   def install
     bin.install "dbf"
-    pkgshare.install "README.md", "docs", "examples"
+    pkgshare.install "README.md", "README.zh-CN.md", "docs", "examples"
   end
 
   test do

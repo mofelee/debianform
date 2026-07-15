@@ -254,6 +254,7 @@ chmod 0755 "$install_tmp"
 mv "$install_tmp" "${bin_dir}/dbf"
 
 [ -f "${extract_dir}/README.md" ] && cp "${extract_dir}/README.md" "${share_dir}/README.md"
+[ -f "${extract_dir}/README.zh-CN.md" ] && cp "${extract_dir}/README.zh-CN.md" "${share_dir}/README.zh-CN.md"
 [ -f "${extract_dir}/LICENSE" ] && cp "${extract_dir}/LICENSE" "${share_dir}/LICENSE"
 [ -f "${extract_dir}/CHANGELOG.md" ] && cp "${extract_dir}/CHANGELOG.md" "${share_dir}/CHANGELOG.md"
 copy_tree "${extract_dir}/docs" "${share_dir}/docs"

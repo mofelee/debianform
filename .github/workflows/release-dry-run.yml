@@ -11,6 +11,7 @@ on:
       - "go.mod"
       - "go.sum"
       - "README.md"
+      - "README.zh-CN.md"
       - "LICENSE"
       - "CHANGELOG.md"
       - "docs/**"
