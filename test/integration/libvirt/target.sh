@@ -46,8 +46,22 @@ dbf_integration_resolve_target() {
       DBF_INTEGRATION_TARGET_APT_SECURITY_MIRROR="https://mirrors.aliyun.com/ubuntu/"
       DBF_INTEGRATION_TARGET_APT_COMPONENTS="main restricted universe multiverse"
       ;;
+    ubuntu-26.04)
+      DBF_INTEGRATION_TARGET_DISTRIBUTION="ubuntu"
+      DBF_INTEGRATION_TARGET_VERSION="26.04"
+      DBF_INTEGRATION_TARGET_CODENAME="resolute"
+      DBF_INTEGRATION_TARGET_ARCHITECTURE="amd64"
+      DBF_INTEGRATION_TARGET_CLOUD_URL="https://cloud-images.ubuntu.com/releases/26.04/release"
+      DBF_INTEGRATION_TARGET_CLOUD_IMAGE="ubuntu-26.04-server-cloudimg-amd64.img"
+      DBF_INTEGRATION_TARGET_CHECKSUM_FILE="SHA256SUMS"
+      DBF_INTEGRATION_TARGET_CHECKSUM_ALGORITHM="sha256"
+      DBF_INTEGRATION_TARGET_APT_SOURCE_PATH="/etc/apt/sources.list.d/ubuntu.sources"
+      DBF_INTEGRATION_TARGET_APT_MIRROR="https://archive.ubuntu.com/ubuntu/"
+      DBF_INTEGRATION_TARGET_APT_SECURITY_MIRROR="https://security.ubuntu.com/ubuntu/"
+      DBF_INTEGRATION_TARGET_APT_COMPONENTS="main restricted universe multiverse"
+      ;;
     *)
-      printf 'unsupported integration target: %s (expected debian-12, debian-13, or ubuntu-24.04)\n' "$target" >&2
+      printf 'unsupported integration target: %s (expected debian-12, debian-13, ubuntu-24.04, or ubuntu-26.04)\n' "$target" >&2
       return 1
       ;;
   esac

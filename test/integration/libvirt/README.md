@@ -1,10 +1,11 @@
 # Libvirt Integration Tests
 
-These tests boot fresh Debian 12, Debian 13, or Ubuntu 24.04 amd64 cloud VMs
+These tests boot fresh Debian 12, Debian 13, Ubuntu 24.04, or Ubuntu 26.04 amd64 cloud VMs
 with libvirt and exercise the full managed-target lifecycle against real remote
 state. Debian 13 is the default and primary target. Debian 12, Debian 13, and
 Ubuntu 24.04 each have a blocking CI matrix; Ubuntu's initial support tier is
-Preview.
+Preview. The Ubuntu 26.04 target is available for the #53 implementation baseline
+but is not a support claim until its separate blocking matrix is green.
 
 Run all cases on the default Debian 13 target or explicitly select either
 supported version:
@@ -14,6 +15,7 @@ make test-integration
 make test-integration DEBIAN_VERSION=12
 make test-integration DEBIAN_VERSION=13
 make test-integration TARGET=ubuntu-24.04
+make test-integration TARGET=ubuntu-26.04
 ```
 
 Run one case:
@@ -22,6 +24,7 @@ Run one case:
 make test-integration-case CASE=apt-source
 make test-integration-case CASE=apt-source DEBIAN_VERSION=12
 make test-integration-case CASE=files TARGET=ubuntu-24.04
+make test-integration-case CASE=files TARGET=ubuntu-26.04
 make test-integration-case CASE=bbr
 make test-integration-case CASE=component-inputs
 make test-integration-case CASE=files
@@ -33,7 +36,7 @@ make test-integration-case CASE=systemd-service-unit
 make test-integration-case CASE=wireguard
 ```
 
-`TARGET` accepts `debian-12`, `debian-13`, or `ubuntu-24.04`. When `TARGET` is
+`TARGET` accepts `debian-12`, `debian-13`, `ubuntu-24.04`, or `ubuntu-26.04`. When `TARGET` is
 omitted, the compatibility variable `DEBIAN_VERSION=12|13` selects Debian and
 defaults to Debian 13. The target descriptor resolves an official cloud image,
 verifies its SHA256 or SHA512 publisher checksum, and asserts the guest's ID,
@@ -63,7 +66,7 @@ Useful environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `TARGET` | Public target selector: `debian-12`, `debian-13`, or `ubuntu-24.04`. |
+| `TARGET` | Public target selector: `debian-12`, `debian-13`, `ubuntu-24.04`, or `ubuntu-26.04`. |
 | `DEBIAN_VERSION` | Public Make variable selecting `12` or `13`; defaults to `13`. |
 | `DBF_INTEGRATION_TARGET` | Internal generic target selector used by CI and direct script invocations. |
 | `DBF_INTEGRATION_CASE` | Run a single case directory. |

@@ -40,20 +40,32 @@ bash "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
 target_12="$(bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 12)"
 target_13="$(bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 13)"
 target_13_generic="$(bash "$ROOT_DIR/test/integration/libvirt/target.sh" debian-13)"
-target_ubuntu="$(bash "$ROOT_DIR/test/integration/libvirt/target.sh" ubuntu-24.04)"
+target_ubuntu_24="$(bash "$ROOT_DIR/test/integration/libvirt/target.sh" ubuntu-24.04)"
+target_ubuntu_26="$(bash "$ROOT_DIR/test/integration/libvirt/target.sh" ubuntu-26.04)"
 grep -qx 'codename=bookworm' <<<"$target_12"
 grep -qx 'cloud_image=debian-12-genericcloud-amd64.qcow2' <<<"$target_12"
 grep -qx 'codename=trixie' <<<"$target_13"
 grep -qx 'cloud_image=debian-13-genericcloud-amd64.qcow2' <<<"$target_13"
 grep -qx 'apt_source_path=/etc/apt/sources.list.d/debian.sources' <<<"$target_13_generic"
 grep -qx 'apt_mirror=https://mirrors.aliyun.com/debian/' <<<"$target_13_generic"
-grep -qx 'distribution=ubuntu' <<<"$target_ubuntu"
-grep -qx 'version=24.04' <<<"$target_ubuntu"
-grep -qx 'codename=noble' <<<"$target_ubuntu"
-grep -qx 'cloud_image=noble-server-cloudimg-amd64.img' <<<"$target_ubuntu"
-grep -qx 'checksum_algorithm=sha256' <<<"$target_ubuntu"
-grep -qx 'apt_source_path=/etc/apt/sources.list.d/ubuntu.sources' <<<"$target_ubuntu"
-grep -qx 'apt_mirror=https://mirrors.aliyun.com/ubuntu/' <<<"$target_ubuntu"
+grep -qx 'distribution=ubuntu' <<<"$target_ubuntu_24"
+grep -qx 'version=24.04' <<<"$target_ubuntu_24"
+grep -qx 'codename=noble' <<<"$target_ubuntu_24"
+grep -qx 'cloud_image=noble-server-cloudimg-amd64.img' <<<"$target_ubuntu_24"
+grep -qx 'checksum_algorithm=sha256' <<<"$target_ubuntu_24"
+grep -qx 'apt_source_path=/etc/apt/sources.list.d/ubuntu.sources' <<<"$target_ubuntu_24"
+grep -qx 'apt_mirror=https://mirrors.aliyun.com/ubuntu/' <<<"$target_ubuntu_24"
+grep -qx 'distribution=ubuntu' <<<"$target_ubuntu_26"
+grep -qx 'version=26.04' <<<"$target_ubuntu_26"
+grep -qx 'codename=resolute' <<<"$target_ubuntu_26"
+grep -qx 'architecture=amd64' <<<"$target_ubuntu_26"
+grep -qx 'cloud_url=https://cloud-images.ubuntu.com/releases/26.04/release' <<<"$target_ubuntu_26"
+grep -qx 'cloud_image=ubuntu-26.04-server-cloudimg-amd64.img' <<<"$target_ubuntu_26"
+grep -qx 'checksum_file=SHA256SUMS' <<<"$target_ubuntu_26"
+grep -qx 'checksum_algorithm=sha256' <<<"$target_ubuntu_26"
+grep -qx 'apt_source_path=/etc/apt/sources.list.d/ubuntu.sources' <<<"$target_ubuntu_26"
+grep -qx 'apt_mirror=https://archive.ubuntu.com/ubuntu/' <<<"$target_ubuntu_26"
+grep -qx 'apt_security_mirror=https://security.ubuntu.com/ubuntu/' <<<"$target_ubuntu_26"
 if bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 11 >/dev/null 2>&1; then
   printf 'debian-target.sh unexpectedly accepted Debian 11\n' >&2
   exit 1
@@ -64,6 +76,10 @@ if bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" "" >/dev/null 2>&1
 fi
 if bash "$ROOT_DIR/test/integration/libvirt/target.sh" ubuntu-22.04 >/dev/null 2>&1; then
   printf 'target.sh unexpectedly accepted Ubuntu 22.04\n' >&2
+  exit 1
+fi
+if bash "$ROOT_DIR/test/integration/libvirt/target.sh" ubuntu-25.10 >/dev/null 2>&1; then
+  printf 'target.sh unexpectedly accepted Ubuntu 25.10\n' >&2
   exit 1
 fi
 
