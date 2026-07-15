@@ -13,7 +13,12 @@ import (
 
 const netplanOwnershipScript = `set -eu
 export LC_ALL=C
-for path in /etc/netplan/*.yaml; do
+for path in \
+  /lib/netplan/*.yaml \
+  /etc/netplan/*.yaml \
+  /run/netplan/*.yaml \
+  /run/systemd/network/*netplan* \
+  /run/NetworkManager/system-connections/netplan-*; do
   [ -f "$path" ] || continue
   printf '%s\n' "$path"
 done
@@ -42,7 +47,7 @@ func (p NativeProvider) PreflightHost(ctx context.Context, host ir.HostSpec, nod
 	}
 	sort.Strings(ownership)
 	return fmt.Errorf(
-		"host %q has active Netplan ownership (%s); affected native systemd-networkd declarations: %s; prepare a native-networkd target outside DebianForm",
+		"host %q has active Netplan ownership (%s); affected native systemd-networkd declarations: %s; no provider changes were made; prepare a native-networkd target outside DebianForm",
 		host.Name,
 		strings.Join(ownership, ", "),
 		strings.Join(declarations, ", "),

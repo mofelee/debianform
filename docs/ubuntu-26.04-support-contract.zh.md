@@ -141,6 +141,27 @@ Netplan ownership。
 - 不提供自动接管、override 或 Netplan YAML；测试 harness 的 native-networkd 准备不是产品能力。
 - arbitrary script 内容不参与 ownership 推断，由配置作者负责。
 
+### Network ownership 验证结果
+
+#59 在官方 Ubuntu 26.04 released image 上验证了冲突和 native 两条路径：
+
+- stock image 同时存在 `/etc/netplan/50-cloud-init.yaml` 和 Netplan 生成的
+  `/run/systemd/network/10-netplan-primary.network`；preflight 将二者作为 ownership evidence。
+- 同一配置同时声明 structured networkd 和 raw `/etc/systemd/network` file 时，`plan` 与
+  `apply` 都在 provider mutation 前失败；诊断包含 host、两个 declaration address、冲突路径、
+  `no provider changes were made` 和外部准备要求。
+- 冲突检查前后 networkd service 状态不变，两个目标文件和 managed resource state 均未创建。
+- stock image 随后完成非网络 file create、drift repair 和 destroy，三个阶段的 Netplan 文件集合
+  与 SHA-256 都保持不变。
+- operator-prepared native-networkd fixture 上，`shared-script-networkd`、`wireguard` 和
+  `wireguard-three-host` 分别通过 14、39、30 条显式断言，包括 reload dedup、no-op、drift、
+  deletion 和 cleanup。
+- runner 为 SSH 增加 server-alive 限界；guest reboot 窗口不再让已建立的 SSH 探测无限挂起，
+  单机、双机和三机 fixture 均无需人工干预完成。
+
+ownership 检查只读取 `/lib/netplan`、`/etc/netplan`、`/run/netplan` 以及 Netplan 生成的
+systemd-networkd/NetworkManager runtime 文件；不执行 Netplan CLI、`systemctl` 或文件 mutation。
+
 ## 20-case 26.04 baseline 和验收映射
 
 “released image”表示保留镜像原有 Netplan ownership；“native-networkd image”表示 harness 在

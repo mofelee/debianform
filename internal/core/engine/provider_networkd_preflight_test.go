@@ -54,7 +54,18 @@ func TestNativeProviderPreflightHostAllowsNativeNetworkdUbuntu(t *testing.T) {
 	if runner.scripts[0] != netplanOwnershipScript {
 		t.Fatalf("preflight script = %q, want fixed read-only ownership script", runner.scripts[0])
 	}
-	for _, forbidden := range []string{"netplan generate", "netplan apply", "rm ", "printf %s >"} {
+	for _, want := range []string{
+		"/lib/netplan/*.yaml",
+		"/etc/netplan/*.yaml",
+		"/run/netplan/*.yaml",
+		"/run/systemd/network/*netplan*",
+		"/run/NetworkManager/system-connections/netplan-*",
+	} {
+		if !strings.Contains(runner.scripts[0], want) {
+			t.Fatalf("preflight script does not inspect %q", want)
+		}
+	}
+	for _, forbidden := range []string{"netplan generate", "netplan apply", "netplan get", "systemctl", "rm ", "printf %s >"} {
 		if strings.Contains(runner.scripts[0], forbidden) {
 			t.Fatalf("preflight script contains forbidden mutation %q", forbidden)
 		}
@@ -62,7 +73,11 @@ func TestNativeProviderPreflightHostAllowsNativeNetworkdUbuntu(t *testing.T) {
 }
 
 func TestNativeProviderPreflightHostRejectsNetplanOwnership(t *testing.T) {
-	runner := &recordingRunner{outputs: []Result{{Stdout: "/etc/netplan/50-cloud-init.yaml\n"}}}
+	runner := &recordingRunner{outputs: []Result{{Stdout: strings.Join([]string{
+		"/etc/netplan/50-cloud-init.yaml",
+		"/run/systemd/network/10-netplan-enp1s0.network",
+		"/run/NetworkManager/system-connections/netplan-enp1s0.nmconnection",
+	}, "\n") + "\n"}}}
 	provider := NewNativeProvider(runner)
 	nodes := []graph.Node{
 		preflightNode("networkd_network", "/etc/systemd/network/20-wan.network"),
@@ -77,8 +92,11 @@ func TestNativeProviderPreflightHostRejectsNetplanOwnership(t *testing.T) {
 		`host "server1"`,
 		"active Netplan ownership",
 		"/etc/netplan/50-cloud-init.yaml",
+		"/run/systemd/network/10-netplan-enp1s0.network",
+		"/run/NetworkManager/system-connections/netplan-enp1s0.nmconnection",
 		nodes[0].Address,
 		nodes[1].Address,
+		"no provider changes were made",
 		"outside DebianForm",
 	} {
 		if !strings.Contains(err.Error(), want) {
@@ -128,8 +146,8 @@ func TestEngineApplyStopsBeforeProviderMutationOnPreflightFailure(t *testing.T) 
 }
 
 func testPreflightHost(distribution string) ir.HostSpec {
-	version := "24.04"
-	codename := "noble"
+	version := "26.04"
+	codename := "resolute"
 	if distribution == "debian" {
 		version = "13"
 		codename = "trixie"

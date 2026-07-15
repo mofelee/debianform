@@ -37,6 +37,11 @@ bash -n "$ROOT_DIR/test/integration/libvirt/network.sh"
 bash -n "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
 bash "$ROOT_DIR/test/integration/libvirt/test-network-helper.sh"
 
+for runner in run-case.sh run-two-host-case.sh run-three-host-case.sh; do
+  grep -q -- '-o ServerAliveInterval=5' "$ROOT_DIR/test/integration/libvirt/$runner"
+  grep -q -- '-o ServerAliveCountMax=1' "$ROOT_DIR/test/integration/libvirt/$runner"
+done
+
 target_12="$(bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 12)"
 target_13="$(bash "$ROOT_DIR/test/integration/libvirt/debian-target.sh" 13)"
 target_13_generic="$(bash "$ROOT_DIR/test/integration/libvirt/target.sh" debian-13)"
@@ -97,6 +102,7 @@ if grep -R -n -E 'DBF_INTEGRATION_DEBIAN|__DBF_DEBIAN' "$CASES_DIR"; then
   printf 'case fixtures still contain Debian-specific target variables\n' >&2
   exit 1
 fi
+"$DBF_BIN" validate -f "$CASES_DIR/files/netplan-conflict.dbf.hcl" >/dev/null
 
 TEMP_PLAN="$(mktemp "${TMPDIR:-/tmp}/dbf-core-noop-plan.XXXXXX.json")"
 printf '%s\n' '{"format_version":"debianform.plan.alpha1","summary":{"create":0,"update":0,"delete":0,"no_op":1,"operations":0}}' >"$TEMP_PLAN"

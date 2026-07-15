@@ -177,6 +177,8 @@ ssh_vm() {
     -F "$DBF_HOME/.ssh/config" \
     -o BatchMode=yes \
     -o ConnectTimeout=5 \
+    -o ServerAliveInterval=5 \
+    -o ServerAliveCountMax=1 \
     cihost "$@"
 }
 
