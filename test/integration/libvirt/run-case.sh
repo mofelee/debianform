@@ -264,7 +264,27 @@ collect_guest_diagnostics() {
   mkdir -p "$guest_dir"
   ssh_vm "set +e; hostnamectl; printf '\n'; uname -a; printf '\n'; uptime; printf '\n'; cat /etc/os-release" >"$guest_dir/system.txt" 2>&1 || true
   ssh_vm "systemctl --failed --no-pager --full" >"$guest_dir/systemctl-failed.txt" 2>&1 || true
-  ssh_vm "systemctl list-units --all --no-pager --full 'debianform*' 'dbf*' '*docker*'" >"$guest_dir/systemd-units.txt" 2>&1 || true
+  ssh_vm "systemctl list-units --all --no-pager --full 'debianform*' 'dbf*' '*docker*' '*networkd*' 'NetworkManager*'" >"$guest_dir/systemd-units.txt" 2>&1 || true
+  ssh_vm 'set +e
+printf "===== Netplan ownership paths =====\n"
+for path in /lib/netplan/*.yaml /etc/netplan/*.yaml /run/netplan/*.yaml /run/systemd/network/*netplan* /run/NetworkManager/system-connections/netplan-*; do
+  test -f "$path" || continue
+  printf "%s\n" "$path"
+done
+printf "\n===== Network management commands =====\n"
+command -v netplan || true
+command -v networkctl || true
+command -v nmcli || true
+printf "\n===== Network services =====\n"
+systemctl is-enabled systemd-networkd.service NetworkManager.service
+systemctl is-active systemd-networkd.service NetworkManager.service
+printf "\n===== Links and routes =====\n"
+ip -brief link
+ip -brief address
+ip route show table all
+printf "\n===== networkctl =====\n"
+networkctl --no-pager --full status
+' >"$guest_dir/network-ownership.txt" 2>&1 || true
   ssh_vm "dpkg-query -W | LC_ALL=C sort" >"$guest_dir/packages.txt" 2>&1 || true
   ssh_vm "journalctl --no-pager -n 500" >"$guest_dir/journal.log" 2>&1 || true
   ssh_vm "journalctl -u docker.service --no-pager -n 300" >"$guest_dir/docker.service.log" 2>&1 || true

@@ -340,6 +340,191 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  ubuntu-26-integration:
+    name: Ubuntu 26.04 amd64 libvirt (${{ matrix.case }})
+    needs: unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        case: ${{ fromJSON(needs.unit.outputs.integration_cases) }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.mod
+            go.sum
+
+      - name: Resolve Ubuntu 26.04 target metadata
+        id: ubuntu-26-target
+        run: |
+          source test/integration/libvirt/target.sh
+          dbf_integration_resolve_target ubuntu-26.04
+          echo "target=$DBF_INTEGRATION_TARGET" >> "$GITHUB_OUTPUT"
+          echo "distribution=$DBF_INTEGRATION_TARGET_DISTRIBUTION" >> "$GITHUB_OUTPUT"
+          echo "version=$DBF_INTEGRATION_TARGET_VERSION" >> "$GITHUB_OUTPUT"
+          echo "codename=$DBF_INTEGRATION_TARGET_CODENAME" >> "$GITHUB_OUTPUT"
+          echo "architecture=$DBF_INTEGRATION_TARGET_ARCHITECTURE" >> "$GITHUB_OUTPUT"
+          echo "cloud_url=$DBF_INTEGRATION_TARGET_CLOUD_URL" >> "$GITHUB_OUTPUT"
+          echo "cloud_image=$DBF_INTEGRATION_TARGET_CLOUD_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "checksum_file=$DBF_INTEGRATION_TARGET_CHECKSUM_FILE" >> "$GITHUB_OUTPUT"
+          echo "checksum_algorithm=$DBF_INTEGRATION_TARGET_CHECKSUM_ALGORITHM" >> "$GITHUB_OUTPUT"
+
+      - name: Cache apt packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/apt-cache
+          key: apt-${{ runner.os }}-libvirt-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            apt-${{ runner.os }}-libvirt-
+
+      - name: Install libvirt and cloud image tools
+        run: |
+          sudo install -d -m 0755 "${{ runner.temp }}/apt-cache/partial"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            -o Dir::Cache::archives="${{ runner.temp }}/apt-cache" \
+            cloud-image-utils \
+            curl \
+            dnsmasq-base \
+            libvirt-clients \
+            libvirt-daemon-system \
+            openssh-client \
+            ovmf \
+            qemu-system-x86 \
+            qemu-utils
+          sudo chown -R "$(id -u):$(id -g)" "${{ runner.temp }}/apt-cache"
+          sudo systemctl start libvirtd
+          if [[ -e /dev/kvm ]]; then
+            sudo chmod 0666 /dev/kvm
+          fi
+
+      - name: Resolve Ubuntu 26.04 cloud image checksum
+        id: ubuntu-26-image
+        env:
+          CLOUD_URL: ${{ steps.ubuntu-26-target.outputs.cloud_url }}
+          CLOUD_IMAGE: ${{ steps.ubuntu-26-target.outputs.cloud_image }}
+          CHECKSUM_FILE: ${{ steps.ubuntu-26-target.outputs.checksum_file }}
+          CHECKSUM_ALGORITHM: ${{ steps.ubuntu-26-target.outputs.checksum_algorithm }}
+        run: |
+          digest="$(
+            curl --fail --location --retry 3 --show-error --silent \
+              "$CLOUD_URL/$CHECKSUM_FILE" |
+              awk -v image="$CLOUD_IMAGE" '{ name=$2; sub(/^\*/, "", name); if (name == image) { print $1; exit } }'
+          )"
+          test -n "$digest"
+          test "${#digest}" = 64
+          test "$CHECKSUM_ALGORITHM" = sha256
+          echo "sha256=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Record Ubuntu 26.04 target evidence
+        env:
+          TARGET: ${{ steps.ubuntu-26-target.outputs.target }}
+          DISTRIBUTION: ${{ steps.ubuntu-26-target.outputs.distribution }}
+          VERSION: ${{ steps.ubuntu-26-target.outputs.version }}
+          CODENAME: ${{ steps.ubuntu-26-target.outputs.codename }}
+          ARCHITECTURE: ${{ steps.ubuntu-26-target.outputs.architecture }}
+          CLOUD_URL: ${{ steps.ubuntu-26-target.outputs.cloud_url }}
+          CLOUD_IMAGE: ${{ steps.ubuntu-26-target.outputs.cloud_image }}
+          SHA256: ${{ steps.ubuntu-26-image.outputs.sha256 }}
+        run: |
+          image_url="$CLOUD_URL/$CLOUD_IMAGE"
+          {
+            echo "### Ubuntu 26.04 target (${{ matrix.case }})"
+            echo
+            echo "- Target tuple: \`$DISTRIBUTION/$VERSION/$CODENAME/$ARCHITECTURE\` (\`$TARGET\`)"
+            echo "- Released image: \`$image_url\`"
+            echo "- SHA-256: \`$SHA256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cache Ubuntu 26.04 cloud image
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ubuntu-26.04-image-cache
+          key: ubuntu26.04-server-cloudimg-amd64-${{ steps.ubuntu-26-image.outputs.sha256 }}
+
+      - name: Run Ubuntu 26.04 VM integration test
+        run: |
+          artifact_root="${DBF_INTEGRATION_ARTIFACT_DIR:?}"
+          for attempt in 1 2; do
+            export DBF_INTEGRATION_ARTIFACT_DIR="$artifact_root/attempt-$attempt"
+            echo "Running Ubuntu 26.04 libvirt integration attempt $attempt for case ${DBF_INTEGRATION_CASE}"
+            if make test-integration TARGET="$TARGET"; then
+              exit 0
+            else
+              status=$?
+            fi
+            if [[ "$attempt" == "2" ]]; then
+              exit "$status"
+            fi
+            echo "Libvirt integration attempt $attempt failed; retrying once."
+            sleep 10
+          done
+        env:
+          TARGET: ubuntu-26.04
+          DBF_INTEGRATION_CASE: ${{ matrix.case }}
+          DBF_INTEGRATION_ARTIFACT_DIR: ${{ runner.temp }}/debianform-integration-artifacts/ubuntu-26.04
+          DBF_INTEGRATION_IMAGE_CACHE: ${{ runner.temp }}/ubuntu-26.04-image-cache
+
+      - name: Verify Ubuntu 26.04 libvirt cleanup
+        if: always()
+        run: |
+          evidence_dir="${{ runner.temp }}/debianform-integration-artifacts/ubuntu-26.04"
+          evidence_file="$evidence_dir/cleanup.txt"
+          mkdir -p "$evidence_dir"
+          domains="$(sudo virsh --connect qemu:///system list --all --name | sed '/^$/d' | grep '^dbf-test-ubuntu26-04-' || true)"
+          networks="$(sudo virsh --connect qemu:///system net-list --all --name | sed '/^$/d' | grep '^dbf-test-ubuntu26-04-' || true)"
+          volumes="$(
+            while IFS= read -r pool; do
+              test -n "$pool" || continue
+              sudo virsh --connect qemu:///system vol-list "$pool" |
+                awk 'NR > 2 && NF { print $1 }' |
+                grep '^dbf-test-ubuntu26-04-' |
+                sed "s|^|$pool/|" || true
+            done < <(sudo virsh --connect qemu:///system pool-list --all --name)
+          )"
+          disk_files="$(sudo find /var/lib/libvirt/images /var/lib/libvirt/qemu/nvram "${TMPDIR:-/tmp}" -xdev -name 'dbf-test-ubuntu26-04-*' -print 2>/dev/null || true)"
+          workdirs="$(find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'debianform-core-integration.*' -print || true)"
+          ssh_artifacts="$(find "${TMPDIR:-/tmp}" -path '*/debianform-core-integration.*/*' \( -name id_ed25519 -o -name id_ed25519.pub -o -path '*/.ssh/config' \) -print 2>/dev/null || true)"
+          {
+            echo "domains=${domains:-none}"
+            echo "networks=${networks:-none}"
+            echo "volumes=${volumes:-none}"
+            echo "disk_files=${disk_files:-none}"
+            echo "workdirs=${workdirs:-none}"
+            echo "ssh_artifacts=${ssh_artifacts:-none}"
+          } | tee "$evidence_file"
+          {
+            echo "### Ubuntu 26.04 libvirt cleanup (${{ matrix.case }})"
+            echo '```text'
+            cat "$evidence_file"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          test -z "$domains"
+          test -z "$networks"
+          test -z "$volumes"
+          test -z "$disk_files"
+          test -z "$workdirs"
+          test -z "$ssh_artifacts"
+
+      - name: Upload Ubuntu 26.04 libvirt diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: debianform-libvirt-ubuntu-26.04-${{ matrix.case }}-diagnostics
+          path: ${{ runner.temp }}/debianform-integration-artifacts
+          if-no-files-found: error
+          retention-days: 7
+
   managed-target-gate:
     name: Managed target matrix gate
     if: always()
@@ -371,3 +556,19 @@ jobs:
         run: |
           test "$UNIT_RESULT" = success
           test "$UBUNTU_INTEGRATION_RESULT" = success
+
+  ubuntu-26-target-gate:
+    name: Ubuntu 26.04 target matrix gate
+    if: always()
+    needs:
+      - unit
+      - ubuntu-26-integration
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require unit and Ubuntu 26.04 target matrix
+        env:
+          UNIT_RESULT: ${{ needs.unit.result }}
+          UBUNTU_26_INTEGRATION_RESULT: ${{ needs.ubuntu-26-integration.result }}
+        run: |
+          test "$UNIT_RESULT" = success
+          test "$UBUNTU_26_INTEGRATION_RESULT" = success
