@@ -4,7 +4,7 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
-## Unreleased
+## v0.8.0
 
 - Added Ubuntu 26.04 LTS (`resolute`) amd64 Server as a Preview managed target
   with an independent blocking 20-case libvirt matrix and target gate. The same
