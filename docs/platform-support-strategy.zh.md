@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="platform-support-strategy.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 目标平台支持策略
 
 本文档定义 DebianForm 对 CLI 运行平台、被管理目标主机发行版、版本和架构的支持策略。

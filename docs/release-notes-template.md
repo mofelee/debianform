@@ -1,5 +1,7 @@
 # Release Notes Template
 
+<p align="right"><strong>English</strong> | <a href="release-notes-template.zh.md">简体中文</a></p>
+
 Copy this template into the GitHub Release body before publishing a DebianForm
 release. Keep every top-level section, even when the answer is `None`.
 The release workflow appends or replaces the final `Verification Matrix`
@@ -62,7 +64,7 @@ section after post-release verification jobs finish.
 - Ubuntu network boundary: DebianForm does not manage or migrate Netplan;
   networkd requires an operator-prepared native-networkd target.
 - Install paths: <curl/Homebrew/.deb/apt support status>.
-- Feature support: see [support matrix](https://github.com/mofelee/debianform/blob/main/docs/support-matrix.zh.md).
+- Feature support: see [support matrix](https://github.com/mofelee/debianform/blob/main/docs/support-matrix.md).
 
 ## Verification
 
@@ -122,4 +124,4 @@ Before creating the release tag, check that:
   all three aggregate gates passed. Record the 26.04 released-image URL and digest.
 - The release notes do not use stable/GA/production-ready language unless the
   release has passed the stable gates in
-  [project maturity checklist](archive/legacy-design/project-maturity-and-launch-checklist.zh.md).
+  [project maturity checklist](archive/legacy-design/project-maturity-and-launch-checklist.md).

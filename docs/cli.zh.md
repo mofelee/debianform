@@ -1,5 +1,7 @@
 # DebianForm CLI
 
+<p align="right"><a href="cli.md">English</a> | <strong>简体中文</strong></p>
+
 本文档说明 `dbf` 命令行工具的主要功能、可用选项和常见用法。
 
 `dbf` 读取 `.dbf.hcl` 配置文件，用于校验、预览、应用和检查受支持 Debian/Ubuntu 目标主机配置。
@@ -158,7 +160,7 @@ dbf plan -f examples/bbr.dbf.hcl --format json --debug --offline
 | --- | --- | --- |
 | `-f path` | 当前目录所有 `*.dbf.hcl` | 可重复；读取显式指定的文件，或目录直属 `*.dbf.hcl`。 |
 | `--host name` | 空 | 只为指定 host 生成 plan。 |
-| `--format text\|json` | `text` | 输出文本或 JSON。JSON 格式见 [plan format](plan-format.md)。 |
+| `--format text\|json` | `text` | 输出文本或 JSON。JSON 格式见 [plan format](plan-format.zh.md)。 |
 | `--html file` | 空 | 将 plan 写成静态 HTML 文件。只能用于 `plan`，且不能和显式 `--format` 同时使用。 |
 | `--debug` | `false` | 在 plan 输出中显示内部 provider address。`apply --debug` 是不同语义，见 apply 章节。 |
 | `--offline` | `false` | 不进行 SSH、state 和 runtime facts 探测，只做本地 plan 预览。只能用于 `plan`。 |

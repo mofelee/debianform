@@ -1,5 +1,7 @@
 # script / on_change 需求文档
 
+<p align="right"><a href="script-on-change-requirements.md">English</a> | <strong>简体中文</strong></p>
+
 本文描述 `script` 指令和 `files.file.on_change` 的设计目标。当前已实现 DSL 解析、
 validate、HostSpec 编译、ResourceGraph/plan operation 展示、apply 阶段脚本执行、
 `mode = "once"` / `"each"` 触发语义，以及运行时触发上下文注入。已支持语法见

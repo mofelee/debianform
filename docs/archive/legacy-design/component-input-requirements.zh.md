@@ -1,5 +1,7 @@
 # DebianForm component input 需求文档
 
+<p align="right"><a href="component-input-requirements.md">English</a> | <strong>简体中文</strong></p>
+
 本文档定义 `component` 内 `input` 的目标能力。目标是把 component input
 从当前的简单参数声明，提升为接近 Terraform `variable` 的组件接口契约，特别支持
 `list(object({...}))` 这类结构化参数。

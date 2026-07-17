@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="ubuntu-24.04-support-contract.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # Ubuntu 24.04 Preview 支持契约
 
 本文档记录 issue [#43](https://github.com/mofelee/debianform/issues/43) 已交付的实现和支持

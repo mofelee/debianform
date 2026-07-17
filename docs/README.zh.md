@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="README.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # DebianForm Docs
 
 这里是 DebianForm 的文档入口。第一次使用从 Quickstart 开始；日常查命令看 CLI 手册；
@@ -26,12 +30,13 @@
 - [安全模型](security-model.zh.md)：root SSH、secret 脱敏、state/lock 和漏洞响应边界。
 - [兼容性政策](compatibility-policy.zh.md)：beta/stable 的 CLI、DSL、state 和 plan JSON 兼容规则。
 - [系统如何工作](how-it-works/README.zh.md)：面向后续开发者的内部架构和实现链路系列教程。
-- [Plan JSON 格式](plan-format.md)：`dbf plan --format json` 的结构化输出。
-- [State 格式](state.md)：远端 state、lock、ownership 和脱敏规则。
-- [systemd service units](systemd-service-units.md)：纯文本 unit 和结构化 `service_unit` 写法。
+- [Plan JSON 格式](plan-format.zh.md)：`dbf plan --format json` 的结构化输出。
+- [State 格式](state.zh.md)：远端 state、lock、ownership 和脱敏规则。
+- [systemd service units](systemd-service-units.zh.md)：纯文本 unit 和结构化 `service_unit` 写法。
 - [script / on_change](script-on-change-requirements.zh.md)：component 内部文件变更后的 script 钩子语义。
 - [CLI 颜色输出和日志策略](cli-color-output-policy.zh.md)：终端颜色、日志颜色、CI 和 JSON 输出边界。
 - [删除行为提示设计稿](delete-behavior-diagnostics-plan.zh.md)：plan/apply 删除提示、颜色和行为矩阵。
+- [文档本地化政策](localization-policy.zh.md)：双语文件命名、翻译、导航和验证要求。
 
 ## 设计中的需求
 
@@ -46,7 +51,7 @@
 
 - [Release 快速操作手册](release-quick-runbook.zh.md)：日常发布步骤。
 - [Release 流程](release-process.zh.md)：发布产物、release gate、安装和升级流程。
-- [Release notes 模板](release-notes-template.md)：GitHub Release 正文模板。
+- [Release notes 模板](release-notes-template.zh.md)：GitHub Release 正文模板。
 - [Release 自动化计划](release-automation-plan.zh.md)：发布 workflow 的实现记录。
 - [Linux Homebrew 验证策略](linux-homebrew-verification-policy.zh.md)：Linux Homebrew best-effort 边界。
 - [APT repository 可行性评估](apt-repository-feasibility.zh.md)：`.deb` 和 APT 仓库的后续路径。

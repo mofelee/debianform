@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="04-apt-and-packages.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 04. 安装软件包和配置 APT 源
 
 本章演示两类常见 APT 运维任务：

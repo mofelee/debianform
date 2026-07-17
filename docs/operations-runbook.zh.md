@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="operations-runbook.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # DebianForm Operations Runbook
 
 本文档覆盖 DebianForm 日常运维恢复流程：state lock、apply 中途失败、state 与远端不一致、

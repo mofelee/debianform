@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="cli-repeatable-f-requirements.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # CLI 可重复 `-f` 需求文档
 
 ## 背景

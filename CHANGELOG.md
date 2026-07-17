@@ -1,8 +1,21 @@
 # Changelog
 
+<p align="right"><strong>English</strong> | <a href="CHANGELOG.zh-CN.md">简体中文</a></p>
+
 All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
+
+## v0.8.1
+
+- Added complete English counterparts for every maintained Markdown document, with reciprocal
+  language selectors and same-language navigation across the repository.
+- Added a bilingual documentation policy and `make docs-check` CI gate covering 73 document pairs,
+  structural parity, unexpected Chinese prose in English documents, and local link integrity.
+- Added both language variants of CHANGELOG and SECURITY to GoReleaser archives, curl installs,
+  `make install`, and Homebrew package data alongside the existing bilingual README and docs tree.
+- This documentation and packaging patch does not change CLI, DSL, resource addresses, state schema
+  version 2, plan format `debianform.plan.alpha1`, or managed-target support semantics.
 
 ## v0.8.0
 

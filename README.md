@@ -176,10 +176,10 @@ This covers the complete workflow:
 - The second `plan`: should be a no-op.
 - `check`: detect remote drift and return a non-zero status when the host differs.
 
-For a more complete Debian tutorial, see the [Quickstart](docs/quickstart.zh.md) (Chinese). Ubuntu
-Preview quickstarts are available separately for [24.04 LTS amd64](docs/ubuntu-24.04-quickstart.zh.md)
-and [26.04 LTS amd64](docs/ubuntu-26.04-quickstart.zh.md) (Chinese). Continue with the
-[User Manual](docs/user-manual/README.zh.md) (Chinese). See
+For a more complete Debian tutorial, see the [Quickstart](docs/quickstart.md). Ubuntu Preview
+quickstarts are available separately for [24.04 LTS amd64](docs/ubuntu-24.04-quickstart.md)
+and [26.04 LTS amd64](docs/ubuntu-26.04-quickstart.md). Continue with the
+[User Manual](docs/user-manual/README.md). See
 [`examples/shadowsocks-rust.dbf.hcl`](examples/shadowsocks-rust.dbf.hcl) for the complete
 multi-architecture, least-privilege version.
 
@@ -437,7 +437,7 @@ Runnable examples covered by this README:
 - `examples/user-group.dbf.hcl`
 - `examples/variable-secret-file.dbf.hcl`
 
-See the [Support Matrix](docs/support-matrix.zh.md) (Chinese) for complete example status and coverage.
+See the [Support Matrix](docs/support-matrix.md) for complete example status and coverage.
 
 ## Support Scope
 
@@ -456,32 +456,32 @@ See the [Support Matrix](docs/support-matrix.zh.md) (Chinese) for complete examp
 - Service processes may still run with reduced privileges through systemd `user` / `group`; this does
   not change the root requirement for the management connection.
 
-For platform details, see the [Support Matrix](docs/support-matrix.zh.md) and
-[Platform Support Strategy](docs/platform-support-strategy.zh.md) (Chinese). For security boundaries,
-see the [Security Model](docs/security-model.zh.md) (Chinese).
+For platform details, see the [Support Matrix](docs/support-matrix.md) and
+[Platform Support Strategy](docs/platform-support-strategy.md). For security boundaries,
+see the [Security Model](docs/security-model.md).
 
 ## Documentation
 
-The detailed documentation linked below is currently available in Chinese:
+The detailed documentation linked below is available in English and Simplified Chinese:
 
-- [Quickstart](docs/quickstart.zh.md): from installation to the first `apply` / `check` on Debian.
-- [Ubuntu 24.04 Preview Quickstart](docs/ubuntu-24.04-quickstart.zh.md): a safe first run on Ubuntu
+- [Quickstart](docs/quickstart.md): from installation to the first `apply` / `check` on Debian.
+- [Ubuntu 24.04 Preview Quickstart](docs/ubuntu-24.04-quickstart.md): a safe first run on Ubuntu
   24.04 LTS amd64.
-- [Ubuntu 26.04 Preview Quickstart](docs/ubuntu-26.04-quickstart.zh.md): a safe first run on Ubuntu
+- [Ubuntu 26.04 Preview Quickstart](docs/ubuntu-26.04-quickstart.md): a safe first run on Ubuntu
   26.04 LTS amd64 with exact `resolute` platform facts.
-- [User Manual](docs/user-manual/README.zh.md): progressive, runnable tutorials.
-- [CLI Manual](docs/cli.zh.md): every command, option, output format, and limitation.
-- [Realistic Deployment Template](docs/realistic-deployment-example.zh.md): a least-privilege systemd
+- [User Manual](docs/user-manual/README.md): progressive, runnable tutorials.
+- [CLI Manual](docs/cli.md): every command, option, output format, and limitation.
+- [Realistic Deployment Template](docs/realistic-deployment-example.md): a least-privilege systemd
   application template.
-- [Operations Runbook](docs/operations-runbook.zh.md): state locks, failure recovery, and drift
+- [Operations Runbook](docs/operations-runbook.md): state locks, failure recovery, and drift
   diagnosis.
-- [Support Matrix](docs/support-matrix.zh.md): supported systems, domain blocks, examples, and test
+- [Support Matrix](docs/support-matrix.md): supported systems, domain blocks, examples, and test
   coverage.
-- [Compatibility Policy](docs/compatibility-policy.zh.md): compatibility and migration rules for beta
+- [Compatibility Policy](docs/compatibility-policy.md): compatibility and migration rules for beta
   and stable releases.
 - [Plan JSON Format](docs/plan-format.md): structured output from `dbf plan --format json`.
 - [State Format](docs/state.md): remote state, locks, ownership, and redaction rules.
-- [Documentation Index](docs/README.zh.md): all user documentation, maintainer documentation, and
+- [Documentation Index](docs/README.md): all user documentation, maintainer documentation, and
   archived design notes.
 
 ## Verify Release Artifacts
@@ -493,7 +493,7 @@ a GitHub provenance attestation. To quickly verify checksums:
 sha256sum --check checksums.txt
 ```
 
-See the [release process](docs/release-process.zh.md) (Chinese) for the complete release and
+See the [release process](docs/release-process.md) for the complete release and
 verification workflow.
 
 ## Development

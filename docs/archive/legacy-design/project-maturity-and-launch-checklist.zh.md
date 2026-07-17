@@ -1,5 +1,7 @@
 # 项目成熟度与上线清单
 
+<p align="right"><a href="project-maturity-and-launch-checklist.md">English</a> | <strong>简体中文</strong></p>
+
 本文档用于定期评估 DebianForm 的项目成熟度，并把上线前、公开 beta 后、stable 前需要完成的事项整理成可维护的 checklist。
 
 维护方式：每次检查时直接把 `- [ ]` 改成 `- [x]`，并在「检查记录」中追加本次验证命令和结论。
@@ -108,16 +110,16 @@
 - [x] README 说明 checksum 校验。
 - [x] README 说明 cosign keyless bundle 校验。
 - [x] README 说明 GitHub provenance attestation 校验。
-- [x] [state](../../state.md) 说明 state 保存哪些字段。
-- [x] [state](../../state.md) 说明 secret content、sensitive input、SSH 私钥、命令日志和 lock lease 不写入 state。
-- [x] [plan format](../../plan-format.md) 说明 sensitive diff 不输出明文。
+- [x] [state](../../state.zh.md) 说明 state 保存哪些字段。
+- [x] [state](../../state.zh.md) 说明 secret content、sensitive input、SSH 私钥、命令日志和 lock lease 不写入 state。
+- [x] [plan format](../../plan-format.zh.md) 说明 sensitive diff 不输出明文。
 - [x] README 说明远程 URL artifact 必须声明 64 位 sha256。
 - [x] WireGuard integration checks 覆盖 private key 不写入 state 明文。
 - [x] 增加 `govulncheck` 或等价依赖漏洞扫描。
 - [x] 增加 Dependabot/Renovate 或等价依赖更新策略。
 - [x] README 说明 root-only SSH 执行模型，不支持 sudo/become/非 root 管理连接。
 - [x] [CLI 文档](../../cli.zh.md) 说明 root-only SSH 执行模型。
-- [x] [requirements](requirements.md) 说明 root-only 权限边界。
+- [x] [requirements](requirements.zh.md) 说明 root-only 权限边界。
 - [x] 增加覆盖 text/json/html plan、stdout/stderr、state 的集中式 secret redaction 回归矩阵。
 
 ### 用户文档
@@ -129,7 +131,7 @@
 - [x] README 包含 validate、offline plan、json plan、html plan、apply、check 的基础示例。
 - [x] [CLI 文档](../../cli.zh.md) 说明 `validate`、`plan`、`apply`、`check`、`fmt`、`variable inspect`、`component inspect` 和 version。
 - [x] [CLI 文档](../../cli.zh.md) 说明 `--host`、`--parallel` 和 `--lock-timeout`。
-- [x] [state](../../state.md) 说明 state path、lock path、ownership、lock 和 atomic write。
+- [x] [state](../../state.zh.md) 说明 state path、lock path、ownership、lock 和 atomic write。
 - [x] [release quick runbook](../../release-quick-runbook.zh.md) 说明发布前、发布中、发布后和回滚流程。
 - [x] 新增独立 quickstart，覆盖准备 SSH 用户、写第一份配置、validate、在线 plan、apply、check。
 - [x] 新增 operations/runbook，覆盖 stale lock、apply 中途失败、state 与远端不一致、资源移除和恢复步骤。
@@ -234,9 +236,9 @@
 
 - [x] README 覆盖项目定位、安装、升级、校验、示例、基础命令和集成测试入口。
 - [x] [CLI 文档](../../cli.zh.md) 覆盖主要命令和参数。
-- [x] [requirements](requirements.md) 和相关设计文档存在。
-- [x] [state](../../state.md) 文档存在。
-- [x] [plan format](../../plan-format.md) 文档存在。
+- [x] [requirements](requirements.zh.md) 和相关设计文档存在。
+- [x] [state](../../state.zh.md) 文档存在。
+- [x] [plan format](../../plan-format.zh.md) 文档存在。
 - [x] [support matrix](../../support-matrix.zh.md) 文档存在。
 - [x] [security model](../../security-model.zh.md) 文档存在。
 - [x] [apt repository feasibility](../../apt-repository-feasibility.zh.md) 文档存在。

@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="security-model.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # DebianForm 安全模型
 
 本文档说明 DebianForm public beta 阶段的安全边界、secret 处理和漏洞响应流程。它不是

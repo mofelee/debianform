@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="support-matrix.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # DebianForm 支持矩阵
 
 本文档把 DebianForm 当前可承诺的 CLI 平台、目标主机、配置 block、domain/resource 类型和

@@ -1,5 +1,7 @@
 # 09. Backend、SSH 与远端 State
 
+<p align="right"><a href="09-backend-state.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 backend、SSH runner 和 state 的边界。它们负责“如何访问主机”和“如何保存 DebianForm 的管理记录”，
 不负责解析配置，也不负责决定资源动作。
 

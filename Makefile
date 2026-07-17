@@ -19,7 +19,7 @@ LDFLAGS := -s -w \
 	-X $(VERSION_PACKAGE).Commit=$(COMMIT) \
 	-X $(VERSION_PACKAGE).Date=$(BUILD_DATE)
 
-.PHONY: build install test test-unit vulncheck update-golden test-integration test-integration-case test-integration-layout test-integration-source-build clean
+.PHONY: build install test test-unit docs-check vulncheck update-golden test-integration test-integration-case test-integration-layout test-integration-source-build clean
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) $(PACKAGE)
@@ -29,6 +29,10 @@ install: build
 	$(INSTALL) -m 0755 "$(BINARY)" "$(DESTDIR)$(BINDIR)/dbf"
 	$(INSTALL) -m 0644 README.md "$(DESTDIR)$(DATADIR)/README.md"
 	$(INSTALL) -m 0644 README.zh-CN.md "$(DESTDIR)$(DATADIR)/README.zh-CN.md"
+	$(INSTALL) -m 0644 CHANGELOG.md "$(DESTDIR)$(DATADIR)/CHANGELOG.md"
+	$(INSTALL) -m 0644 CHANGELOG.zh-CN.md "$(DESTDIR)$(DATADIR)/CHANGELOG.zh-CN.md"
+	$(INSTALL) -m 0644 SECURITY.md "$(DESTDIR)$(DATADIR)/SECURITY.md"
+	$(INSTALL) -m 0644 SECURITY.zh-CN.md "$(DESTDIR)$(DATADIR)/SECURITY.zh-CN.md"
 	cp -R docs/. "$(DESTDIR)$(DATADIR)/docs/"
 	cp -R examples/. "$(DESTDIR)$(DATADIR)/examples/"
 
@@ -37,6 +41,9 @@ test:
 
 test-unit:
 	go test -race -count=1 ./...
+
+docs-check:
+	python3 scripts/check-docs.py
 
 vulncheck:
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...

@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="10-profiles-and-variables.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 10. 使用 profile、variable 和多环境参数
 
 本章演示两个复用机制：

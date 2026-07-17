@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="release-quick-runbook.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # DebianForm Release 快速操作手册
 
 日常发布按这份短流程执行；设计和背景见
@@ -6,7 +10,7 @@
 ## 发布前
 
 1. 更新 `CHANGELOG.md`，确认当前 tag 的变更、兼容性和迁移说明完整。
-2. 按 [release notes template](release-notes-template.md) 准备 GitHub Release notes，
+2. 按 [release notes template](release-notes-template.zh.md) 准备 GitHub Release notes，
    明确 breaking changes、known issues、verification matrix 和 migration notes。
 3. 确认本地在 `main` 且工作区干净：
 
@@ -19,6 +23,7 @@
 4. 运行基础检查：
 
    ```bash
+   make docs-check
    test -z "$(gofmt -l $(git ls-files '*.go'))"
    go vet ./...
    go test -race -count=1 ./...

@@ -1,5 +1,7 @@
 # 12. 测试体系与新增能力清单
 
+<p align="right"><a href="12-testing-and-extension.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 DebianForm 的测试分层，以及新增一个 domain block 或 provider resource 时应该改哪些地方。
 
 ## 测试分层

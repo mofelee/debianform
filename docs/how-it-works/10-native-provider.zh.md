@@ -1,5 +1,7 @@
 # 10. Native Provider 与资源实现
 
+<p align="right"><a href="10-native-provider.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 `NativeProvider` 如何把 graph node 转成受支持目标主机上的实际观测和修改。
 provider 是最接近操作系统的一层。
 

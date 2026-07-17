@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="07-nftables.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 07. 管理 nftables 防火墙
 
 本章演示如何安装并启用 nftables，管理 `/etc/nftables.conf` 和 snippet 文件，并在文件漂移后重新验证、

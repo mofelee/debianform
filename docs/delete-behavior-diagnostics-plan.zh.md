@@ -1,5 +1,7 @@
 # DebianForm 删除行为提示设计稿
 
+<p align="right"><a href="delete-behavior-diagnostics-plan.md">English</a> | <strong>简体中文</strong></p>
+
 本文档记录删除行为提示的需求讨论。结论：弃用两阶段删除方案，不实现
 `prepare-destroy` / `prepare-remove`。更合适的方向是在 `plan` 和 `apply` 中把删除动作讲清楚：
 系统会删除什么、保留什么、是否恢复运行时状态、是否可能影响用户数据。

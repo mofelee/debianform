@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="12-operations.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 12. 日常运维：plan 审阅、漂移处理、锁、state 和故障恢复
 
 本章把前面章节反复用到的操作整理成日常 runbook：如何审阅 plan，如何生成 JSON/HTML plan，

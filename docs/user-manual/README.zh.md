@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="README.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # DebianForm 用户手册
 
 这个目录存放面向使用者的系列教程。每一章都按“可以直接运行”的标准编写：包含完整 `.dbf.hcl`

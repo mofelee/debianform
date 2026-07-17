@@ -1,5 +1,7 @@
 # 03. Profile、Host 与 Component 如何编译成 IR
 
+<p align="right"><a href="03-merge-compile.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 `internal/core/merge` 如何把 parser 输出的原始配置编译成 `internal/core/ir.Program`。
 这个阶段是 DebianForm 从“配置语法树”进入“领域模型”的边界。
 

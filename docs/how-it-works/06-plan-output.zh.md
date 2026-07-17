@@ -1,5 +1,7 @@
 # 06. Plan 文档、Diff 与输出格式
 
+<p align="right"><a href="06-plan-output.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 `internal/core/plan` 如何把资源图或 engine plan 转成用户可读和机器可读输出。
 
 ## 两种 plan 来源

@@ -1,5 +1,7 @@
 # Libvirt Integration Tests
 
+<p align="right"><strong>English</strong> | <a href="README.zh.md">简体中文</a></p>
+
 These tests boot fresh Debian 12, Debian 13, Ubuntu 24.04, or Ubuntu 26.04 amd64 cloud VMs
 with libvirt and exercise the full managed-target lifecycle against real remote
 state. Debian 13 is the default and primary target. Debian 12, Debian 13, and

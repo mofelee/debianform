@@ -81,6 +81,9 @@ jobs:
       - name: Run static analysis
         run: go vet ./...
 
+      - name: Validate bilingual documentation
+        run: make docs-check
+
       - name: Run vulnerability scan
         run: make vulncheck
 

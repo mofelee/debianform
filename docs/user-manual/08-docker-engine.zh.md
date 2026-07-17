@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="08-docker-engine.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 08. 管理 Docker Engine、daemon 配置和用户权限
 
 本章演示 DebianForm 的高层 Docker 能力：安装 Docker 官方源和软件包，启用 Docker 服务，

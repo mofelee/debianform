@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="ubuntu-26.04-quickstart.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # Ubuntu 26.04 Preview Quickstart
 
 本文档是在 Ubuntu 26.04 LTS (`resolute`) amd64 Server 上完成第一次

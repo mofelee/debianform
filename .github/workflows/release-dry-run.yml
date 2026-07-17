@@ -14,6 +14,9 @@ on:
       - "README.zh-CN.md"
       - "LICENSE"
       - "CHANGELOG.md"
+      - "CHANGELOG.zh-CN.md"
+      - "SECURITY.md"
+      - "SECURITY.zh-CN.md"
       - "docs/**"
       - "examples/**"
   workflow_dispatch:
@@ -63,6 +66,9 @@ jobs:
       - name: Run static analysis
         run: go vet ./...
 
+      - name: Validate bilingual documentation
+        run: make docs-check
+
       - name: Run vulnerability scan
         run: make vulncheck
 
@@ -82,3 +88,7 @@ jobs:
           test -n "$(find dist -maxdepth 1 -name 'dbf_*_linux_arm64.tar.gz' -print -quit)"
           test -n "$(find dist -maxdepth 1 -name 'dbf_*_darwin_amd64.tar.gz' -print -quit)"
           test -n "$(find dist -maxdepth 1 -name 'dbf_*_darwin_arm64.tar.gz' -print -quit)"
+          archive="$(find dist -maxdepth 1 -name 'dbf_*_linux_amd64.tar.gz' -print -quit)"
+          for path in README.md README.zh-CN.md CHANGELOG.md CHANGELOG.zh-CN.md SECURITY.md SECURITY.zh-CN.md docs/localization-policy.md docs/localization-policy.zh.md; do
+            tar -tzf "$archive" | grep -qx "$path"
+          done

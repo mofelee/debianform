@@ -1,5 +1,7 @@
 # 07. 在线 Engine：读取状态、观测现实、计算动作
 
+<p align="right"><a href="07-engine-plan.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 `internal/core/engine.Engine.Plan` 如何在在线模式下计算真实动作。它是 DebianForm 区分
 “期望配置”、“远端 state”和“主机现实”的关键层。
 

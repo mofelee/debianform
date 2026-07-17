@@ -1,5 +1,7 @@
 # DebianForm WireGuard Example Plan
 
+<p align="right"><a href="wireguard-example-plan.md">English</a> | <strong>简体中文</strong></p>
+
 本文档记录当前 WireGuard 示例和双主机集成测试的实现方向。WireGuard 由
 `systemd-networkd` 原生 `.netdev` / `.network` 文件管理，不安装 `wireguard-tools`，
 也不使用 `wg-quick`。

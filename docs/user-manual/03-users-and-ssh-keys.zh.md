@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="03-users-and-ssh-keys.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 03. 管理用户、组和 SSH authorized keys
 
 本章演示如何创建系统组、系统用户、用户 home 目录和 SSH authorized key，并演示 authorized key

@@ -1,5 +1,7 @@
 # DebianForm variable 与敏感数据需求文档
 
+<p align="right"><a href="variable-secrets-requirements.md">English</a> | <strong>简体中文</strong></p>
+
 本文档定义 顶层 `variable`、敏感值传播、运行时 secret 注入，以及它们与现有
 `secrets.file` 的关系。目标是把 secret 的“来源”和“落到目标机的资源”拆开，避免
 继续把本地 secret 文件路径绑定为唯一输入方式。

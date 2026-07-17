@@ -1,3 +1,5 @@
+<p align="right"><a href="docker-compose-requirements.md">English</a> | <strong>简体中文</strong></p>
+
 # DebianForm Docker / Docker Compose 管理需求文档
 
 实现拆分与当前状态见：`docs/docker-compose-implementation-plan.zh.md`。

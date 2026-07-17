@@ -1,7 +1,11 @@
+<p align="right">
+  <a href="beta-feedback-triage.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # DebianForm Beta Feedback 和 Triage 流程
 
 本文档定义 public beta 阶段的用户反馈入口、issue triage 流程、优先级和关闭条件。
-安全漏洞不走公开 issue；请按 [SECURITY.md](../SECURITY.md) 使用 GitHub Security Advisories。
+安全漏洞不走公开 issue；请按 [SECURITY.zh-CN.md](../SECURITY.zh-CN.md) 使用 GitHub Security Advisories。
 
 ## 反馈入口
 

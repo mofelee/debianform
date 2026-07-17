@@ -1,5 +1,7 @@
 # 08. Apply 执行模型、锁和调度
 
+<p align="right"><a href="08-apply-scheduler.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 `Engine.Apply` 如何执行变更。apply 是 DebianForm 中唯一会修改远端主机和远端 state 的核心路径。
 
 ## 数据流

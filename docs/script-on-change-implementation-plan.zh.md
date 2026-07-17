@@ -1,5 +1,7 @@
 # script / on_change 实施计划
 
+<p align="right"><a href="script-on-change-implementation-plan.md">English</a> | <strong>简体中文</strong></p>
+
 本文档把 [script / on_change 需求文档](script-on-change-requirements.zh.md) 拆成可执行
 开发循环。每个 loop 都必须形成一个可合并闭环：
 

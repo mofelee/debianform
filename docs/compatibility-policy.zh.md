@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="compatibility-policy.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # DebianForm 兼容性和迁移政策
 
 本文档定义 DebianForm 的 DSL、CLI、state schema 和 plan JSON 格式兼容性规则。项目当前仍处于

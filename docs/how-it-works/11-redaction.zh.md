@@ -1,5 +1,7 @@
 # 11. Secrets、Sensitive 与脱敏链路
 
+<p align="right"><a href="11-redaction.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 DebianForm 如何在 parser、IR、graph、plan、state 和 provider 执行中处理敏感数据。
 这条链路必须整体理解，因为任何一层放松都可能泄漏 secret。
 

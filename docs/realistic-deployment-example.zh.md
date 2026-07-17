@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="realistic-deployment-example.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 真实部署模板：systemd app
 
 本文档给出一个可本地验证的小型部署案例：
@@ -65,4 +69,4 @@ unit、文件或服务状态，`check` 应输出 drift 并返回非零。
 - [CLI 文档](cli.zh.md)
 - [operations runbook](operations-runbook.zh.md)
 - [support matrix](support-matrix.zh.md)
-- [systemd service units](systemd-service-units.md)
+- [systemd service units](systemd-service-units.zh.md)

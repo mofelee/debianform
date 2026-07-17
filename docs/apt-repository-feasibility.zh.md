@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="apt-repository-feasibility.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # DebianForm .deb 和 APT Repository 可行性评估
 
 本文档评估 DebianForm 后续提供 `.deb` 包和 APT repository 的可行性、边界和实施路线。

@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="linux-homebrew-verification-policy.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # Linux Homebrew 验证策略
 
 本文档定义 DebianForm 对 Linux Homebrew 安装路径的验证策略。当前 public beta 已支持自建

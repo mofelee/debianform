@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="01-first-apply.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 01. 准备测试主机并完成第一次 apply/check
 
 本章完成 DebianForm 的最小闭环：连接一台 Debian 测试主机，写一个文件，执行 `validate`、

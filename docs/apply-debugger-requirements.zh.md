@@ -1,5 +1,7 @@
 # apply SSH 调试器需求文档
 
+<p align="right"><a href="apply-debugger-requirements.md">English</a> | <strong>简体中文</strong></p>
+
 本文描述 `dbf apply` 的交互式 SSH 调试器需求。目标是让用户像使用 GDB 一样观察和控制
 DebianForm 在远端主机上执行的每一次 SSH 调用，支持单步执行、一次执行多步、继续执行、
 查看脚本详情、查看远端输出，以及失败后重试。

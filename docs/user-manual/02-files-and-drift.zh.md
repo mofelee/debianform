@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="02-files-and-drift.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 02. 管理文件、目录和漂移修复
 
 本章在第 1 章基础上继续管理目录和多个文件，并演示一次真实漂移：手动修改远端文件后，

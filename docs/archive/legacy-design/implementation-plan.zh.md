@@ -1,5 +1,7 @@
 # DebianForm 实施计划
 
+<p align="right"><a href="implementation-plan.md">English</a> | <strong>简体中文</strong></p>
+
 本文档把 设计落成可执行的开发计划。每个 loop 都必须形成一个可合并闭环：
 
 - 代码路径可运行

@@ -1,5 +1,7 @@
 # DebianForm 系统如何工作
 
+<p align="right"><a href="README.md">English</a> | <strong>简体中文</strong></p>
+
 这个目录存放面向后续开发者的系统工作原理系列教程。目标不是重复用户手册，而是解释
 `dbf` 从读取 `.dbf.hcl` 到生成计划、执行变更、写入 state 的内部链路，以及每个包的职责边界。
 

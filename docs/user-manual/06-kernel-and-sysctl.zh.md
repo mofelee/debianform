@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="06-kernel-and-sysctl.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 06. 管理内核模块、sysctl 和 BBR
 
 本章演示如何加载并持久化内核模块、设置 sysctl，并用 BBR 作为真实例子。这个示例会修改测试主机的

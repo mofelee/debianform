@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="09-docker-compose.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 09. 部署 Docker Compose 项目
 
 本章演示 DebianForm 的 Docker Compose 能力：管理项目目录、`compose.yaml`、敏感 `.env` 文件、

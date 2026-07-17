@@ -1,5 +1,7 @@
 # DebianForm DSL Reference
 
+<p align="right"><a href="dsl-reference.md">English</a> | <strong>简体中文</strong></p>
+
 本文档按当前实现列出 `.dbf.hcl` 的已支持指令、字段、默认值和限制。教程式用法见
 [用户手册](user-manual/README.zh.md)；命令行选项见 [CLI 手册](cli.zh.md)；
 能力状态见 [支持矩阵](support-matrix.zh.md)。

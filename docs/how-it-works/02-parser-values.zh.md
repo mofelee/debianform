@@ -1,5 +1,7 @@
 # 02. HCL 解析、变量和值模型
 
+<p align="right"><a href="02-parser-values.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 `internal/core/parser` 如何把 `.dbf.hcl`、变量文件、环境变量和 CLI 变量转换成
 `parser.Config`。这个阶段只负责读配置和表达式求值，不负责把配置变成最终资源。
 

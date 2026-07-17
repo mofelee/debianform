@@ -1,5 +1,7 @@
 # DebianForm 发布流程
 
+<p align="right"><a href="release-process.md">English</a> | <strong>简体中文</strong></p>
+
 本文档规定 DebianForm 的公开发布、安装和升级流程。目标是让用户可以在 Linux 和
 macOS 上用 `curl` 或 Homebrew 安装 `dbf`，并支持 `amd64` 和 `arm64`。
 
@@ -48,7 +50,7 @@ CLI 发布产物覆盖：
 - `checksums.txt`，包含所有 tarball 的 SHA256。
 - release notes，说明新增、修复、兼容性和迁移事项。
 
-release notes 必须按 [release notes template](release-notes-template.md)
+release notes 必须按 [release notes template](release-notes-template.zh.md)
 检查，固定包含 breaking changes、known issues、verification matrix 和 migration notes。
 
 `<tag>` 使用完整 git tag，例如 `v0.1.0-beta.1`。
@@ -58,10 +60,13 @@ release notes 必须按 [release notes template](release-notes-template.md)
 - `dbf`
 - `README.md`
 - `README.zh-CN.md`
+- `CHANGELOG.md`
+- `CHANGELOG.zh-CN.md`
+- `SECURITY.md`
+- `SECURITY.zh-CN.md`
 - `docs/`
 - `examples/`
 - `LICENSE`
-- `CHANGELOG.md`
 
 建议后续增加：
 
@@ -110,6 +115,7 @@ dbf --version
 打 tag 前必须通过：
 
 ```bash
+make docs-check
 test -z "$(gofmt -l $(git ls-files '*.go'))"
 go vet ./...
 go test -race -count=1 ./...
@@ -146,8 +152,8 @@ make test-integration-case CASE=files TARGET=ubuntu-26.04
 ## GitHub Release 流程
 
 1. 更新 `CHANGELOG.md`。
-2. 按 [release notes template](release-notes-template.md) 准备 GitHub Release notes。
-3. 确认 `README.md`、`README.zh-CN.md` 和 `docs/` 已同步。
+2. 按 [release notes template](release-notes-template.zh.md) 准备 GitHub Release notes。
+3. 运行 `make docs-check`，确认所有维护中的 Markdown 文档对都已同步。
 4. 确认 CI 全绿。
 5. 创建 tag：
 

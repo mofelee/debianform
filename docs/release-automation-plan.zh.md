@@ -1,5 +1,7 @@
 # 发布自动化执行计划
 
+<p align="right"><a href="release-automation-plan.md">English</a> | <strong>简体中文</strong></p>
+
 本文档把 DebianForm 的发布自动化拆成可验证 loop。每个 loop 都应该形成一个可以合并的闭环：
 
 - [x] 代码或配置可运行

@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="11-components.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # 11. 使用 component 安装二进制或源码构建工具
 
 本章演示 DebianForm 的 `component`：把一组资源封装成可复用模板，再挂载到 host。

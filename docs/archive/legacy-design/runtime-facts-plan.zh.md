@@ -1,5 +1,7 @@
 # DebianForm Runtime Facts Plan
 
+<p align="right"><a href="runtime-facts-plan.md">English</a> | <strong>简体中文</strong></p>
+
 本文档记录 `system.architecture`、`system.codename` 这类 runtime facts 的实现计划，
 并明确区分 desired hostname 和 observed hostname。
 

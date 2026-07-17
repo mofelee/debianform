@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="ubuntu-24.04-quickstart.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # Ubuntu 24.04 Preview Quickstart
 
 本文档是在 Ubuntu 24.04 LTS (`noble`) amd64 Server 上完成第一次

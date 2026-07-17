@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="readme-asciinema-demo.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # README asciinema 演示录制指南
 
 本文档记录 GitHub README 终端演示的生成方式。目标是在 README 中直接展示

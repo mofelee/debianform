@@ -1,3 +1,5 @@
+<p align="right"><a href="ir-requirements.md">English</a> | <strong>简体中文</strong></p>
+
 # DebianForm 中间表达需求文档
 
 ## 目标

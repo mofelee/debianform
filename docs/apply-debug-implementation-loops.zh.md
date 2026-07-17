@@ -1,5 +1,7 @@
 # apply --debug 实施循环拆分
 
+<p align="right"><a href="apply-debug-implementation-loops.md">English</a> | <strong>简体中文</strong></p>
+
 本文档把 [apply SSH 调试器需求文档](apply-debugger-requirements.zh.md) 拆成可验证的开发 loop。
 每个 loop 都必须形成一个可合并闭环：
 

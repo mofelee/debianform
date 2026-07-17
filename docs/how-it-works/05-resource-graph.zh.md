@@ -1,5 +1,7 @@
 # 05. ResourceGraph 如何展开资源和依赖
 
+<p align="right"><a href="05-resource-graph.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 `internal/core/graph` 如何把 `ir.Program` 展开成 `ResourceGraph`。graph 是 plan 和 apply 的
 共同输入，它定义资源地址、provider payload、依赖关系和 operation 触发关系。
 

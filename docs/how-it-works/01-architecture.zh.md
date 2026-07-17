@@ -1,5 +1,7 @@
 # 01. 全局架构与命令生命周期
 
+<p align="right"><a href="01-architecture.md">English</a> | <strong>简体中文</strong></p>
+
 本章解释 `dbf` 命令从参数进入，到解析配置、编译 IR、生成资源图、生成计划或执行变更的主流程。
 后续章节会分别展开 parser、merge、graph、plan、engine 和 provider。
 

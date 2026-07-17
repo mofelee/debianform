@@ -1,5 +1,7 @@
 # DebianForm CLI 颜色输出和日志策略
 
+<p align="right"><a href="cli-color-output-policy.md">English</a> | <strong>简体中文</strong></p>
+
 本文档记录 CLI 颜色输出和日志颜色的需求讨论。结论：颜色适合用于面向人的终端输出，
 尤其是 `plan` / `apply` 中需要快速识别风险的内容；不适合写入结构化输出、持久化日志或默认 CI 输出。
 

@@ -1,12 +1,15 @@
 # DebianForm State
 
-DebianForm 为每台 host 保存独立的远端 JSON state：
+<p align="right"><strong>English</strong> | <a href="state.zh.md">简体中文</a></p>
+
+DebianForm stores a separate remote JSON state for each host:
 
 ```text
 /var/lib/debianform/state/<host>.json
 ```
 
-对应的租约文件、兼容锁目录和内部 guard 文件为：
+The corresponding lease file, compatibility lock directory, and internal guard
+file are:
 
 ```text
 /var/lock/debianform/state/<host>.lock
@@ -15,8 +18,9 @@ DebianForm 为每台 host 保存独立的远端 JSON state：
 /var/lock/debianform/state/<host>.lock.guard
 ```
 
-这些路径由默认 lock path 派生；通常不需要在配置中写 `state` block。需要自定义远端 state 或 lock
-位置时，可以在 host 中覆盖：
+These paths are derived from the default lock path. You normally do not need a
+`state` block in the configuration. To customize the remote state or lock
+location, override it within the host:
 
 ```hcl
 host "server1" {
@@ -29,90 +33,127 @@ host "server1" {
 
 ## State Schema
 
-state 顶层字段：
+Top-level state fields:
 
-- `version`: 当前为 `2`。
-- `host`: host label。
-- `serial`: 每次成功提交 state write 时恰好递增 1。
-- `updated_at`: UTC RFC3339。
-- `facts`: 运行时探测到的主机事实。DSL 中目标平台 facts 写作 `platform.architecture`
-  和 `platform.codename`；state schema 仍以 `facts.system.*` 保存这些值。
-  `facts.system.hostname` 是 observed value，不等同于配置中的 desired `system.hostname`。
-  配置省略 `system.hostname` 时，DebianForm 不管理远端 hostname。
-- `resources`: 以稳定 address 为 key 的资源记录。
+- `version`: currently `2`.
+- `host`: the host label.
+- `serial`: increments by exactly 1 for each successfully committed state write.
+- `updated_at`: UTC RFC3339.
+- `facts`: host facts detected at runtime. Target-platform facts in the DSL are
+  written as `platform.architecture` and `platform.codename`; the state schema
+  continues to store these values under `facts.system.*`.
+  `facts.system.hostname` is the observed value and is not the same as the
+  desired `system.hostname` in configuration. When `system.hostname` is omitted
+  from the configuration, DebianForm does not manage the remote hostname.
+- `resources`: resource records keyed by stable address.
 
-资源记录保存：
+A resource record stores:
 
-- `host`；兼容的 version 2 记录可以省略，读取时会归一为顶层 `host`。
-- resource kind、provider type 和仅供调试的 provider address。
-- ownership。
-- 经过脱敏的 desired 和 desired digest。
-- 必要的 observed 摘要。
-- lifecycle、更新时间和执行顺序。
+- `host`; compatible version 2 records may omit it, in which case it is
+  normalized to the top-level `host` when read.
+- The resource kind, provider type, and debug-only provider address.
+- Ownership.
+- The redacted desired value and desired digest.
+- Any required observed summary.
+- Lifecycle, update time, and execution order.
 
-secret content、sensitive component input 明文，以及由 sensitive input 派生的 files、
-systemd unit、APT source/signing key 或 nftables content 不会写入 state。SSH 私钥、
-命令日志和 lock 租约同样不会写入 state。敏感 content 只保存 `content_sha256`、
-`content_bytes` 等摘要字段，用于 drift 比对和 no-op 判断。
+Secret content, sensitive component input plaintext, and file, systemd unit,
+APT source/signing-key, or nftables content derived from sensitive input are
+never written to state. SSH private keys, command logs, and lock leases are also
+excluded. Sensitive content is represented only by summary fields such as
+`content_sha256` and `content_bytes`, which support drift comparison and no-op
+detection.
 
-## 读取校验
+## Read Validation
 
-state 是 ownership 和远端操作目标的安全边界。不存在或内容为空的 state 文件会被视为当前 host 的
-空 version 2 state；任何非空 state 必须同时满足：
+State is the safety boundary for ownership and remote operation targets. A
+missing or empty state file is treated as an empty version 2 state for the
+current host. Every non-empty state must satisfy all of these requirements:
 
-- 顶层 `version` 必须恰好为 `2`。缺失、旧版本和未知较新版本都会被拒绝。
-- 顶层 `host` 必须存在，并与当前请求的 host label 完全一致。
-- 每条 resource 的 `host` 可以省略，也可以与顶层 `host` 一致；省略值会在内存中显式归一化，
-  指向其他 host 的值会被拒绝。
+- Top-level `version` must be exactly `2`. Missing, older, and unknown newer
+  versions are all rejected.
+- Top-level `host` must be present and exactly match the host label in the
+  current request.
+- Each resource's `host` may be omitted or equal the top-level `host`. An
+  omitted value is explicitly normalized in memory; a value that points to a
+  different host is rejected.
 
-这些检查在 JSON decode 后执行，engine 也会再次校验任意 backend 返回的 state。校验失败发生在
-provider inspect、state write 和远端资源变更之前；CLI 不会用当前 schema 重写无法识别的 state。
+These checks run after JSON decoding, and the engine validates again any state
+returned by a backend. Validation fails before provider inspection, state
+writes, or remote resource changes. The CLI will not rewrite an unrecognized
+state using the current schema.
 
-当前没有旧 state schema 的自动迁移器。遇到旧版本时，应先备份原 state，并使用能读取该版本的
-DebianForm 或经过审查的手工迁移流程；遇到较新版本时，应升级 DebianForm。不要通过删除或篡改
-`version`、`host` 绕过检查。
+There is currently no automatic migrator for an older state schema. When you
+encounter an older version, first back up the original state, then use a
+DebianForm version that can read it or a reviewed manual migration procedure.
+When you encounter a newer version, upgrade DebianForm. Do not bypass these
+checks by deleting or tampering with `version` or `host`.
 
 ## Ownership
 
-- `managed`: DebianForm 创建或管理的资源；从配置移除后销毁。
-- `adopted`: 远端原本已存在的资源；从配置移除后只清理 state。
-- `external`: 只用于依赖或观测；不销毁远端对象。
+- `managed`: a resource created or managed by DebianForm; destroyed when
+  removed from configuration.
+- `adopted`: a resource that already existed remotely; removing it from
+  configuration cleans up only the state record.
+- `external`: used only for dependencies or observation; the remote object is
+  not destroyed.
 
-显式 `ensure = "absent"` 与从配置移除不同。前者请求删除远端对象，后者根据
-ownership 决定 destroy 或 forget。`lifecycle.prevent_destroy` 会在 plan 阶段阻止
-delete 和 destroy。
+An explicit `ensure = "absent"` differs from removal from configuration. The
+former requests deletion of the remote object; the latter selects destroy or
+forget according to ownership. `lifecycle.prevent_destroy` blocks delete and
+destroy during planning.
 
 ## Locking
 
-获取锁时，DebianForm 使用不会在正常 unlock 时删除的 `<lock_path>.guard` 和 `flock`
-串行化 lease 的读取、续租、接管和删除。version 2 JSON lease 先完整写入同目录临时文件，再通过
-`mv` 原子发布；其中包含 base64 编码的 owner、pid、随机 token、`lease_expires_at_unix` 和完整性校验值。
-fresh acquisition 仍用排他的 `mkdir <lock_path>.d` 作为旧版/新版共同识别的原子桥，赢家随后写入
-带 token 和 checksum 的 `.d/owner.v2` marker。获取 SSH 调用返回后还会同步续租并重新验证一次
-lease 与 marker，确认远端 lease 仍归当前 token 才把 lock 返回给 engine。
-每次成功续租也会刷新 marker 的 mtime，使 incomplete recovery 的宽限期从最近一次 holder 活动计算。
+When acquiring a lock, DebianForm uses a `<lock_path>.guard` file, which is not
+deleted during normal unlock, together with `flock` to serialize lease reads,
+renewals, takeovers, and deletion. A version 2 JSON lease is first written in
+full to a temporary file in the same directory, then atomically published with
+`mv`. It contains a base64-encoded owner, PID, random token,
+`lease_expires_at_unix`, and integrity checksum. A fresh acquisition still uses
+the exclusive `mkdir <lock_path>.d` as the atomic bridge recognized by both old
+and new clients. The winner then writes a token- and checksum-bearing
+`.d/owner.v2` marker. After the acquisition SSH call returns, DebianForm
+synchronously renews and revalidates both the lease and marker once more. It
+returns the lock to the engine only after confirming that the remote lease is
+still owned by the current token. Each successful renewal also refreshes the
+marker's mtime, so the incomplete-recovery grace period is measured from the
+holder's most recent activity.
 
-等待锁的 timeout 与 lease TTL 相互独立。默认 lease TTL 是 2 分钟，每 30 秒续租一次；因此长时间
-apply 不会因为 `--lock-timeout` 到期而丢锁。兼容字段 `expires_at_unix` 固定为 `0`，防止不认识
-version 2 协议的旧客户端把仍在续租的 lease 当成 stale lock。
+The wait timeout and lease TTL are independent. The default lease TTL is 2
+minutes and is renewed every 30 seconds, so a long-running apply does not lose
+its lock when `--lock-timeout` expires. The compatibility field
+`expires_at_unix` is fixed at `0`, preventing old clients that do not understand
+the version 2 protocol from treating an actively renewed lease as stale.
 
-- 同一 host 的第二个 apply 会等待并在 lock timeout 后失败。
-- version 2 lock 过期后只能在 guard 临界区内重新校验并原子接管，同时向 stderr 输出 stale lock 提示。
-- 新鲜的半写或损坏 version 2 lease 会保守等待；只有 `.d/owner.v2` 可验证的 incomplete lock
-  才能在超过恢复宽限期后接管。
-- 无 marker 的 lock dir、legacy 或未知格式 lease 不会自动接管，必须先确认没有 holder，再人工备份和清理。
-- unlock 必须匹配 token；token 不匹配时不会删除 lock 文件或目录。
-- lock 文件不参与 plan diff，也不写入 state。
+- A second apply for the same host waits and then fails after the lock timeout.
+- An expired version 2 lock can be taken over only after revalidation inside
+  the guard critical section and an atomic takeover; a stale-lock notice is
+  written to stderr.
+- A fresh, partially written, or corrupt version 2 lease is conservatively
+  left waiting. Only an incomplete lock with a verifiable `.d/owner.v2` marker
+  can be taken over after the recovery grace period.
+- A markerless lock directory or a legacy or unknown lease format is never
+  taken over automatically. First confirm that no holder exists, then back it
+  up and clean it manually.
+- Unlock must match the token. A token mismatch does not delete the lock file
+  or directory.
+- Lock files do not participate in plan diffs and are not written to state.
 
-state 使用临时文件写入并通过同目录 `mv` 原子替换。apply 每成功执行一个资源节点后
-立即写回 state，因此中途失败时 state 只包含已经成功的节点。
+State is written to a temporary file and atomically replaced with `mv` in the
+same directory. Apply writes state back immediately after each resource node
+succeeds, so after an interrupted failure, state contains only the nodes that
+completed successfully.
 
-写入前，`state.PrepareWrite` 会在严格归一化后的副本上推进 `serial` 并更新 `updated_at`；
-`state.Encode` 只校验和序列化，不改变 revision。backend 只有在持久化成功后才返回这个
-committed state，engine 随后用它替换内存快照。写入失败时，候选 revision 不会进入调用方
-可见 state，使用原快照重试仍只增加 1。一次 operation 返回多条 output 时，这些 output 在
-同一次 state write 中提交，因此合计只推进一次 `serial`。host facts 的持久化也是独立的
-成功 state write，会单独推进一次 `serial`。
+Before writing, `state.PrepareWrite` advances `serial` and updates `updated_at`
+on a strictly normalized copy. `state.Encode` only validates and serializes; it
+does not modify the revision. A backend returns this committed state only after
+persistence succeeds, and the engine then uses it to replace its in-memory
+snapshot. If the write fails, the candidate revision never becomes visible to
+the caller, so retrying from the original snapshot still increments by only 1.
+When one operation returns multiple outputs, they are committed in the same
+state write and together increment `serial` only once. Persisting host facts is
+also a separate successful state write and increments `serial` independently.
 
-state schema 兼容性、版本检测、自动迁移、备份和回滚边界见
-[compatibility policy](compatibility-policy.zh.md)。
+For state-schema compatibility, version detection, automatic migration, backup,
+and rollback boundaries, see the [compatibility policy](compatibility-policy.md).

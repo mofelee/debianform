@@ -38,6 +38,9 @@ jobs:
       - name: Check formatting
         run: test -z "$(gofmt -l $(git ls-files '*.go'))"
 
+      - name: Validate bilingual documentation
+        run: make docs-check
+
       - name: Run static analysis
         run: go vet ./...
 

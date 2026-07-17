@@ -1,3 +1,7 @@
+<p align="right">
+  <a href="quickstart.md">English</a> | <strong>简体中文</strong>
+</p>
+
 # DebianForm Quickstart
 
 本文档是一条从零到第一次 apply/check 的最短路径，面向最高优先级的低风险 Debian 13
