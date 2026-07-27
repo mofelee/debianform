@@ -6,9 +6,9 @@ assert_remote wg-a "wg-a networkd files were removed before destroy" \
   "test ! -e /etc/systemd/network/10-wg0.netdev && test ! -e /etc/systemd/network/20-wg0.network"
 assert_remote wg-b "wg-b networkd files were removed before destroy" \
   "test ! -e /etc/systemd/network/10-wg0.netdev && test ! -e /etc/systemd/network/20-wg0.network"
-assert_remote_eventually wg-a "wg-a orphan-test netdev exists before declaration removal" \
+assert_remote wg-a "wg-a orphan-test netdev exists before declaration removal" \
   "test -e /etc/systemd/network/10-dbf-orphan.netdev && ip link show dbf-orphan0"
-assert_remote_eventually wg-b "wg-b orphan-test netdev exists before declaration removal" \
+assert_remote wg-b "wg-b orphan-test netdev exists before declaration removal" \
   "test -e /etc/systemd/network/10-dbf-orphan.netdev && ip link show dbf-orphan0"
 assert_remote wg-a "wg-a private key remains available for final destroy" \
   "test \"\$(stat -c '%a %U %G' /etc/wireguard/private.key)\" = '640 root systemd-network'"
