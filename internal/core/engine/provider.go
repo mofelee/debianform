@@ -161,7 +161,9 @@ func (p NativeProvider) Destroy(ctx context.Context, step Step) error {
 		return p.destroyAPTSourceFile(ctx, step)
 	case "component_build":
 		return p.removePath(ctx, host, stringMapValue(desired, "output_path"), false)
-	case "file", "secret", "nftables_file", "networkd_netdev", "networkd_network", "apt_signing_key", "component_download", "component_binary", "component_file", "component_ca_certificate":
+	case "networkd_netdev":
+		return p.destroyNetworkdNetDev(ctx, step)
+	case "file", "secret", "nftables_file", "networkd_network", "apt_signing_key", "component_download", "component_binary", "component_file", "component_ca_certificate":
 		return p.removePath(ctx, host, stringMapValue(desired, "path"), false)
 	case "component_script_output":
 		return nil

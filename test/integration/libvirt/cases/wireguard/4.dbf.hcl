@@ -62,6 +62,13 @@ component "wireguard_networkd" {
         }
       }
 
+      netdev "10-dbf-orphan" {
+        netdev = {
+          Name = "dbf-orphan0"
+          Kind = "dummy"
+        }
+      }
+
       network "20-wg0" {
         ensure = "absent"
 

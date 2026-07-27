@@ -6,6 +6,10 @@ assert_remote wg-a "wg-a networkd netdev was destroyed" \
   "test ! -e /etc/systemd/network/10-wg0.netdev"
 assert_remote wg-b "wg-b networkd netdev was destroyed" \
   "test ! -e /etc/systemd/network/10-wg0.netdev"
+assert_remote wg-a "wg-a orphaned netdev file and runtime interface were destroyed together" \
+  "test ! -e /etc/systemd/network/10-dbf-orphan.netdev && ! ip link show dbf-orphan0"
+assert_remote wg-b "wg-b orphaned netdev file and runtime interface were destroyed together" \
+  "test ! -e /etc/systemd/network/10-dbf-orphan.netdev && ! ip link show dbf-orphan0"
 assert_remote wg-a "wg-a WireGuard interface remains removed" \
   "! ip link show wg0"
 assert_remote wg-b "wg-b WireGuard interface remains removed" \

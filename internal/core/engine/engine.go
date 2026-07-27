@@ -856,7 +856,15 @@ func deleteDiagnosticForStep(step Step) deleteDiagnostic {
 		}
 	case "docker_package_conflicts", "package", "file", "secret", "directory", "group", "user", "ssh_authorized_key", "component_binary", "component_file", "component_archive", "docker_compose_project":
 		return destructiveDeleteDiagnostic(kind, desired)
-	case "networkd_netdev", "networkd_network":
+	case "networkd_netdev":
+		path := stringMapValue(desired, "path")
+		name := stringMapValue(desired, "name")
+		return deleteDiagnostic{
+			Behavior: "external-side-effect",
+			Notes:    compactNotes("removes systemd-networkd netdev file", "path: "+path, "reloads systemd-networkd", "removes runtime netdev", "netdev: "+name),
+			Risk:     "high",
+		}
+	case "networkd_network":
 		path := stringMapValue(desired, "path")
 		return deleteDiagnostic{
 			Behavior: "external-side-effect",

@@ -219,6 +219,9 @@ host "server1" {
 	if _, ok := netdev.Desired["content"]; !ok {
 		t.Fatalf("networkd netdev desired content missing: %#v", netdev.Desired)
 	}
+	if got := netdev.Desired["name"]; got != "wg0" {
+		t.Fatalf("networkd netdev desired name = %#v, want wg0", got)
+	}
 	networkDeps := dependsOnFor(resourceGraph, `host.server1.systemd.networkd.network["20-wg0"]`)
 	if !containsString(networkDeps, `host.server1.systemd.networkd.netdev["10-wg0"]`) {
 		t.Fatalf("network deps = %#v, want netdev dependency", networkDeps)

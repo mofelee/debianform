@@ -2024,6 +2024,24 @@ func TestDeleteDiagnosticsForPlanDocument(t *testing.T) {
 			wantRisk:     "high",
 			wantNote:     "daemon-reload",
 		},
+		{
+			name: "networkd netdev runtime removal",
+			step: Step{
+				Address: `host.server1.systemd.networkd.netdev["10-dbf-test"]`,
+				Action:  ActionDestroy,
+				Prior: &corestate.Resource{
+					Host: "server1",
+					Kind: "networkd_netdev",
+					Desired: map[string]any{
+						"path": "/etc/systemd/network/10-dbf-test.netdev",
+						"name": "dbf-test0",
+					},
+				},
+			},
+			wantBehavior: "external-side-effect",
+			wantRisk:     "high",
+			wantNote:     "removes runtime netdev",
+		},
 	}
 
 	for _, tt := range tests {

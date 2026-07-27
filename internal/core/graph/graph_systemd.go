@@ -141,6 +141,7 @@ func systemdManagedServiceNode(hostName, address, component, name, unit, package
 func networkdNetDevNode(hostName, address, component string, item ir.NetworkdNetDev, deps []string) Node {
 	desired := map[string]any{
 		"label":   item.Label,
+		"name":    networkdNetDevName(item),
 		"path":    item.Path,
 		"owner":   item.Owner,
 		"group":   item.Group,
