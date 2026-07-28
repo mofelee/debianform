@@ -126,7 +126,7 @@ does not migrate, adopt, or remove Netplan configuration.
 
 ## 7. Preview Boundaries
 
-- Ubuntu 26.04 LTS amd64 has an independent, blocking 20-case matrix and
+- Ubuntu 26.04 LTS amd64 has an independent, blocking 21-case matrix and
   `Ubuntu 26.04 target matrix gate`. Preview describes maturity; it does not make CI regressions
   acceptable.
 - Ubuntu 24.04 LTS amd64 is a separate Preview path with independent verification. Matrix results

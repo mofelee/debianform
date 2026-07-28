@@ -137,6 +137,14 @@ Migration rules:
 - `Migration Notes` in the release notes must cover pre-migration checks, backup, rollback, and
   failure recovery.
 
+Declarative component moves are an additive DSL capability, not a state-schema
+version migration. State remains version `2`; addresses are rewritten only when
+the user explicitly declares `moved` and applies the reviewed plan. The write
+must preserve ownership and remote identity, be atomic per host, and remain
+idempotent on retry. Changing address-move validation, payload-rebase rules, or
+apply ordering in a way that turns a previously move-only rename into remote
+create/destroy work is a breaking safety change.
+
 Rollback boundaries:
 
 - An older CLI is not guaranteed to read state after a newer version has migrated it.
@@ -153,6 +161,9 @@ Compatible changes include:
 - Adding a top-level field or a field to a change, operation, or diagnostic.
 - Adding an action or kind enum value, provided the release notes describe it.
 - Adding a summary field.
+- Adding the top-level `moves` collection and `summary.move`; these are additive
+  fields in `debianform.plan.alpha1`, and moves remain separate from change
+  actions.
 - Adding more precise source, diagnostic, or non-debug metadata.
 
 Breaking changes include:

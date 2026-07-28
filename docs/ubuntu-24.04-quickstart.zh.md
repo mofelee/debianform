@@ -114,7 +114,7 @@ DebianForm 只读检查 `/etc/netplan/*.yaml` 是否仍存在 active ownership�
 
 ## 6. Preview 边界
 
-- Ubuntu 24.04 LTS amd64 当前有独立的 20-case 阻断矩阵，但 Preview 仍表示用户反馈和 release
+- Ubuntu 24.04 LTS amd64 当前有独立的 21-case 阻断矩阵，但 Preview 仍表示用户反馈和 release
   验证积累少于 Beta。
 - Docker official source 会根据已验证的 `platform.distribution` 选择
   `https://download.docker.com/linux/ubuntu`；自定义 Debian mirror URL 不会自动改写为 Ubuntu。

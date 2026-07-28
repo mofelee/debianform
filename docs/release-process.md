@@ -142,7 +142,7 @@ The release commit must satisfy:
 - Compatibility review covers breaking DSL/state/plan-JSON changes, state
   migration, and plan JSON format-version impact.
 - GitHub Actions is fully passing for the target commit.
-- CI evidence for the same target commit records `20/20` independently for
+- CI evidence for the same target commit records `21/21` independently for
   Ubuntu 24.04 LTS amd64, Ubuntu 26.04 LTS amd64, Debian 12 amd64, and Debian 13
   amd64; the `Ubuntu 24.04 target matrix gate`,
   `Ubuntu 26.04 target matrix gate`, and `Managed target matrix gate` all pass;

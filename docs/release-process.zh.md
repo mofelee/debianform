@@ -134,7 +134,7 @@ git diff --check
   plan JSON format version 影响。
 - GitHub Actions 在目标 commit 上全绿。
 - 同一目标 commit 的 CI 证据分别记录 Ubuntu 24.04 LTS amd64、Ubuntu 26.04 LTS amd64、
-  Debian 12 amd64、Debian 13 amd64 各 `20/20`，并确认 `Ubuntu 24.04 target matrix gate`、
+  Debian 12 amd64、Debian 13 amd64 各 `21/21`，并确认 `Ubuntu 24.04 target matrix gate`、
   `Ubuntu 26.04 target matrix gate` 和 `Managed target matrix gate` 都通过；同时记录 26.04
   released-image URL 和 SHA-256。
 - 四个目标的每个 libvirt case 都完成 `validate`、online `plan`、`apply`、再次 JSON

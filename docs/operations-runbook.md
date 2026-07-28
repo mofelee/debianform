@@ -184,6 +184,42 @@ Do not delete the entire state merely because apply failed partway through. Stat
 successful nodes. Deleting it removes DebianForm's ownership context and may cause unnecessary
 adopt/create/destroy actions in the next plan.
 
+## Rename a Component Without Recreating It
+
+Use a declarative move when only a component instance label changes:
+
+```hcl
+moved {
+  from = component.bird2_babel
+  to   = component.bird2_ospfv3
+}
+```
+
+Use this rollout procedure:
+
+1. Rename the mounted component, add the `moved` block, and run `dbf validate`.
+   Validation checks syntax and mapping conflicts without reading or writing
+   remote state.
+2. Run an online plan for each rollout target. Confirm that `moves` contains the
+   old and new prefixes and that `summary.move` is separate from remote action
+   counts. Review any real updates and operations independently.
+3. Apply the reviewed plan. Approval happens while the host lock is held; the
+   address mapping is atomically committed before provider actions begin.
+4. Run online plan and check again with the block retained. Both must show no
+   pending moves, resource changes, or operations.
+5. Repeat for every host. When using `--host`, keep the block in version control
+   until hosts not yet selected have also migrated.
+6. Remove the block only after every relevant state has the source prefix absent
+   and destination prefix present. Run online plan/check once more; removal must
+   remain a no-op.
+
+Never remove the block merely because one host is clean. A later host with old
+state would lose the instruction and could plan destination creates plus source
+orphans. If apply fails while writing the move, no provider mutation starts and
+retry uses the old state. If a later provider step fails, the move may already be
+committed; keep the block and retry normally. Do not edit the remote JSON state
+by hand and do not add a reverse move.
+
 ## Investigate Remote Calls with the Apply Debugger
 
 When ordinary progress logs do not reveal which remote command, stdin payload, or stdout/stderr

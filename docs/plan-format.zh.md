@@ -27,12 +27,20 @@ plan format 的目标：
     "host": "server1"
   },
   "summary": {
+    "move": 2,
     "create": 1,
     "update": 2,
     "delete": 0,
     "no_op": 0,
     "operations": 2
   },
+  "moves": [
+    {
+      "host": "server1",
+      "from": "host.server1.components.old.files.file[\"/etc/app.conf\"]",
+      "to": "host.server1.components.current.files.file[\"/etc/app.conf\"]"
+    }
+  ],
   "changes": [],
   "operations": [],
   "diagnostics": []
@@ -43,9 +51,31 @@ plan format 的目标：
 
 - `format_version` 必须随破坏式格式变更更新。
 - `generated_at` 使用 UTC RFC3339。
+- `moves` 保存所选 host 上每条 realized state-address mapping。
 - `changes` 保存资源或领域对象变更。
 - `operations` 保存由变更触发的动作节点，例如 APT cache refresh、nftables activate。
 - `diagnostics` 保存 warning 或非 fatal 信息；fatal error 不应产生成功 plan。
+
+## StateMove
+
+每条 `moves` entry 都有三个必填 string 字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `host` | source/destination state key 所属 host。 |
+| `from` | 迁移前的完整 source graph address。 |
+| `to` | 迁移后的完整 destination graph address。 |
+
+move 是 state 变更，不是远端 resource action。`summary.move` 等于 realized entry 数量，且绝不增加
+`create`、`update`、`delete` 或 `operations`。因此一条 component-root 声明可以为每个匹配的
+持久化 resource 或 script output 产生一条 entry；已经位于 destination 的 host 不产生 entry。
+
+text 输出把每条 mapping 渲染为 `-> <from>`，下一行显示 `to: <to>`。静态 HTML 使用独立 Moves
+表格，move row 支持 host、action 和 search filter。即使 human view 可以按公共 prefix 汇总，JSON
+仍会保留每条 leaf mapping。
+
+move entry 只包含 address，不包含 desired/observed payload 或 secret value；JSON string encoding
+和 HTML template escaping 仍然生效。消费者不能把 move 推断为远端 create、rename 或 delete。
 
 ## Action 枚举
 

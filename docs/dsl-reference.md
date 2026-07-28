@@ -19,6 +19,7 @@ directories by `go test ./cmd/dbf`, which runs the commands in each marker.
 | `variable "<name>"` | Declare an external variable assigned through the CLI, environment, or a variable file. |
 | `profile "<name>"` | Reusable host-configuration fragment imported by a profile or host. |
 | `component "<name>"` | Reusable resource template with typed inputs and optional artifact installation. |
+| `moved` | Declaratively migrate state from one component instance address to another. |
 | `host "<name>"` | Target-host configuration entry point. |
 
 The `<name>` of a `profile`, `component`, `host`, or explicit `host.component`
@@ -76,6 +77,60 @@ host "custom_component_mount" {
   }
 }
 ```
+
+### moved
+
+A top-level `moved` block preserves resource identity when a host component
+instance is renamed. Its endpoints are static component-root traversals:
+
+<!-- dbf-test:name=moved-component-syntax;commands=validate,plan-offline -->
+
+```hcl
+component "bird_stack" {}
+
+moved {
+  from = component.bird2_babel
+  to   = component.bird2_ospfv3
+}
+
+host "router1" {
+  component "bird2_ospfv3" {
+    source = component.bird_stack
+  }
+}
+```
+
+`from` may name an instance that is no longer declared. `to` must name the
+replacement instance on each host whose source state is migrated. Variables,
+locals, interpolation, function calls, quoted addresses, resource leaves, and
+host-qualified or cross-host endpoints are rejected. Only
+`component.<instance>` roots are supported in this release.
+
+For each applicable host, DebianForm expands the declaration into a same-host
+prefix mapping. Every matching state entry keeps its suffix:
+
+```text
+host.router1.components.bird2_babel.*
+  -> host.router1.components.bird2_ospfv3.*
+```
+
+The move changes persistent addresses, not remote paths, package names, service
+units, or other provider identities. A host that still declares only the source
+instance is left unchanged, which permits a staged rollout. A host that declares
+both endpoints while source state exists is ambiguous and rejected. Source state
+with no desired destination is also rejected before it can become an orphan.
+
+Self-moves, duplicate sources, many-to-one mappings, cycles, and overlapping
+prefix mappings are invalid. Acyclic historical chains such as `old -> middle`
+and `middle -> current` are supported and resolved deterministically through the
+final destination.
+
+`moved` blocks are disposable migration instructions, not aliases. Keep the
+block until every relevant host has been applied and an online plan/check shows
+no pending moves. This is especially important with `--host`: removing the block
+after migrating only one host prevents the remaining hosts from migrating. Once
+all source prefixes are absent and destination prefixes are present, removing
+the block does not reverse the migration.
 
 `assert` may appear in a `profile` or `host`:
 

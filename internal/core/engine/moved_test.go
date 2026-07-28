@@ -243,6 +243,84 @@ func TestMovedStatePartialMultiHostRetryAndHostFilter(t *testing.T) {
 	}
 }
 
+func TestMovedStateMystackFiveHostAcceptance(t *testing.T) {
+	hostNames := []string{"rfchk", "rflon", "rfsea", "rfsgp", "rfsyd"}
+	backend := NewMemoryBackend()
+	provider := NewMemoryProvider()
+	program := &ir.Program{}
+	resourceGraph := &graph.ResourceGraph{}
+
+	for _, hostName := range hostNames {
+		host, nodes, operation, initial := mystackMovedFixture(hostName)
+		program.Hosts = append(program.Hosts, host)
+		resourceGraph.Nodes = append(resourceGraph.Nodes, nodes...)
+		resourceGraph.Operations = append(resourceGraph.Operations, operation)
+		if _, err := backend.Write(context.Background(), host, initial); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	engine := Engine{Backend: backend, Provider: provider}
+	preview, err := engine.Plan(context.Background(), program, resourceGraph, Options{Parallel: len(hostNames)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.Moves) != 35 || len(preview.Steps) != 5 || len(preview.Operations) != 5 {
+		t.Fatalf("five-host preview = %d moves, %d steps, %d operations; want 35, 5, 5", len(preview.Moves), len(preview.Steps), len(preview.Operations))
+	}
+	if preview.Summary.Move != 35 || preview.Summary.Create != 0 || preview.Summary.Update != 5 || preview.Summary.Delete != 0 || preview.Summary.Operations != 5 {
+		t.Fatalf("five-host summary = %#v", preview.Summary)
+	}
+
+	wantHosts := make(map[string]bool, len(hostNames))
+	for _, hostName := range hostNames {
+		wantHosts[hostName] = true
+	}
+	for _, step := range preview.Steps {
+		wantAddress := fmt.Sprintf(`host.%s.components.bird2_ospfv3.files.file["/etc/bird/bird.conf"]`, step.Host)
+		if step.Action != ActionUpdate || step.Address != wantAddress {
+			t.Fatalf("rename introduced a false remote action: %#v", step)
+		}
+		delete(wantHosts, step.Host)
+	}
+	if len(wantHosts) != 0 {
+		t.Fatalf("hosts missing the one real file update: %#v", wantHosts)
+	}
+	for _, operation := range preview.Operations {
+		wantAddress := fmt.Sprintf(`host.%s.components.bird2_ospfv3.script["reload_bird"]`, operation.Operation.Host)
+		wantTrigger := fmt.Sprintf(`host.%s.components.bird2_ospfv3.files.file["/etc/bird/bird.conf"]`, operation.Operation.Host)
+		if operation.Address != wantAddress || len(operation.Operation.TriggeredBy) != 1 || operation.Operation.TriggeredBy[0] != wantTrigger {
+			t.Fatalf("unexpected rename operation: %#v", operation)
+		}
+	}
+
+	applied, err := engine.Apply(context.Background(), program, resourceGraph, Options{Parallel: len(hostNames)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applied.Moves) != 35 || len(provider.Applied) != 5 || len(provider.Destroyed) != 0 || len(provider.Operations) != 5 {
+		t.Fatalf("five-host apply caused false provider work: plan=%#v applied=%#v destroyed=%#v operations=%#v", applied, provider.Applied, provider.Destroyed, provider.Operations)
+	}
+
+	retained, err := engine.Check(context.Background(), program, resourceGraph, Options{Parallel: len(hostNames)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(retained.Moves) != 0 || len(retained.Steps) != 0 || len(retained.Operations) != 0 {
+		t.Fatalf("retained five-host moved block did not converge: %#v", retained)
+	}
+	for i := range program.Hosts {
+		program.Hosts[i].Moves = nil
+	}
+	removed, err := engine.Check(context.Background(), program, resourceGraph, Options{Parallel: len(hostNames)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed.Moves) != 0 || len(removed.Steps) != 0 || len(removed.Operations) != 0 {
+		t.Fatalf("removed five-host moved block did not stay converged: %#v", removed)
+	}
+}
+
 func TestMovedStateLockLossBeforePersistenceLeavesStateUntouched(t *testing.T) {
 	host, resourceGraph, initial := movedNoOpFixture("server1")
 	leaseCause := errors.New("injected move lease loss")
@@ -351,6 +429,85 @@ func movedUpdateFixture(hostName string) (ir.HostSpec, graph.Node, corestate.Sta
 	initial.Serial = 7
 	initial.Resources[strings.Replace(address, newPrefix, oldPrefix, 1)] = movedPriorResource(priorNode, "current", "old")
 	return host, node, initial
+}
+
+func mystackMovedFixture(hostName string) (ir.HostSpec, []graph.Node, graph.Operation, corestate.State) {
+	oldPrefix := fmt.Sprintf("host.%s.components.bird2_babel", hostName)
+	newPrefix := fmt.Sprintf("host.%s.components.bird2_ospfv3", hostName)
+	configAddress := newPrefix + `.files.file["/etc/bird/bird.conf"]`
+	outputAddress := newPrefix + `.script["reload_bird"].outputs["/var/lib/bird/reload.stamp"]`
+	nodes := []graph.Node{
+		{
+			Host: hostName, Address: newPrefix + `.apt.signing_key["bird2"]`, Kind: "apt_signing_key", Summary: "manage BIRD signing key",
+			Desired:      map[string]any{"component": "bird2_ospfv3", "path": "/etc/apt/keyrings/bird2.asc", "url": "https://packages.example.invalid/bird2.asc", "sha256": "same-key"},
+			ProviderType: "apt_signing_key", ProviderAddress: "apt_signing_key." + hostName + "_bird2_ospfv3",
+		},
+		{
+			Host: hostName, Address: newPrefix + `.apt.repository["bird2"]`, Kind: "apt_repository", Summary: "manage BIRD repository",
+			Desired:      map[string]any{"component": "bird2_ospfv3", "name": "bird2", "uris": []string{"https://packages.example.invalid/bird2"}, "suites": []string{"trixie"}},
+			ProviderType: "apt_repository", ProviderAddress: "apt_repository." + hostName + "_bird2_ospfv3", DependsOn: []string{newPrefix + `.apt.signing_key["bird2"]`},
+		},
+		{
+			Host: hostName, Address: newPrefix + `.packages.install["bird2"]`, Kind: "package", Summary: "install bird2",
+			Desired:      map[string]any{"component": "bird2_ospfv3", "name": "bird2", "ensure": "present"},
+			ProviderType: "package", ProviderAddress: "package." + hostName + "_bird2_ospfv3", DependsOn: []string{newPrefix + `.apt.repository["bird2"]`},
+		},
+		{
+			Host: hostName, Address: newPrefix + `.services.service["bird"]`, Kind: "service", Summary: "keep bird running",
+			Desired:      map[string]any{"component": "bird2_ospfv3", "name": "bird", "unit": "bird.service", "enabled": true, "state": "running"},
+			ProviderType: "service", ProviderAddress: "service." + hostName + "_bird2_ospfv3", DependsOn: []string{newPrefix + `.packages.install["bird2"]`, configAddress},
+		},
+		{
+			Host: hostName, Address: newPrefix + `.files.file["/etc/bird/bird.env"]`, Kind: "file", Summary: "manage unchanged BIRD environment",
+			Desired:      map[string]any{"component": "bird2_ospfv3", "path": "/etc/bird/bird.env", "content": "BIRD_ARGS=-f\n", "owner": "root", "group": "root", "mode": "0644", "ensure": "present"},
+			ProviderType: "file", ProviderAddress: "file." + hostName + "_bird2_ospfv3_env", Lifecycle: &ir.LifecycleSpec{PreventDestroy: true},
+		},
+		{
+			Host: hostName, Address: configAddress, Kind: "file", Summary: "switch BIRD from Babel standby to OSPFv3 only",
+			Desired:      map[string]any{"component": "bird2_ospfv3", "path": "/etc/bird/bird.conf", "content": "protocol ospf v3 edge {}\n", "owner": "root", "group": "root", "mode": "0644", "ensure": "present"},
+			ProviderType: "file", ProviderAddress: "file." + hostName + "_bird2_ospfv3_conf",
+		},
+		{
+			Host: hostName, Address: outputAddress, Kind: "component_script_output", Summary: "observe BIRD reload output",
+			Desired:      map[string]any{"component": "bird2_ospfv3", "path": "/var/lib/bird/reload.stamp", "script": "reload_bird", "script_digest": "same-script"},
+			ProviderType: "component_script_output", ProviderAddress: "component_script_output." + hostName + "_bird2_ospfv3_reload",
+		},
+	}
+
+	initial := corestate.Empty(hostName)
+	for _, node := range nodes {
+		priorNode := node
+		priorNode.Desired = cloneMap(node.Desired)
+		if node.Address == configAddress {
+			priorNode.Desired["content"] = "protocol ospf v3 edge {}\nprotocol babel edge {}\n"
+		}
+		oldAddress := strings.Replace(node.Address, newPrefix, oldPrefix, 1)
+		resource := movedPriorResource(priorNode, "bird2_ospfv3", "bird2_babel")
+		switch node.Kind {
+		case "package", "component_script_output":
+			resource.Ownership = "adopted"
+		case "service":
+			resource.Ownership = "external"
+		}
+		resource.Lifecycle = cloneLifecycle(node.Lifecycle)
+		initial.Resources[oldAddress] = resource
+	}
+
+	host := ir.HostSpec{
+		Name:       hostName,
+		Components: []ir.ComponentInstanceSpec{{Name: "bird2_ospfv3"}},
+		Moves: []ir.MovedSpec{{
+			From:       oldPrefix,
+			To:         newPrefix,
+			FromSource: ir.SourceRef{File: "mystack.dbf.hcl", Line: 2, Path: "moved.from"},
+			ToSource:   ir.SourceRef{File: "mystack.dbf.hcl", Line: 3, Path: "moved.to"},
+		}},
+	}
+	operation := graph.Operation{
+		Host: hostName, Address: newPrefix + `.script["reload_bird"]`, Action: ActionRun, Summary: "reload BIRD after the real configuration update",
+		DependsOn: []string{configAddress, outputAddress}, TriggeredBy: []string{configAddress},
+	}
+	return host, nodes, operation, initial
 }
 
 func movedPriorResource(node graph.Node, fromComponent, toComponent string) corestate.Resource {

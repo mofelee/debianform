@@ -28,12 +28,20 @@ The goals of the plan format are to:
     "host": "server1"
   },
   "summary": {
+    "move": 2,
     "create": 1,
     "update": 2,
     "delete": 0,
     "no_op": 0,
     "operations": 2
   },
+  "moves": [
+    {
+      "host": "server1",
+      "from": "host.server1.components.old.files.file[\"/etc/app.conf\"]",
+      "to": "host.server1.components.current.files.file[\"/etc/app.conf\"]"
+    }
+  ],
   "changes": [],
   "operations": [],
   "diagnostics": []
@@ -44,11 +52,37 @@ Field requirements:
 
 - `format_version` must change whenever the format changes incompatibly.
 - `generated_at` uses UTC RFC3339.
+- `moves` contains every realized state-address mapping for the selected hosts.
 - `changes` contains changes to resources or domain objects.
 - `operations` contains action nodes triggered by changes, such as an APT cache
   refresh or nftables activation.
 - `diagnostics` contains warnings or non-fatal information; a fatal error must
   not produce a successful plan.
+
+## StateMove
+
+Each `moves` entry has three required string fields:
+
+| Field | Meaning |
+| --- | --- |
+| `host` | Host whose state contains the source and destination keys. |
+| `from` | Complete source graph address before migration. |
+| `to` | Complete destination graph address after migration. |
+
+Moves are state changes, not remote resource actions. `summary.move` equals the
+number of realized entries and never increments `create`, `update`, `delete`, or
+`operations`. A component-root declaration can therefore produce many entries,
+one for every matching persisted resource or script output. Hosts already at the
+destination produce no entry.
+
+Text output renders each mapping as `-> <from>` followed by `to: <to>`. Static
+HTML has a separate Moves table; move rows participate in host, action, and
+search filtering. JSON always retains every leaf mapping even when a human view
+could summarize the common prefix.
+
+Move entries contain addresses only, never desired/observed payloads or secret
+values. JSON string encoding and HTML template escaping still apply. Consumers
+must not infer a remote create, rename, or delete from a move entry.
 
 ## Action Enumeration
 

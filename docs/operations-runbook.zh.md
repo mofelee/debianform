@@ -173,6 +173,36 @@ host.server1.files.file["/etc/app/config.yaml"] failed: ...
 不要因为 apply 中途失败就删除整个 state。state 已记录成功节点，删除会让 DebianForm 失去 ownership
 上下文，下一次 plan 可能出现不必要的 adopt/create/destroy。
 
+## 不重建远端对象地重命名 Component
+
+只有 component instance label 改变时，使用声明式 move：
+
+```hcl
+moved {
+  from = component.bird2_babel
+  to   = component.bird2_ospfv3
+}
+```
+
+按以下流程 rollout：
+
+1. 重命名挂载的 component，加入 `moved` block，再运行 `dbf validate`。validate 只检查语法和
+   mapping 冲突，不读写远端 state。
+2. 对每台 rollout target 运行在线 plan。确认 `moves` 显示新旧 prefix，且 `summary.move` 与远端
+   action count 分离；真实 update 和 operation 必须另行审查。
+3. apply 已审查的 plan。approval 在持有 host lock 时发生，address mapping 会在任何 provider
+   action 前原子提交。
+4. 保留 block，再次运行在线 plan 和 check；两者都必须没有 pending move、resource change 或
+   operation。
+5. 对所有 host 重复。使用 `--host` 时，尚未被选择的 host 完成迁移前必须把 block 保留在版本库中。
+6. 只有所有相关 state 都已满足 source prefix 不存在、destination prefix 存在，才能移除 block；
+   再运行一次在线 plan/check，移除后必须仍为 no-op。
+
+不能因为一台 host 已 clean 就提前移除 block。仍有旧 state 的 host 会失去迁移指令，之后可能 plan
+destination create 和 source orphan。move state write 失败时 provider mutation 不会开始，重试仍使用
+旧 state；后续 provider step 失败时 move 可能已提交，应保留 block 并正常重试。不要手工编辑远端
+JSON state，也不要添加 reverse move。
+
 ## 使用 apply 调试器排查远端调用
 
 当普通进度日志不足以判断失败发生在哪条远端命令、stdin payload 或 stdout/stderr 中时，可以临时使用

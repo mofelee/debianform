@@ -42,9 +42,9 @@ version、codename 和 architecture。
 
 每个编号 case 步骤都会运行 `validate`、在线 JSON plan；在 case 提供 drift hook 时拒绝 drift；
 然后运行 `apply`、断言为 no-op 的 JSON plan、`check` 以及 case 特有的 apply 后检查。CI 当前发现
-20 个 case 目录。未改变的 Debian 矩阵展开为 2 个版本 x 20 个 case，即 40 个由
-`Managed target matrix gate` 守卫的 job。独立 Ubuntu 矩阵运行相同的 20 个 case，并由
-`Ubuntu 24.04 target matrix gate` 守卫。
+21 个 case 目录。Debian 矩阵展开为 2 个版本 x 21 个 case，即 42 个由
+`Managed target matrix gate` 守卫的 job。两套独立 Ubuntu 矩阵都运行相同的 21 个 case，
+并分别使用自己的 target matrix gate。
 
 `wireguard` 使用双 host runner，`wireguard-three-host` 使用三 host runner。在 Ubuntu 上，
 这些 case 和 `shared-script-networkd` 带有 `native-networkd.case` 标记。fixture 会禁用未来的

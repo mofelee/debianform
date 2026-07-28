@@ -76,10 +76,10 @@ section after post-release verification jobs finish.
   - `make vulncheck`: <pass | fail | skipped with reason>
   - `make test-integration-layout`: <pass | fail | skipped with reason>
 - Managed-target CI evidence for this commit:
-  - Ubuntu 24.04 LTS amd64 libvirt matrix (20/20): <pass | fail; CI run URL>
-  - Ubuntu 26.04 LTS amd64 libvirt matrix (20/20): <pass | fail; CI run URL>
-  - Debian 12 amd64 libvirt matrix (20/20): <pass | fail; CI run URL>
-  - Debian 13 amd64 libvirt matrix (20/20): <pass | fail; CI run URL>
+  - Ubuntu 24.04 LTS amd64 libvirt matrix (21/21): <pass | fail; CI run URL>
+  - Ubuntu 26.04 LTS amd64 libvirt matrix (21/21): <pass | fail; CI run URL>
+  - Debian 12 amd64 libvirt matrix (21/21): <pass | fail; CI run URL>
+  - Debian 13 amd64 libvirt matrix (21/21): <pass | fail; CI run URL>
   - `Ubuntu 24.04 target matrix gate`: <pass | fail; CI run URL>
   - `Ubuntu 26.04 target matrix gate`: <pass | fail; CI run URL>
   - `Managed target matrix gate`: <pass | fail; CI run URL>
@@ -120,7 +120,7 @@ Before creating the release tag, check that:
 - `Migration Notes` explains required user action, including state handling and
   rollback guidance for breaking releases.
 - Ubuntu 24.04, Ubuntu 26.04, Debian 12, and Debian 13 managed-target evidence
-  is listed separately as `20/20`, points to the release commit's CI run, and
+  is listed separately as `21/21`, points to the release commit's CI run, and
   all three aggregate gates passed. Record the 26.04 released-image URL and digest.
 - The release notes do not use stable/GA/production-ready language unless the
   release has passed the stable gates in

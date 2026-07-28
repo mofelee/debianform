@@ -177,7 +177,7 @@ Ownership checks read only `/lib/netplan`, `/etc/netplan`, `/run/netplan`, and N
 systemd-networkd/NetworkManager runtime files. They do not run the Netplan CLI, `systemctl`, or file
 mutations.
 
-## 20-Case 26.04 Baseline and Acceptance Mapping
+## 21-Case 26.04 Baseline and Acceptance Mapping
 
 "Released image" preserves the image's Netplan ownership. "Native-networkd image" means the
 harness performs external preparation before DebianForm.
@@ -188,6 +188,7 @@ harness performs external preparation before DebianForm.
 | `apt-virtual-package` | released image | Shared package/virtual package | #56/#57 |
 | `bbr` | released image | Shared kernel | #56/#58 |
 | `component-inputs` | released image | Shared component | #56/#58 |
+| `component-moved` | released image | Shared state refactoring | #65 |
 | `docker-compose` | released image | Packages plus shared Compose | #56/#57/#58 |
 | `docker-daemon` | released image | Packages plus shared daemon | #56/#57/#58 |
 | `docker-engine` | released image | Docker `resolute` repository | #56/#57 |
@@ -240,10 +241,10 @@ sensitive text, JSON, HTML, debug, and state output.
 
 ## CI and Support-Claim Gates
 
-- Add a separately named 20-case Ubuntu 26.04 matrix and `Ubuntu 26.04 target matrix gate`.
+- Keep a separately named 21-case Ubuntu 26.04 matrix and `Ubuntu 26.04 target matrix gate`.
 - Do not rename or weaken `Managed target matrix gate` or `Ubuntu 24.04 target matrix gate`.
-- A support claim requires Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04 at 20 cases each on
-  the same commit: all 80 target-case results green.
+- A support claim requires Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04 at 21 cases each on
+  the same commit: all 84 target-case results green.
 - Record the exact commit, CI run URL, released-image digest, and hypervisor cleanup after success or
   failure.
 - Preview describes maturity rather than permission to merge known regressions. After the claim is
@@ -267,6 +268,9 @@ and [CI run 29418825778](https://github.com/mofelee/debianform/actions/runs/2941
 - Failure diagnostics on all three runners include target facts, Netplan ownership, network
   services/links/addresses/routes, package/service status, journals, plans/state/logs, libvirt
   XML/console, and cleanup evidence.
+
+This delivery evidence is the historical 20-case baseline. The current gate adds
+`component-moved`; it does not retroactively change the recorded run.
 
 First-run commands and an ordinary non-network example are in the
 [Ubuntu 26.04 Preview Quickstart](ubuntu-26.04-quickstart.md) and
