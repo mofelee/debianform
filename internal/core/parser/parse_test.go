@@ -1505,6 +1505,135 @@ component "policy" {
 	}
 }
 
+func TestParseNetworkdGenericSectionsAndActivation(t *testing.T) {
+	file := writeConfig(t, `
+script "reexport" {
+  mode = "once"
+  run  = "birdc reload out kernel4"
+}
+
+host "router" {
+  systemd {
+    networkd {
+      network "wg-peer" {
+        section "match" {
+          name = "Match"
+          settings = {
+            Name = "wg-peer"
+          }
+        }
+
+        section "ipv4" {
+          name = "Address"
+          settings = {
+            Address        = "10.2.0.0/31"
+            AddPrefixRoute = false
+          }
+        }
+
+        section "ipv6" {
+          name = "Address"
+          settings = {
+            Address = "fd64:0:2::/127"
+          }
+        }
+
+        activation {
+          reconfigure = ["wg-peer"]
+          post_reload = script.reexport
+        }
+      }
+    }
+  }
+}
+`)
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := cfg.Hosts["router"].Body.Map["systemd"].Map["networkd"].Map["network"].Map["wg-peer"]
+	sections := resource.Map["section"]
+	if !reflect.DeepEqual(sections.Order, []string{"match", "ipv4", "ipv6"}) {
+		t.Fatalf("section order = %#v", sections.Order)
+	}
+	if got := sections.Map["ipv4"].Map["name"].String; got != "Address" {
+		t.Fatalf("ipv4 section name = %q", got)
+	}
+	activation := resource.Map["activation"]
+	if got := activation.Map["reconfigure"].List[0].String; got != "wg-peer" {
+		t.Fatalf("reconfigure interface = %q", got)
+	}
+	ref := activation.Map["post_reload"].ScriptReference
+	if ref == nil || ref.Name != "reexport" || ref.Scope != ScriptReferenceAuto {
+		t.Fatalf("post_reload reference = %#v", ref)
+	}
+	if ref.Source.Path != `host.router.systemd.networkd.network["wg-peer"].activation.post_reload` {
+		t.Fatalf("post_reload source path = %q", ref.Source.Path)
+	}
+}
+
+func TestParseRejectsInvalidNetworkdGenericShapes(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "duplicate section identity",
+			body: `section "address" {
+  name     = "Address"
+  settings = {}
+}
+section "address" {
+  name     = "Route"
+  settings = {}
+}`,
+			want: `duplicate host.router.systemd.networkd.network["test"].section["address"]`,
+		},
+		{
+			name: "section labels",
+			body: `section {
+  name     = "Address"
+  settings = {}
+}`,
+			want: "section block requires exactly one label",
+		},
+		{
+			name: "activation label",
+			body: `activation "bad" {
+  reconfigure = ["eth0"]
+}`,
+			want: "activation block must not have labels",
+		},
+		{
+			name: "invalid post reload traversal",
+			body: `activation {
+  post_reload = component.reload
+}`,
+			want: "script reference must be script.<name>",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := writeConfig(t, `
+host "router" {
+  systemd {
+    networkd {
+      network "test" {
+`+tt.body+`
+      }
+    }
+  }
+}
+`)
+			_, err := ParseFiles([]string{file})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ParseFiles error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseRejectsRootScriptComponentInputReference(t *testing.T) {
 	file := writeConfig(t, `
 script "reload" {

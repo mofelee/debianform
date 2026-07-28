@@ -2043,9 +2043,9 @@ func validateNetworkdObjectBlockShape(file, path string, block *hclsyntax.Block)
 	var allowed map[string]struct{}
 	switch block.Type {
 	case "netdev":
-		allowed = attrSet("path", "owner", "group", "mode", "ensure", "netdev", "wireguard", "wireguard_peer")
+		allowed = attrSet("path", "content", "source", "sensitive", "owner", "group", "mode", "ensure", "netdev", "wireguard", "wireguard_peer")
 	case "network":
-		allowed = attrSet("path", "owner", "group", "mode", "ensure", "match", "network")
+		allowed = attrSet("path", "content", "source", "sensitive", "owner", "group", "mode", "ensure", "match", "network")
 	default:
 		return fmt.Errorf("%s:%d: unsupported block %s", file, block.TypeRange.Start.Line, path)
 	}
@@ -2066,6 +2066,27 @@ func validateNetworkdObjectBlockShape(file, path string, block *hclsyntax.Block)
 				return err
 			}
 			values["lifecycle"] = struct{}{}
+		case "section":
+			if len(child.Labels) != 1 {
+				return fmt.Errorf("%s:%d: %s.section block requires exactly one label", file, child.TypeRange.Start.Line, path)
+			}
+			label := child.Labels[0]
+			sectionPath := fmt.Sprintf("%s.section[%s]", path, strconv.Quote(label))
+			if _, exists := values[sectionPath]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, sectionPath)
+			}
+			if err := validateGenericNetworkdSectionBlockShape(file, sectionPath, child); err != nil {
+				return err
+			}
+			values[sectionPath] = struct{}{}
+		case "activation":
+			if _, exists := values["activation"]; exists {
+				return fmt.Errorf("%s:%d: duplicate %s.activation block", file, child.TypeRange.Start.Line, path)
+			}
+			if err := validateNetworkdActivationBlockShape(file, path+".activation", child); err != nil {
+				return err
+			}
+			values["activation"] = struct{}{}
 		case "wireguard_peer":
 			if block.Type != "netdev" {
 				return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
@@ -2084,6 +2105,35 @@ func validateNetworkdObjectBlockShape(file, path string, block *hclsyntax.Block)
 			values[peerPath] = struct{}{}
 		default:
 			return fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
+		}
+	}
+	return nil
+}
+
+func validateGenericNetworkdSectionBlockShape(file, path string, block *hclsyntax.Block) error {
+	if len(block.Body.Blocks) != 0 {
+		return fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	allowed := attrSet("name", "settings")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+	}
+	return nil
+}
+
+func validateNetworkdActivationBlockShape(file, path string, block *hclsyntax.Block) error {
+	if len(block.Labels) != 0 {
+		return fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, path)
+	}
+	if len(block.Body.Blocks) != 0 {
+		return fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, path)
+	}
+	allowed := attrSet("reconfigure", "post_reload")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
 		}
 	}
 	return nil
@@ -2370,9 +2420,9 @@ func parseNetworkdObjectBlock(file, path string, block *hclsyntax.Block, ctx Eva
 	var allowed map[string]struct{}
 	switch block.Type {
 	case "netdev":
-		allowed = attrSet("path", "owner", "group", "mode", "ensure", "netdev", "wireguard", "wireguard_peer")
+		allowed = attrSet("path", "content", "source", "sensitive", "owner", "group", "mode", "ensure", "netdev", "wireguard", "wireguard_peer")
 	case "network":
-		allowed = attrSet("path", "owner", "group", "mode", "ensure", "match", "network")
+		allowed = attrSet("path", "content", "source", "sensitive", "owner", "group", "mode", "ensure", "match", "network")
 	default:
 		return Value{}, fmt.Errorf("%s:%d: unsupported block %s", file, block.TypeRange.Start.Line, path)
 	}
@@ -2400,6 +2450,35 @@ func parseNetworkdObjectBlock(file, path string, block *hclsyntax.Block, ctx Eva
 				return Value{}, err
 			}
 			values["lifecycle"] = lifecycle
+		case "section":
+			if len(child.Labels) != 1 {
+				return Value{}, fmt.Errorf("%s:%d: %s.section block requires exactly one label", file, child.TypeRange.Start.Line, path)
+			}
+			label := child.Labels[0]
+			sectionPath := fmt.Sprintf("%s.section[%s]", path, strconv.Quote(label))
+			section, err := parseGenericNetworkdSectionBlock(file, sectionPath, child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			collection, ok := values["section"]
+			if !ok {
+				collection = MapValue(nil, ir.SourceRef{File: file, Line: child.TypeRange.Start.Line, Path: path + ".section"})
+			}
+			if _, exists := collection.Map[label]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s", file, child.TypeRange.Start.Line, sectionPath)
+			}
+			collection.Map[label] = section
+			collection.Order = append(collection.Order, label)
+			values["section"] = collection
+		case "activation":
+			if _, exists := values["activation"]; exists {
+				return Value{}, fmt.Errorf("%s:%d: duplicate %s.activation block", file, child.TypeRange.Start.Line, path)
+			}
+			activation, err := parseNetworkdActivationBlock(file, path+".activation", child, ctx)
+			if err != nil {
+				return Value{}, err
+			}
+			values["activation"] = activation
 		case "wireguard_peer":
 			if block.Type != "netdev" {
 				return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
@@ -2428,6 +2507,55 @@ func parseNetworkdObjectBlock(file, path string, block *hclsyntax.Block, ctx Eva
 		default:
 			return Value{}, fmt.Errorf("%s:%d: unsupported block %s.%s", file, child.TypeRange.Start.Line, path, child.Type)
 		}
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseGenericNetworkdSectionBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	if err := validateGenericNetworkdSectionBlockShape(file, path, block); err != nil {
+		return Value{}, err
+	}
+	values := map[string]Value{}
+	allowed := attrSet("name", "settings")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
+	}
+	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
+}
+
+func parseNetworkdActivationBlock(file, path string, block *hclsyntax.Block, ctx EvalContext) (Value, error) {
+	if err := validateNetworkdActivationBlockShape(file, path, block); err != nil {
+		return Value{}, err
+	}
+	values := map[string]Value{}
+	allowed := attrSet("reconfigure", "post_reload")
+	for name, attr := range block.Body.Attributes {
+		if _, ok := allowed[name]; !ok {
+			return Value{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
+		}
+		attrSource := ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+		if name == "post_reload" {
+			ref, err := parseScriptTraversal(file, attr.Expr)
+			if err != nil {
+				return Value{}, err
+			}
+			ref.Source = attrSource
+			values[name] = Value{Kind: KindString, String: ref.Name, ScriptReference: &ref, Source: attrSource}
+			continue
+		}
+		value, err := evalValue(attr.Expr, ctx, attrSource)
+		if err != nil {
+			return Value{}, fmt.Errorf("%s:%d: %s.%s: %w", file, attrSource.Line, path, name, err)
+		}
+		values[name] = value
 	}
 	return MapValue(values, ir.SourceRef{File: file, Line: block.TypeRange.Start.Line, Path: path}), nil
 }

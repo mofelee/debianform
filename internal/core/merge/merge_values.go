@@ -81,6 +81,7 @@ func mergeValue(base, overlay parser.Value) (parser.Value, bool, error) {
 
 	if base.IsMap() && overlay.IsMap() {
 		result := parser.MapValue(copyMap(base.Map), overlay.Source)
+		result.Order = mergeMapOrder(base, overlay)
 		keys := make([]string, 0, len(overlay.Map))
 		for key := range overlay.Map {
 			keys = append(keys, key)
@@ -119,6 +120,24 @@ func mergeValue(base, overlay parser.Value) (parser.Value, bool, error) {
 	}
 
 	return overlay.WithoutModifier(), true, nil
+}
+
+func mergeMapOrder(base, overlay parser.Value) []string {
+	if len(base.Order) == 0 && len(overlay.Order) == 0 {
+		return nil
+	}
+	order := make([]string, 0, len(base.Order)+len(overlay.Order))
+	seen := map[string]struct{}{}
+	for _, labels := range [][]string{base.Order, overlay.Order} {
+		for _, label := range labels {
+			if _, exists := seen[label]; exists {
+				continue
+			}
+			seen[label] = struct{}{}
+			order = append(order, label)
+		}
+	}
+	return order
 }
 
 func isKnownListPath(path string) bool {

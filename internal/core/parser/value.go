@@ -36,6 +36,7 @@ type Value struct {
 	Number          string
 	List            []Value
 	Map             map[string]Value
+	Order           []string
 	ScriptReference *ScriptReference
 	Source          ir.SourceRef
 	Modifier        Modifier

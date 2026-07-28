@@ -4,6 +4,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mofelee/debianform/internal/core/ir"
+	"github.com/mofelee/debianform/internal/core/parser"
 )
 
 func TestCompileMergesImportsListsMapsAndScalars(t *testing.T) {
@@ -76,6 +79,30 @@ host "server1" {
 	}
 	if !host.System.LocaleSet {
 		t.Fatalf("locale should be marked explicit")
+	}
+}
+
+func TestMergePreservesOrderedMapLabels(t *testing.T) {
+	source := ir.SourceRef{File: "test.dbf.hcl", Line: 1, Path: "section"}
+	base := parser.MapValue(map[string]parser.Value{
+		"match": parser.MapValue(nil, source),
+		"ipv4":  parser.MapValue(nil, source),
+	}, source)
+	base.Order = []string{"match", "ipv4"}
+	overlay := parser.MapValue(map[string]parser.Value{
+		"ipv4": parser.MapValue(map[string]parser.Value{
+			"name": {Kind: parser.KindString, String: "Address", Source: source},
+		}, source),
+		"ipv6": parser.MapValue(nil, source),
+	}, source)
+	overlay.Order = []string{"ipv4", "ipv6"}
+
+	merged, err := Merge(base, overlay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(merged.Order, []string{"match", "ipv4", "ipv6"}) {
+		t.Fatalf("merged order = %#v", merged.Order)
 	}
 }
 
