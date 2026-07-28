@@ -256,6 +256,114 @@ func TestAPTAndNftablesRedactionRegressionMatrix(t *testing.T) {
 	}
 }
 
+func TestNetworkdRedactionRegressionMatrix(t *testing.T) {
+	fixture := "../../internal/core/testdata/fixtures/sensitive-networkd.dbf.hcl"
+	htmlPath := filepath.Join(t.TempDir(), "networkd-plan.html")
+
+	matrix := []struct {
+		name string
+		run  func(t *testing.T) string
+	}{
+		{
+			name: "offline plan text",
+			run: func(t *testing.T) string {
+				stdout, stderr := captureOutput(t, func() {
+					if err := run([]string{"plan", "-f", fixture, "--offline"}); err != nil {
+						t.Fatal(err)
+					}
+				})
+				for _, want := range []string{
+					"host.networkd-redaction1.systemd.networkd.restart",
+					`host.networkd-redaction1.systemd.networkd.reconfigure["wg0"]`,
+					`host.networkd-redaction1.script["reexport"]`,
+					"depends_on:",
+					"triggered_by:",
+				} {
+					if !strings.Contains(stdout, want) {
+						t.Fatalf("offline networkd plan missing %q:\n%s", want, stdout)
+					}
+				}
+				return stdout + stderr
+			},
+		},
+		{
+			name: "offline plan json debug",
+			run: func(t *testing.T) string {
+				stdout, stderr := captureOutput(t, func() {
+					if err := run([]string{"plan", "-f", fixture, "--offline", "--format", "json", "--debug"}); err != nil {
+						t.Fatal(err)
+					}
+				})
+				var decoded map[string]any
+				if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
+					t.Fatalf("networkd debug plan JSON did not parse: %v\n%s", err, stdout)
+				}
+				return stdout + stderr
+			},
+		},
+		{
+			name: "offline plan html",
+			run: func(t *testing.T) string {
+				stdout, stderr := captureOutput(t, func() {
+					if err := run([]string{"plan", "-f", fixture, "--offline", "--html", htmlPath}); err != nil {
+						t.Fatal(err)
+					}
+				})
+				data, err := os.ReadFile(htmlPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, want := range []string{"depends_on:", "triggered_by:", "networkd.reconfigure"} {
+					if !strings.Contains(string(data), want) {
+						t.Fatalf("networkd HTML plan missing %q", want)
+					}
+				}
+				return stdout + stderr + string(data)
+			},
+		},
+		{
+			name: "hostspec json",
+			run: func(t *testing.T) string {
+				program := compileRedactionFixture(t, fixture, nil)
+				data, err := json.Marshal(program)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return string(data)
+			},
+		},
+		{
+			name: "resource graph json",
+			run: func(t *testing.T) string {
+				program := compileRedactionFixture(t, fixture, nil)
+				resourceGraph, err := coregraph.Compile(program)
+				if err != nil {
+					t.Fatal(err)
+				}
+				data, err := json.Marshal(resourceGraph)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return string(data)
+			},
+		},
+		{
+			name: "state json",
+			run: func(t *testing.T) string {
+				return applyFixtureStateJSON(t, fixture, "networkd-redaction1")
+			},
+		},
+	}
+
+	for _, tt := range matrix {
+		t.Run(tt.name, func(t *testing.T) {
+			output := tt.run(t)
+			testassert.NoSecretLeak(t, tt.name, output)
+			assertRedactionMatrixNoEncodedPayload(t, output)
+		})
+	}
+}
+
 func compileRedactionFixture(t *testing.T, fixture string, values []coreparser.ExternalVariableValue) *coreir.Program {
 	t.Helper()
 
