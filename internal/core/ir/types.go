@@ -338,6 +338,19 @@ type NetworkdSpec struct {
 
 type NetworkdSection map[string][]string
 
+type NetworkdNamedSection struct {
+	Identity string          `json:"identity"`
+	Name     string          `json:"name"`
+	Settings NetworkdSection `json:"settings,omitempty"`
+	Source   SourceRef       `json:"source,omitempty"`
+}
+
+type NetworkdActivationSpec struct {
+	Reconfigure []string             `json:"reconfigure,omitempty"`
+	PostReload  *ScriptReferenceSpec `json:"post_reload,omitempty"`
+	Source      SourceRef            `json:"source,omitempty"`
+}
+
 type SystemdTimer struct {
 	Name    string          `json:"name"`
 	Unit    SystemdUnit     `json:"unit"`
@@ -365,14 +378,20 @@ type SystemdJournaldSpec struct {
 
 type NetworkdNetDev struct {
 	Label          string                     `json:"label"`
+	Name           string                     `json:"name,omitempty"`
 	Path           string                     `json:"path"`
 	NetDev         NetworkdSection            `json:"netdev,omitempty"`
 	WireGuard      NetworkdSection            `json:"wireguard,omitempty"`
 	WireGuardPeers map[string]NetworkdSection `json:"wireguard_peer,omitempty"`
+	Sections       []NetworkdNamedSection     `json:"sections,omitempty"`
+	ContentMode    string                     `json:"content_mode,omitempty"`
+	SourcePath     string                     `json:"source_path,omitempty"`
 	Owner          string                     `json:"owner"`
 	Group          string                     `json:"group"`
 	Mode           string                     `json:"mode"`
+	Sensitive      bool                       `json:"sensitive,omitempty"`
 	Ensure         string                     `json:"ensure"`
+	Activation     *NetworkdActivationSpec    `json:"activation,omitempty"`
 	Lifecycle      *LifecycleSpec             `json:"lifecycle,omitempty"`
 	Summary        ContentSummary             `json:"summary,omitempty"`
 	Content        string                     `json:"content,omitempty"`
@@ -380,18 +399,23 @@ type NetworkdNetDev struct {
 }
 
 type NetworkdNetwork struct {
-	Label     string          `json:"label"`
-	Path      string          `json:"path"`
-	Match     NetworkdSection `json:"match,omitempty"`
-	Network   NetworkdSection `json:"network,omitempty"`
-	Owner     string          `json:"owner"`
-	Group     string          `json:"group"`
-	Mode      string          `json:"mode"`
-	Ensure    string          `json:"ensure"`
-	Lifecycle *LifecycleSpec  `json:"lifecycle,omitempty"`
-	Summary   ContentSummary  `json:"summary,omitempty"`
-	Content   string          `json:"content,omitempty"`
-	Source    SourceRef       `json:"source,omitempty"`
+	Label       string                  `json:"label"`
+	Path        string                  `json:"path"`
+	Match       NetworkdSection         `json:"match,omitempty"`
+	Network     NetworkdSection         `json:"network,omitempty"`
+	Sections    []NetworkdNamedSection  `json:"sections,omitempty"`
+	ContentMode string                  `json:"content_mode,omitempty"`
+	SourcePath  string                  `json:"source_path,omitempty"`
+	Owner       string                  `json:"owner"`
+	Group       string                  `json:"group"`
+	Mode        string                  `json:"mode"`
+	Sensitive   bool                    `json:"sensitive,omitempty"`
+	Ensure      string                  `json:"ensure"`
+	Activation  *NetworkdActivationSpec `json:"activation,omitempty"`
+	Lifecycle   *LifecycleSpec          `json:"lifecycle,omitempty"`
+	Summary     ContentSummary          `json:"summary,omitempty"`
+	Content     string                  `json:"content,omitempty"`
+	Source      SourceRef               `json:"source,omitempty"`
 }
 
 type ServiceSpec struct {

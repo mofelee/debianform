@@ -139,6 +139,39 @@ func systemdManagedServiceNode(hostName, address, component, name, unit, package
 }
 
 func networkdNetDevNode(hostName, address, component string, item ir.NetworkdNetDev, deps []string) Node {
+	if item.ContentMode != "" {
+		desired, payload := fileResourceDesiredPayload(fileResourceSpec{
+			Path:       item.Path,
+			Component:  component,
+			Content:    item.Content,
+			SourcePath: item.SourcePath,
+			Owner:      item.Owner,
+			Group:      item.Group,
+			Mode:       item.Mode,
+			Sensitive:  item.Sensitive,
+			Ensure:     item.Ensure,
+			Summary:    item.Summary,
+		})
+		desired["label"] = item.Label
+		desired["name"] = networkdNetDevName(item)
+		desired["content_mode"] = item.ContentMode
+		payload["label"] = item.Label
+		payload["name"] = networkdNetDevName(item)
+		payload["content_mode"] = item.ContentMode
+		return Node{
+			Host:            hostName,
+			Address:         address,
+			Kind:            "networkd_netdev",
+			Summary:         "manage " + item.ContentMode + " networkd netdev " + item.Label,
+			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
+			Desired:         desired,
+			DependsOn:       dedupeStrings(deps),
+			ProviderType:    "file",
+			ProviderAddress: "file." + providerName(hostName, item.Path),
+			ProviderPayload: payload,
+		}
+	}
 	desired := map[string]any{
 		"label":   item.Label,
 		"name":    networkdNetDevName(item),
@@ -171,6 +204,37 @@ func networkdNetDevNode(hostName, address, component string, item ir.NetworkdNet
 }
 
 func networkdNetworkNode(hostName, address, component string, item ir.NetworkdNetwork, deps []string) Node {
+	if item.ContentMode != "" {
+		desired, payload := fileResourceDesiredPayload(fileResourceSpec{
+			Path:       item.Path,
+			Component:  component,
+			Content:    item.Content,
+			SourcePath: item.SourcePath,
+			Owner:      item.Owner,
+			Group:      item.Group,
+			Mode:       item.Mode,
+			Sensitive:  item.Sensitive,
+			Ensure:     item.Ensure,
+			Summary:    item.Summary,
+		})
+		desired["label"] = item.Label
+		desired["content_mode"] = item.ContentMode
+		payload["label"] = item.Label
+		payload["content_mode"] = item.ContentMode
+		return Node{
+			Host:            hostName,
+			Address:         address,
+			Kind:            "networkd_network",
+			Summary:         "manage " + item.ContentMode + " networkd network " + item.Label,
+			Source:          item.Source,
+			Lifecycle:       lifecyclePtr(item.Lifecycle),
+			Desired:         desired,
+			DependsOn:       dedupeStrings(deps),
+			ProviderType:    "file",
+			ProviderAddress: "file." + providerName(hostName, item.Path),
+			ProviderPayload: payload,
+		}
+	}
 	desired := map[string]any{
 		"label":   item.Label,
 		"path":    item.Path,
@@ -212,6 +276,9 @@ func networkdNetworkDependencies(item ir.NetworkdNetwork, networkdAddresses map[
 }
 
 func networkdNetDevName(item ir.NetworkdNetDev) string {
+	if item.Name != "" {
+		return item.Name
+	}
 	if values := item.NetDev["Name"]; len(values) > 0 {
 		return values[0]
 	}

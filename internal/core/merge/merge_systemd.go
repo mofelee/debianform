@@ -2,6 +2,7 @@ package merge
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -206,6 +207,14 @@ func networkdNetDevSpec(label string, item parser.Value) (ir.NetworkdNetDev, err
 	if err != nil {
 		return ir.NetworkdNetDev{}, err
 	}
+	sections, hasSections, sectionsSensitive, err := networkdGenericSections(item)
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
+	raw, err := networkdRawFile(item)
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
 	netdev, err := networkdSectionField(item, "netdev")
 	if err != nil {
 		return ir.NetworkdNetDev{}, err
@@ -226,7 +235,25 @@ func networkdNetDevSpec(label string, item parser.Value) (ir.NetworkdNetDev, err
 			return ir.NetworkdNetDev{}, fmt.Errorf("%s:%d:%s.wireguard_peer[%q].PresharedKey: use PresharedKeyFile instead of inline PresharedKey", item.Source.File, item.Source.Line, item.Source.Path, label)
 		}
 	}
-	if ensure == "present" {
+	hasCompatibility := hasNetworkdCompatibilityFields(item, "netdev", "wireguard", "wireguard_peer")
+	if raw.Present && (hasSections || hasCompatibility) {
+		return ir.NetworkdNetDev{}, fmt.Errorf("%s:%d:%s: networkd netdev raw content/source is mutually exclusive with section blocks and compatibility attributes", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	if hasSections && hasCompatibility {
+		return ir.NetworkdNetDev{}, fmt.Errorf("%s:%d:%s: networkd netdev section blocks are mutually exclusive with compatibility attributes", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	name := ""
+	if raw.Present {
+		name, err = validateRawNetworkdNetDev(raw.ValidationContent, item.Source)
+		if err != nil {
+			return ir.NetworkdNetDev{}, err
+		}
+	} else if hasSections {
+		name, err = validateGenericNetworkdNetDev(sections, item.Source)
+		if err != nil {
+			return ir.NetworkdNetDev{}, err
+		}
+	} else if ensure == "present" {
 		if len(netdev) == 0 {
 			return ir.NetworkdNetDev{}, fmt.Errorf("%s:%d:%s.netdev: networkd netdev requires netdev section when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
 		}
@@ -237,6 +264,10 @@ func networkdNetDevSpec(label string, item parser.Value) (ir.NetworkdNetDev, err
 			return ir.NetworkdNetDev{}, fmt.Errorf("%s:%d:%s.netdev.Name: networkd netdev requires Name", item.Source.File, item.Source.Line, item.Source.Path)
 		}
 	}
+	activation, err := networkdActivationSpec(item)
+	if err != nil {
+		return ir.NetworkdNetDev{}, err
+	}
 	owner, err := stringFieldDefault(item, "owner", "root")
 	if err != nil {
 		return ir.NetworkdNetDev{}, err
@@ -245,7 +276,12 @@ func networkdNetDevSpec(label string, item parser.Value) (ir.NetworkdNetDev, err
 	if err != nil {
 		return ir.NetworkdNetDev{}, err
 	}
-	mode, err := modeFieldDefault(item, "mode", "0644")
+	sensitive := raw.Sensitive || sectionsSensitive
+	defaultMode := "0644"
+	if sensitive {
+		defaultMode = "0600"
+	}
+	mode, err := modeFieldDefault(item, "mode", defaultMode)
 	if err != nil {
 		return ir.NetworkdNetDev{}, err
 	}
@@ -259,14 +295,28 @@ func networkdNetDevSpec(label string, item parser.Value) (ir.NetworkdNetDev, err
 		NetDev:         netdev,
 		WireGuard:      wireguard,
 		WireGuardPeers: peers,
+		Sections:       sections,
+		SourcePath:     raw.SourcePath,
 		Owner:          owner,
 		Group:          group,
 		Mode:           mode,
+		Sensitive:      sensitive,
 		Ensure:         ensure,
+		Activation:     activation,
 		Lifecycle:      lifecycle,
 		Source:         item.Source,
 	}
-	if ensure == "present" {
+	if hasSections {
+		out.Name = name
+		out.ContentMode = "structured"
+	}
+	if raw.Present {
+		out.Name = name
+		out.ContentMode = "raw"
+		out.Content = raw.Content
+		out.Summary = raw.Summary
+	}
+	if ensure == "present" && !raw.Present {
 		content, err := renderNetworkdNetDev(out)
 		if err != nil {
 			return ir.NetworkdNetDev{}, err
@@ -286,6 +336,14 @@ func networkdNetworkSpec(label string, item parser.Value) (ir.NetworkdNetwork, e
 	if err != nil {
 		return ir.NetworkdNetwork{}, err
 	}
+	sections, hasSections, sectionsSensitive, err := networkdGenericSections(item)
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
+	}
+	raw, err := networkdRawFile(item)
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
+	}
 	match, err := networkdSectionField(item, "match")
 	if err != nil {
 		return ir.NetworkdNetwork{}, err
@@ -294,13 +352,24 @@ func networkdNetworkSpec(label string, item parser.Value) (ir.NetworkdNetwork, e
 	if err != nil {
 		return ir.NetworkdNetwork{}, err
 	}
-	if ensure == "present" {
+	hasCompatibility := hasNetworkdCompatibilityFields(item, "match", "network")
+	if raw.Present && (hasSections || hasCompatibility) {
+		return ir.NetworkdNetwork{}, fmt.Errorf("%s:%d:%s: networkd network raw content/source is mutually exclusive with section blocks and compatibility attributes", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	if hasSections && hasCompatibility {
+		return ir.NetworkdNetwork{}, fmt.Errorf("%s:%d:%s: networkd network section blocks are mutually exclusive with compatibility attributes", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	if ensure == "present" && !raw.Present && !hasSections {
 		if len(match) == 0 {
 			return ir.NetworkdNetwork{}, fmt.Errorf("%s:%d:%s.match: networkd network requires match section when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
 		}
 		if len(network) == 0 {
 			return ir.NetworkdNetwork{}, fmt.Errorf("%s:%d:%s.network: networkd network requires network section when ensure is present", item.Source.File, item.Source.Line, item.Source.Path)
 		}
+	}
+	activation, err := networkdActivationSpec(item)
+	if err != nil {
+		return ir.NetworkdNetwork{}, err
 	}
 	owner, err := stringFieldDefault(item, "owner", "root")
 	if err != nil {
@@ -310,7 +379,12 @@ func networkdNetworkSpec(label string, item parser.Value) (ir.NetworkdNetwork, e
 	if err != nil {
 		return ir.NetworkdNetwork{}, err
 	}
-	mode, err := modeFieldDefault(item, "mode", "0644")
+	sensitive := raw.Sensitive || sectionsSensitive
+	defaultMode := "0644"
+	if sensitive {
+		defaultMode = "0600"
+	}
+	mode, err := modeFieldDefault(item, "mode", defaultMode)
 	if err != nil {
 		return ir.NetworkdNetwork{}, err
 	}
@@ -319,18 +393,30 @@ func networkdNetworkSpec(label string, item parser.Value) (ir.NetworkdNetwork, e
 		return ir.NetworkdNetwork{}, err
 	}
 	out := ir.NetworkdNetwork{
-		Label:     label,
-		Path:      path,
-		Match:     match,
-		Network:   network,
-		Owner:     owner,
-		Group:     group,
-		Mode:      mode,
-		Ensure:    ensure,
-		Lifecycle: lifecycle,
-		Source:    item.Source,
+		Label:      label,
+		Path:       path,
+		Match:      match,
+		Network:    network,
+		Sections:   sections,
+		SourcePath: raw.SourcePath,
+		Owner:      owner,
+		Group:      group,
+		Mode:       mode,
+		Sensitive:  sensitive,
+		Ensure:     ensure,
+		Activation: activation,
+		Lifecycle:  lifecycle,
+		Source:     item.Source,
 	}
-	if ensure == "present" {
+	if hasSections {
+		out.ContentMode = "structured"
+	}
+	if raw.Present {
+		out.ContentMode = "raw"
+		out.Content = raw.Content
+		out.Summary = raw.Summary
+	}
+	if ensure == "present" && !raw.Present {
 		content, err := renderNetworkdNetwork(out)
 		if err != nil {
 			return ir.NetworkdNetwork{}, err
@@ -339,6 +425,285 @@ func networkdNetworkSpec(label string, item parser.Value) (ir.NetworkdNetwork, e
 		out.Summary = contentSummary([]byte(content))
 	}
 	return out, nil
+}
+
+type networkdRawFileSpec struct {
+	Present           bool
+	Content           string
+	SourcePath        string
+	Sensitive         bool
+	Summary           ir.ContentSummary
+	ValidationContent string
+}
+
+func networkdRawFile(item parser.Value) (networkdRawFileSpec, error) {
+	content, hasContent, err := stringFieldAllowEphemeral(item, "content")
+	if err != nil {
+		return networkdRawFileSpec{}, err
+	}
+	if hasContent {
+		if err := rejectEphemeralValue(item.Map["content"]); err != nil {
+			return networkdRawFileSpec{}, err
+		}
+	}
+	source, hasSource, err := stringField(item, "source")
+	if err != nil {
+		return networkdRawFileSpec{}, err
+	}
+	if hasContent && hasSource {
+		return networkdRawFileSpec{}, fmt.Errorf("%s:%d:%s: networkd resource accepts only one of content or source", item.Source.File, item.Source.Line, item.Source.Path)
+	}
+	if !hasContent && !hasSource {
+		return networkdRawFileSpec{}, nil
+	}
+	sensitive, ok, err := boolField(item, "sensitive")
+	if err != nil {
+		return networkdRawFileSpec{}, err
+	}
+	if !ok {
+		sensitive = false
+	}
+	if hasContent && contentNeedsRedaction(item.Map["content"]) {
+		sensitive = true
+	}
+	if hasSource && item.Map["source"].ContainsSensitive() {
+		sensitive = true
+	}
+	out := networkdRawFileSpec{Present: true, Content: content, Sensitive: sensitive}
+	if hasContent {
+		out.ValidationContent = content
+		out.Summary = contentSummary([]byte(content))
+		return out, nil
+	}
+	out.SourcePath = resolvePath(item.Source.File, source)
+	data, err := os.ReadFile(out.SourcePath)
+	if err != nil {
+		return networkdRawFileSpec{}, fmt.Errorf("%s:%d:%s: read source %q: %w", item.Source.File, item.Source.Line, item.Source.Path, out.SourcePath, err)
+	}
+	out.ValidationContent = string(data)
+	out.Summary = contentSummary(data)
+	return out, nil
+}
+
+func hasNetworkdCompatibilityFields(item parser.Value, names ...string) bool {
+	for _, name := range names {
+		if _, ok := item.Map[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func networkdGenericSections(item parser.Value) ([]ir.NetworkdNamedSection, bool, bool, error) {
+	collection, ok := item.Map["section"]
+	if !ok {
+		return nil, false, false, nil
+	}
+	if !collection.IsMap() {
+		return nil, false, false, fmt.Errorf("%s:%d:%s: networkd section collection must be a map", collection.Source.File, collection.Source.Line, collection.Source.Path)
+	}
+	order := append([]string(nil), collection.Order...)
+	seen := map[string]struct{}{}
+	for _, label := range order {
+		seen[label] = struct{}{}
+	}
+	for _, label := range sortedKeys(collection.Map) {
+		if _, exists := seen[label]; !exists {
+			order = append(order, label)
+		}
+	}
+	sections := make([]ir.NetworkdNamedSection, 0, len(collection.Map))
+	sensitive := false
+	for _, label := range order {
+		section := collection.Map[label]
+		if label == "" {
+			return nil, false, false, fmt.Errorf("%s:%d:%s: networkd section identity must be non-empty", section.Source.File, section.Source.Line, section.Source.Path)
+		}
+		name, hasName, err := stringField(section, "name")
+		if err != nil {
+			return nil, false, false, err
+		}
+		if !hasName || !validNetworkdIdentifier(name) {
+			return nil, false, false, fmt.Errorf("%s:%d:%s.name: networkd section name %q is invalid", section.Source.File, section.Source.Line, section.Source.Path, name)
+		}
+		settingsValue, hasSettings, err := mapField(section, "settings")
+		if err != nil {
+			return nil, false, false, err
+		}
+		if !hasSettings {
+			return nil, false, false, fmt.Errorf("%s:%d:%s.settings: networkd section settings map is required", section.Source.File, section.Source.Line, section.Source.Path)
+		}
+		if settingsValue.ContainsEphemeral() {
+			return nil, false, false, fmt.Errorf("%s:%d:%s: ephemeral value is not allowed in networkd section settings", settingsValue.Source.File, settingsValue.Source.Line, settingsValue.Source.Path)
+		}
+		for _, key := range sortedKeys(settingsValue.Map) {
+			value := settingsValue.Map[key]
+			if !validNetworkdIdentifier(key) {
+				return nil, false, false, fmt.Errorf("%s:%d:%s: networkd section key %q is invalid", value.Source.File, value.Source.Line, value.Source.Path, key)
+			}
+			if (key == "PrivateKey" || key == "PresharedKey") && !value.ContainsSensitive() {
+				return nil, false, false, fmt.Errorf("%s:%d:%s: inline %s must use a sensitive value or its file-backed directive", value.Source.File, value.Source.Line, value.Source.Path, key)
+			}
+		}
+		settings, err := networkdSection(settingsValue)
+		if err != nil {
+			return nil, false, false, err
+		}
+		sensitive = sensitive || settingsValue.ContainsSensitive()
+		sections = append(sections, ir.NetworkdNamedSection{Identity: label, Name: name, Settings: settings, Source: section.Source})
+	}
+	return sections, true, sensitive, nil
+}
+
+func validNetworkdIdentifier(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_' || char == '.' || char == ':' || char == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func networkdActivationSpec(item parser.Value) (*ir.NetworkdActivationSpec, error) {
+	activation, ok, err := mapField(item, "activation")
+	if err != nil || !ok {
+		return nil, err
+	}
+	reconfigure, err := stringListField(activation, "reconfigure")
+	if err != nil {
+		return nil, err
+	}
+	for i, name := range reconfigure {
+		if err := validateSystemdSingleLine(name, activation.Map["reconfigure"].List[i].Source); err != nil {
+			return nil, err
+		}
+	}
+	var postReload *ir.ScriptReferenceSpec
+	if value, exists := activation.Map["post_reload"]; exists {
+		name, _, err := stringField(activation, "post_reload")
+		if err != nil {
+			return nil, err
+		}
+		scope := string(parser.ScriptReferenceAuto)
+		if value.ScriptReference != nil {
+			scope = string(value.ScriptReference.Scope)
+			name = value.ScriptReference.Name
+		}
+		postReload = &ir.ScriptReferenceSpec{Name: name, Scope: scope, Source: value.Source}
+	}
+	if len(reconfigure) == 0 && postReload == nil {
+		return nil, fmt.Errorf("%s:%d:%s: networkd activation requires reconfigure or post_reload", activation.Source.File, activation.Source.Line, activation.Source.Path)
+	}
+	return &ir.NetworkdActivationSpec{Reconfigure: reconfigure, PostReload: postReload, Source: activation.Source}, nil
+}
+
+func validateNetworkdActivationRefs(spec *ir.NetworkdSpec, localScripts, rootScripts map[string]ir.ComponentScriptSpec) error {
+	if spec == nil {
+		return nil
+	}
+	for _, label := range sortedKeys(spec.NetDevs) {
+		item := spec.NetDevs[label]
+		if err := resolveNetworkdActivationRef(item.Activation, localScripts, rootScripts); err != nil {
+			return err
+		}
+		spec.NetDevs[label] = item
+	}
+	for _, label := range sortedKeys(spec.Networks) {
+		item := spec.Networks[label]
+		if err := resolveNetworkdActivationRef(item.Activation, localScripts, rootScripts); err != nil {
+			return err
+		}
+		spec.Networks[label] = item
+	}
+	return nil
+}
+
+func resolveNetworkdActivationRef(activation *ir.NetworkdActivationSpec, localScripts, rootScripts map[string]ir.ComponentScriptSpec) error {
+	if activation == nil || activation.PostReload == nil {
+		return nil
+	}
+	ref := *activation.PostReload
+	if ref.Scope != string(parser.ScriptReferenceGlobal) {
+		if script, ok := localScripts[ref.Name]; ok {
+			ref.Scope = "component"
+			ref.DeclarationID = script.DeclarationID
+			activation.PostReload = &ref
+			return nil
+		}
+	}
+	if script, ok := rootScripts[ref.Name]; ok {
+		ref.Scope = "root"
+		ref.DeclarationID = script.DeclarationID
+		activation.PostReload = &ref
+		return nil
+	}
+	traversal := "script." + ref.Name
+	if ref.Scope == string(parser.ScriptReferenceGlobal) {
+		traversal = "global.script." + ref.Name
+	}
+	return fmt.Errorf("%s:%d:%s: networkd activation.post_reload references unknown %s", ref.Source.File, ref.Source.Line, ref.Source.Path, traversal)
+}
+
+func validateGenericNetworkdNetDev(sections []ir.NetworkdNamedSection, source ir.SourceRef) (string, error) {
+	name := ""
+	found := 0
+	for _, section := range sections {
+		if section.Name != "NetDev" {
+			continue
+		}
+		found++
+		name = firstSectionValue(section.Settings, "Name")
+		if firstSectionValue(section.Settings, "Kind") == "" {
+			return "", fmt.Errorf("%s:%d:%s: networkd netdev [NetDev] section requires Kind", section.Source.File, section.Source.Line, section.Source.Path)
+		}
+		if name == "" {
+			return "", fmt.Errorf("%s:%d:%s: networkd netdev [NetDev] section requires Name", section.Source.File, section.Source.Line, section.Source.Path)
+		}
+	}
+	if found != 1 {
+		return "", fmt.Errorf("%s:%d:%s: networkd netdev requires exactly one NetDev section", source.File, source.Line, source.Path)
+	}
+	return name, nil
+}
+
+func validateRawNetworkdNetDev(content string, source ir.SourceRef) (string, error) {
+	inNetDev := false
+	name := ""
+	kind := ""
+	for _, rawLine := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			inNetDev = line == "[NetDev]"
+			continue
+		}
+		if !inNetDev {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(key) {
+		case "Name":
+			name = strings.TrimSpace(value)
+		case "Kind":
+			kind = strings.TrimSpace(value)
+		}
+	}
+	if name == "" || kind == "" {
+		return "", fmt.Errorf("%s:%d:%s: raw networkd netdev requires [NetDev] Name and Kind", source.File, source.Line, source.Path)
+	}
+	if err := validateSystemdSingleLine(name, source); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 func networkdFilePath(item parser.Value, field string, fallback string) (string, error) {
@@ -449,6 +814,9 @@ func networkdSectionValues(value parser.Value) ([]string, error) {
 }
 
 func networkdScalarValue(value parser.Value) (string, error) {
+	if value.ContainsEphemeral() {
+		return "", fmt.Errorf("%s:%d:%s: ephemeral value is not allowed in networkd section settings", value.Source.File, value.Source.Line, value.Source.Path)
+	}
 	switch value.Kind {
 	case parser.KindString:
 		if err := validateSystemdSingleLine(value.String, value.Source); err != nil {
@@ -472,6 +840,12 @@ func networkdScalarValue(value parser.Value) (string, error) {
 
 func renderNetworkdNetDev(item ir.NetworkdNetDev) (string, error) {
 	var lines []string
+	if len(item.Sections) > 0 {
+		if err := appendNetworkdNamedSections(&lines, item.Sections); err != nil {
+			return "", err
+		}
+		return strings.Join(lines, "\n") + "\n", nil
+	}
 	if err := appendNetworkdSection(&lines, "NetDev", item.NetDev, item.Source); err != nil {
 		return "", err
 	}
@@ -490,6 +864,12 @@ func renderNetworkdNetDev(item ir.NetworkdNetDev) (string, error) {
 
 func renderNetworkdNetwork(item ir.NetworkdNetwork) (string, error) {
 	var lines []string
+	if len(item.Sections) > 0 {
+		if err := appendNetworkdNamedSections(&lines, item.Sections); err != nil {
+			return "", err
+		}
+		return strings.Join(lines, "\n") + "\n", nil
+	}
 	if err := appendNetworkdSection(&lines, "Match", item.Match, item.Source); err != nil {
 		return "", err
 	}
@@ -497,6 +877,18 @@ func renderNetworkdNetwork(item ir.NetworkdNetwork) (string, error) {
 		return "", err
 	}
 	return strings.Join(lines, "\n") + "\n", nil
+}
+
+func appendNetworkdNamedSections(lines *[]string, sections []ir.NetworkdNamedSection) error {
+	for _, section := range sections {
+		if !validNetworkdIdentifier(section.Name) {
+			return fmt.Errorf("%s:%d:%s: networkd section name %q is invalid", section.Source.File, section.Source.Line, section.Source.Path, section.Name)
+		}
+		if err := appendNetworkdSection(lines, section.Name, section.Settings, section.Source); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func appendNetworkdSection(lines *[]string, name string, values ir.NetworkdSection, source ir.SourceRef) error {

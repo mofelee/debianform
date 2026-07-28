@@ -96,6 +96,9 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 			return nil, err
 		}
 		spec.Scripts = hostScripts
+		if err := validateNetworkdActivationRefs(spec.Systemd.Networkd, nil, hostScripts); err != nil {
+			return nil, err
+		}
 		if opts.ValidateRuntimeTemplates {
 			if err := compiler.validateRuntimeComponentTemplates(host.Components, spec); err != nil {
 				return nil, err

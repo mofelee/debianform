@@ -79,3 +79,27 @@ func (u SystemdUnit) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(out)
 }
+
+type networkdNetDevJSON NetworkdNetDev
+
+func (n NetworkdNetDev) MarshalJSON() ([]byte, error) {
+	out := networkdNetDevJSON(n)
+	if n.Sensitive {
+		out.Content = ""
+		out.SourcePath = ""
+		out.Sections = nil
+	}
+	return json.Marshal(out)
+}
+
+type networkdNetworkJSON NetworkdNetwork
+
+func (n NetworkdNetwork) MarshalJSON() ([]byte, error) {
+	out := networkdNetworkJSON(n)
+	if n.Sensitive {
+		out.Content = ""
+		out.SourcePath = ""
+		out.Sections = nil
+	}
+	return json.Marshal(out)
+}

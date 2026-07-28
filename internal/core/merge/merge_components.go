@@ -1223,6 +1223,9 @@ func (c *compiler) buildComponentSpec(instance parser.ComponentInstance, templat
 			return spec, err
 		}
 		spec.Systemd.Networkd = networkd
+		if err := validateNetworkdActivationRefs(spec.Systemd.Networkd, spec.Scripts, rootScripts); err != nil {
+			return spec, err
+		}
 		resolved, err := systemdResolvedSpec(systemd)
 		if err != nil {
 			return spec, err
