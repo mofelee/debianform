@@ -90,6 +90,7 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 				return nil, err
 			}
 		}
+		spec.Moves = movedSpecs(cfg.Moves, host.Name)
 		hostScripts, err := compiler.hostScriptSpecs(spec)
 		if err != nil {
 			return nil, err
@@ -115,6 +116,23 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 		program.Hosts = append(program.Hosts, spec)
 	}
 	return program, nil
+}
+
+func movedSpecs(moves []parser.Moved, host string) []ir.MovedSpec {
+	if len(moves) == 0 {
+		return nil
+	}
+	out := make([]ir.MovedSpec, 0, len(moves))
+	for _, move := range moves {
+		out = append(out, ir.MovedSpec{
+			From:       fmt.Sprintf("host.%s.components.%s", host, move.From),
+			To:         fmt.Sprintf("host.%s.components.%s", host, move.To),
+			Source:     move.Source,
+			FromSource: move.FromSource,
+			ToSource:   move.ToSource,
+		})
+	}
+	return out
 }
 
 func variableSpecs(cfg *parser.Config) (map[string]ir.VariableSpec, error) {

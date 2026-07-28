@@ -1,0 +1,165 @@
+{
+  "name": "server1",
+  "source": {
+    "file": "../testdata/fixtures/moved-component.dbf.hcl",
+    "line": 14,
+    "path": "host.server1"
+  },
+  "facts": {
+    "system": {
+      "hostname": "server1",
+      "architecture": "amd64",
+      "codename": "trixie"
+    }
+  },
+  "ssh": {
+    "host": "server1",
+    "port": 22,
+    "user": "root",
+    "source": {
+      "file": "../testdata/fixtures/moved-component.dbf.hcl",
+      "line": 14,
+      "path": "host.server1"
+    }
+  },
+  "state": {
+    "path": "/var/lib/debianform/state/server1.json",
+    "lock_path": "/var/lock/debianform/state/server1.lock",
+    "source": {
+      "file": "../testdata/fixtures/moved-component.dbf.hcl",
+      "line": 14,
+      "path": "host.server1"
+    }
+  },
+  "moves": [
+    {
+      "from": "host.server1.components.legacy",
+      "to": "host.server1.components.current",
+      "source": {
+        "file": "../testdata/fixtures/moved-component.dbf.hcl",
+        "line": 1,
+        "path": "moved[component.legacy]"
+      },
+      "from_source": {
+        "file": "../testdata/fixtures/moved-component.dbf.hcl",
+        "line": 2,
+        "path": "moved[component.legacy].from"
+      },
+      "to_source": {
+        "file": "../testdata/fixtures/moved-component.dbf.hcl",
+        "line": 3,
+        "path": "moved[component.legacy].to"
+      }
+    }
+  ],
+  "platform": {
+    "architecture": "amd64",
+    "codename": "trixie",
+    "source": {
+      "file": "../testdata/fixtures/moved-component.dbf.hcl",
+      "line": 14,
+      "path": "host.server1"
+    }
+  },
+  "system": {
+    "source": {
+      "file": "../testdata/fixtures/moved-component.dbf.hcl",
+      "line": 14,
+      "path": "host.server1"
+    }
+  },
+  "kernel": {
+    "source": {}
+  },
+  "packages": {
+    "source": {}
+  },
+  "apt": {
+    "source": {}
+  },
+  "files": {
+    "source": {}
+  },
+  "secrets": {
+    "source": {}
+  },
+  "directories": {
+    "source": {}
+  },
+  "groups": {
+    "source": {}
+  },
+  "users": {
+    "source": {}
+  },
+  "systemd": {
+    "source": {}
+  },
+  "services": {
+    "source": {}
+  },
+  "nftables": {
+    "source": {}
+  },
+  "components": [
+    {
+      "name": "current",
+      "template": "managed_file",
+      "apt": {
+        "source": {}
+      },
+      "packages": {
+        "source": {}
+      },
+      "files": {
+        "files": {
+          "/etc/moved-component.conf": {
+            "path": "/etc/moved-component.conf",
+            "content": "managed\n",
+            "owner": "root",
+            "group": "root",
+            "mode": "0644",
+            "ensure": "present",
+            "summary": {
+              "sha256": "5b4bc29f140e30c01417d810e700ecc54a84a0107566d84215b42e5742ef8d96",
+              "bytes": 8
+            },
+            "source": {
+              "file": "../testdata/fixtures/moved-component.dbf.hcl",
+              "line": 8,
+              "path": "component.managed_file.files.file[\"/etc/moved-component.conf\"]"
+            }
+          }
+        },
+        "source": {
+          "file": "../testdata/fixtures/moved-component.dbf.hcl",
+          "line": 7,
+          "path": "component.managed_file.files"
+        }
+      },
+      "secrets": {
+        "source": {}
+      },
+      "directories": {
+        "source": {}
+      },
+      "groups": {
+        "source": {}
+      },
+      "users": {
+        "source": {}
+      },
+      "systemd": {
+        "source": {}
+      },
+      "services": {
+        "source": {}
+      },
+      "source": {
+        "file": "../testdata/fixtures/moved-component.dbf.hcl",
+        "line": 15,
+        "path": "host.server1.component[\"current\"]"
+      }
+    }
+  ]
+}
