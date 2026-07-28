@@ -1322,6 +1322,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	journaldRestartOnChange := false
 	networkdDeleteNames := []string{}
 	networkdSource := ir.SourceRef{}
+	networkdReconfigureTriggers := map[string][]string{}
+	networkdPostReloadTriggers := map[string]*networkdPostReloadGroup{}
 	var networkdEnable *bool
 	networkdEnableSource := ir.SourceRef{}
 	for _, name := range sortedKeys(host.Systemd.Units) {
@@ -1469,6 +1471,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			item := host.Systemd.Networkd.NetDevs[label]
 			address := fmt.Sprintf("host.%s.systemd.networkd.netdev[%s]", host.Name, strconv.Quote(label))
 			networkdTriggers = append(networkdTriggers, address)
+			if err := collectNetworkdActivation(item.Activation, address, "", networkdReconfigureTriggers, networkdPostReloadTriggers); err != nil {
+				return nil, nil, err
+			}
 			if item.Ensure == "absent" {
 				networkdDeleteNames = append(networkdDeleteNames, networkdNetDevName(item))
 			}
@@ -1478,6 +1483,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			item := host.Systemd.Networkd.Networks[label]
 			address := fmt.Sprintf("host.%s.systemd.networkd.network[%s]", host.Name, strconv.Quote(label))
 			networkdTriggers = append(networkdTriggers, address)
+			if err := collectNetworkdActivation(item.Activation, address, "", networkdReconfigureTriggers, networkdPostReloadTriggers); err != nil {
+				return nil, nil, err
+			}
 			deps := networkdNetworkDependencies(item, networkdAddresses)
 			nodes = append(nodes, networkdNetworkNode(host.Name, address, "", item, deps))
 		}
@@ -1500,6 +1508,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			item := component.Systemd.Networkd.NetDevs[label]
 			address := fmt.Sprintf("%s.systemd.networkd.netdev[%s]", componentPrefix, strconv.Quote(label))
 			networkdTriggers = append(networkdTriggers, address)
+			if err := collectNetworkdActivation(item.Activation, address, component.Name, networkdReconfigureTriggers, networkdPostReloadTriggers); err != nil {
+				return nil, nil, err
+			}
 			if item.Ensure == "absent" {
 				networkdDeleteNames = append(networkdDeleteNames, networkdNetDevName(item))
 			}
@@ -1514,6 +1525,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			item := component.Systemd.Networkd.Networks[label]
 			address := fmt.Sprintf("%s.systemd.networkd.network[%s]", componentPrefix, strconv.Quote(label))
 			networkdTriggers = append(networkdTriggers, address)
+			if err := collectNetworkdActivation(item.Activation, address, component.Name, networkdReconfigureTriggers, networkdPostReloadTriggers); err != nil {
+				return nil, nil, err
+			}
 			deps := networkdNetworkDependencies(item, networkdAddresses)
 			if installAddress, ok := componentArtifactInstallAddresses[component.Name]; ok {
 				deps = append(deps, installAddress)
@@ -1523,13 +1537,15 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 	}
 
+	networkdReloadAddress := ""
 	if len(networkdTriggers) > 0 {
+		networkdReloadAddress = "host." + host.Name + ".systemd.networkd.restart"
 		deps := append([]string(nil), networkdTriggers...)
 		if networkdEnable != nil && *networkdEnable {
 			deps = append(deps, "host."+host.Name+".systemd.networkd.enable")
 		}
 		operations = append(operations, Operation{
-			Address:        "host." + host.Name + ".systemd.networkd.restart",
+			Address:        networkdReloadAddress,
 			Action:         "run",
 			Summary:        "reload systemd-networkd",
 			DependsOn:      dedupeStrings(deps),
@@ -1537,6 +1553,16 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			CommandPreview: networkdReloadCommand(networkdDeleteNames),
 			Source:         networkdSource,
 		})
+	}
+	if networkdReloadAddress != "" {
+		reconfigureAddresses := appendNetworkdReconfigureOperations(host.Name, networkdReloadAddress, networkdReconfigureTriggers, networkdSource, &operations)
+		after := networkdReloadAddress
+		if len(reconfigureAddresses) > 0 {
+			after = reconfigureAddresses[len(reconfigureAddresses)-1]
+		}
+		if err := appendNetworkdPostReloadOperations(host, networkdPostReloadTriggers, after, &operations); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	if networkdEnable != nil {

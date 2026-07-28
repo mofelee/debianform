@@ -83,6 +83,7 @@ Plan:
     + unit: "docker.service"
   ! host.docker1.apt.cache_refresh
     refresh apt package cache
+    depends_on: host.docker1.docker.apt.signing_key["docker-official"], host.docker1.docker.apt.repository["docker-official"]
     triggered_by: host.docker1.docker.apt.signing_key["docker-official"], host.docker1.docker.apt.repository["docker-official"]
     command: apt-get update
 

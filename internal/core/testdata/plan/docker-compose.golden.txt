@@ -172,14 +172,17 @@ Plan:
     + unit: "docker.service"
   ! host.compose1.apt.cache_refresh
     refresh apt package cache
+    depends_on: host.compose1.docker.apt.signing_key["docker-official"], host.compose1.docker.apt.repository["docker-official"]
     triggered_by: host.compose1.docker.apt.signing_key["docker-official"], host.compose1.docker.apt.repository["docker-official"]
     command: apt-get update
   ! host.compose1.docker.compose["app"].daemon_reload
     reload systemd manager configuration
+    depends_on: host.compose1.docker.compose["app"].systemd_unit
     triggered_by: host.compose1.docker.compose["app"].systemd_unit
     command: systemctl daemon-reload
   ! host.compose1.docker.compose["app"].validate
     validate docker compose project app
+    depends_on: host.compose1.docker.compose["app"].file, host.compose1.docker.compose["app"].env_file["app"]
     triggered_by: host.compose1.docker.compose["app"].file, host.compose1.docker.compose["app"].env_file["app"]
     command: docker compose -p app -f /opt/app/compose.yaml config
 

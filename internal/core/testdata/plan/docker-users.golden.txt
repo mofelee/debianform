@@ -116,6 +116,7 @@ Plan:
     + uid: ""
   ! host.docker-users1.apt.cache_refresh
     refresh apt package cache
+    depends_on: host.docker-users1.docker.apt.signing_key["docker-official"], host.docker-users1.docker.apt.repository["docker-official"]
     triggered_by: host.docker-users1.docker.apt.signing_key["docker-official"], host.docker-users1.docker.apt.repository["docker-official"]
     command: apt-get update
 

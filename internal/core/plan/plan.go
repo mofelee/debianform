@@ -231,6 +231,9 @@ func (r textRenderer) print(doc Document) {
 		if op.Summary != "" {
 			fmt.Fprintf(r.w, "    %s\n", r.summary(op.Summary))
 		}
+		if len(op.DependsOn) > 0 {
+			fmt.Fprintf(r.w, "    %s %s\n", r.label("depends_on:"), r.muted(strings.Join(op.DependsOn, ", ")))
+		}
 		if len(op.TriggeredBy) > 0 {
 			fmt.Fprintf(r.w, "    %s %s\n", r.label("triggered_by:"), r.muted(strings.Join(op.TriggeredBy, ", ")))
 		}
@@ -850,13 +853,14 @@ const planHTMLTemplate = `<!doctype html>
     <h2>Operations</h2>
     {{if .Operations}}
     <table>
-      <thead><tr><th>Action</th><th>Address</th><th>Summary</th><th>Command</th></tr></thead>
+      <thead><tr><th>Action</th><th>Address</th><th>Summary</th><th>Relationships</th><th>Command</th></tr></thead>
       <tbody>
       {{range .Operations}}
-        <tr data-plan-row data-action="{{.Action}}" data-host="{{.Host}}" data-search="{{.Address}} {{.Summary}} {{.CommandPreview}}">
+        <tr data-plan-row data-action="{{.Action}}" data-host="{{.Host}}" data-search="{{.Address}} {{.Summary}} {{range .DependsOn}}{{.}} {{end}}{{range .TriggeredBy}}{{.}} {{end}}{{.CommandPreview}}">
           <td><span class="action action-{{.Action}}">{{actionText .Action}}</span></td>
           <td><code>{{.Address}}</code></td>
           <td>{{.Summary}}</td>
+          <td>{{if .DependsOn}}<div class="source">depends_on: {{range $index, $address := .DependsOn}}{{if $index}}, {{end}}<code>{{$address}}</code>{{end}}</div>{{end}}{{if .TriggeredBy}}<div class="source">triggered_by: {{range $index, $address := .TriggeredBy}}{{if $index}}, {{end}}<code>{{$address}}</code>{{end}}</div>{{end}}</td>
           <td><code>{{.CommandPreview}}</code></td>
         </tr>
       {{end}}

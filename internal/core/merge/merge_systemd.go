@@ -629,6 +629,9 @@ func resolveNetworkdActivationRef(activation *ir.NetworkdActivationSpec, localSc
 	ref := *activation.PostReload
 	if ref.Scope != string(parser.ScriptReferenceGlobal) {
 		if script, ok := localScripts[ref.Name]; ok {
+			if err := validateNetworkdPostReloadScript(script, ref.Source); err != nil {
+				return err
+			}
 			ref.Scope = "component"
 			ref.DeclarationID = script.DeclarationID
 			activation.PostReload = &ref
@@ -636,6 +639,9 @@ func resolveNetworkdActivationRef(activation *ir.NetworkdActivationSpec, localSc
 		}
 	}
 	if script, ok := rootScripts[ref.Name]; ok {
+		if err := validateNetworkdPostReloadScript(script, ref.Source); err != nil {
+			return err
+		}
 		ref.Scope = "root"
 		ref.DeclarationID = script.DeclarationID
 		activation.PostReload = &ref
@@ -646,6 +652,16 @@ func resolveNetworkdActivationRef(activation *ir.NetworkdActivationSpec, localSc
 		traversal = "global.script." + ref.Name
 	}
 	return fmt.Errorf("%s:%d:%s: networkd activation.post_reload references unknown %s", ref.Source.File, ref.Source.Line, ref.Source.Path, traversal)
+}
+
+func validateNetworkdPostReloadScript(script ir.ComponentScriptSpec, source ir.SourceRef) error {
+	if script.Mode != "once" {
+		return fmt.Errorf("%s:%d:%s: networkd activation.post_reload requires script mode once", source.File, source.Line, source.Path)
+	}
+	if len(script.Outputs) != 0 {
+		return fmt.Errorf("%s:%d:%s: networkd activation.post_reload does not support script outputs", source.File, source.Line, source.Path)
+	}
+	return nil
 }
 
 func validateGenericNetworkdNetDev(sections []ir.NetworkdNamedSection, source ir.SourceRef) (string, error) {

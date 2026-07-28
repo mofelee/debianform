@@ -106,10 +106,12 @@ Plan:
     + unit: "docker.service"
   ! host.docker-daemon1.apt.cache_refresh
     refresh apt package cache
+    depends_on: host.docker-daemon1.docker.apt.signing_key["docker-official"], host.docker-daemon1.docker.apt.repository["docker-official"]
     triggered_by: host.docker-daemon1.docker.apt.signing_key["docker-official"], host.docker-daemon1.docker.apt.repository["docker-official"]
     command: apt-get update
   ! host.docker-daemon1.docker.daemon.restart
     restart docker service
+    depends_on: host.docker-daemon1.docker.daemon.file["/etc/docker/daemon.json"], host.docker-daemon1.docker.service["docker"]
     triggered_by: host.docker-daemon1.docker.daemon.file["/etc/docker/daemon.json"]
     command: systemctl restart docker.service
 

@@ -1235,8 +1235,32 @@ func operationSteps(operations []graph.Operation, changed map[string]struct{}, s
 
 func operationForTriggers(op graph.Operation, triggers []string) graph.Operation {
 	out := op
-	out.DependsOn = append([]string(nil), triggers...)
+	triggerSet := map[string]struct{}{}
+	for _, trigger := range op.TriggeredBy {
+		triggerSet[trigger] = struct{}{}
+	}
+	dependsOn := append([]string(nil), triggers...)
+	for _, dependency := range op.DependsOn {
+		if _, dynamic := triggerSet[dependency]; dynamic {
+			continue
+		}
+		dependsOn = append(dependsOn, dependency)
+	}
+	out.DependsOn = dedupeOperationDependencies(dependsOn)
 	out.TriggeredBy = append([]string(nil), triggers...)
+	return out
+}
+
+func dedupeOperationDependencies(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
 	return out
 }
 

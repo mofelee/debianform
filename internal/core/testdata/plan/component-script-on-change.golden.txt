@@ -24,6 +24,7 @@ Plan:
     + script_digest: "0951895a12ee063087d297b63985fa6762bf0fba17a8b9623e53fbcbf04743c1"
   ! host.app1.components.app.script["reload"]
     run component script reload
+    depends_on: host.app1.components.app.files.file["/etc/managed-app/config.env"], host.app1.components.app.script["reload"].outputs["/etc/managed-app/rendered.env"]
     triggered_by: host.app1.components.app.files.file["/etc/managed-app/config.env"], host.app1.components.app.script["reload"].outputs["/etc/managed-app/rendered.env"]
     command: script reload (once)
 

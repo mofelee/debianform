@@ -12,6 +12,7 @@ Plan:
     command: nft -c -f /etc/nftables.conf
   ! host.preview1.nftables.activate
     activate nftables ruleset
+    depends_on: host.preview1.nftables.validate
     triggered_by: host.preview1.nftables.file["20-services"]
     command: nft -f /etc/nftables.conf
 
