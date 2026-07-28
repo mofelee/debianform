@@ -34,6 +34,7 @@ type Document struct {
 	GeneratedAt   string          `json:"generated_at"`
 	Command       Command         `json:"command"`
 	Summary       Summary         `json:"summary"`
+	Moves         []Move          `json:"moves"`
 	Changes       []Change        `json:"changes"`
 	Operations    []OperationNode `json:"operations"`
 	Diagnostics   []Diagnostic    `json:"diagnostics"`
@@ -45,11 +46,18 @@ type Command struct {
 }
 
 type Summary struct {
+	Move       int `json:"move"`
 	Create     int `json:"create"`
 	Update     int `json:"update"`
 	Delete     int `json:"delete"`
 	NoOp       int `json:"no_op"`
 	Operations int `json:"operations"`
+}
+
+type Move struct {
+	Host string `json:"host"`
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 type Change struct {
@@ -158,12 +166,14 @@ func New(resourceGraph *graph.ResourceGraph, opts Options) Document {
 			Host: opts.Host,
 		},
 		Summary: Summary{
+			Move:       0,
 			Create:     len(changes),
 			Update:     0,
 			Delete:     0,
 			NoOp:       0,
 			Operations: len(operations),
 		},
+		Moves:       []Move{},
 		Changes:     changes,
 		Operations:  operations,
 		Diagnostics: []Diagnostic{},
@@ -190,11 +200,15 @@ type textRenderer struct {
 
 func (r textRenderer) print(doc Document) {
 	fmt.Fprintln(r.w, "Plan:")
-	if len(doc.Changes) == 0 && len(doc.Operations) == 0 {
+	if len(doc.Moves) == 0 && len(doc.Changes) == 0 && len(doc.Operations) == 0 {
 		fmt.Fprintln(r.w, "  No changes.")
 		fmt.Fprintln(r.w)
 		printSummary(r.w, doc.Summary)
 		return
+	}
+	for _, move := range doc.Moves {
+		fmt.Fprintf(r.w, "  %s %s\n", r.moveSymbol(), r.address(move.From))
+		fmt.Fprintf(r.w, "    %s %s\n", r.label("to:"), r.address(move.To))
 	}
 	for _, change := range doc.Changes {
 		fmt.Fprintf(r.w, "  %s %s\n", r.changeSymbol(change), r.address(change.Address))
@@ -303,6 +317,13 @@ func (r textRenderer) operationSymbol(action string) string {
 	return r.colorize(action, "!")
 }
 
+func (r textRenderer) moveSymbol() string {
+	if r.richStyle() {
+		return r.actionBadge("move", "MOVE")
+	}
+	return r.colorize("move", "->")
+}
+
 func (r textRenderer) colorize(action string, text string) string {
 	if !r.style.Color {
 		return text
@@ -397,12 +418,13 @@ func (r textRenderer) printSummary(summary Summary) {
 		printSummary(r.w, summary)
 		return
 	}
-	fmt.Fprintf(r.w, "Summary: %s, %s, %s, %s, %s\n",
+	fmt.Fprintf(r.w, "Summary: %s, %s, %s, %s, %s, %s\n",
 		r.summaryPart("create", summary.Create, "create"),
 		r.summaryPart("update", summary.Update, "update"),
 		r.summaryPart("delete", summary.Delete, "delete"),
 		r.summaryPart("no-op", summary.NoOp, "no-op"),
 		r.summaryPart("run", summary.Operations, "operations"),
+		r.summaryPart("move", summary.Move, "move"),
 	)
 }
 
@@ -521,12 +543,13 @@ func deleteBehaviorWillNot(behavior string, notes []string) string {
 }
 
 func printSummary(w io.Writer, summary Summary) {
-	fmt.Fprintf(w, "Summary: %d create, %d update, %d delete, %d no-op, %d operations\n",
+	fmt.Fprintf(w, "Summary: %d create, %d update, %d delete, %d no-op, %d operations, %d move\n",
 		summary.Create,
 		summary.Update,
 		summary.Delete,
 		summary.NoOp,
 		summary.Operations,
+		summary.Move,
 	)
 }
 
@@ -661,6 +684,11 @@ type htmlView struct {
 
 func collectHosts(doc Document) []string {
 	seen := map[string]struct{}{}
+	for _, move := range doc.Moves {
+		if move.Host != "" {
+			seen[move.Host] = struct{}{}
+		}
+	}
 	for _, change := range doc.Changes {
 		if change.Host != "" {
 			seen[change.Host] = struct{}{}
@@ -676,6 +704,9 @@ func collectHosts(doc Document) []string {
 
 func collectActions(doc Document) []string {
 	seen := map[string]struct{}{}
+	if len(doc.Moves) > 0 {
+		seen["move"] = struct{}{}
+	}
 	for _, change := range doc.Changes {
 		if change.Action != "" {
 			seen[change.Action] = struct{}{}
@@ -705,8 +736,8 @@ const planHTMLTemplate = `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DebianForm Plan</title>
   <style>
-    :root { color-scheme: light dark; --border: #d0d7de; --muted: #57606a; --bg: #ffffff; --panel: #f6f8fa; --text: #24292f; --create: #1a7f37; --update: #9a6700; --delete: #cf222e; --run: #0969da; }
-    @media (prefers-color-scheme: dark) { :root { --border: #30363d; --muted: #8b949e; --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --create: #3fb950; --update: #d29922; --delete: #f85149; --run: #58a6ff; } }
+    :root { color-scheme: light dark; --border: #d0d7de; --muted: #57606a; --bg: #ffffff; --panel: #f6f8fa; --text: #24292f; --move: #8250df; --create: #1a7f37; --update: #9a6700; --delete: #cf222e; --run: #0969da; }
+    @media (prefers-color-scheme: dark) { :root { --border: #30363d; --muted: #8b949e; --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --move: #a371f7; --create: #3fb950; --update: #d29922; --delete: #f85149; --run: #58a6ff; } }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     header { padding: 24px 32px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
@@ -730,6 +761,7 @@ const planHTMLTemplate = `<!doctype html>
     pre { margin: 8px 0 0; padding: 10px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; }
     .action { font-weight: 700; text-transform: uppercase; white-space: nowrap; }
     .action-create, .action-adopt { color: var(--create); }
+    .action-move { color: var(--move); }
     .action-update { color: var(--update); }
     .action-delete, .action-destroy, .action-forget { color: var(--delete); }
     .action-run { color: var(--run); }
@@ -750,6 +782,7 @@ const planHTMLTemplate = `<!doctype html>
     <h1>DebianForm Plan</h1>
     <div class="meta">format {{.FormatVersion}} · generated {{.GeneratedAt}}{{if .Command.File}} · {{.Command.File}}{{end}}{{if .Command.Host}} · host {{.Command.Host}}{{end}}</div>
     <div class="summary">
+      <span class="pill">{{.Summary.Move}} move</span>
       <span class="pill">{{.Summary.Create}} create</span>
       <span class="pill">{{.Summary.Update}} update</span>
       <span class="pill">{{.Summary.Delete}} delete</span>
@@ -775,6 +808,24 @@ const planHTMLTemplate = `<!doctype html>
         <input id="search-filter" type="search" placeholder="Address, summary, command, source">
       </label>
     </div>
+
+    <h2>Moves</h2>
+    {{if .Moves}}
+    <table>
+      <thead><tr><th>Action</th><th>From</th><th>To</th></tr></thead>
+      <tbody>
+      {{range .Moves}}
+        <tr data-plan-row data-action="move" data-host="{{.Host}}" data-search="{{.From}} {{.To}}">
+          <td><span class="action action-move">move</span></td>
+          <td><code>{{.From}}</code></td>
+          <td><code>{{.To}}</code></td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <div class="empty">No state moves.</div>
+    {{end}}
 
     <h2>Changes</h2>
     {{if .Changes}}

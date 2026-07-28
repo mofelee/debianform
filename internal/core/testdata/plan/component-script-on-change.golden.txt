@@ -27,4 +27,4 @@ Plan:
     triggered_by: host.app1.components.app.files.file["/etc/managed-app/config.env"], host.app1.components.app.script["reload"].outputs["/etc/managed-app/rendered.env"]
     command: script reload (once)
 
-Summary: 2 create, 0 update, 0 delete, 0 no-op, 1 operations
+Summary: 2 create, 0 update, 0 delete, 0 no-op, 1 operations, 0 move

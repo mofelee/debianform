@@ -6,12 +6,20 @@
     "host": "server1"
   },
   "summary": {
+    "move": 1,
     "create": 1,
     "update": 1,
     "delete": 1,
     "no_op": 1,
     "operations": 1
   },
+  "moves": [
+    {
+      "host": "server1",
+      "from": "host.server1.components.legacy.files.file[\"/tmp/example\"]",
+      "to": "host.server1.components.current.files.file[\"/tmp/example\"]"
+    }
+  ],
   "changes": [
     {
       "address": "host.server1.files.file[\"/tmp/create\"]",

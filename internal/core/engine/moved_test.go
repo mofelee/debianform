@@ -10,6 +10,7 @@ import (
 
 	"github.com/mofelee/debianform/internal/core/graph"
 	"github.com/mofelee/debianform/internal/core/ir"
+	coreplan "github.com/mofelee/debianform/internal/core/plan"
 	corestate "github.com/mofelee/debianform/internal/core/state"
 )
 
@@ -30,6 +31,13 @@ func TestMovedStatePlanCheckApplyAndBlockRemoval(t *testing.T) {
 	}
 	if len(preview.Moves) != 2 || len(preview.Steps) != 0 || len(preview.Operations) != 0 {
 		t.Fatalf("preview = %#v, want two moves and no remote actions", preview)
+	}
+	if preview.Summary.Move != 2 || preview.Summary.Create != 0 || preview.Summary.Update != 0 || preview.Summary.Delete != 0 {
+		t.Fatalf("move-only summary = %#v", preview.Summary)
+	}
+	doc := preview.Document(coreplan.Options{})
+	if doc.Summary.Move != 2 || len(doc.Moves) != 2 || doc.Moves[0].Host != "server1" || len(doc.Changes) != 0 || len(doc.Operations) != 0 {
+		t.Fatalf("move-only plan document = %#v", doc)
 	}
 	if writes := backend.writeCount(); writes != 0 {
 		t.Fatalf("plan state writes = %d, want 0", writes)

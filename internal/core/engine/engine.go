@@ -231,7 +231,7 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 		Steps:      steps,
 		Operations: operations,
 		Moves:      moves,
-		Summary:    summarize(steps, operations, noOp),
+		Summary:    summarize(steps, operations, noOp, len(moves)),
 	}, nil
 }
 
@@ -810,6 +810,10 @@ func Compare(node graph.Node, prior *corestate.Resource, observed Observed) Prov
 }
 
 func (p Plan) Document(opts coreplan.Options) coreplan.Document {
+	moves := make([]coreplan.Move, 0, len(p.Moves))
+	for _, move := range p.Moves {
+		moves = append(moves, coreplan.Move{Host: move.Host, From: move.From, To: move.To})
+	}
 	changes := make([]coreplan.Change, 0, len(p.Steps))
 	for _, step := range p.Steps {
 		before := any(step.Observed)
@@ -869,6 +873,7 @@ func (p Plan) Document(opts coreplan.Options) coreplan.Document {
 			Host: opts.Host,
 		},
 		Summary:     p.Summary,
+		Moves:       moves,
 		Changes:     changes,
 		Operations:  operations,
 		Diagnostics: []coreplan.Diagnostic{},
@@ -1253,8 +1258,8 @@ func operationTriggerPath(step Step) string {
 	return ""
 }
 
-func summarize(steps []Step, operations []OperationStep, noOp int) coreplan.Summary {
-	var summary coreplan.Summary
+func summarize(steps []Step, operations []OperationStep, noOp, moves int) coreplan.Summary {
+	summary := coreplan.Summary{Move: moves}
 	for _, step := range steps {
 		switch step.Action {
 		case ActionCreate:

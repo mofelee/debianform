@@ -186,4 +186,4 @@ Plan:
     triggered_by: host.compose1.docker.compose["app"].file, host.compose1.docker.compose["app"].env_file["app"]
     command: docker compose -p app -f /opt/app/compose.yaml config
 
-Summary: 13 create, 1 update, 0 delete, 1 no-op, 3 operations
+Summary: 13 create, 1 update, 0 delete, 1 no-op, 3 operations, 0 move
