@@ -37,26 +37,26 @@ rules.
 | CLI on Linux arm64 | Preview | Release artifact is built; real arm64 curl-installer verification still requires a runner or manual host. |
 | CLI on macOS amd64 | Beta | Release artifact, curl installer, and Homebrew install/test/upgrade are verified. |
 | CLI on macOS arm64 | Beta | Release artifact, curl installer, and Homebrew install/test/upgrade are verified. |
-| Target Debian 13 amd64 | Beta | Highest-priority target; all 20 libvirt cases are blocking gates. |
+| Target Debian 13 amd64 | Beta | Highest-priority target; all 21 libvirt cases are blocking gates. |
 | Target Debian 13 arm64 | Preview | Runtime facts and architecture selection support arm64, but no real arm64 target matrix exists. |
-| Target Debian 12 amd64 | Beta | The same blocking gate as Debian 13 runs all 20 cases. |
+| Target Debian 12 amd64 | Beta | The same blocking gate as Debian 13 runs all 21 cases. |
 | Target Debian 12 arm64 | Preview | Runtime facts recognize arm64, but no Debian 12 arm64 apply/check matrix exists. |
 | Target Debian 11 or earlier | Unsupported | Outside current support commitments and release gates. |
 | Debian testing/unstable | Unsupported | Outside current beta support commitments. |
-| Target Ubuntu 24.04 LTS amd64 | Preview | Independent blocking 20-case matrix; see the Ubuntu support contract for scope and exclusions. |
-| Target Ubuntu 26.04 LTS amd64 | Preview | Official released image, independent blocking 20-case matrix, and independent gate; only `resolute` amd64 Server is allowed. |
+| Target Ubuntu 24.04 LTS amd64 | Preview | Independent blocking 21-case matrix; see the Ubuntu support contract for scope and exclusions. |
+| Target Ubuntu 26.04 LTS amd64 | Preview | Official released image, independent blocking 21-case matrix, and independent gate; only `resolute` amd64 Server is allowed. |
 | Ubuntu 22.04, other Ubuntu versions, Ubuntu arm64, or desktop | Unsupported | Outside current support commitments and release gates. |
 | Other distributions | Unsupported | Not in the managed-target allowlist. |
 | Root SSH management connection | Beta | `ssh.user` must be omitted or set to `"root"`. |
 | sudo/become/non-root management connection | Unsupported | Sudo elevation, become, and non-root management are unsupported. |
 
-CI discovers 20 libvirt cases and expands them across four amd64 matrices: Debian 12, Debian 13,
-Ubuntu 24.04, and Ubuntu 26.04, for 80 blocking libvirt jobs. The Ubuntu versions have separate
+CI discovers 21 libvirt cases and expands them across four amd64 matrices: Debian 12, Debian 13,
+Ubuntu 24.04, and Ubuntu 26.04, for 84 blocking libvirt jobs. The Ubuntu versions have separate
 `Ubuntu 24.04 target matrix gate` and `Ubuntu 26.04 target matrix gate` jobs. Debian 12/13 use
 `Managed target matrix gate`. Debian 13 remains the local default and the highest-priority target
 for new features.
 
-The current complete four-target baseline is commit
+The last complete four-target baseline before the `component-moved` case was added is commit
 [`0211ab2c98d674182dc91a9af7bd887dc91e5539`](https://github.com/mofelee/debianform/commit/0211ab2c98d674182dc91e5539).
 In [CI run 29418825778](https://github.com/mofelee/debianform/actions/runs/29418825778), Debian 12,
 Debian 13, Ubuntu 24.04, and Ubuntu 26.04 amd64 each passed `20/20` libvirt cases, and all three
@@ -66,8 +66,9 @@ official released image `ubuntu-26.04-server-cloudimg-amd64.img` with SHA-256
 
 The host-scoped shared-script `shared-script-networkd` case passed 14 assertions on a real Debian 13
 amd64 VM on 2026-07-12, covering one reload for two files, zero reload on no-op, one reload after
-single-file drift, raw policy-route/rule behavior, and cleanup. The CI run and gates above prove the
-current four complete 20-case matrices.
+single-file drift, raw policy-route/rule behavior, and cleanup. The CI run and gates above preserve
+the prior 20-case baseline. The current 21-case gate additionally requires `component-moved` on
+every target.
 
 ## CLI Commands
 
@@ -208,7 +209,8 @@ current four complete 20-case matrices.
 | `examples/wireguard-networkd.dbf.hcl` | Preview | WireGuard networkd component with multiple peers and interfaces; requires local secrets. |
 | `test/integration/libvirt/cases/systemd-extensions` | Preview | `service_config`, timer enable/state and firing, resolved/journald drop-ins, drift repair, and removal. |
 | `test/integration/libvirt/cases/script-on-change` | Beta | Script on component-file change, no trigger on no-op, trigger again after configuration update. |
-| `test/integration/libvirt/cases/*` | Beta/Preview | 20 Beta cases each on Debian 12/13 amd64 and 20 Preview cases each on Ubuntu 24.04/26.04 amd64, covering platform assertions, validate, online plan, drift check, apply, JSON no-op plan, check, and case-specific assertions. |
+| `test/integration/libvirt/cases/component-moved` | Beta | Component-prefix state migration, one real file update/operation, retained and removed block convergence, and cleanup. |
+| `test/integration/libvirt/cases/*` | Beta/Preview | 21 Beta cases each on Debian 12/13 amd64 and 21 Preview cases each on Ubuntu 24.04/26.04 amd64, covering platform assertions, validate, online plan, drift check, apply, JSON no-op plan, check, and case-specific assertions. |
 
 ## Currently Unsupported or Not Yet Committed
 

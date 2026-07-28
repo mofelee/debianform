@@ -17,6 +17,7 @@
 | `variable "<name>"` | 声明外部变量。支持 CLI、环境变量和 var-file 赋值。 |
 | `profile "<name>"` | 可复用 host 配置片段，可被 profile/host import。 |
 | `component "<name>"` | 可复用资源模板，可带 typed input 和 artifact 安装。 |
+| `moved` | 声明式地把 state 从一个 component instance address 迁移到另一个。 |
 | `host "<name>"` | 目标主机配置入口。 |
 
 `profile`、`component`、`host` 和显式 `host.component` instance 的 `<name>` 必须是合法的 HCL
@@ -69,6 +70,52 @@ host "custom_component_mount" {
   }
 }
 ```
+
+### moved
+
+顶层 `moved` block 用于在 host component instance 改名时保留资源身份。两个端点都必须是
+静态 component-root traversal：
+
+<!-- dbf-test:name=moved-component-syntax;commands=validate,plan-offline -->
+
+```hcl
+component "bird_stack" {}
+
+moved {
+  from = component.bird2_babel
+  to   = component.bird2_ospfv3
+}
+
+host "router1" {
+  component "bird2_ospfv3" {
+    source = component.bird_stack
+  }
+}
+```
+
+`from` 可以引用已经不再声明的 instance；对每台需要迁移 source state 的 host，`to` 必须是
+replacement instance。变量、local、插值、函数调用、带引号的 address、resource leaf、
+host-qualified 或跨 host 端点都会被拒绝。当前版本只支持 `component.<instance>` root。
+
+DebianForm 会为每台适用 host 把声明展开成同 host 的 prefix mapping，并保留每条 state key 的 suffix：
+
+```text
+host.router1.components.bird2_babel.*
+  -> host.router1.components.bird2_ospfv3.*
+```
+
+move 只改变持久化 address，不会改远端 path、package name、service unit 或其他 provider identity。
+仍只声明 source instance 的 host 会保持不变，因此可以分批 rollout。如果 source state 存在而同一
+host 同时声明两个端点，配置有歧义并会被拒绝；source state 存在但没有 desired destination 时也会
+在它落入 orphan 处理前失败。
+
+self-move、重复 source、many-to-one、cycle 和重叠 prefix 都不合法。`old -> middle`、
+`middle -> current` 这类无环历史 chain 受支持，并会确定性地解析到最终 destination。
+
+`moved` block 是一次性迁移指令，不是永久 alias。必须保留到所有相关 host 都 apply 完成，且在线
+plan/check 均不再显示 pending move。使用 `--host` 时尤其要注意：只迁移一台 host 就移除 block，
+会让其余 host 失去迁移指令。确认所有 source prefix 都已消失、destination prefix 都已存在后，
+移除 block 不会反向迁移 state。
 
 `assert` 可出现在 `profile` 或 `host` 中：
 

@@ -89,6 +89,43 @@ DebianForm version that can read it or a reviewed manual migration procedure.
 When you encounter a newer version, upgrade DebianForm. Do not bypass these
 checks by deleting or tampering with `version` or `host`.
 
+## Declarative Address Refactoring
+
+A top-level `moved` block changes state keys without renaming the corresponding
+remote objects. For a component-root move, every matching resource and persisted
+script-output entry keeps its address suffix under the destination prefix.
+Prefix matching uses address-segment boundaries; a move from `component.old`
+does not match `component.oldish`.
+
+The resource payload is carried forward with ownership, lifecycle, observed
+remote fields, timestamps, and ordering intact. DebianForm rebases only metadata
+derived from the graph address: the desired `component`, its digest, a matching
+observed desired digest, and `provider_address`. Remote identity fields such as a
+file path, package name, service unit, observed hash, or operation output are not
+rewritten.
+
+Resolution is idempotent:
+
+- Source present and destination absent: move every matching entry.
+- Source absent and destination present: treat the host as already migrated.
+- Both absent: do not fabricate state; plan desired resources normally.
+- Both present: fail rather than merge or discard either entry.
+
+Online `plan` resolves moves only in an in-memory view before provider
+inspection and never writes state. `check` uses the same read-only view while
+holding the host lock and treats pending moves as drift. `apply` builds the
+locked plan first, includes moves in approval, and then atomically persists all
+resolved moves and any newly discovered facts for that host before provider
+mutation starts. Across multiple selected hosts, no provider mutation starts
+until every host has completed this preparation barrier.
+
+A move-only apply performs exactly one state write for the host and advances
+`serial` once. If that write fails, the prior atomic file remains valid and no
+provider action begins. If a later provider action fails, the committed move may
+remain; retry is safe because an already-migrated host realizes no move. Atomicity
+is per host, so a multi-host retry may see a mixture of migrated and pending
+hosts.
+
 ## Ownership
 
 - `managed`: a resource created or managed by DebianForm; destroyed when

@@ -74,6 +74,103 @@ banana {}
 	}
 }
 
+func TestParseMovedComponentTraversals(t *testing.T) {
+	file := writeConfig(t, `
+moved {
+  from = component.bird2_babel
+  to   = component.bird2_ospfv3
+}
+
+component "bird2" {}
+
+host "router1" {
+  component "bird2_ospfv3" {
+    source = component.bird2
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Moves) != 1 {
+		t.Fatalf("moves = %#v, want one declaration", cfg.Moves)
+	}
+	move := cfg.Moves[0]
+	if move.From != "bird2_babel" || move.To != "bird2_ospfv3" {
+		t.Fatalf("move = %#v", move)
+	}
+	if move.Source.Line != 1 || move.Source.Path != "moved[component.bird2_babel]" {
+		t.Fatalf("move source = %#v", move.Source)
+	}
+	if move.FromSource.Line != 2 || move.ToSource.Line != 3 {
+		t.Fatalf("endpoint sources = from:%#v to:%#v", move.FromSource, move.ToSource)
+	}
+}
+
+func TestParseMovedAllowsAbsentSourceAndAcyclicChains(t *testing.T) {
+	file := writeConfig(t, `
+moved {
+  from = component.old
+  to   = component.intermediate
+}
+
+moved {
+  from = component.intermediate
+  to   = component.current
+}
+
+host "server1" {}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := []string{cfg.Moves[0].From + "->" + cfg.Moves[0].To, cfg.Moves[1].From + "->" + cfg.Moves[1].To}; !reflect.DeepEqual(got, []string{"intermediate->current", "old->intermediate"}) {
+		t.Fatalf("sorted moves = %#v", got)
+	}
+}
+
+func TestParseRejectsInvalidMovedBlocks(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{name: "label", hcl: `moved "old" { from = component.old; to = component.new }`, want: "moved block must not have labels"},
+		{name: "nested", hcl: `moved { from = component.old; to = component.new; nested {} }`, want: "moved block does not support nested blocks"},
+		{name: "missing from", hcl: `moved { to = component.new }`, want: "moved.from is required"},
+		{name: "missing to", hcl: `moved { from = component.old }`, want: "moved.to is required"},
+		{name: "unknown attribute", hcl: `moved { from = component.old; to = component.new; because = "rename" }`, want: "unsupported attribute moved.because"},
+		{name: "unknown attributes deterministic", hcl: `moved { from = component.old; to = component.new; zeta = true; alpha = true }`, want: "unsupported attribute moved.alpha"},
+		{name: "string from", hcl: `moved { from = "component.old"; to = component.new }`, want: "moved.from must be a static component.<name> traversal"},
+		{name: "variable from", hcl: `variable "source" { type = string; default = "old" }; moved { from = var.source; to = component.new }`, want: "moved.from must be a static component.<name> traversal"},
+		{name: "local interpolation", hcl: `locals { source = "old" }; moved { from = "component.${local.source}"; to = component.new }`, want: "moved.from must be a static component.<name> traversal"},
+		{name: "leaf endpoint", hcl: `moved { from = component.old.files; to = component.new }`, want: "moved.from must be a static component.<name> traversal"},
+		{name: "wrong root", hcl: `moved { from = host.old; to = component.new }`, want: "moved.from must be a static component.<name> traversal"},
+		{name: "self move", hcl: `moved { from = component.same; to = component.same }`, want: "component.same cannot move to itself"},
+		{name: "duplicate", hcl: `moved { from = component.old; to = component.new }; moved { from = component.old; to = component.new }`, want: "duplicate mapping from component.old to component.new"},
+		{name: "one to many", hcl: `moved { from = component.old; to = component.one }; moved { from = component.old; to = component.two }`, want: "component.old maps to both"},
+		{name: "many to one", hcl: `moved { from = component.one; to = component.new }; moved { from = component.two; to = component.new }`, want: "both map to component.new"},
+		{name: "cycle", hcl: `moved { from = component.one; to = component.two }; moved { from = component.two; to = component.one }`, want: "moved mappings contain a cycle"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := strings.ReplaceAll(tt.hcl, "{ ", "{\n")
+			content = strings.ReplaceAll(content, " }", "\n}")
+			content = strings.ReplaceAll(content, "; ", "\n")
+			file := writeConfig(t, content)
+			_, err := ParseFiles([]string{file})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ParseFiles() error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseRejectsWrongLabelCount(t *testing.T) {
 	file := writeConfig(t, `
 profile {}

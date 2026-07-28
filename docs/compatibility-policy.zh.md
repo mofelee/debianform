@@ -114,6 +114,12 @@ stable 之后遵循 semver：
 - 如果不能安全自动迁移，必须失败并给出手工步骤。
 - release notes 的 `Migration Notes` 必须说明迁移前检查、备份、回滚和失败恢复。
 
+声明式 component move 是新增 DSL 能力，不是 state schema version migration。state 仍为
+version `2`；只有用户显式声明 `moved` 并 apply 已审查 plan 时才会重写 address。写入必须保留
+ownership 和远端 identity、按 host 原子提交，并在重试时保持幂等。如果 address-move validation、
+payload rebase 规则或 apply 顺序的变更会让原本 move-only 的 rename 产生远端 create/destroy，
+则属于破坏性安全语义变更。
+
 回滚边界：
 
 - 已被新版本迁移过的 state 不保证旧 CLI 可读取。
@@ -129,6 +135,8 @@ stable 之后遵循 semver：
 - 新增顶层字段、change 字段、operation 字段或 diagnostic 字段。
 - 新增 action/kind 枚举值，但必须在 release notes 中说明。
 - 对 summary 增加字段。
+- 新增顶层 `moves` collection 和 `summary.move`；它们是 `debianform.plan.alpha1` 的兼容新增
+  字段，move 与 change action 保持分离。
 - 增加更精确的 source、diagnostic 或 non-debug metadata。
 
 破坏性变更包括：

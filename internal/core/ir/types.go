@@ -24,6 +24,7 @@ type HostSpec struct {
 	Facts       HostFacts                      `json:"facts,omitempty"`
 	SSH         SSHSpec                        `json:"ssh"`
 	State       StateSpec                      `json:"state"`
+	Moves       []MovedSpec                    `json:"moves,omitempty"`
 	Platform    *PlatformSpec                  `json:"platform,omitempty"`
 	System      SystemSpec                     `json:"system"`
 	Kernel      KernelSpec                     `json:"kernel"`
@@ -40,6 +41,14 @@ type HostSpec struct {
 	Docker      *DockerSpec                    `json:"docker,omitempty"`
 	Scripts     map[string]ComponentScriptSpec `json:"scripts,omitempty"`
 	Components  []ComponentInstanceSpec        `json:"components,omitempty"`
+}
+
+type MovedSpec struct {
+	From       string    `json:"from"`
+	To         string    `json:"to"`
+	Source     SourceRef `json:"source,omitempty"`
+	FromSource SourceRef `json:"from_source,omitempty"`
+	ToSource   SourceRef `json:"to_source,omitempty"`
 }
 
 func (h HostSpec) PlatformArchitecture() string {

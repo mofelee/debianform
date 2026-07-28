@@ -6,12 +6,14 @@
     "host": "input1"
   },
   "summary": {
+    "move": 0,
     "create": 2,
     "update": 0,
     "delete": 0,
     "no_op": 0,
     "operations": 0
   },
+  "moves": [],
   "changes": [
     {
       "host": "input1",

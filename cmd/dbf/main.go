@@ -521,7 +521,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 		}
 		coreplan.PrintTextWithOptions(os.Stdout, doc, textOpts)
 		if cmd == "check" {
-			if len(onlinePlan.Steps) > 0 || len(onlinePlan.Operations) > 0 {
+			if len(onlinePlan.Moves) > 0 || len(onlinePlan.Steps) > 0 || len(onlinePlan.Operations) > 0 {
 				return fmt.Errorf("remote state does not match configuration")
 			}
 			return nil
@@ -551,7 +551,7 @@ func runConfigWorkflow(cmd string, files []string, host string, format string, h
 }
 
 func planHasActions(plan coreengine.Plan) bool {
-	return len(plan.Steps) > 0 || len(plan.Operations) > 0
+	return len(plan.Moves) > 0 || len(plan.Steps) > 0 || len(plan.Operations) > 0
 }
 
 func sameApprovedPlan(preview, actual coreengine.Plan, previewDoc, actualDoc coreplan.Document) bool {

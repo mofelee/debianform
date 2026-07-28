@@ -150,9 +150,9 @@ Before managing either, the online preflight must inspect `/etc/netplan/*.yaml` 
 - Arbitrary script command text is not inferred; its safety remains the configuration author's
   responsibility.
 
-## 20-Case Ubuntu Matrix
+## 21-Case Ubuntu Matrix
 
-These 20 cases run as an independent blocking Ubuntu matrix. "Native-networkd image" means the test
+These 21 cases run as an independent blocking Ubuntu matrix. "Native-networkd image" means the test
 harness performs external preparation before DebianForm; it is not product-managed migration.
 
 | Case | Ubuntu fixture | Classification/implementation loop |
@@ -161,6 +161,7 @@ harness performs external preparation before DebianForm; it is not product-manag
 | `apt-virtual-package` | official image | Shared package, #47 |
 | `bbr` | official image | Shared kernel, #48 |
 | `component-inputs` | official image | Shared component, #48 |
+| `component-moved` | official image | Shared state refactoring, #65 |
 | `docker-compose` | official image | Distro packages plus shared Compose, #47/#48 |
 | `docker-daemon` | official image | Distro packages plus shared daemon, #47/#48 |
 | `docker-engine` | official image | Official Ubuntu Docker repository, #47 |
@@ -191,9 +192,9 @@ same commit:
 - `Ubuntu 24.04 target matrix gate` and `Managed target matrix gate` succeeded.
 - Including unit tests: `63/63` jobs.
 
-That is the historical baseline for the initial 24.04 delivery. The current four-target gate uses
-commit `0211ab2c98d674182dc91a9af7bd887dc91e5539` and CI run `29418825778` recorded in the
-[Support Matrix](support-matrix.md), with separate `20/20` matrices and gates for 24.04 and 26.04.
+That is the historical baseline for the initial 24.04 delivery. The later four-target 20-case
+baseline is recorded in the [Support Matrix](support-matrix.md); the current gate adds
+`component-moved` and requires separate `21/21` matrices for 24.04 and 26.04.
 
 Preview describes maturity, does not permit a known Ubuntu regression, and is not Beta. Promotion
 to Beta requires sustained blocking CI, release-verification evidence, resolved high-risk user

@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CASES_DIR="$ROOT_DIR/test/integration/libvirt/cases"
-EXPECTED_CASE_COUNT=20
+EXPECTED_CASE_COUNT=21
 DBF_BIN="${DBF_INTEGRATION_DBF_BIN:-}"
 TEMP_DBF=""
 TEMP_PLAN=""
@@ -105,11 +105,16 @@ fi
 "$DBF_BIN" validate -f "$CASES_DIR/files/netplan-conflict.dbf.hcl" >/dev/null
 
 TEMP_PLAN="$(mktemp "${TMPDIR:-/tmp}/dbf-core-noop-plan.XXXXXX.json")"
-printf '%s\n' '{"format_version":"debianform.plan.alpha1","summary":{"create":0,"update":0,"delete":0,"no_op":1,"operations":0}}' >"$TEMP_PLAN"
+printf '%s\n' '{"format_version":"debianform.plan.alpha1","summary":{"move":0,"create":0,"update":0,"delete":0,"no_op":1,"operations":0}}' >"$TEMP_PLAN"
 python3 "$ROOT_DIR/test/integration/libvirt/assert-noop-plan.py" "$TEMP_PLAN"
-printf '%s\n' '{"format_version":"debianform.plan.alpha1","summary":{"create":0,"update":1,"delete":0,"no_op":0,"operations":0}}' >"$TEMP_PLAN"
+printf '%s\n' '{"format_version":"debianform.plan.alpha1","summary":{"move":0,"create":0,"update":1,"delete":0,"no_op":0,"operations":0}}' >"$TEMP_PLAN"
 if python3 "$ROOT_DIR/test/integration/libvirt/assert-noop-plan.py" "$TEMP_PLAN" >/dev/null 2>&1; then
   printf 'assert-noop-plan.py unexpectedly accepted an update plan\n' >&2
+  exit 1
+fi
+printf '%s\n' '{"format_version":"debianform.plan.alpha1","summary":{"move":1,"create":0,"update":0,"delete":0,"no_op":1,"operations":0}}' >"$TEMP_PLAN"
+if python3 "$ROOT_DIR/test/integration/libvirt/assert-noop-plan.py" "$TEMP_PLAN" >/dev/null 2>&1; then
+  printf 'assert-noop-plan.py unexpectedly accepted a pending move\n' >&2
   exit 1
 fi
 printf '%s\n' '{}' >"$TEMP_PLAN"

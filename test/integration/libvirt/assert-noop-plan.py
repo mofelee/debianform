@@ -22,14 +22,16 @@ def main() -> int:
         return 1
 
     counts = {}
-    for name in ("create", "update", "delete", "no_op", "operations"):
+    for name in ("move", "create", "update", "delete", "no_op", "operations"):
         value = summary.get(name)
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             print(f"expected summary.{name} to be a non-negative integer", file=sys.stderr)
             return 1
         counts[name] = value
 
-    action_counts = {name: counts[name] for name in ("create", "update", "delete", "operations")}
+    action_counts = {
+        name: counts[name] for name in ("move", "create", "update", "delete", "operations")
+    }
     if any(action_counts.values()):
         print(
             "expected no-op plan after apply, got "

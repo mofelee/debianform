@@ -74,6 +74,33 @@ provider inspect、state write 和远端资源变更之前；CLI 不会用当前
 DebianForm 或经过审查的手工迁移流程；遇到较新版本时，应升级 DebianForm。不要通过删除或篡改
 `version`、`host` 绕过检查。
 
+## 声明式 Address 重构
+
+顶层 `moved` block 只改变 state key，不会重命名对应的远端对象。component-root move 会把每条
+匹配的 resource 和已持久化 script-output entry 移到 destination prefix，同时保留 address suffix。
+prefix 匹配按 address segment boundary 进行，因此 `component.old` 不会匹配 `component.oldish`。
+
+迁移会完整保留 ownership、lifecycle、observed 远端字段、时间戳和 order。DebianForm 只重算
+从 graph address 派生的 metadata：desired `component`、对应 digest、匹配的 observed desired
+digest 和 `provider_address`。file path、package name、service unit、observed hash 或 operation
+output 等远端身份字段不会被改写。
+
+解析是幂等的：
+
+- source 存在、destination 不存在：迁移所有匹配 entry。
+- source 不存在、destination 存在：视为该 host 已迁移。
+- 两者都不存在：不伪造 state，按正常规则 plan desired resource。
+- 两者都存在：失败，不合并也不丢弃任一 entry。
+
+在线 `plan` 会在 provider inspect 前只对内存视图解析 move，绝不写 state。`check` 在持有 host lock
+时使用同一只读视图，并把 pending move 视为 drift。`apply` 先在 lock 内构建 plan，把 move 纳入
+approval，然后在任何 provider mutation 前，为该 host 原子持久化所有 realized move 和本轮新发现的
+facts。选择多台 host 时，所有 host 都完成这个 preparation barrier 后才会开始 provider mutation。
+
+move-only apply 对该 host 恰好执行一次 state write，`serial` 只增加 1。写入失败时旧原子文件仍然
+有效，provider action 不会开始；后续 provider action 失败时已提交的 move 可以保留，重试会把已迁移
+host 视为无 pending move。原子性以 host 为边界，因此 multi-host 重试可能同时遇到已迁移和未迁移 host。
+
 ## Ownership
 
 - `managed`: DebianForm 创建或管理的资源；从配置移除后销毁。

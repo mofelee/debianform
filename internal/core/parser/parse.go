@@ -24,6 +24,7 @@ type Config struct {
 	Hosts                  map[string]Host
 	Components             map[string]Component
 	Scripts                map[string]ComponentScript
+	Moves                  []Moved
 }
 
 type Profile struct {
@@ -277,6 +278,9 @@ func ParseFilesWithOptions(files []string, opts ParseOptions) (*Config, error) {
 			return nil, err
 		}
 	}
+	if err := validateAndSortMoved(cfg); err != nil {
+		return nil, err
+	}
 
 	return cfg, nil
 }
@@ -461,6 +465,12 @@ func parseTopLevel(cfg *Config, file string, body *hclsyntax.Body) error {
 				return fmt.Errorf("%s:%d: duplicate root script %q; first defined at %s:%d", file, script.Source.Line, script.Name, previous.Source.File, previous.Source.Line)
 			}
 			cfg.Scripts[script.Name] = script
+		case "moved":
+			move, err := parseMovedBlock(file, block)
+			if err != nil {
+				return err
+			}
+			cfg.Moves = append(cfg.Moves, move)
 		default:
 			return fmt.Errorf("%s:%d: unknown top-level block %q", file, block.TypeRange.Start.Line, block.Type)
 		}

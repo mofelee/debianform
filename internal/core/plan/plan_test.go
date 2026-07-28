@@ -945,7 +945,12 @@ func TestActionMatrixJSONAndTerminalGolden(t *testing.T) {
 		FormatVersion: FormatVersion,
 		GeneratedAt:   "2026-06-20T12:00:00Z",
 		Command:       Command{File: "examples/action-matrix.dbf.hcl", Host: "server1"},
-		Summary:       Summary{Create: 1, Update: 1, Delete: 1, NoOp: 1, Operations: 1},
+		Summary:       Summary{Move: 1, Create: 1, Update: 1, Delete: 1, NoOp: 1, Operations: 1},
+		Moves: []Move{{
+			Host: "server1",
+			From: `host.server1.components.legacy.files.file["/tmp/example"]`,
+			To:   `host.server1.components.current.files.file["/tmp/example"]`,
+		}},
 		Changes: []Change{
 			{
 				Address: `host.server1.files.file["/tmp/create"]`,
@@ -1003,12 +1008,79 @@ func TestActionMatrixJSONAndTerminalGolden(t *testing.T) {
 	assertGolden(t, "../testdata/plan/action-matrix.golden.txt", text.String())
 }
 
+func TestMovedPlanJSONTextAndHTMLContract(t *testing.T) {
+	doc := Document{
+		FormatVersion: FormatVersion,
+		GeneratedAt:   "2026-07-28T12:00:00Z",
+		Command:       Command{File: "moved.dbf.hcl", Host: "server1"},
+		Summary:       Summary{Move: 2, NoOp: 2},
+		Moves: []Move{
+			{Host: "server1", From: `host.server1.components.old.files.file["/etc/example"]`, To: `host.server1.components.current.files.file["/etc/example"]`},
+			{Host: "server1", From: `host.server1.components.old.services.service["example"]`, To: `host.server1.components.current.services.service["example"]`},
+		},
+		Changes:     []Change{},
+		Operations:  []OperationNode{},
+		Diagnostics: []Diagnostic{},
+	}
+
+	var jsonOut bytes.Buffer
+	if err := PrintJSON(&jsonOut, doc); err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Summary Summary  `json:"summary"`
+		Moves   []Move   `json:"moves"`
+		Changes []Change `json:"changes"`
+	}
+	if err := json.Unmarshal(jsonOut.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Summary.Move != 2 || decoded.Summary.Create != 0 || decoded.Summary.Update != 0 || decoded.Summary.Delete != 0 || len(decoded.Moves) != 2 || len(decoded.Changes) != 0 {
+		t.Fatalf("decoded moved plan = %#v", decoded)
+	}
+	if decoded.Moves[0].Host != "server1" || decoded.Moves[0].From == "" || decoded.Moves[0].To == "" {
+		t.Fatalf("machine-readable move = %#v", decoded.Moves[0])
+	}
+
+	var textOut bytes.Buffer
+	PrintText(&textOut, doc)
+	for _, want := range []string{"-> host.server1.components.old.files.file", "to: host.server1.components.current.files.file", "Summary: 0 create, 0 update, 0 delete, 2 no-op, 0 operations, 2 move"} {
+		if !strings.Contains(textOut.String(), want) {
+			t.Fatalf("text moved plan missing %q:\n%s", want, textOut.String())
+		}
+	}
+	if strings.Contains(textOut.String(), "No changes.") {
+		t.Fatalf("move-only text plan was rendered as no-op:\n%s", textOut.String())
+	}
+
+	var htmlOut bytes.Buffer
+	if err := PrintHTML(&htmlOut, doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"2 move", "<h2>Moves</h2>", `data-action="move"`, `data-host="server1"`, "host.server1.components.old.files.file", "host.server1.components.current.files.file"} {
+		if !strings.Contains(htmlOut.String(), want) {
+			t.Fatalf("HTML moved plan missing %q", want)
+		}
+	}
+	if got := collectActions(doc); len(got) != 1 || got[0] != "move" {
+		t.Fatalf("HTML actions = %#v", got)
+	}
+	if got := collectHosts(doc); len(got) != 1 || got[0] != "server1" {
+		t.Fatalf("HTML hosts = %#v", got)
+	}
+}
+
 func TestPrintTextWithColorOption(t *testing.T) {
 	doc := Document{
 		FormatVersion: FormatVersion,
 		GeneratedAt:   "2026-06-20T12:00:00Z",
 		Command:       Command{File: "examples/action-matrix.dbf.hcl", Host: "server1"},
-		Summary:       Summary{Create: 1, Update: 1, Delete: 1, Operations: 1},
+		Summary:       Summary{Move: 1, Create: 1, Update: 1, Delete: 1, Operations: 1},
+		Moves: []Move{{
+			Host: "server1",
+			From: `host.server1.components.legacy.files.file["/tmp/example"]`,
+			To:   `host.server1.components.current.files.file["/tmp/example"]`,
+		}},
 		Changes: []Change{
 			{
 				Address: `host.server1.files.file["/tmp/create"]`,
@@ -1052,6 +1124,7 @@ func TestPrintTextWithColorOption(t *testing.T) {
 	PrintTextWithOptions(&colored, doc, TextOptions{Color: true})
 	rendered := colored.String()
 	for _, want := range []string{
+		"\x1b[35m->\x1b[0m",
 		"\x1b[32m+\x1b[0m",
 		"\x1b[33m~\x1b[0m",
 		"\x1b[31m-\x1b[0m",
@@ -1069,6 +1142,7 @@ func TestPrintTextWithColorOption(t *testing.T) {
 	PrintTextWithOptions(&rich, doc, TextOptions{Color: true, Background: true})
 	richRendered := rich.String()
 	for _, want := range []string{
+		"\x1b[1m\x1b[97m\x1b[45m MOVE \x1b[0m",
 		"\x1b[1m\x1b[30m\x1b[42m CREATE \x1b[0m",
 		"\x1b[1m\x1b[30m\x1b[43m UPDATE \x1b[0m",
 		"\x1b[1m\x1b[97m\x1b[41m DELETE \x1b[0m",

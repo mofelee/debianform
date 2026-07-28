@@ -139,9 +139,9 @@ Netplan ownership。
 - 不提供自动接管或 override；管理员必须在 DebianForm 之外准备 native-networkd 主机。
 - arbitrary script 的命令文本不参与推断；这部分始终由配置作者负责。
 
-## 20-case Ubuntu 矩阵
+## 21-case Ubuntu 矩阵
 
-以下 20 个 cases 已作为独立 Ubuntu 阻断矩阵运行。`native-networkd image` 表示测试 harness
+以下 21 个 cases 作为独立 Ubuntu 阻断矩阵运行。`native-networkd image` 表示测试 harness
 在 DebianForm 运行前完成外部准备，不是 DebianForm 自动迁移。
 
 | Case | Ubuntu fixture | 分类/实现 Loop |
@@ -150,6 +150,7 @@ Netplan ownership。
 | `apt-virtual-package` | official image | package shared，#47 |
 | `bbr` | official image | kernel shared，#48 |
 | `component-inputs` | official image | component shared，#48 |
+| `component-moved` | official image | state refactoring shared，#65 |
 | `docker-compose` | official image | distro package + shared Compose，#47/#48 |
 | `docker-daemon` | official image | distro package + shared daemon，#47/#48 |
 | `docker-engine` | official image | Ubuntu official Docker repo，#47 |
@@ -179,9 +180,9 @@ Ubuntu Preview 的权威实现基线是提交
 - `Ubuntu 24.04 target matrix gate` 和 `Managed target matrix gate` 均成功。
 - 连同 unit job 共 `63/63`。
 
-这是 24.04 首次交付时的历史基线。当前四目标门禁以[支持矩阵](support-matrix.zh.md)记录的提交
-`0211ab2c98d674182dc91a9af7bd887dc91e5539` 和 CI run `29418825778` 为准，其中 24.04 与
-26.04 分别使用独立的 `20/20` 矩阵和 gate。
+这是 24.04 首次交付时的历史基线。后续四目标 20-case 基线记录在
+[支持矩阵](support-matrix.zh.md)；当前 gate 新增 `component-moved`，要求 24.04 与 26.04
+分别使用独立的 `21/21` 矩阵。
 
 Preview 表示成熟度，不允许合并已知 Ubuntu 回归，也不等同于 Beta。未来提升 Beta 至少要求
 持续阻断 CI、release verification 证据、已解决高风险用户反馈，以及显式 support-tier 决策。

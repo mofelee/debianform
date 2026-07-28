@@ -44,6 +44,8 @@ func ActionColor(action string) string {
 		return Green
 	case "update":
 		return Yellow
+	case "move":
+		return Magenta
 	case "delete", "destroy":
 		return Red
 	case "forget", "no-op":
@@ -61,6 +63,8 @@ func ActionBackground(action string) string {
 		return BgGreen
 	case "update":
 		return BgYellow
+	case "move":
+		return BgMagenta
 	case "delete", "destroy":
 		return BgRed
 	case "forget", "no-op":

@@ -9,7 +9,18 @@ import (
 	coreengine "github.com/mofelee/debianform/internal/core/engine"
 	"github.com/mofelee/debianform/internal/core/graph"
 	coreplan "github.com/mofelee/debianform/internal/core/plan"
+	corestate "github.com/mofelee/debianform/internal/core/state"
 )
+
+func TestPlanHasActionsIncludesStateMoves(t *testing.T) {
+	if planHasActions(coreengine.Plan{}) {
+		t.Fatal("empty plan has actions")
+	}
+	plan := coreengine.Plan{Moves: []corestate.RealizedMove{{Host: "server1", From: "old", To: "current"}}}
+	if !planHasActions(plan) {
+		t.Fatal("move-only plan was treated as no-op")
+	}
+}
 
 func TestSameApprovedPlanIgnoresGeneratedAtButChecksExecutionPayload(t *testing.T) {
 	preview := approvalTestPlan("preview payload")

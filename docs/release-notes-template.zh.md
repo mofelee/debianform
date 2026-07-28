@@ -72,10 +72,10 @@
   - `make vulncheck`：<通过 | 失败 | 跳过并说明原因>
   - `make test-integration-layout`：<通过 | 失败 | 跳过并说明原因>
 - 此提交的受管目标 CI 证据：
-  - Ubuntu 24.04 LTS amd64 libvirt 矩阵（20/20）：<通过 | 失败；CI 运行 URL>
-  - Ubuntu 26.04 LTS amd64 libvirt 矩阵（20/20）：<通过 | 失败；CI 运行 URL>
-  - Debian 12 amd64 libvirt 矩阵（20/20）：<通过 | 失败；CI 运行 URL>
-  - Debian 13 amd64 libvirt 矩阵（20/20）：<通过 | 失败；CI 运行 URL>
+  - Ubuntu 24.04 LTS amd64 libvirt 矩阵（21/21）：<通过 | 失败；CI 运行 URL>
+  - Ubuntu 26.04 LTS amd64 libvirt 矩阵（21/21）：<通过 | 失败；CI 运行 URL>
+  - Debian 12 amd64 libvirt 矩阵（21/21）：<通过 | 失败；CI 运行 URL>
+  - Debian 13 amd64 libvirt 矩阵（21/21）：<通过 | 失败；CI 运行 URL>
   - `Ubuntu 24.04 target matrix gate`：<通过 | 失败；CI 运行 URL>
   - `Ubuntu 26.04 target matrix gate`：<通过 | 失败；CI 运行 URL>
   - `Managed target matrix gate`：<通过 | 失败；CI 运行 URL>
@@ -110,7 +110,7 @@
 - `Verification Matrix` 不存在，或者以完全一致的 `## Verification Matrix` 标题存在；工作流替换
   生成的矩阵时使用此标题。
 - `迁移说明` 解释用户必须执行的操作；破坏性版本还须包括 state 处理和回滚指导。
-- Ubuntu 24.04、Ubuntu 26.04、Debian 12 和 Debian 13 的受管目标证据分别以 `20/20`
+- Ubuntu 24.04、Ubuntu 26.04、Debian 12 和 Debian 13 的受管目标证据分别以 `21/21`
   列出，指向发布提交对应的 CI 运行，且三个聚合 gate 全部通过。记录 26.04 已发布镜像的 URL
   和摘要。
 - 除非该版本已通过[项目成熟度检查清单](archive/legacy-design/project-maturity-and-launch-checklist.zh.md)

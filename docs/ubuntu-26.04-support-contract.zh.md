@@ -164,7 +164,7 @@ Netplan ownership。
 ownership 检查只读取 `/lib/netplan`、`/etc/netplan`、`/run/netplan` 以及 Netplan 生成的
 systemd-networkd/NetworkManager runtime 文件；不执行 Netplan CLI、`systemctl` 或文件 mutation。
 
-## 20-case 26.04 baseline 和验收映射
+## 21-case 26.04 baseline 和验收映射
 
 “released image”表示保留镜像原有 Netplan ownership；“native-networkd image”表示 harness 在
 DebianForm 运行前完成外部准备。
@@ -175,6 +175,7 @@ DebianForm 运行前完成外部准备。
 | `apt-virtual-package` | released image | package/virtual package shared | #56/#57 |
 | `bbr` | released image | kernel shared | #56/#58 |
 | `component-inputs` | released image | component shared | #56/#58 |
+| `component-moved` | released image | state refactoring shared | #65 |
 | `docker-compose` | released image | package + shared Compose | #56/#57/#58 |
 | `docker-daemon` | released image | package + shared daemon | #56/#57/#58 |
 | `docker-engine` | released image | Docker `resolute` repository | #56/#57 |
@@ -225,10 +226,10 @@ rejection、`apply`、JSON no-op plan、`check`、case assertion 和 cleanup。#
 
 ## CI 和支持声明 gate
 
-- 新增独立命名的 20-case Ubuntu 26.04 matrix 和 `Ubuntu 26.04 target matrix gate`。
+- 保留独立命名的 21-case Ubuntu 26.04 matrix 和 `Ubuntu 26.04 target matrix gate`。
 - 不重命名或弱化现有 `Managed target matrix gate` 与 `Ubuntu 24.04 target matrix gate`。
-- 支持声明要求同一提交上 Debian 12、Debian 13、Ubuntu 24.04、Ubuntu 26.04 各 20 个 case，
-  即 80 个 target-case 结果全部绿色。
+- 支持声明要求同一提交上 Debian 12、Debian 13、Ubuntu 24.04、Ubuntu 26.04 各 21 个 case，
+  即 84 个 target-case 结果全部绿色。
 - 记录 exact commit、CI run URL、released image digest 和成功/失败后的 hypervisor cleanup。
 - Preview 代表成熟度，不代表允许合并已知回归；声明完成后 26.04 gate 是 release blocker。
 
@@ -249,6 +250,8 @@ Ubuntu 26.04 Preview 的实现门禁基线是提交
   libvirt volume、disk/NVRAM、临时 workdir 和 SSH artifact。
 - 三种 runner 的失败诊断包含 target facts、Netplan ownership、network service/link/address/route、
   package/service 状态、journals、plan/state/log、libvirt XML/console 和 cleanup evidence。
+
+这段交付证据是历史 20-case 基线。当前 gate 新增 `component-moved`，不会追溯修改已记录 run。
 
 首跑命令和普通非网络示例见
 [Ubuntu 26.04 Preview Quickstart](ubuntu-26.04-quickstart.zh.md)与
