@@ -36,21 +36,21 @@ Linux Homebrew best-effort 规则见
 | CLI on Linux arm64 | Preview | release artifact 已构建；真实 arm64 curl installer 仍需人工或 runner 验证。 |
 | CLI on macOS amd64 | Beta | release artifact、curl installer 和 Homebrew install/test/upgrade 已验证。 |
 | CLI on macOS arm64 | Beta | release artifact、curl installer 和 Homebrew install/test/upgrade 已验证。 |
-| Target Debian 13 amd64 | Beta | 最高优先级目标；21 个 libvirt cases 全部作为阻断门禁。 |
+| Target Debian 13 amd64 | Beta | 最高优先级目标；22 个 libvirt cases 全部作为阻断门禁。 |
 | Target Debian 13 arm64 | Preview | runtime facts 和架构选择支持 arm64，但缺少真实 arm64 目标主机矩阵。 |
-| Target Debian 12 amd64 | Beta | 21 个 libvirt cases 与 Debian 13 使用同一阻断门禁。 |
+| Target Debian 12 amd64 | Beta | 22 个 libvirt cases 与 Debian 13 使用同一阻断门禁。 |
 | Target Debian 12 arm64 | Preview | runtime facts 可识别 arm64，但缺少 Debian 12 arm64 apply/check 矩阵。 |
 | Target Debian 11 或更早版本 | Unsupported | 不进入当前版本支持承诺或 release gate。 |
 | Debian testing/unstable | Unsupported | 不进入当前 beta 支持承诺。 |
-| Target Ubuntu 24.04 LTS amd64 | Preview | 独立 21-case 阻断矩阵；范围和排除项见 Ubuntu 支持契约。 |
-| Target Ubuntu 26.04 LTS amd64 | Preview | 官方 released image、独立 21-case 阻断矩阵和独立 gate；只允许 `resolute` amd64 Server。 |
+| Target Ubuntu 24.04 LTS amd64 | Preview | 独立 22-case 阻断矩阵；范围和排除项见 Ubuntu 支持契约。 |
+| Target Ubuntu 26.04 LTS amd64 | Preview | 官方 released image、独立 22-case 阻断矩阵和独立 gate；只允许 `resolute` amd64 Server。 |
 | Ubuntu 22.04、其他 Ubuntu 版本、Ubuntu arm64 或桌面 | Unsupported | 不进入当前版本支持承诺或 release gate。 |
 | 其他发行版 | Unsupported | 未进入被管理目标 allowlist。 |
 | root SSH 管理连接 | Beta | `ssh.user` 只能省略或为 `"root"`。 |
 | sudo/become/非 root 管理连接 | Unsupported | 当前不支持 sudo 提权、become 或非 root 管理连接。 |
 
-CI 当前自动发现 21 个 libvirt cases，并展开为 Debian 12、Debian 13、Ubuntu 24.04 和
-Ubuntu 26.04 四套 amd64 矩阵，共 84 个阻断 libvirt jobs。两个 Ubuntu 版本分别使用
+CI 当前自动发现 22 个 libvirt cases，并展开为 Debian 12、Debian 13、Ubuntu 24.04 和
+Ubuntu 26.04 四套 amd64 矩阵，共 88 个阻断 libvirt jobs。两个 Ubuntu 版本分别使用
 `Ubuntu 24.04 target matrix gate` 和 `Ubuntu 26.04 target matrix gate`；Debian 12/13 使用
 `Managed target matrix gate`。Debian 13 仍是本地默认值和新功能的最高优先级目标。
 
@@ -65,7 +65,7 @@ aggregate gates 均成功；连同 unit job 共 `84/84`。Ubuntu 26.04 使用官
 host-scoped shared script 新增的 `shared-script-networkd` case 已于 2026-07-12 在真实 Debian 13
 amd64 VM 上通过 14 个断言，覆盖双文件一次 reload、no-op 零 reload、单文件 drift 一次 reload、
 raw policy route/rule 生效和清理。上述 CI run 和三个 gates 保留了此前的 20-case 基线；
-当前 21-case gate 还要求 `component-moved` 在每个目标上通过。
+当前 22-case gate 还要求 `component-moved` 和 `bird-wireguard-networkd` 在每个目标上通过。
 
 ## CLI 命令
 
@@ -207,10 +207,11 @@ raw policy route/rule 生效和清理。上述 CI run 和三个 gates 保留了�
 | `examples/user-group.dbf.hcl` | Beta | users/groups/directories/files。 |
 | `examples/variable-secret-file.dbf.hcl` | Beta | variable + sensitive file 写入。 |
 | `examples/wireguard-networkd.dbf.hcl` | Preview | WireGuard networkd component，多 peer 和多 interface 复用，需准备本地 secrets。 |
+| `test/integration/libvirt/cases/bird-wireguard-networkd` | Preview | BIRD-owned dummy/WireGuard topology、reviewed networkd 输出、activation 去重、drift 修复、runtime 删除和脱敏。 |
 | `test/integration/libvirt/cases/systemd-extensions` | Preview | `service_config`、timer enable/state 和实际触发、resolved/journald drop-in、漂移修复和删除。 |
 | `test/integration/libvirt/cases/script-on-change` | Beta | component file 变更触发 script、no-op 不重复触发、配置更新再次触发。 |
 | `test/integration/libvirt/cases/component-moved` | Beta | component-prefix state 迁移、一个真实文件 update/operation、保留及移除 block 后收敛和清理。 |
-| `test/integration/libvirt/cases/*` | Beta/Preview | Debian 12/13 amd64 各 21 个 Beta cases，Ubuntu 24.04/26.04 amd64 各 21 个 Preview cases；覆盖 platform assertion、validate、online plan、drift check、apply、JSON no-op plan、check 和 case-specific assertions。 |
+| `test/integration/libvirt/cases/*` | Beta/Preview | Debian 12/13 amd64 各 22 个 Beta cases，Ubuntu 24.04/26.04 amd64 各 22 个 Preview cases；覆盖 platform assertion、validate、online plan、drift check、apply、JSON no-op plan、check 和 case-specific assertions。 |
 
 ## 当前不支持或尚未承诺
 

@@ -72,10 +72,10 @@
   - `make vulncheck`：<通过 | 失败 | 跳过并说明原因>
   - `make test-integration-layout`：<通过 | 失败 | 跳过并说明原因>
 - 此提交的受管目标 CI 证据：
-  - Ubuntu 24.04 LTS amd64 libvirt 矩阵（21/21）：<通过 | 失败；CI 运行 URL>
-  - Ubuntu 26.04 LTS amd64 libvirt 矩阵（21/21）：<通过 | 失败；CI 运行 URL>
-  - Debian 12 amd64 libvirt 矩阵（21/21）：<通过 | 失败；CI 运行 URL>
-  - Debian 13 amd64 libvirt 矩阵（21/21）：<通过 | 失败；CI 运行 URL>
+  - Ubuntu 24.04 LTS amd64 libvirt 矩阵（22/22）：<通过 | 失败；CI 运行 URL>
+  - Ubuntu 26.04 LTS amd64 libvirt 矩阵（22/22）：<通过 | 失败；CI 运行 URL>
+  - Debian 12 amd64 libvirt 矩阵（22/22）：<通过 | 失败；CI 运行 URL>
+  - Debian 13 amd64 libvirt 矩阵（22/22）：<通过 | 失败；CI 运行 URL>
   - `Ubuntu 24.04 target matrix gate`：<通过 | 失败；CI 运行 URL>
   - `Ubuntu 26.04 target matrix gate`：<通过 | 失败；CI 运行 URL>
   - `Managed target matrix gate`：<通过 | 失败；CI 运行 URL>
@@ -113,7 +113,7 @@
 - 改变原生 networkd 语法或 ownership 的 release 必须说明兼容语法、resource address、provider
   kind、rendered byte 和 activation 顺序是否变化。任何 `files.file` 交接都必须写明是手工过程，
   要求 state/file 备份和恢复通道，不得宣称自动或零停机迁移。
-- Ubuntu 24.04、Ubuntu 26.04、Debian 12 和 Debian 13 的受管目标证据分别以 `21/21`
+- Ubuntu 24.04、Ubuntu 26.04、Debian 12 和 Debian 13 的受管目标证据分别以 `22/22`
   列出，指向发布提交对应的 CI 运行，且三个聚合 gate 全部通过。记录 26.04 已发布镜像的 URL
   和摘要。
 - 除非该版本已通过[项目成熟度检查清单](archive/legacy-design/project-maturity-and-launch-checklist.zh.md)

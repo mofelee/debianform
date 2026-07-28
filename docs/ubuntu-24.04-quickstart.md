@@ -121,7 +121,7 @@ enable, or reload. DebianForm does not migrate, adopt, or remove Netplan configu
 
 ## 6. Preview Boundaries
 
-- Ubuntu 24.04 LTS amd64 has an independent, blocking 21-case matrix. Preview still means less user
+- Ubuntu 24.04 LTS amd64 has an independent, blocking 22-case matrix. Preview still means less user
   feedback and release history than Beta.
 - Docker's official source selects `https://download.docker.com/linux/ubuntu` from the validated
   `platform.distribution`. A custom Debian mirror URL is not rewritten automatically for Ubuntu.

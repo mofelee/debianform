@@ -1,0 +1,1 @@
+Ubuntu runs this case only after the fixture removes Netplan ownership and reboots onto persistent native systemd-networkd.

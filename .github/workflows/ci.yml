@@ -65,8 +65,8 @@ jobs:
           from pathlib import Path
 
           cases = sorted(path.name for path in Path("test/integration/libvirt/cases").iterdir() if path.is_dir())
-          if len(cases) != 21:
-              raise SystemExit(f"expected 21 libvirt integration cases, discovered {len(cases)}")
+          if len(cases) != 22:
+              raise SystemExit(f"expected 22 libvirt integration cases, discovered {len(cases)}")
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               print("cases=" + json.dumps(cases), file=output)

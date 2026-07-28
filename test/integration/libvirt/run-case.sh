@@ -255,6 +255,45 @@ assert_remote_eventually() {
   fail "$description did not pass within ${timeout}s"
 }
 
+assert_remote_file_matches() {
+  local description=$1
+  local expected=$2
+  local remote_path=$3
+
+  ASSERTION_COUNT=$((ASSERTION_COUNT + 1))
+  log "ASSERT $ASSERTION_COUNT: $description"
+  if ! ssh_vm cat -- "$remote_path" | diff -u "$expected" -; then
+    fail "$description"
+  fi
+}
+
+assert_remote_file_excludes() {
+  local description=$1
+  local needle=$2
+  local remote_path=$3
+
+  ASSERTION_COUNT=$((ASSERTION_COUNT + 1))
+  log "ASSERT $ASSERTION_COUNT: $description"
+  if ! ssh_vm test -f "$remote_path"; then
+    fail "$description: remote file does not exist"
+  fi
+  if ssh_vm cat -- "$remote_path" | grep -F -q -- "$needle"; then
+    fail "$description"
+  fi
+}
+
+assert_local_tree_excludes() {
+  local description=$1
+  local needle=$2
+  local root=$3
+
+  ASSERTION_COUNT=$((ASSERTION_COUNT + 1))
+  log "ASSERT $ASSERTION_COUNT: $description"
+  if grep -R -F -q -- "$needle" "$root"; then
+    fail "$description"
+  fi
+}
+
 collect_guest_diagnostics() {
   if [[ -z "$VM_IP" || ! -f "$DBF_HOME/.ssh/config" ]]; then
     return
@@ -625,8 +664,18 @@ for config in "${CONFIGS[@]}"; do
   log "step $CURRENT_STEP: planning before apply"
   dbf plan "${source_args[@]}" --format json | tee "$LOG_DIR/$CURRENT_STEP.pre-apply-plan.json"
 
+  if [[ -f "$CASE_DIR/plan-output-formats.case" ]]; then
+    log "step $CURRENT_STEP: capturing text, debug, and HTML plan evidence"
+    dbf plan "${source_args[@]}" >"$LOG_DIR/$CURRENT_STEP.pre-apply-plan.txt"
+    dbf plan "${source_args[@]}" --debug >"$LOG_DIR/$CURRENT_STEP.pre-apply-debug.log" 2>&1
+    dbf plan "${source_args[@]}" --html "$LOG_DIR/$CURRENT_STEP.pre-apply-plan.html" \
+      >"$LOG_DIR/$CURRENT_STEP.pre-apply-html.log"
+  fi
+
   if [[ -f "$drift_hook" ]]; then
     run_hook "$drift_hook"
+    log "step $CURRENT_STEP: planning observed drift"
+    dbf plan "${source_args[@]}" --format json | tee "$LOG_DIR/$CURRENT_STEP.drift-plan.json"
     log "step $CURRENT_STEP: verifying dbf check rejects drift"
     if dbf check "${source_args[@]}" >"$LOG_DIR/$CURRENT_STEP.drift-check.log" 2>&1; then
       cat "$LOG_DIR/$CURRENT_STEP.drift-check.log"

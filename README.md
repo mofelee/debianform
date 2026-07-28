@@ -448,7 +448,7 @@ See the [Support Matrix](docs/support-matrix.md) for complete example status and
 - Debian 13 amd64 is currently the highest-priority managed target.
 - Debian 12 amd64 is in Beta and joins Debian 13 amd64 in the blocking libvirt CI matrix. Debian 12
   arm64 remains in Preview.
-- Ubuntu 24.04 and 26.04 LTS amd64 are Preview targets with separate blocking 21-case matrices and
+- Ubuntu 24.04 and 26.04 LTS amd64 are Preview targets with separate blocking 22-case matrices and
   gates. Other Ubuntu releases, Ubuntu arm64, and desktop environments are unsupported.
 - DebianForm does not manage Netplan or NetworkManager. Networkd configuration on Ubuntu requires an
   operator-prepared native-networkd target; ordinary non-network resources are unaffected.

@@ -67,6 +67,39 @@ host "server1" {
 	if !reflect.DeepEqual(provider.Operations, want) {
 		t.Fatalf("single-file drift operations = %#v, want %#v", provider.Operations, want)
 	}
+
+	secondAddress := `host.server1.systemd.networkd.network["21-wg1"]`
+	provider.Observed[secondAddress] = Observed{Exists: false}
+	provider.Operations = nil
+	plan, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSecond := []string{
+		"host.server1.systemd.networkd.restart",
+		`host.server1.systemd.networkd.reconfigure["wg0"]`,
+		`host.server1.script["reexport"]`,
+	}
+	if !reflect.DeepEqual(provider.Operations, wantSecond) {
+		t.Fatalf("second-file drift operations = %#v, want %#v", provider.Operations, wantSecond)
+	}
+	post := operationStepFor(plan, `host.server1.script["reexport"]`)
+	if post == nil || !reflect.DeepEqual(post.Operation.DependsOn, []string{
+		secondAddress,
+		"host.server1.systemd.networkd.restart",
+		`host.server1.systemd.networkd.reconfigure["wg0"]`,
+	}) {
+		t.Fatalf("second-file post-reload operation = %#v", post)
+	}
+}
+
+func operationStepFor(plan Plan, address string) *OperationStep {
+	for i := range plan.Operations {
+		if plan.Operations[i].Address == address {
+			return &plan.Operations[i]
+		}
+	}
+	return nil
 }
 
 func TestOperationForTriggersPreservesStaticDependencies(t *testing.T) {

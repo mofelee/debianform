@@ -45,7 +45,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for command in curl go python3 "${TARGET_CHECKSUM_ALGORITHM}sum" ssh ssh-keygen virsh; do
+for command in curl diff go python3 "${TARGET_CHECKSUM_ALGORITHM}sum" ssh ssh-keygen virsh; do
   require_command "$command"
 done
 if [[ -z "${DBF_LIBVIRT_URI:-${VIRSH_DEFAULT_CONNECT_URI:-${LIBVIRT_DEFAULT_URI:-}}}" ]]; then

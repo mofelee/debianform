@@ -10,30 +10,31 @@ host "cihost" {
     lock_path = "/var/lock/debianform-integration/netplan-preflight-state.lock"
   }
 
-  files {
-    file "/etc/systemd/network/91-dbf-netplan-raw.network" {
-      content = <<-EOF
-        [Match]
-        Name=dbf-netplan-raw0
-
-        [Network]
-        Address=198.51.100.1/32
-      EOF
-    }
-  }
-
   systemd {
     networkd {
-      network "90-dbf-netplan-structured" {
-        path = "/etc/systemd/network/90-dbf-netplan-structured.network"
-
-        match = {
-          Name = "dbf-netplan-structured0"
+      network "90-dbf-netplan-generic" {
+        section "match" {
+          name     = "Match"
+          settings = { Name = "dbf-netplan-generic0" }
         }
-
-        network = {
-          Address = ["192.0.2.1/32"]
+        section "network" {
+          name     = "Network"
+          settings = { Address = ["192.0.2.1/32"] }
         }
+      }
+
+      network "91-dbf-netplan-raw-content" {
+        content = <<-EOF
+          [Match]
+          Name=dbf-netplan-raw0
+
+          [Network]
+          Address=198.51.100.1/32
+        EOF
+      }
+
+      netdev "92-dbf-netplan-raw-source" {
+        source = "netplan-conflict-raw.netdev"
       }
     }
   }

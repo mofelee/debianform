@@ -46,7 +46,7 @@ design details and background.
    ```
 
    Ubuntu 24.04 LTS amd64, Ubuntu 26.04 LTS amd64, Debian 12 amd64, and Debian 13 amd64 must each
-   pass 21/21 cases on the same commit. `Ubuntu 24.04 target matrix gate`,
+   pass 22/22 cases on the same commit. `Ubuntu 24.04 target matrix gate`,
    `Ubuntu 26.04 target matrix gate`, and `Managed target matrix gate` must all succeed. Record each
    target's result, the exact commit, and the CI run URL separately in the release notes. Also
    record the Ubuntu 26.04 released-image URL and SHA-256; one combined statement that "libvirt

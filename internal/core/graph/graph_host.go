@@ -1556,10 +1556,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	}
 	if networkdReloadAddress != "" {
 		reconfigureAddresses := appendNetworkdReconfigureOperations(host.Name, networkdReloadAddress, networkdReconfigureTriggers, networkdSource, &operations)
-		after := networkdReloadAddress
-		if len(reconfigureAddresses) > 0 {
-			after = reconfigureAddresses[len(reconfigureAddresses)-1]
-		}
+		after := append([]string{networkdReloadAddress}, reconfigureAddresses...)
 		if err := appendNetworkdPostReloadOperations(host, networkdPostReloadTriggers, after, &operations); err != nil {
 			return nil, nil, err
 		}

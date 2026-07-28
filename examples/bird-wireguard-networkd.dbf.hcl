@@ -76,6 +76,9 @@ host "bird-router" {
       }
 
       netdev "30-wg-core" {
+        group = "systemd-network"
+        mode  = "0640"
+
         section "identity" {
           name = "NetDev"
           settings = {
@@ -156,6 +159,9 @@ host "bird-router" {
       }
 
       netdev "50-wg-edge" {
+        group = "systemd-network"
+        mode  = "0640"
+
         section "identity" {
           name = "NetDev"
           settings = {

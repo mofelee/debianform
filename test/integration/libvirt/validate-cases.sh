@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CASES_DIR="$ROOT_DIR/test/integration/libvirt/cases"
-EXPECTED_CASE_COUNT=21
+EXPECTED_CASE_COUNT=22
 DBF_BIN="${DBF_INTEGRATION_DBF_BIN:-}"
 TEMP_DBF=""
 TEMP_PLAN=""
@@ -88,14 +88,14 @@ if bash "$ROOT_DIR/test/integration/libvirt/target.sh" ubuntu-25.10 >/dev/null 2
   exit 1
 fi
 
-for case_name in shared-script-networkd wireguard wireguard-three-host; do
+for case_name in bird-wireguard-networkd shared-script-networkd wireguard wireguard-three-host; do
   test -f "$CASES_DIR/$case_name/native-networkd.case"
 done
 if find "$CASES_DIR" -mindepth 2 -maxdepth 2 -name native-networkd.case -printf '%h\n' |
-  sed 's#.*/##' | sort | diff -u - <(printf '%s\n' shared-script-networkd wireguard wireguard-three-host | sort); then
+  sed 's#.*/##' | sort | diff -u - <(printf '%s\n' bird-wireguard-networkd shared-script-networkd wireguard wireguard-three-host | sort); then
   :
 else
-  printf 'native-networkd markers do not match the three planned cases\n' >&2
+  printf 'native-networkd markers do not match the four planned cases\n' >&2
   exit 1
 fi
 if grep -R -n -E 'DBF_INTEGRATION_DEBIAN|__DBF_DEBIAN' "$CASES_DIR"; then

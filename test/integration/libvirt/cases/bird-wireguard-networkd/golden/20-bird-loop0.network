@@ -1,0 +1,13 @@
+[Match]
+Name=bird-loop0
+
+[Network]
+LinkLocalAddressing=no
+
+[Address]
+AddPrefixRoute=no
+Address=192.0.2.1/32
+
+[Address]
+AddPrefixRoute=no
+Address=2001:db8:100::1/128

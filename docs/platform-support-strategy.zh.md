@@ -25,14 +25,14 @@ amd64 同为 Beta；Ubuntu 24.04 和 26.04 LTS amd64 以各自独立门禁进入
 | CLI Linux arm64 | Preview | release artifact 已构建；真实 arm64 installer 验证仍需 runner 或机器。 |
 | CLI macOS amd64 | Beta | release artifact、curl installer、Homebrew install/test/upgrade 已验证。 |
 | CLI macOS arm64 | Beta | release artifact、curl installer、Homebrew install/test/upgrade 已验证。 |
-| Target Debian 13 amd64 | Beta | 当前主目标；21 个 libvirt cases 全部阻断合并和发布。 |
+| Target Debian 13 amd64 | Beta | 当前主目标；22 个 libvirt cases 全部阻断合并和发布。 |
 | Target Debian 13 arm64 | Preview | runtime facts 和 artifact source selection 支持 arm64，但缺少真实目标矩阵。 |
-| Target Debian 12 amd64 | Beta | 与 Debian 13 运行相同的 21 个阻断式 libvirt cases。 |
+| Target Debian 12 amd64 | Beta | 与 Debian 13 运行相同的 22 个阻断式 libvirt cases。 |
 | Target Debian 12 arm64 | Preview | 需要 Debian 12 + arm64 真实 apply/check 矩阵后才能提升。 |
 | Debian 11 或更早版本 | Unsupported | 不进入当前支持承诺或 release gate。 |
 | Debian testing/unstable | Unsupported | 不进入 beta 支持承诺。 |
-| Target Ubuntu 24.04 LTS amd64 | Preview | 独立 21-case 阻断矩阵；不改变 Debian 默认和 Beta 等级。 |
-| Target Ubuntu 26.04 LTS amd64 | Preview | 官方 released image、独立 21-case 阻断矩阵和 `resolute` 精确 tuple。 |
+| Target Ubuntu 24.04 LTS amd64 | Preview | 独立 22-case 阻断矩阵；不改变 Debian 默认和 Beta 等级。 |
+| Target Ubuntu 26.04 LTS amd64 | Preview | 官方 released image、独立 22-case 阻断矩阵和 `resolute` 精确 tuple。 |
 | 其他 Ubuntu tuple 或桌面环境 | Unsupported | 仅 24.04 (`noble`) 和 26.04 (`resolute`) amd64 Server 进入 allowlist。 |
 | 其他发行版 | Unsupported | 必须先有独立契约、实现和真实目标矩阵。 |
 
@@ -52,7 +52,7 @@ Debian 13 是当前最高优先级目标：
 
 Debian 12 amd64 作为 Beta：
 
-- 运行与 Debian 13 amd64 完全相同的 21 个 libvirt cases，任何失败都是 release blocker。
+- 运行与 Debian 13 amd64 完全相同的 22 个 libvirt cases，任何失败都是 release blocker。
 - 每个 case 都断言 Debian ID、版本、`bookworm` codename 和 `amd64` architecture。
 - 每个配置步骤覆盖 `validate`、online JSON plan、可用时的 drift rejection、`apply`、JSON
   no-op plan 和 `check`，并执行 case-specific assertions。
@@ -68,7 +68,7 @@ Ubuntu 24.04 LTS (`noble`) 和 Ubuntu 26.04 LTS (`resolute`) amd64 的 Preview �
 
 - 使用同一个 `dbf` CLI、DSL、resource address、plan 格式和 state schema，不创建 UbuntuForm。
 - 继续只支持 root SSH，不支持 sudo/become 或默认 `ubuntu` 用户连接。
-- 与 Debian 分开运行完整 21-case 阻断矩阵；24.04 和 26.04 分别由
+- 与 Debian 分开运行完整 22-case 阻断矩阵；24.04 和 26.04 分别由
   `Ubuntu 24.04 target matrix gate` 与 `Ubuntu 26.04 target matrix gate` 阻断。
 - 普通非网络资源允许目标继续由 Netplan 管理现有网络。
 - DebianForm 不管理 Netplan 或 NetworkManager。结构化 networkd 和
@@ -163,7 +163,7 @@ Unsupported 提升到 Preview 必须先有独立设计或实现记录，不能�
 - `Managed target matrix gate`、`Ubuntu 24.04 target matrix gate` 和
   `Ubuntu 26.04 target matrix gate`。
 
-四个目标的证据不能合并成一句“libvirt passed”。当前 21-case 矩阵必须分别记录 `21/21`
+四个目标的证据不能合并成一句“libvirt passed”。当前 22-case 矩阵必须分别记录 `22/22`
 和 CI run URL，并确认来自同一个 release commit；三个 aggregate gates 也必须单独记录结果。
 
 如果某个平台无法自动验证，必须写成：
@@ -216,8 +216,8 @@ brew upgrade dbf
 ## 当前状态
 
 - Debian 13 amd64 是最高优先级目标，Debian 12 amd64 同为 Beta 和 release blocker。
-- Ubuntu 24.04 和 26.04 LTS amd64 为 Preview，各使用独立 21-case 阻断矩阵。
-- CI 当前按 4 个目标 x 21 个 cases 运行 84 个 amd64 libvirt jobs，并要求三个 aggregate gates。
+- Ubuntu 24.04 和 26.04 LTS amd64 为 Preview，各使用独立 22-case 阻断矩阵。
+- CI 当前按 4 个目标 x 22 个 cases 运行 88 个 amd64 libvirt jobs，并要求三个 aggregate gates。
 - Debian 12 arm64、Debian 13 arm64 和 Linux arm64 CLI installer 仍是 Preview/best-effort。
 - Ubuntu arm64、桌面和除 24.04/26.04 外的 Ubuntu 版本为 Unsupported。
 - Debian 11 及更早版本为 Unsupported。

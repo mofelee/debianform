@@ -91,3 +91,39 @@ host "server1" {
 		t.Fatalf("distinct post-reload declarations were collapsed: %#v", resourceGraph.Operations)
 	}
 }
+
+func TestCompileNetworkdPostReloadResolvesGlobalScriptFromComponent(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+script "reexport" {
+  mode = "once"
+  run  = "birdc reload out kernel4"
+}
+
+component "routing" {
+  systemd {
+    networkd {
+      network "20-wg0" {
+        content = "[Match]\nName=wg0\n"
+        activation {
+          post_reload = global.script.reexport
+        }
+      }
+    }
+  }
+}
+
+host "server1" {
+  component "routing" {
+    source = component.routing
+  }
+}
+`)
+	post := operationFor(resourceGraph, `host.server1.script["reexport"]`)
+	trigger := `host.server1.components.routing.systemd.networkd.network["20-wg0"]`
+	if post == nil {
+		t.Fatalf("global post-reload operation missing: %#v", resourceGraph.Operations)
+	}
+	if !reflect.DeepEqual(post.TriggeredBy, []string{trigger}) || post.ScriptPayload == nil || post.ScriptPayload.ComponentName != "" {
+		t.Fatalf("global post-reload operation = %#v", post)
+	}
+}

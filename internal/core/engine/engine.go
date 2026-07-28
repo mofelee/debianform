@@ -1230,7 +1230,31 @@ func operationSteps(operations []graph.Operation, changed map[string]struct{}, s
 			TriggerPaths:     triggerPaths,
 		})
 	}
-	return out
+	return filterInactiveOperationDependencies(out, operations)
+}
+
+func filterInactiveOperationDependencies(steps []OperationStep, operations []graph.Operation) []OperationStep {
+	operationAddresses := make(map[string]struct{}, len(operations))
+	for _, operation := range operations {
+		operationAddresses[operation.Address] = struct{}{}
+	}
+	active := make(map[string]struct{}, len(steps))
+	for _, step := range steps {
+		active[step.Operation.Address] = struct{}{}
+	}
+	for i := range steps {
+		dependencies := steps[i].Operation.DependsOn[:0]
+		for _, dependency := range steps[i].Operation.DependsOn {
+			if _, isOperation := operationAddresses[dependency]; isOperation {
+				if _, isActive := active[dependency]; !isActive {
+					continue
+				}
+			}
+			dependencies = append(dependencies, dependency)
+		}
+		steps[i].Operation.DependsOn = dependencies
+	}
+	return steps
 }
 
 func operationForTriggers(op graph.Operation, triggers []string) graph.Operation {

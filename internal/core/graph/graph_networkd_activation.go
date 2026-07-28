@@ -33,10 +33,14 @@ func collectNetworkdActivation(activation *ir.NetworkdActivationSpec, address, c
 	if ref.Scope == "component" {
 		key = component + ":" + key
 	}
+	groupComponent := component
+	if ref.Scope == "root" {
+		groupComponent = ""
+	}
 	group, exists := postReload[key]
 	if !exists {
 		group = &networkdPostReloadGroup{
-			Component:     component,
+			Component:     groupComponent,
 			Name:          ref.Name,
 			DeclarationID: ref.DeclarationID,
 			Source:        ref.Source,
@@ -49,13 +53,9 @@ func collectNetworkdActivation(activation *ir.NetworkdActivationSpec, address, c
 
 func appendNetworkdReconfigureOperations(host, reloadAddress string, triggers map[string][]string, source ir.SourceRef, operations *[]Operation) []string {
 	addresses := make([]string, 0, len(triggers))
-	previous := reloadAddress
 	for _, name := range sortedKeys(triggers) {
 		address := fmt.Sprintf("host.%s.systemd.networkd.reconfigure[%s]", host, strconv.Quote(name))
-		dependencies := []string{reloadAddress}
-		if previous != reloadAddress {
-			dependencies = append(dependencies, previous)
-		}
+		dependencies := append([]string{reloadAddress}, addresses...)
 		*operations = append(*operations, Operation{
 			Host:           host,
 			Address:        address,
@@ -67,13 +67,12 @@ func appendNetworkdReconfigureOperations(host, reloadAddress string, triggers ma
 			Source:         source,
 		})
 		addresses = append(addresses, address)
-		previous = address
 	}
 	return addresses
 }
 
-func appendNetworkdPostReloadOperations(host ir.HostSpec, groups map[string]*networkdPostReloadGroup, after string, operations *[]Operation) error {
-	previous := after
+func appendNetworkdPostReloadOperations(host ir.HostSpec, groups map[string]*networkdPostReloadGroup, after []string, operations *[]Operation) error {
+	previous := []string{}
 	for _, key := range sortedKeys(groups) {
 		group := groups[key]
 		script, address, err := networkdPostReloadScript(host, group)
@@ -84,18 +83,20 @@ func appendNetworkdPostReloadOperations(host ir.HostSpec, groups map[string]*net
 		if index >= 0 {
 			op := (*operations)[index]
 			op.TriggeredBy = dedupeStrings(append(op.TriggeredBy, group.Triggers...))
-			op.DependsOn = dedupeStrings(append(op.DependsOn, previous))
+			op.DependsOn = dedupeStrings(append(op.DependsOn, append(after, previous...)...))
 			(*operations)[index] = op
-			previous = address
+			previous = append(previous, address)
 			continue
 		}
+		dependencies := append(append([]string(nil), after...), previous...)
+		dependencies = append(dependencies, group.Triggers...)
 		*operations = append(*operations, Operation{
 			Host:           host.Name,
 			Address:        address,
 			Action:         "run",
 			Summary:        "run networkd post-reload script " + group.Name,
 			Sensitive:      script.Sensitive,
-			DependsOn:      dedupeStrings(append([]string{previous}, group.Triggers...)),
+			DependsOn:      dedupeStrings(dependencies),
 			TriggeredBy:    dedupeStrings(group.Triggers),
 			CommandPreview: "script " + group.Name + " (once)",
 			ScriptPayload: &ScriptPayload{
@@ -110,7 +111,7 @@ func appendNetworkdPostReloadOperations(host ir.HostSpec, groups map[string]*net
 			},
 			Source: script.Source,
 		})
-		previous = address
+		previous = append(previous, address)
 	}
 	return nil
 }

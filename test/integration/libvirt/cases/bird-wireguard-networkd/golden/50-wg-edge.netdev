@@ -1,0 +1,15 @@
+[NetDev]
+Kind=wireguard
+Name=wg-edge
+
+[WireGuard]
+ListenPort=51831
+PrivateKeyFile=/etc/wireguard/wg-edge.key
+RouteTable=off
+
+[WireGuardPeer]
+AllowedIPs=10.200.0.1/32
+AllowedIPs=fd00:200::1/128
+Endpoint=198.51.100.10:51821
+PersistentKeepalive=25
+PublicKey=2Ra/MKyq6SNHwY2Zk7pFeJrpVxbL1g5pXHltd4xT5Co=

@@ -44,7 +44,7 @@
    ```
 
    必须确认同一提交上的 Ubuntu 24.04 LTS amd64、Ubuntu 26.04 LTS amd64、Debian 12 amd64、
-   Debian 13 amd64 均为 21/21，且 `Ubuntu 24.04 target matrix gate`、
+   Debian 13 amd64 均为 22/22，且 `Ubuntu 24.04 target matrix gate`、
    `Ubuntu 26.04 target matrix gate` 与 `Managed target matrix gate` 都成功。把四个目标各自的
    结果、exact commit 和 CI run URL 分开写入 release notes；同时记录 26.04 released-image URL
    和 SHA-256，不能只写一个合并后的“libvirt passed”。
