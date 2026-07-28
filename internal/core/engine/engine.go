@@ -95,6 +95,7 @@ type Engine struct {
 type Plan struct {
 	Steps      []Step
 	Operations []OperationStep
+	Moves      []corestate.RealizedMove
 	Summary    coreplan.Summary
 }
 
@@ -140,6 +141,10 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	selectedHosts := selectedProgramHosts(program, opts)
 	parallel := boundedHostParallel(opts.Parallel, len(selectedHosts))
 	stateByHost, err := e.readStates(ctx, selectedHosts, parallel, progress)
+	if err != nil {
+		return Plan{}, err
+	}
+	stateByHost, moves, err := resolveProgramMoves(program, resourceGraph, stateByHost, opts)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -225,6 +230,7 @@ func (e Engine) Plan(ctx context.Context, program *ir.Program, resourceGraph *gr
 	return Plan{
 		Steps:      steps,
 		Operations: operations,
+		Moves:      moves,
 		Summary:    summarize(steps, operations, noOp),
 	}, nil
 }
@@ -308,16 +314,12 @@ func (e Engine) Apply(ctx context.Context, program *ir.Program, resourceGraph *g
 		if err := ctx.Err(); err != nil {
 			return plan, err
 		}
-		if err := e.persistHostFacts(ctx, program, applyOpts); err != nil {
+		states, err := e.prepareHostStates(ctx, program, resourceGraph, applyOpts, plan)
+		if err != nil {
 			return plan, err
 		}
 		if len(plan.Steps) == 0 && len(plan.Operations) == 0 {
 			return plan, nil
-		}
-
-		states, err := e.readStates(ctx, selectedHosts, applyOpts.Parallel, progress)
-		if err != nil {
-			return plan, err
 		}
 
 		waves, err := executionWaves(resourceGraph, plan)
@@ -356,18 +358,17 @@ func (e Engine) withHostLocks(
 	return fn(leaseMonitor.context())
 }
 
-func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts Options) error {
+func (e Engine) prepareHostStates(ctx context.Context, program *ir.Program, resourceGraph *graph.ResourceGraph, opts Options, approved Plan) (map[string]corestate.State, error) {
 	if program == nil {
-		return nil
+		return map[string]corestate.State{}, nil
 	}
 	progress := newProgressLoggerWithStyle(opts.Progress, opts.ProgressStyle)
 	hosts := selectedProgramHosts(program, opts)
 	parallel := boundedHostParallel(opts.Parallel, len(hosts))
-	return runHosts(ctx, hosts, parallel, func(ctx context.Context, host ir.HostSpec) error {
-		if !hasHostFacts(host.Facts) {
-			return nil
-		}
-		task := progress.Start(host.Name, "persist facts", "", "")
+	prepared := make(map[string]corestate.State, len(hosts))
+	var mu sync.Mutex
+	err := runHosts(ctx, hosts, parallel, func(ctx context.Context, host ir.HostSpec) error {
+		task := progress.Start(host.Name, "prepare state", "", "")
 		st, err := e.Backend.Read(ctx, host)
 		if err != nil {
 			task.Done(err)
@@ -378,15 +379,43 @@ func (e Engine) persistHostFacts(ctx context.Context, program *ir.Program, opts 
 			task.Done(err)
 			return err
 		}
-		facts := host.Facts
-		st.Facts = &facts
-		if _, err := e.Backend.Write(ctx, host, st); err != nil {
+		moveResult, err := resolveHostMoves(st, host, resourceGraph)
+		if err != nil {
 			task.Done(err)
 			return err
 		}
+		if err := verifyApprovedHostMoves(host.Name, approved.Moves, moveResult.Moves); err != nil {
+			task.Done(err)
+			return err
+		}
+		st = moveResult.State
+		write := len(moveResult.Moves) > 0
+		if hasHostFacts(host.Facts) {
+			facts := host.Facts
+			st.Facts = &facts
+			write = true
+		}
+		if err := ctx.Err(); err != nil {
+			task.Done(err)
+			return err
+		}
+		if write {
+			st, err = e.Backend.Write(ctx, host, st)
+			if err != nil {
+				task.Done(err)
+				return err
+			}
+		}
+		mu.Lock()
+		prepared[host.Name] = st
+		mu.Unlock()
 		task.Done(nil)
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return prepared, nil
 }
 
 func hasHostFacts(facts ir.HostFacts) bool {
@@ -460,6 +489,87 @@ func (e Engine) readStates(ctx context.Context, hosts []ir.HostSpec, parallel in
 		return nil, err
 	}
 	return states, nil
+}
+
+func resolveProgramMoves(program *ir.Program, resourceGraph *graph.ResourceGraph, states map[string]corestate.State, opts Options) (map[string]corestate.State, []corestate.RealizedMove, error) {
+	resolved := make(map[string]corestate.State, len(states))
+	moves := make([]corestate.RealizedMove, 0)
+	for _, host := range selectedProgramHosts(program, opts) {
+		st, ok := states[host.Name]
+		if !ok {
+			return nil, nil, fmt.Errorf("state for selected host %q was not read", host.Name)
+		}
+		result, err := resolveHostMoves(st, host, resourceGraph)
+		if err != nil {
+			return nil, nil, err
+		}
+		resolved[host.Name] = result.State
+		moves = append(moves, result.Moves...)
+	}
+	sortRealizedMoves(moves)
+	return resolved, moves, nil
+}
+
+func resolveHostMoves(st corestate.State, host ir.HostSpec, resourceGraph *graph.ResourceGraph) (corestate.MoveResult, error) {
+	desiredComponents := make(map[string]bool, len(host.Components))
+	for _, component := range host.Components {
+		desiredComponents[fmt.Sprintf("host.%s.components.%s", host.Name, component.Name)] = true
+	}
+	targets := map[string]corestate.MoveTarget{}
+	if resourceGraph != nil {
+		for _, node := range resourceGraph.Nodes {
+			if node.Host != host.Name {
+				continue
+			}
+			targets[node.Address] = corestate.MoveTarget{ProviderAddress: node.ProviderAddress, Desired: node.Desired}
+		}
+		for _, operation := range resourceGraph.Operations {
+			if operation.Host != host.Name || operation.ScriptPayload == nil {
+				continue
+			}
+			for _, output := range operation.ScriptPayload.Outputs {
+				node, ok := scriptOutputNodeForOperation(operation, output.Address)
+				if !ok {
+					continue
+				}
+				targets[node.Address] = corestate.MoveTarget{ProviderAddress: node.ProviderAddress, Desired: node.Desired}
+			}
+		}
+	}
+	return corestate.ResolveMoves(st, host.Moves, desiredComponents, targets)
+}
+
+func verifyApprovedHostMoves(host string, approved, realized []corestate.RealizedMove) error {
+	want := make([]corestate.RealizedMove, 0)
+	for _, move := range approved {
+		if move.Host == host {
+			want = append(want, move)
+		}
+	}
+	got := append([]corestate.RealizedMove(nil), realized...)
+	sortRealizedMoves(want)
+	sortRealizedMoves(got)
+	if len(want) != len(got) {
+		return fmt.Errorf("approved state moves for host %q changed before persistence: approved %d, resolved %d", host, len(want), len(got))
+	}
+	for i := range want {
+		if want[i] != got[i] {
+			return fmt.Errorf("approved state moves for host %q changed before persistence: approved %s -> %s, resolved %s -> %s", host, want[i].From, want[i].To, got[i].From, got[i].To)
+		}
+	}
+	return nil
+}
+
+func sortRealizedMoves(moves []corestate.RealizedMove) {
+	sort.SliceStable(moves, func(i, j int) bool {
+		if moves[i].Host != moves[j].Host {
+			return moves[i].Host < moves[j].Host
+		}
+		if moves[i].From != moves[j].From {
+			return moves[i].From < moves[j].From
+		}
+		return moves[i].To < moves[j].To
+	})
 }
 
 func (e Engine) planNodesByHost(ctx context.Context, hosts []ir.HostSpec, parallel int, planner HostPlanner, nodesByHost map[string][]graph.Node, priorsByHost map[string]map[string]*corestate.Resource, progress *progressLogger) (map[string]ProviderPlan, error) {
