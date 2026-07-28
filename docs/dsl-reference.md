@@ -536,22 +536,31 @@ Both `unit` and `service_unit` support
 #### systemd.networkd
 
 `systemd { networkd { ... } }` generates networkd files and manages
-`systemd-networkd.service`.
+`systemd-networkd.service`. This provider is Preview. On Ubuntu it is limited to
+operator-prepared native-networkd targets; active Netplan ownership is rejected before changes.
 
 | Field | Default | Description |
 | --- | --- | --- |
 | `enable` | `null` | Whether to enable systemd-networkd. |
+
+Each `netdev` or `network` uses exactly one content form: compatibility attributes, generic
+`section "<identity>"` blocks, or one raw `content`/`source` attribute. These forms are mutually
+exclusive. Existing compatibility syntax and resource addresses remain supported.
 
 Fields of `netdev "<label>"`:
 
 | Field | Default | Description |
 | --- | --- | --- |
 | `path` | `/etc/systemd/network/<label>.netdev` | Must be an absolute path. |
-| `netdev` | `{}` | Render as `[NetDev]`; when present, must contain `Name` and `Kind`. |
-| `wireguard` | `{}` | Render as `[WireGuard]`; inline `PrivateKey` is forbidden, so use `PrivateKeyFile`. |
-| `wireguard_peer "<label>"` | None | Nested block rendered as `[WireGuardPeer]`; inline `PresharedKey` is forbidden. |
+| `netdev` | `{}` | Compatibility form rendered as `[NetDev]`; when present, must contain `Name` and `Kind`. |
+| `wireguard` | `{}` | Compatibility form rendered as `[WireGuard]`; inline `PrivateKey` is forbidden, so use `PrivateKeyFile`. |
+| `wireguard_peer "<label>"` | None | Compatibility block rendered as `[WireGuardPeer]`; inline `PresharedKey` is forbidden. |
+| `section "<identity>"` | None | Generic structured section; one rendered `[NetDev]` with `Name` and `Kind` is required. |
+| `content` / `source` | None | Raw escape hatch; exactly one may be set. A raw netdev must contain `[NetDev]` `Name` and `Kind`. |
+| `sensitive` | `false` | Marks raw content sensitive; automatically enabled for sensitive expressions. |
+| `activation` | None | Optional reconfigure and post-reload behavior after a shared reload. |
 | `owner` / `group` | `"root"` / `"root"` | File owner/group. |
-| `mode` | `"0644"` | Four-digit octal string. |
+| `mode` | `"0644"` | Four-digit octal string; sensitive generic/raw content defaults to `"0600"`. |
 | `ensure` | `"present"` | `"present"` or `"absent"`. |
 
 Fields of `network "<label>"`:
@@ -559,15 +568,44 @@ Fields of `network "<label>"`:
 | Field | Default | Description |
 | --- | --- | --- |
 | `path` | `/etc/systemd/network/<label>.network` | Must be an absolute path. |
-| `match` | `{}` | Render as `[Match]`; required when present. |
-| `network` | `{}` | Render as `[Network]`; required when present. |
+| `match` | `{}` | Compatibility form rendered as `[Match]`; required when present. |
+| `network` | `{}` | Compatibility form rendered as `[Network]`; required when present. |
+| `section "<identity>"` | None | Generic structured section. Multiple identities may render the same section name. |
+| `content` / `source` | None | Raw escape hatch; exactly one may be set. `source` is relative to the declaring file. |
+| `sensitive` | `false` | Marks raw content sensitive; automatically enabled for sensitive expressions. |
+| `activation` | None | Optional reconfigure and post-reload behavior after a shared reload. |
 | `owner` / `group` | `"root"` / `"root"` | File owner/group. |
-| `mode` | `"0644"` | Four-digit octal string. |
+| `mode` | `"0644"` | Four-digit octal string; sensitive generic/raw content defaults to `"0600"`. |
 | `ensure` | `"present"` | `"present"` or `"absent"`. |
 
-Networkd section values may be strings, numbers, booleans, or lists of those
-types; booleans render as `yes`/`no`. Both `netdev` and `network` support
-`lifecycle { prevent_destroy = true }`.
+Fields of generic `section "<identity>"`:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `name` | None | Required rendered section name. The block label is stable DebianForm identity and is not rendered. |
+| `settings` | None | Required map of string, number, boolean, null, or lists of scalar values. |
+
+Generic sections render in declaration order. Setting keys render in lexical order; lists render as
+repeated keys in list order; booleans render as `yes`/`no`; null values are omitted. Unknown but
+syntactically valid section names and settings are accepted. Names, keys, and scalar values reject
+newline/NUL injection. Generic inline `PrivateKey` or `PresharedKey` requires a sensitive expression;
+file-backed directives remain recommended. Ephemeral values are unsupported.
+
+Fields of `activation`:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `reconfigure` | `[]` | Interface names to union, deduplicate, sort, and run with `networkctl reconfigure` after reload. |
+| `post_reload` | None | `script.<name>` or `global.script.<name>` using a `mode = "once"` script without outputs. |
+
+Changed files share one host reload. Runtime links for deleted netdevs are removed after reload,
+then reconfigure operations run deterministically, followed by each declaration-identity post-reload
+script once. No relevant change produces no activation; `check` is observational; offline plans show
+the operation graph. Both resources support `lifecycle { prevent_destroy = true }`.
+
+See the runnable [BIRD-owned WireGuard example](../examples/bird-wireguard-networkd.dbf.hcl), the
+[migration guide](networkd-migration.md), and the
+[generalization contract](networkd-generalization-contract.md).
 
 ### services
 

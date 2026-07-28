@@ -42,6 +42,10 @@ troubleshooting.
 - [State Format](state.md): remote state, locking, ownership, and redaction rules.
 - [systemd Service Units](systemd-service-units.md): plain-text units and structured
   `service_unit` declarations.
+- [systemd.networkd Generalization](networkd-generalization-contract.md): generic sections, raw
+  content, activation ordering, sensitivity, and stable identity for the Preview provider.
+- [systemd.networkd Migration](networkd-migration.md): reviewed ownership handoff, state backup,
+  recovery, rollback, and the Ubuntu Netplan boundary.
 - [script / on_change](script-on-change-requirements.md): script-hook semantics for changes to
   files inside a component.
 - [CLI Color and Logging Policy](cli-color-output-policy.md): terminal and log colors, CI behavior,

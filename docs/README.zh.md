@@ -33,6 +33,10 @@
 - [Plan JSON 格式](plan-format.zh.md)：`dbf plan --format json` 的结构化输出。
 - [State 格式](state.zh.md)：远端 state、lock、ownership 和脱敏规则。
 - [systemd service units](systemd-service-units.zh.md)：纯文本 unit 和结构化 `service_unit` 写法。
+- [systemd.networkd 通用化](networkd-generalization-contract.zh.md)：Preview provider 的通用
+  section、raw content、activation 顺序、sensitivity 和稳定 identity。
+- [systemd.networkd 迁移](networkd-migration.zh.md)：经过审查的 ownership 交接、state 备份、
+  恢复、回滚和 Ubuntu Netplan 边界。
 - [script / on_change](script-on-change-requirements.zh.md)：component 内部文件变更后的 script 钩子语义。
 - [CLI 颜色输出和日志策略](cli-color-output-policy.zh.md)：终端颜色、日志颜色、CI 和 JSON 输出边界。
 - [删除行为提示设计稿](delete-behavior-diagnostics-plan.zh.md)：plan/apply 删除提示、颜色和行为矩阵。

@@ -126,6 +126,19 @@ payload rebase 规则或 apply 顺序的变更会让原本 move-only 的 rename 
 - 需要支持回滚时，release notes 必须明确要求保留迁移前 state 备份。
 - patch 版本不得引入需要不可逆 state 迁移的变更。
 
+## Networkd Ownership 迁移
+
+Preview `systemd.networkd` provider 在兼容语法、通用 section 和 raw content 三种形式下保留
+现有 `networkd_netdev`、`networkd_network` resource address。新增通用 section 或 raw content
+属于兼容新增；兼容语法会按已记录的 deprecation policy 继续保留。语法等价不代表可以省略
+rendered byte equality 审查。
+
+把 `files.file` 改成原生 networkd resource 会改变 ownership 和 state address，不是自动迁移，
+也不是 leaf-resource `moved` operation。release 不得把这项交接描述为零停机或自动完成。
+Migration Notes 必须要求 path ownership 唯一、备份 state 和文件、准备恢复通道、审查
+destroy/create action、执行 apply 后网络检查并保留 rollback 配置。active Netplan 或
+NetworkManager ownership 不能被 adopt。详见 [networkd 迁移指南](networkd-migration.zh.md)。
+
 ## Plan JSON Format 兼容性
 
 `dbf plan --format json` 当前格式版本是 `debianform.plan.alpha1`。

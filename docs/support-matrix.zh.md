@@ -111,7 +111,7 @@ raw policy route/rule 生效和清理。上述 CI run 和三个 gates 保留了�
 | `systemd.timer` | Preview | 结构化 `.timer` 生成，并可管理 timer enabled/state。 | merge/graph 单测、`fleet` 示例和 `systemd-extensions` integration case。 |
 | `systemd.resolved` | Preview | 管理 `/etc/systemd/resolved.conf.d/debianform.conf` drop-in，并可管理/重启 `systemd-resolved`。 | merge/graph 单测、`fleet` 示例和 `systemd-extensions` integration case。 |
 | `systemd.journald` | Preview | 管理 `/etc/systemd/journald.conf.d/debianform.conf` drop-in，并可重载/重启 journald。 | merge/graph 单测、`fleet` 示例和 `systemd-extensions` integration case。 |
-| `systemd.networkd` | Preview | netdev/network、WireGuard peer、networkd enable；Ubuntu 仅限 operator-prepared native-networkd，active Netplan ownership 时只读 preflight 拒绝。 | WireGuard examples 和三套 networkd integration cases。 |
+| `systemd.networkd` | Preview | 兼容语法、任意重复通用 section、raw content/source、WireGuard peer、shared reload、interface reconfigure、按 declaration identity 的 post-reload hook 和 networkd enable。Ubuntu 仍仅限通过只读 active-Netplan preflight 的 operator-prepared native-networkd。 | generic/raw parser、graph、plan、redaction、lifecycle 测试；BIRD/WireGuard 示例；networkd integration cases。 |
 | `services` | Beta | systemd service enabled/state，支持 running/stopped/restarted/reloaded。 | service tests 和 integration cases。 |
 | `nftables` | Beta | `/etc/nftables.conf`、snippet file、validate/activate。 | `nftables` integration case。 |
 | `docker` | Beta | Docker Engine、daemon、users、Compose project。 | Docker graph/plan/apply tests 和 integration cases。 |
@@ -136,6 +136,8 @@ raw policy route/rule 生效和清理。上述 CI run 和三个 gates 保留了�
 | `systemd_unit` | Beta | `systemd.unit`、`systemd.service_unit`、`systemd.timer`、Docker Compose | 管理 systemd unit 文件。 |
 | `service` | Beta | `services.service`、systemd timer/resolved/journald、Docker service/Compose service | 管理 systemd enabled/state。 |
 | `nftables_file` | Beta | `nftables.file` | 管理 nftables 文件并触发 validate/activate。 |
+| `networkd_netdev` | Preview | `systemd.networkd.netdev` | 管理 structured/raw `.netdev` 文件、shared activation 和删除时的 runtime link cleanup。 |
+| `networkd_network` | Preview | `systemd.networkd.network` | 管理 structured/raw `.network` 文件及 shared reload/reconfigure/post-reload activation。 |
 | `component_artifact` | Beta | `component.source` | 下载或准备 binary/file/archive/ca_certificate/source artifact。 |
 | `docker_package_conflicts` | Beta | `docker.package.source = "official"` | 检测并按策略移除冲突包。 |
 | `docker_compose_project` | Beta | `docker.compose` | 收敛 Compose project running/stopped/absent。 |
@@ -187,6 +189,7 @@ raw policy route/rule 生效和清理。上述 CI run 和三个 gates 保留了�
 | `examples/apt-source-file.dbf.hcl` | Beta | APT source file。 |
 | `examples/apt-repository.dbf.hcl` | Beta | APT repository 和 signing key。 |
 | `examples/bird2.dbf.hcl` | Beta | component 展开和 service/file/package。 |
+| `examples/bird-wireguard-networkd.dbf.hcl` | Preview | 可 offline 运行的 BIRD-owned routing 示例，含 dummy loopback、两个 WireGuard link、重复 Address/Route/Peer section、reconfigure 和一个 post-reload export script。 |
 | `examples/component-binary.dbf.hcl` | Beta | binary artifact，真实 apply 前需替换 sha256。 |
 | `examples/component-source-build.dbf.hcl` | Beta | source build component。 |
 | `examples/component-inputs.dbf.hcl` | Beta | typed input、validation、sensitive。 |

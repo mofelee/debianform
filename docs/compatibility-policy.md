@@ -152,6 +152,20 @@ Rollback boundaries:
   pre-migration state backup.
 - A patch release must not introduce an irreversible state migration.
 
+## Networkd Ownership Migration
+
+The Preview `systemd.networkd` provider keeps existing `networkd_netdev` and `networkd_network`
+resource addresses for compatibility, generic-section, and raw-content forms. Adding generic
+sections or raw content is additive; compatibility syntax remains supported through the documented
+deprecation policy. Equivalent syntax does not remove the need to review rendered byte equality.
+
+Changing a `files.file` resource into a native networkd resource is an ownership and state-address
+change, not an automatic migration or a leaf-resource `moved` operation. A release must not describe
+that handoff as no-downtime or automatic. Migration notes must require exclusive path ownership,
+state and file backups, recovery access, reviewed destroy/create actions, post-apply network checks,
+and a rollback configuration. Active Netplan or NetworkManager ownership is not eligible for
+adoption. See the [networkd migration guide](networkd-migration.md).
+
 ## Plan JSON Format Compatibility
 
 The current format version for `dbf plan --format json` is `debianform.plan.alpha1`.

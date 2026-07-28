@@ -6,6 +6,20 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
+## Unreleased
+
+- Generalized the Preview `systemd.networkd` provider with arbitrary declaration-ordered repeated
+  sections, raw `content`/`source`, interface reconfigure, and declaration-identity post-reload
+  scripts while retaining compatibility syntax and existing resource/provider addresses.
+- Preserved one host reload, runtime netdev cleanup, active-Netplan ownership rejection, drift and
+  lifecycle behavior, and sensitive-content redaction across text, JSON, HTML, state, diagnostics,
+  and debug plans.
+- Added `depends_on` relationships to text and HTML operation output; plan JSON remains
+  `debianform.plan.alpha1` and already carried `depends_on`/`triggered_by` fields.
+- Added a runnable BIRD-owned WireGuard example and bilingual DSL/migration guidance. Moving from
+  `files.file` to a native networkd resource remains a reviewed ownership/state-address handoff,
+  not an automatic or zero-downtime migration.
+
 ## v0.8.1
 
 - Added complete English counterparts for every maintained Markdown document, with reciprocal

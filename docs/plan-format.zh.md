@@ -266,11 +266,18 @@ OperationNode 只描述有语义的执行动作，不是任意 shell hook。典�
 
 `host` 是 operation 的明确执行目标；调度器、provider 和 HTML filter 都使用该字段，address 不承担路由职责。
 
+`depends_on` 表示执行顺序关系，`triggered_by` 列出本次 plan 中会激活 operation 的 resource
+change。text 与 HTML plan 都会展示这两个关系；JSON consumer 必须把数组视为 address，不能从
+operation list 的位置推断顺序。
+
 ```text
 host.server1.apt.cache_refresh
 host.server1.nftables.validate
 host.server1.nftables.activate
 host.server1.systemd.daemon_reload
+host.server1.systemd.networkd.restart
+host.server1.systemd.networkd.reconfigure["wg0"]
+host.server1.script["reexport_bird"]
 host.server1.services.service["myapp"].restart
 ```
 

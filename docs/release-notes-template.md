@@ -119,6 +119,10 @@ Before creating the release tag, check that:
   generated matrix.
 - `Migration Notes` explains required user action, including state handling and
   rollback guidance for breaking releases.
+- A release that changes native networkd syntax or ownership states whether compatibility syntax,
+  resource addresses, provider kinds, rendered bytes, and activation ordering changed. Any
+  `files.file` handoff must be described as manual, require state/file backups and recovery access,
+  and must not claim automatic or zero-downtime migration.
 - Ubuntu 24.04, Ubuntu 26.04, Debian 12, and Debian 13 managed-target evidence
   is listed separately as `21/21`, points to the release commit's CI run, and
   all three aggregate gates passed. Record the 26.04 released-image URL and digest.

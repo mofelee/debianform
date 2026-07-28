@@ -2188,6 +2188,8 @@ func TestREADMELocalCommandsAreCopyRunnable(t *testing.T) {
 		{name: "plan-files-html", args: []string{"plan", "-f", "../../examples/files-plan-preview.dbf.hcl", "--html", filepath.Join(dir, "plan.html"), "--offline"}},
 		{name: "fmt-bbr-copy", args: []string{"fmt", "-f", fmtFixture}},
 		{name: "validate-bird2", args: []string{"validate", "-f", "../../examples/bird2.dbf.hcl"}},
+		{name: "validate-bird-wireguard-networkd", args: []string{"validate", "-f", "../../examples/bird-wireguard-networkd.dbf.hcl"}},
+		{name: "plan-bird-wireguard-networkd-offline", args: []string{"plan", "-f", "../../examples/bird-wireguard-networkd.dbf.hcl", "--offline"}},
 		{name: "plan-nftables-offline", args: []string{"plan", "-f", "../../examples/nftables.dbf.hcl", "--offline"}},
 		{name: "plan-variable-secret-file-offline", args: []string{"plan", "-f", "../../examples/variable-secret-file.dbf.hcl", "--offline"}},
 	}
@@ -2608,6 +2610,7 @@ func runnableExamples() []string {
 		"examples/bbr.dbf.hcl",
 		"examples/apt-repository.dbf.hcl",
 		"examples/bird2.dbf.hcl",
+		"examples/bird-wireguard-networkd.dbf.hcl",
 		"examples/component-binary.dbf.hcl",
 		"examples/files-plan-preview.dbf.hcl",
 		"examples/fleet.dbf.hcl",

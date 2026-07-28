@@ -287,11 +287,18 @@ shell hook. Typical addresses include:
 `host` is the operation's explicit execution target. The scheduler, provider,
 and HTML filter all use this field; the address is not responsible for routing.
 
+`depends_on` is the execution-order relationship. `triggered_by` lists resource changes that make
+the operation active for this plan. Text and HTML plans display both relationships; JSON consumers
+must treat the arrays as addresses, not infer ordering from operation list position.
+
 ```text
 host.server1.apt.cache_refresh
 host.server1.nftables.validate
 host.server1.nftables.activate
 host.server1.systemd.daemon_reload
+host.server1.systemd.networkd.restart
+host.server1.systemd.networkd.reconfigure["wg0"]
+host.server1.script["reexport_bird"]
 host.server1.services.service["myapp"].restart
 ```
 

@@ -6,6 +6,19 @@ DebianForm 的所有重要变更都会记录在此文件中。
 
 公开 beta 版本线开始后，本项目遵循语义化版本控制。
 
+## Unreleased
+
+- 通用化 Preview `systemd.networkd` provider，新增按声明顺序的任意重复 section、raw
+  `content`/`source`、interface reconfigure 和按 declaration identity 的 post-reload script，
+  同时保留兼容语法及现有 resource/provider address。
+- 保留每个 host 一次 reload、runtime netdev cleanup、active-Netplan ownership 拒绝、drift 和
+  lifecycle 行为，并确保 sensitive content 在 text、JSON、HTML、state、diagnostic 和 debug
+  plan 中脱敏。
+- 在 text 和 HTML operation 输出中新增 `depends_on` 关系；plan JSON 仍为
+  `debianform.plan.alpha1`，原本已包含 `depends_on`/`triggered_by` 字段。
+- 新增可运行的 BIRD-owned WireGuard 示例和双语 DSL/迁移指南。从 `files.file` 改为原生
+  networkd resource 仍是需审查的 ownership/state-address 交接，不是自动或零停机迁移。
+
 ## v0.8.1
 
 - 为所有维护中的 Markdown 文档新增完整英文版本，并在全仓提供双向语言选择器和同语言导航。

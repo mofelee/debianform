@@ -114,7 +114,7 @@ every target.
 | `systemd.timer` | Preview | Structured `.timer` generation and timer enabled/state. | Merge/graph tests, `fleet` example, and `systemd-extensions` integration case. |
 | `systemd.resolved` | Preview | `/etc/systemd/resolved.conf.d/debianform.conf` drop-in and optional service management/restart. | Merge/graph tests, `fleet` example, and `systemd-extensions` case. |
 | `systemd.journald` | Preview | `/etc/systemd/journald.conf.d/debianform.conf` drop-in and journald reload/restart. | Merge/graph tests, `fleet` example, and `systemd-extensions` case. |
-| `systemd.networkd` | Preview | netdev/network, WireGuard peers, and networkd enablement; on Ubuntu only operator-prepared native-networkd targets pass the read-only active-Netplan preflight. | WireGuard examples and three networkd integration cases. |
+| `systemd.networkd` | Preview | Compatibility syntax, arbitrary repeated generic sections, raw content/source, WireGuard peers, shared reload, interface reconfigure, declaration-identity post-reload hooks, and networkd enablement. Ubuntu remains limited to operator-prepared native-networkd targets that pass the read-only active-Netplan preflight. | Generic/raw parser, graph, plan, redaction, and lifecycle tests; BIRD/WireGuard examples; networkd integration cases. |
 | `services` | Beta | systemd service enabled/state with running/stopped/restarted/reloaded. | Service tests and integration cases. |
 | `nftables` | Beta | `/etc/nftables.conf`, snippet files, validation, and activation. | `nftables` integration case. |
 | `docker` | Beta | Docker Engine, daemon, users, and Compose projects. | Docker graph/plan/apply tests and integration cases. |
@@ -139,6 +139,8 @@ every target.
 | `systemd_unit` | Beta | `systemd.unit`, `systemd.service_unit`, `systemd.timer`, Docker Compose | Manages systemd unit files. |
 | `service` | Beta | `services.service`, systemd timer/resolved/journald, Docker/Compose services | Manages systemd enabled/state. |
 | `nftables_file` | Beta | `nftables.file` | Manages nftables files and triggers validate/activate. |
+| `networkd_netdev` | Preview | `systemd.networkd.netdev` | Manages structured or raw `.netdev` files, shared activation, and runtime-link cleanup on removal. |
+| `networkd_network` | Preview | `systemd.networkd.network` | Manages structured or raw `.network` files with shared reload/reconfigure/post-reload activation. |
 | `component_artifact` | Beta | `component.source` | Downloads or prepares binary/file/archive/ca_certificate/source artifacts. |
 | `docker_package_conflicts` | Beta | `docker.package.source = "official"` | Detects and removes conflicting packages according to policy. |
 | `docker_compose_project` | Beta | `docker.compose` | Converges a Compose project to running/stopped/absent. |
@@ -190,6 +192,7 @@ every target.
 | `examples/apt-source-file.dbf.hcl` | Beta | APT source file. |
 | `examples/apt-repository.dbf.hcl` | Beta | APT repository and signing key. |
 | `examples/bird2.dbf.hcl` | Beta | Component expansion and service/file/package. |
+| `examples/bird-wireguard-networkd.dbf.hcl` | Preview | Offline-runnable BIRD-owned routing example with dummy loopback, two WireGuard links, repeated Address/Route/Peer sections, reconfigure, and one post-reload export script. |
 | `examples/component-binary.dbf.hcl` | Beta | Binary artifact; replace SHA-256 before a real apply. |
 | `examples/component-source-build.dbf.hcl` | Beta | Source-build component. |
 | `examples/component-inputs.dbf.hcl` | Beta | Typed inputs, validation, sensitive data. |

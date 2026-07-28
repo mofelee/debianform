@@ -501,22 +501,32 @@ Debian fixture，离线配置省略 `distribution/version` 时仍保留历史 De
 
 #### systemd.networkd
 
-`systemd { networkd { ... } }` 支持生成 networkd 文件并管理 `systemd-networkd.service`。
+`systemd { networkd { ... } }` 支持生成 networkd 文件并管理 `systemd-networkd.service`。该
+provider 为 Preview。Ubuntu 仅允许 operator 预先准备的原生 networkd 目标；active Netplan
+ownership 会在变更前被拒绝。
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `enable` | `null` | 是否启用 systemd-networkd。 |
+
+每个 `netdev` 或 `network` 必须只使用一种内容形式：兼容属性、通用
+`section "<identity>"` block，或一个 raw `content`/`source` 属性。三种形式互斥。现有兼容语法
+和 resource address 继续受支持。
 
 `netdev "<label>"` 字段：
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `path` | `/etc/systemd/network/<label>.netdev` | 必须是绝对路径。 |
-| `netdev` | `{}` | 渲染为 `[NetDev]`；present 时必须含 `Name` 和 `Kind`。 |
-| `wireguard` | `{}` | 渲染为 `[WireGuard]`；不允许 inline `PrivateKey`，用 `PrivateKeyFile`。 |
-| `wireguard_peer "<label>"` | 无 | nested block，渲染为 `[WireGuardPeer]`；不允许 inline `PresharedKey`。 |
+| `netdev` | `{}` | 渲染为 `[NetDev]` 的兼容形式；present 时必须含 `Name` 和 `Kind`。 |
+| `wireguard` | `{}` | 渲染为 `[WireGuard]` 的兼容形式；不允许 inline `PrivateKey`，应使用 `PrivateKeyFile`。 |
+| `wireguard_peer "<label>"` | 无 | 渲染为 `[WireGuardPeer]` 的兼容 block；不允许 inline `PresharedKey`。 |
+| `section "<identity>"` | 无 | 通用 structured section；必须有一个包含 `Name`、`Kind` 的 `[NetDev]`。 |
+| `content` / `source` | 无 | raw escape hatch，只能设置一个；raw netdev 必须含 `[NetDev]` 的 `Name`、`Kind`。 |
+| `sensitive` | `false` | 标记 raw 内容为 sensitive；引用 sensitive expression 时自动启用。 |
+| `activation` | 无 | shared reload 后可选的 reconfigure 和 post-reload 行为。 |
 | `owner` / `group` | `"root"` / `"root"` | 文件 owner/group。 |
-| `mode` | `"0644"` | 四位八进制字符串。 |
+| `mode` | `"0644"` | 四位八进制字符串；sensitive generic/raw 内容默认为 `"0600"`。 |
 | `ensure` | `"present"` | `"present"` 或 `"absent"`。 |
 
 `network "<label>"` 字段：
@@ -524,14 +534,42 @@ Debian fixture，离线配置省略 `distribution/version` 时仍保留历史 De
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `path` | `/etc/systemd/network/<label>.network` | 必须是绝对路径。 |
-| `match` | `{}` | 渲染为 `[Match]`；present 时必填。 |
-| `network` | `{}` | 渲染为 `[Network]`；present 时必填。 |
+| `match` | `{}` | 渲染为 `[Match]` 的兼容形式；present 时必填。 |
+| `network` | `{}` | 渲染为 `[Network]` 的兼容形式；present 时必填。 |
+| `section "<identity>"` | 无 | 通用 structured section；多个 identity 可渲染相同 section 名。 |
+| `content` / `source` | 无 | raw escape hatch，只能设置一个；`source` 相对声明文件解析。 |
+| `sensitive` | `false` | 标记 raw 内容为 sensitive；引用 sensitive expression 时自动启用。 |
+| `activation` | 无 | shared reload 后可选的 reconfigure 和 post-reload 行为。 |
 | `owner` / `group` | `"root"` / `"root"` | 文件 owner/group。 |
-| `mode` | `"0644"` | 四位八进制字符串。 |
+| `mode` | `"0644"` | 四位八进制字符串；sensitive generic/raw 内容默认为 `"0600"`。 |
 | `ensure` | `"present"` | `"present"` 或 `"absent"`。 |
 
-networkd section value 可以是 string、number、bool 或这些类型的 list；bool 会渲染为
-`yes`/`no`。`netdev`、`network` 支持 `lifecycle { prevent_destroy = true }`。
+通用 `section "<identity>"` 字段：
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `name` | 无 | 必填的实际 section 名；block label 是稳定 DebianForm identity，不会渲染。 |
+| `settings` | 无 | 必填 map；value 可为 string、number、bool、null 或 scalar list。 |
+
+通用 section 按声明顺序渲染。setting key 按字典序输出；list 按顺序重复 key；bool 渲染为
+`yes`/`no`；null 被省略。语法有效但未知的 section 名和 setting 可用。name、key、scalar value
+会拒绝换行/NUL 注入。generic inline `PrivateKey` 或 `PresharedKey` 必须来自 sensitive expression；
+仍推荐 file-backed directive。不支持 ephemeral value。
+
+`activation` 字段：
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `reconfigure` | `[]` | interface name 会 union、去重、排序，并在 reload 后运行 `networkctl reconfigure`。 |
+| `post_reload` | 无 | `script.<name>` 或 `global.script.<name>`；script 必须为无 output 的 `mode = "once"`。 |
+
+changed file 在 host 上共享一次 reload。删除 netdev 的 runtime link 在 reload 后移除；随后按确定
+顺序 reconfigure，最后每个 declaration-identity post-reload script 运行一次。没有相关变更就不会
+activation；`check` 只观察；offline plan 会展示 operation graph。两类 resource 都支持
+`lifecycle { prevent_destroy = true }`。
+
+完整用法见可运行的 [BIRD-owned WireGuard 示例](../examples/bird-wireguard-networkd.dbf.hcl)、
+[迁移指南](networkd-migration.zh.md)和[通用化契约](networkd-generalization-contract.zh.md)。
 
 ### services
 

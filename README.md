@@ -402,6 +402,8 @@ dbf validate -f examples/ubuntu-24.04-preview.dbf.hcl
 dbf plan -f examples/ubuntu-24.04-preview.dbf.hcl --offline
 dbf validate -f examples/ubuntu-26.04-preview.dbf.hcl
 dbf plan -f examples/ubuntu-26.04-preview.dbf.hcl --offline
+dbf validate -f examples/bird-wireguard-networkd.dbf.hcl
+dbf plan -f examples/bird-wireguard-networkd.dbf.hcl --offline
 dbf validate -f examples/shadowsocks-rust.dbf.hcl
 dbf validate -f examples/realistic-systemd-app.dbf.hcl
 dbf plan -f examples/realistic-systemd-app.dbf.hcl --offline
@@ -419,6 +421,7 @@ Runnable examples covered by this README:
 - `examples/bbr.dbf.hcl`
 - `examples/apt-repository.dbf.hcl`
 - `examples/bird2.dbf.hcl`
+- `examples/bird-wireguard-networkd.dbf.hcl`
 - `examples/component-binary.dbf.hcl`
 - `examples/debian12-amd64.dbf.hcl`
 - `examples/docker-minimal.dbf.hcl`
