@@ -203,6 +203,7 @@ func TestResolveMovesRejectsStateAndDesiredGraphConflicts(t *testing.T) {
 		{name: "both desired", resources: []string{oldPrefix + suffix}, desired: map[string]bool{oldPrefix: true, newPrefix: true}, want: "both source and destination components are desired"},
 		{name: "target missing", resources: []string{oldPrefix + suffix}, desired: map[string]bool{}, want: "destination component"},
 		{name: "destination collision", resources: []string{oldPrefix + suffix, newPrefix + suffix}, desired: map[string]bool{newPrefix: true}, want: "destination state entry already exists"},
+		{name: "destination collision while source remains desired", resources: []string{oldPrefix + suffix, newPrefix + suffix}, desired: map[string]bool{oldPrefix: true}, want: "destination state entry already exists"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -215,6 +216,17 @@ func TestResolveMovesRejectsStateAndDesiredGraphConflicts(t *testing.T) {
 				t.Fatalf("error = %v, want source-oriented %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestResolveMovesCycleDiagnosticIsDeterministic(t *testing.T) {
+	a := "host.server1.components.a"
+	b := "host.server1.components.b"
+	for range 20 {
+		_, err := ResolveMoves(Empty("server1"), []ir.MovedSpec{moveSpec(b, a), moveSpec(a, b)}, nil, nil)
+		if err == nil || !strings.Contains(err.Error(), "cycle through "+a) {
+			t.Fatalf("cycle diagnostic = %v, want deterministic source %s", err, a)
+		}
 	}
 }
 

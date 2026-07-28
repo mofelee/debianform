@@ -51,6 +51,12 @@ func ResolveMoves(st State, declarations []ir.MovedSpec, desiredComponents map[s
 			if targetDesired {
 				return MoveResult{}, moveDiagnostic(declaration.FromSource, "%s has matching state while both source and destination components are desired", declaration.From)
 			}
+			for _, from := range addresses {
+				to := replaceAddressPrefix(from, declaration.From, declaration.To)
+				if _, exists := result.State.Resources[to]; exists {
+					return MoveResult{}, moveDiagnostic(declaration.FromSource, "cannot move %s to %s because the destination state entry already exists", from, to)
+				}
+			}
 			continue
 		}
 		if !targetDesired {
@@ -135,7 +141,12 @@ func validateAndOrderMoves(host string, declarations []ir.MovedSpec) ([]ir.Moved
 		depths[source] = value
 		return value, nil
 	}
+	sources := make([]string, 0, len(bySource))
 	for source := range bySource {
+		sources = append(sources, source)
+	}
+	sort.Strings(sources)
+	for _, source := range sources {
 		if _, err := depth(source); err != nil {
 			return nil, err
 		}

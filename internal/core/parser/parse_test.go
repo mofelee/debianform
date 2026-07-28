@@ -144,6 +144,7 @@ func TestParseRejectsInvalidMovedBlocks(t *testing.T) {
 		{name: "missing from", hcl: `moved { to = component.new }`, want: "moved.from is required"},
 		{name: "missing to", hcl: `moved { from = component.old }`, want: "moved.to is required"},
 		{name: "unknown attribute", hcl: `moved { from = component.old; to = component.new; because = "rename" }`, want: "unsupported attribute moved.because"},
+		{name: "unknown attributes deterministic", hcl: `moved { from = component.old; to = component.new; zeta = true; alpha = true }`, want: "unsupported attribute moved.alpha"},
 		{name: "string from", hcl: `moved { from = "component.old"; to = component.new }`, want: "moved.from must be a static component.<name> traversal"},
 		{name: "variable from", hcl: `variable "source" { type = string; default = "old" }; moved { from = var.source; to = component.new }`, want: "moved.from must be a static component.<name> traversal"},
 		{name: "local interpolation", hcl: `locals { source = "old" }; moved { from = "component.${local.source}"; to = component.new }`, want: "moved.from must be a static component.<name> traversal"},

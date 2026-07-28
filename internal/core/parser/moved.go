@@ -24,10 +24,17 @@ func parseMovedBlock(file string, block *hclsyntax.Block) (Moved, error) {
 	if len(block.Body.Blocks) != 0 {
 		return Moved{}, fmt.Errorf("%s:%d: moved block does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line)
 	}
-	for name, attr := range block.Body.Attributes {
+	unsupported := make([]string, 0)
+	for name := range block.Body.Attributes {
 		if name != "from" && name != "to" {
-			return Moved{}, fmt.Errorf("%s:%d: unsupported attribute moved.%s", file, attr.NameRange.Start.Line, name)
+			unsupported = append(unsupported, name)
 		}
+	}
+	if len(unsupported) > 0 {
+		sort.Strings(unsupported)
+		name := unsupported[0]
+		attr := block.Body.Attributes[name]
+		return Moved{}, fmt.Errorf("%s:%d: unsupported attribute moved.%s", file, attr.NameRange.Start.Line, name)
 	}
 	fromAttr, ok := block.Body.Attributes["from"]
 	if !ok {
