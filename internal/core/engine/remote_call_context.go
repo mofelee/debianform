@@ -7,6 +7,7 @@ type RemoteCallContext struct {
 	Address         string
 	Action          string
 	Summary         string
+	Sensitive       bool
 	Cleanup         bool
 	Maintenance     bool
 	onFailurePrompt func()
@@ -45,6 +46,9 @@ func mergeRemoteCallContext(current RemoteCallContext, next RemoteCallContext) R
 	}
 	if next.Summary != "" {
 		out.Summary = next.Summary
+	}
+	if next.Sensitive {
+		out.Sensitive = true
 	}
 	if next.Cleanup {
 		out.Cleanup = true

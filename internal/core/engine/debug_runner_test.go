@@ -14,6 +14,7 @@ import (
 	"github.com/mofelee/debianform/internal/core/ir"
 	corestate "github.com/mofelee/debianform/internal/core/state"
 	"github.com/mofelee/debianform/internal/core/termstyle"
+	"github.com/mofelee/debianform/internal/core/testassert"
 )
 
 func TestDebugRunnerRunRecordsAndForwards(t *testing.T) {
@@ -53,6 +54,50 @@ func TestDebugRunnerRunRecordsAndForwards(t *testing.T) {
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("debug output missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestDebugRunnerSensitiveCallRedactsPayloadResultAndDiagnostics(t *testing.T) {
+	secret := testassert.SensitiveVariableDefault
+	inner := &debugRecordingRunner{
+		result: Result{Stdout: secret, Stderr: secret},
+		err:    errors.New("remote echoed " + secret),
+	}
+	var out bytes.Buffer
+	runner := DebugRunner{
+		Inner: inner,
+		Session: NewDebugSession(DebugSessionOptions{
+			Writer: &out,
+			Input:  strings.NewReader("step\nshow\nshow stdout\nshow stderr\nrun echo diagnostic\ncontinue\n"),
+			Now:    steppedDebugClock(time.Unix(0, 0), time.Millisecond),
+		}),
+	}
+	ctx := WithRemoteCallContext(context.Background(), RemoteCallContext{
+		Phase:     "apply resource",
+		Address:   `host.server1.components.private.artifact.download["amd64"]`,
+		Action:    ActionCreate,
+		Sensitive: true,
+	})
+
+	_, err := runner.Run(ctx, "server1", "curl https://"+secret+"@example.invalid/private-tool\n")
+	if err == nil || !strings.Contains(err.Error(), secret) {
+		t.Fatalf("debug runner error = %v, want original provider error", err)
+	}
+	if len(inner.calls) != 1 || len(inner.contexts) != 1 || !inner.contexts[0].Sensitive {
+		t.Fatalf("sensitive inner calls/contexts = %#v / %#v", inner.calls, inner.contexts)
+	}
+	text := out.String()
+	testassert.NoSecretLeak(t, "sensitive debugger output", text)
+	for _, want := range []string{
+		"payload: <sensitive>",
+		"error: <redacted>",
+		"result: <sensitive>",
+		"payload output is unavailable for a sensitive remote call",
+		"diagnostic commands are unavailable for a sensitive remote call",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("sensitive debugger output missing %q:\n%s", want, text)
 		}
 	}
 }

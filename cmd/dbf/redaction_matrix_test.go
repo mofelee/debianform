@@ -164,6 +164,106 @@ func TestSecretRedactionRegressionMatrix(t *testing.T) {
 	}
 }
 
+func TestComponentArtifactInputRedactionRegressionMatrix(t *testing.T) {
+	fixture := "../../internal/core/testdata/fixtures/component-artifact-inputs.dbf.hcl"
+	htmlPath := filepath.Join(t.TempDir(), "component-artifact-plan.html")
+
+	matrix := []struct {
+		name string
+		run  func(t *testing.T) string
+	}{
+		{
+			name: "offline plan text",
+			run: func(t *testing.T) string {
+				stdout, stderr := captureOutput(t, func() {
+					if err := run([]string{"plan", "-f", fixture, "--host", "mirror_a", "--offline"}); err != nil {
+						t.Fatal(err)
+					}
+				})
+				for _, want := range []string{
+					"https://mirror-a.example.invalid/input-binary.gz",
+				} {
+					if !strings.Contains(stdout, want) {
+						t.Fatalf("artifact input plan missing %q:\n%s", want, stdout)
+					}
+				}
+				return stdout + stderr
+			},
+		},
+		{
+			name: "offline plan json debug",
+			run: func(t *testing.T) string {
+				stdout, stderr := captureOutput(t, func() {
+					if err := run([]string{"plan", "-f", fixture, "--host", "mirror_a", "--offline", "--format", "json", "--debug"}); err != nil {
+						t.Fatal(err)
+					}
+				})
+				var decoded map[string]any
+				if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
+					t.Fatalf("artifact input plan JSON did not parse: %v\n%s", err, stdout)
+				}
+				return stdout + stderr
+			},
+		},
+		{
+			name: "offline plan html",
+			run: func(t *testing.T) string {
+				stdout, stderr := captureOutput(t, func() {
+					if err := run([]string{"plan", "-f", fixture, "--host", "mirror_a", "--offline", "--html", htmlPath}); err != nil {
+						t.Fatal(err)
+					}
+				})
+				data, err := os.ReadFile(htmlPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return stdout + stderr + string(data)
+			},
+		},
+		{
+			name: "hostspec json",
+			run: func(t *testing.T) string {
+				program := compileRedactionFixture(t, fixture, nil)
+				data, err := json.Marshal(program)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return string(data)
+			},
+		},
+		{
+			name: "resource graph json",
+			run: func(t *testing.T) string {
+				program := compileRedactionFixture(t, fixture, nil)
+				resourceGraph, err := coregraph.Compile(program)
+				if err != nil {
+					t.Fatal(err)
+				}
+				data, err := json.Marshal(resourceGraph)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return string(data)
+			},
+		},
+		{
+			name: "state json",
+			run: func(t *testing.T) string {
+				return applyFixtureStateJSON(t, fixture, "mirror_a")
+			},
+		},
+	}
+
+	for _, tt := range matrix {
+		t.Run(tt.name, func(t *testing.T) {
+			output := tt.run(t)
+			testassert.NoSecretLeak(t, tt.name, output)
+			assertRedactionMatrixNoEncodedPayload(t, output)
+			assertNoSensitiveArtifactChecksum(t, output)
+		})
+	}
+}
+
 func TestAPTAndNftablesRedactionRegressionMatrix(t *testing.T) {
 	fixture := "../../internal/core/testdata/fixtures/sensitive-apt-nftables-content.dbf.hcl"
 	htmlPath := filepath.Join(t.TempDir(), "plan.html")
@@ -476,6 +576,18 @@ func assertRedactionMatrixNoEncodedPayload(t *testing.T, text string) {
 		encoded := base64.StdEncoding.EncodeToString([]byte(payload))
 		if strings.Contains(text, encoded) {
 			t.Fatalf("encoded sensitive payload leaked:\n%s", text)
+		}
+	}
+}
+
+func assertNoSensitiveArtifactChecksum(t *testing.T, text string) {
+	t.Helper()
+	for _, payload := range []string{
+		"5555555555555555555555555555555555555555555555555555555555555555",
+		"6666666666666666666666666666666666666666666666666666666666666666",
+	} {
+		if strings.Contains(text, payload) || strings.Contains(text, base64.StdEncoding.EncodeToString([]byte(payload))) {
+			t.Fatalf("sensitive artifact checksum leaked:\n%s", text)
 		}
 	}
 }

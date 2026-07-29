@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mofelee/debianform/internal/core/ir"
 	"github.com/mofelee/debianform/internal/core/parser"
 	"github.com/mofelee/debianform/internal/core/testassert"
 )
@@ -37,6 +38,69 @@ func TestCompileHostSpecJSONDoesNotLeakCurrentSensitiveBaseline(t *testing.T) {
 			}
 			testassert.NoSecretLeak(t, tt.name+" HostSpec JSON", string(data))
 		})
+	}
+}
+
+func TestCompileSensitiveArtifactInputRedactsHostSpecJSON(t *testing.T) {
+	cfg, err := parser.ParseFiles([]string{"../testdata/fixtures/component-artifact-inputs.dbf.hcl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range program.Hosts {
+		var private ir.ComponentInstanceSpec
+		for _, component := range host.Components {
+			if component.Name == "private" {
+				private = component
+				break
+			}
+		}
+		if private.SelectedSource == nil || !private.SelectedSource.URLSensitive {
+			t.Fatalf("host %s private source = %#v", host.Name, private.SelectedSource)
+		}
+		if !strings.Contains(private.SelectedSource.URL, testassert.SensitiveVariableDefault) {
+			t.Fatalf("host %s provider source did not retain the sensitive URL in memory", host.Name)
+		}
+		if !private.SelectedSource.SHA256Sensitive || private.SelectedSource.SHA256 == "" {
+			t.Fatalf("host %s private checksum = %#v", host.Name, private.SelectedSource)
+		}
+	}
+	data, err := json.MarshalIndent(program, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive artifact HostSpec JSON", string(data))
+	for _, secret := range []string{
+		"5555555555555555555555555555555555555555555555555555555555555555",
+		"6666666666666666666666666666666666666666666666666666666666666666",
+	} {
+		if strings.Contains(string(data), secret) {
+			t.Fatalf("HostSpec JSON leaked sensitive artifact checksum %q", secret)
+		}
+	}
+	var decoded struct {
+		Hosts []struct {
+			Components []struct {
+				Name           string `json:"name"`
+				SelectedSource *struct {
+					URL    string `json:"url"`
+					SHA256 string `json:"sha256"`
+				} `json:"selected_source"`
+			} `json:"components"`
+		} `json:"hosts"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range decoded.Hosts {
+		for _, component := range host.Components {
+			if component.Name == "private" && (component.SelectedSource == nil || component.SelectedSource.URL != "<sensitive>" || component.SelectedSource.SHA256 != "<sensitive>") {
+				t.Fatalf("HostSpec JSON private source = %#v", component.SelectedSource)
+			}
+		}
 	}
 }
 

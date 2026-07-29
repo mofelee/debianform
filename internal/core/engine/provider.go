@@ -79,11 +79,13 @@ func (p NativeProvider) Plan(ctx context.Context, node graph.Node, prior *corest
 }
 
 func (p NativeProvider) Apply(ctx context.Context, step Step) (map[string]any, error) {
+	sensitive, _ := step.Node.Desired["sensitive"].(bool)
 	ctx = WithRemoteCallContext(ctx, RemoteCallContext{
-		Phase:   "apply resource",
-		Address: step.Address,
-		Action:  step.Action,
-		Summary: step.Summary,
+		Phase:     "apply resource",
+		Address:   step.Address,
+		Action:    step.Action,
+		Summary:   step.Summary,
+		Sensitive: sensitive,
 	})
 	switch step.Node.Kind {
 	case "system_hostname":

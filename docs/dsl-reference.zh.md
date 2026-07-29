@@ -714,8 +714,60 @@ Compose label、project、service name 必须以字母或数字开头，后续�
 
 | 字段 | 说明 |
 | --- | --- |
-| `url` | 非空 URL。 |
-| `sha256` | 64 位 hex。 |
+| `url` | 非空 URL；可引用 `input.<name>`。 |
+| `sha256` | 64 位 hex；可引用 `input.<name>`。 |
+
+`source.url` 和 `source.sha256` 会在每个已挂载 component instance 上分别求值；求值发生在
+该实例的 typed input 完成默认值填充、类型归一化和 validation 之后。依赖 input 的 component
+模板可以保持未挂载状态，解析模板时不要求提供具体 input。该能力适用于 `binary`、`archive`、
+`file`、`ca_certificate` 和 `source` artifact。资源地址仍由 host 和 component instance label
+组成，因此切换 mirror 不会改变资源身份。
+
+其他 artifact 属性，包括 `type`、`version`、`extract`、`build` 和 `install`，目前仍作为模板
+元数据求值，不能引用 `input`。这是当前 artifact expression 的明确边界。
+
+```hcl
+component "tool" {
+  input "download_url" {
+    type     = string
+    nullable = false
+  }
+
+  type = "binary"
+
+  source {
+    url    = input.download_url
+    sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+
+  install {
+    path = "/usr/local/bin/tool"
+  }
+}
+
+host "region_a" {
+  component "tool" {
+    source = component.tool
+    inputs = {
+      download_url = "https://mirror-a.example.invalid/tool"
+    }
+  }
+}
+
+host "region_b" {
+  component "tool" {
+    source = component.tool
+    inputs = {
+      download_url = "https://mirror-b.example.invalid/tool"
+    }
+  }
+}
+```
+
+任一 source 字段依赖 sensitive input 时，解析后的明文只保留在内存中的 provider payload。
+HostSpec/graph JSON、text/JSON/HTML plan、state、diagnostic、debugger 输出和 cache metadata
+只会出现脱敏值或派生 digest。非 sensitive 的 literal checksum 会继续使用原有的 content-addressed
+cache 路径。
 
 `extract` 字段：
 

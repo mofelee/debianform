@@ -1351,6 +1351,54 @@ component "rclone" {
 	}
 }
 
+func TestParseComponentArtifactInputExpressionIsDeferred(t *testing.T) {
+	file := writeConfig(t, `
+component "tool" {
+  input "download_url" {
+    type     = string
+    nullable = false
+  }
+
+  type    = "binary"
+  version = "1.0.0"
+
+  source "amd64" {
+    url    = input.download_url
+    sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+
+  install {
+    path = "/usr/local/bin/tool"
+    mode = "0755"
+  }
+}
+
+host "node1" {
+  component "tool" {
+    source = component.tool
+    inputs = {
+      download_url = "https://mirror.example.invalid/tool-1.0.0"
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := cfg.Components["tool"].Sources["amd64"]
+	if source.URLExpr == nil {
+		t.Fatal("source.url expression was not retained for instance evaluation")
+	}
+	if source.URL != "" {
+		t.Fatalf("deferred source.url = %q, want empty template value", source.URL)
+	}
+	if source.SHA256 != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("literal source.sha256 = %q", source.SHA256)
+	}
+}
+
 func TestParseComponentScriptAndFileOnChange(t *testing.T) {
 	file := writeConfig(t, `
 component "app" {

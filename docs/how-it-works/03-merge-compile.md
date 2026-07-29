@@ -116,6 +116,11 @@ Inputs pass through:
 - Validation-block checks.
 - Deprecated warnings.
 
+The parser retains `source.url` and `source.sha256` expressions that reference
+`input`. `instantiateComponents` evaluates them only after binding the concrete
+instance inputs, then propagates sensitive marks into HostSpec and the resource
+graph. Other component artifact fields remain template-time metadata.
+
 Users, groups, files, systemd units, component artifacts, and other resources
 produced by component instantiation are attached to `HostSpec.Components`. The
 graph layer expands both host-owned and component-owned resources.

@@ -73,10 +73,12 @@ func componentTemplateSpecs(components map[string]parser.Component) (map[string]
 		for _, sourceName := range sortedKeys(component.Sources) {
 			source := component.Sources[sourceName]
 			spec.Sources[sourceName] = ir.ComponentArtifactSourceSpec{
-				Architecture: source.Architecture,
-				URL:          source.URL,
-				SHA256:       strings.ToLower(source.SHA256),
-				Source:       source.Source,
+				Architecture:    source.Architecture,
+				URL:             source.URL,
+				SHA256:          strings.ToLower(source.SHA256),
+				URLSensitive:    source.URLSensitive,
+				SHA256Sensitive: source.SHA256Sensitive,
+				Source:          source.Source,
 			}
 		}
 		if len(spec.Sources) == 0 {
@@ -287,7 +289,7 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 		}
 		inputValues, inputJSON, err := componentInputValues(template, instance, c.warningSink())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s:%d:%s: %w", instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
 		inputVars := make(map[string]cty.Value, len(inputValues))
 		for name, value := range inputValues {
@@ -317,8 +319,12 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 		if err != nil {
 			return nil, err
 		}
-		if err := applyComponentArtifact(&component, template, target); err != nil {
-			return nil, err
+		artifactTemplate, err := parser.EvaluateComponentArtifactSources(template, componentCtx)
+		if err != nil {
+			return nil, fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
+		}
+		if err := applyComponentArtifact(&component, artifactTemplate, target); err != nil {
+			return nil, fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
 		component.Template = template.Name
 		component.InputValues = inputJSON
@@ -350,7 +356,7 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 		}
 		inputValues, inputJSON, err := componentInputValues(template, instance, c.warningSink())
 		if err != nil {
-			return err
+			return fmt.Errorf("%s:%d:%s: %w", instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
 		inputVars := make(map[string]cty.Value, len(inputValues))
 		for name, value := range inputValues {
@@ -363,10 +369,6 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 		if err := parser.ValidateComponentBodyShape(template); err != nil {
 			return fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
-		install, err := validateComponentArtifactTemplate(template)
-		if err != nil {
-			return err
-		}
 		variables, err := c.evalVariables(map[string]cty.Value{
 			"target": targetValue,
 			"input":  objectOrEmpty(inputVars),
@@ -378,6 +380,14 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 			ModuleDir: template.ModuleDir,
 			Locals:    c.cfg.Locals,
 			Variables: variables,
+		}
+		artifactTemplate, err := parser.EvaluateComponentArtifactSources(template, componentCtx)
+		if err != nil {
+			return fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
+		}
+		install, err := validateComponentArtifactTemplate(artifactTemplate)
+		if err != nil {
+			return fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
 		}
 		raw, err := parser.ParseComponentBody(template, componentCtx)
 		if err != nil {
@@ -779,10 +789,12 @@ func applyComponentArtifact(spec *ir.ComponentInstanceSpec, template parser.Comp
 	spec.ArtifactType = template.Type
 	spec.Version = template.Version
 	spec.SelectedSource = &ir.ComponentArtifactSourceSpec{
-		Architecture: source.Architecture,
-		URL:          source.URL,
-		SHA256:       strings.ToLower(source.SHA256),
-		Source:       source.Source,
+		Architecture:    source.Architecture,
+		URL:             source.URL,
+		SHA256:          strings.ToLower(source.SHA256),
+		URLSensitive:    source.URLSensitive,
+		SHA256Sensitive: source.SHA256Sensitive,
+		Source:          source.Source,
 	}
 	if template.Extract != nil {
 		extract, err := componentArtifactExtractSpec(template.Type, *template.Extract, source)
@@ -894,14 +906,24 @@ func selectComponentArtifactSource(template parser.Component, target ir.HostSpec
 }
 
 func validateComponentArtifactSource(source parser.ComponentArtifactSource) error {
+	urlSource := source.URLSource
+	if urlSource.File == "" {
+		urlSource = source.Source
+		urlSource.Path += ".url"
+	}
+	shaSource := source.SHA256Source
+	if shaSource.File == "" {
+		shaSource = source.Source
+		shaSource.Path += ".sha256"
+	}
 	if source.URL == "" {
-		return fmt.Errorf("%s:%d:%s.url: source url must be non-empty", source.Source.File, source.Source.Line, source.Source.Path)
+		return fmt.Errorf("%s:%d:%s: source url must be non-empty", urlSource.File, urlSource.Line, urlSource.Path)
 	}
 	if source.SHA256 == "" {
-		return fmt.Errorf("%s:%d:%s.sha256: source url requires sha256", source.Source.File, source.Source.Line, source.Source.Path)
+		return fmt.Errorf("%s:%d:%s: source url requires sha256", shaSource.File, shaSource.Line, shaSource.Path)
 	}
 	if !sha256Pattern.MatchString(source.SHA256) {
-		return fmt.Errorf("%s:%d:%s.sha256: sha256 must be a 64 character hex string", source.Source.File, source.Source.Line, source.Source.Path)
+		return fmt.Errorf("%s:%d:%s: sha256 must be a 64 character hex string", shaSource.File, shaSource.Line, shaSource.Path)
 	}
 	return nil
 }

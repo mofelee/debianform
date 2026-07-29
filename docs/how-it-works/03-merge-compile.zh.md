@@ -100,6 +100,10 @@ component 在 parser 层保留模板 body、input 定义和 artifact 定义。me
 - validation block 校验。
 - deprecated warning。
 
+parser 会保留引用 `input` 的 `source.url` 和 `source.sha256` 表达式；
+`instantiateComponents` 只在绑定具体 instance input 后求值，并把 sensitive 标记传播到
+HostSpec 和 resource graph。其他 component artifact 字段仍属于模板阶段元数据。
+
 component 实例化后产生的用户、组、文件、systemd、component artifact 等会挂在 `HostSpec.Components`
 里。graph 层会把 host 自身资源和 component 资源一起展开。
 

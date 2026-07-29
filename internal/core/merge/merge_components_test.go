@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/mofelee/debianform/internal/core/ir"
+	"github.com/mofelee/debianform/internal/core/parser"
 )
 
 func TestCompileComponentTargetAndInput(t *testing.T) {
@@ -249,7 +250,6 @@ component "hello" {
     path = "/usr/local/bin/hello"
   }
 }
-
 host "tool1" {
   components = [component.hello]
 
@@ -277,6 +277,198 @@ host "tool1" {
 	}
 	if component.Install == nil || component.Install.Mode != "0755" {
 		t.Fatalf("install defaults = %#v", component.Install)
+	}
+}
+
+func TestCompileComponentArtifactInputsResolvePerInstance(t *testing.T) {
+	cfg, err := parser.ParseFiles([]string{"../testdata/fixtures/component-artifact-inputs.dbf.hcl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantURLs := map[string]map[string]string{
+		"mirror_a": {
+			"binary":  "https://mirror-a.example.invalid/input-binary.gz",
+			"archive": "https://mirror-a.example.invalid/input-archive.tar.gz",
+			"source":  "https://mirror-a.example.invalid/input-source.tar.gz",
+		},
+		"mirror_b": {
+			"binary":  "https://mirror-b.example.invalid/input-binary.gz",
+			"archive": "https://mirror-b.example.invalid/input-archive.tar.gz",
+			"source":  "https://mirror-b.example.invalid/input-source.tar.gz",
+		},
+	}
+	for _, host := range program.Hosts {
+		components := map[string]ir.ComponentInstanceSpec{}
+		for _, component := range host.Components {
+			components[component.Name] = component
+		}
+		for name, wantURL := range wantURLs[host.Name] {
+			component := components[name]
+			if component.Name != name || component.SelectedSource == nil {
+				t.Fatalf("host %s component %s = %#v", host.Name, name, component)
+			}
+			if component.SelectedSource.URL != wantURL {
+				t.Fatalf("host %s component %s url = %q, want %q", host.Name, name, component.SelectedSource.URL, wantURL)
+			}
+		}
+		private := components["private"]
+		if private.SelectedSource == nil || !private.SelectedSource.URLSensitive || !private.SelectedSource.SHA256Sensitive {
+			t.Fatalf("host %s private source = %#v", host.Name, private.SelectedSource)
+		}
+		wantSHA := map[string]string{
+			"mirror_a": "5555555555555555555555555555555555555555555555555555555555555555",
+			"mirror_b": "6666666666666666666666666666666666666666666666666666666666666666",
+		}[host.Name]
+		if private.SelectedSource.SHA256 != wantSHA {
+			t.Fatalf("host %s private checksum = %q, want %q", host.Name, private.SelectedSource.SHA256, wantSHA)
+		}
+	}
+}
+
+func TestCompileComponentArtifactInputDiagnostics(t *testing.T) {
+	component := func(inputBlock, sourceURL, instanceInputs string) string {
+		return `
+component "tool" {
+` + inputBlock + `
+  type = "binary"
+  source {
+    url    = ` + sourceURL + `
+    sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+  install { path = "/usr/local/bin/tool" }
+}
+host "node1" {
+  component "tool" {
+    source = component.tool
+` + instanceInputs + `
+  }
+}
+`
+	}
+	tests := []struct {
+		name string
+		hcl  string
+		want []string
+	}{
+		{
+			name: "missing",
+			hcl: component(`  input "download_url" {
+    type     = string
+    nullable = false
+  }
+`, "input.download_url", ""),
+			want: []string{`host.node1.component["tool"]`, `input "download_url" is required`},
+		},
+		{
+			name: "mistyped",
+			hcl: component(`  input "download_url" { type = string }
+`, "input.download_url", `    inputs = { download_url = 42 }
+`),
+			want: []string{`host.node1.component["tool"]`, `component input "download_url" must be string, got number`},
+		},
+		{
+			name: "unknown",
+			hcl: component(`  input "download_url" { type = string }
+`, "input.download_url", `    inputs = {
+      download_url = "https://mirror.example.invalid/tool"
+      mirror       = "unknown"
+    }
+`),
+			want: []string{`host.node1.component["tool"].inputs["mirror"]`, `unknown input for component.tool`},
+		},
+		{
+			name: "validation failing",
+			hcl: component(`  input "download_url" {
+    type = string
+    validation {
+      condition     = input.download_url != ""
+      error_message = "download_url must not be empty"
+    }
+  }
+`, "input.download_url", `    inputs = { download_url = "" }
+`),
+			want: []string{`host.node1.component["tool"]`, `validation failed for input "download_url": download_url must not be empty`},
+		},
+		{
+			name: "unknown artifact input reference",
+			hcl: component(`  input "download_url" { type = string }
+`, "input.missing", `    inputs = { download_url = "https://mirror.example.invalid/tool" }
+`),
+			want: []string{`host.node1.component["tool"]`, `component.tool.source.url`, `Unsupported attribute`},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil {
+				t.Fatal("compile succeeded, want input diagnostic")
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error = %v, want %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestCompileSensitiveArtifactChecksumDiagnosticDoesNotLeak(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+component "tool" {
+  input "download_sha256" {
+    type      = string
+    sensitive = true
+  }
+  type = "binary"
+  source {
+    url    = "https://example.invalid/tool"
+    sha256 = input.download_sha256
+  }
+  install { path = "/usr/local/bin/tool" }
+}
+
+host "node1" {
+  component "tool" {
+    source = component.tool
+    inputs = {
+      download_sha256 = "not-a-real-variable-secret"
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), `component.tool.source.sha256`) || !strings.Contains(err.Error(), `host.node1.component["tool"]`) {
+		t.Fatalf("error = %v, want source-aware checksum diagnostic", err)
+	}
+	if strings.Contains(err.Error(), "not-a-real-variable-secret") {
+		t.Fatalf("sensitive checksum leaked in diagnostic: %v", err)
+	}
+}
+
+func TestCompileUnmountedComponentArtifactInputDoesNotRequireValue(t *testing.T) {
+	program, err := parseOrCompileInline(t, `
+component "tool" {
+  input "download_url" {
+    type     = string
+    nullable = false
+  }
+  type = "binary"
+  source {
+    url    = input.download_url
+    sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+  install { path = "/usr/local/bin/tool" }
+}
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if program.Components["tool"].Name != "tool" || len(program.Hosts) != 0 {
+		t.Fatalf("unmounted component program = %#v", program)
 	}
 }
 
