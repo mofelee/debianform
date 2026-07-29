@@ -22,8 +22,9 @@ func (p NativeProvider) planComponentDownload(ctx context.Context, node graph.No
 		}
 		return absentInSyncPlan(prior, "already absent component source "+path, observed), nil
 	}
-	wantSHA := strings.ToLower(stringDesired(node, "sha256"))
-	if wantSHA == "" || stringDesired(node, "url") == "" {
+	payload := providerDesired(node)
+	wantSHA := strings.ToLower(stringMapValue(payload, "sha256"))
+	if wantSHA == "" || stringMapValue(payload, "url") == "" {
 		return ProviderPlan{}, fmt.Errorf("%s component download requires url and sha256", node.Address)
 	}
 	if !current.Exists {
@@ -80,6 +81,9 @@ func (p NativeProvider) applyComponentDownload(ctx context.Context, step Step) (
 	}
 	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
 	if err != nil {
+		if sensitive, _ := step.Node.Desired["sensitive"].(bool); sensitive {
+			return nil, redactPayloadError(err)
+		}
 		return nil, err
 	}
 	return map[string]any{"exists": true, "desired_digest": corestate.DesiredDigest(step.Node.Desired)}, nil

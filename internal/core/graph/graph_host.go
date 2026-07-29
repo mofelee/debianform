@@ -691,6 +691,12 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			"mode":         "0644",
 			"ensure":       "present",
 		}
+		downloadPayload := downloadDesired
+		if componentArtifactSourceSensitive(*component.SelectedSource) {
+			downloadPayload = cloneMap(downloadDesired)
+			downloadPayload["sensitive"] = true
+			redactComponentArtifactSourceFields(downloadDesired, "url", "sha256", *component.SelectedSource)
+		}
 		downloadDeps := []string{}
 		if strings.HasPrefix(component.SelectedSource.URL, "file://") {
 			sourcePath := strings.TrimPrefix(component.SelectedSource.URL, "file://")
@@ -708,7 +714,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			DependsOn:       downloadDeps,
 			ProviderType:    "component_download",
 			ProviderAddress: "component_download." + providerName(host.Name, component.Name, sourceLabel),
-			ProviderPayload: downloadDesired,
+			ProviderPayload: downloadPayload,
 		})
 
 		buildAddress := ""
@@ -764,6 +770,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				buildDesired["extract_format"] = component.Extract.Format
 				buildDesired["strip_components"] = component.Extract.StripComponents
 			}
+			redactComponentArtifactSourceFields(buildDesired, "source_url", "source_sha256", *component.SelectedSource)
 			nodes = append(nodes, Node{
 				Host:            host.Name,
 				Address:         buildAddress,
@@ -805,6 +812,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			installDesired["include"] = component.Extract.Include
 			source = component.Extract.Source
 		}
+		redactComponentArtifactSourceFields(installDesired, "source_url", "source_sha256", *component.SelectedSource)
 		deps := []string{downloadAddress}
 		if buildAddress != "" {
 			deps = []string{buildAddress}

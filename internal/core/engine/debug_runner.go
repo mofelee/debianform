@@ -203,6 +203,10 @@ func (s *DebugSession) printCall(call debugCall) {
 		s.printField("cleanup", "true", termstyle.Yellow)
 	}
 	s.printField("runner", call.Runner, termstyle.Magenta)
+	if call.Context.Sensitive {
+		s.printField("payload", "<sensitive>", termstyle.Yellow)
+		return
+	}
 	if call.RemoteCommand != "" {
 		writeDebugTextBlockWithStyle(s.w, "remote command", call.RemoteCommand, s.style, "bash")
 	}
@@ -228,6 +232,13 @@ func (s *DebugSession) after(call debugCall, result Result, err error, elapsed t
 		statusColor = termstyle.Red
 	}
 	fmt.Fprintf(s.w, "%s #%d remote call %s in %s\n", s.debugPrefix(), call.Index, termstyle.Apply(status, s.style, termstyle.Bold, statusColor), termstyle.Apply(formatDebugDuration(elapsed), s.style, termstyle.Gray))
+	if call.Context.Sensitive {
+		if err != nil {
+			s.printField("error", "<redacted>", termstyle.Red)
+		}
+		s.printField("result", "<sensitive>", termstyle.Yellow)
+		return
+	}
 	if err != nil {
 		s.printField("error", err.Error(), termstyle.Red)
 	}
@@ -445,6 +456,10 @@ func (s *DebugSession) handleFailedCommand(call debugCall, command string) (bool
 }
 
 func (s *DebugSession) showPayload(call debugCall, name string) {
+	if call.Context.Sensitive {
+		s.printWarningf("payload output is unavailable for a sensitive remote call")
+		return
+	}
 	switch name {
 	case "stdin":
 		if call.Stdin == nil {
@@ -470,6 +485,10 @@ func (s *DebugSession) showPayload(call debugCall, name string) {
 }
 
 func (s *DebugSession) runDiagnostic(call debugCall, command string) {
+	if call.Context.Sensitive {
+		s.printWarningf("diagnostic commands are unavailable for a sensitive remote call")
+		return
+	}
 	if call.Diagnose == nil {
 		s.printWarningf("diagnostic runner is unavailable")
 		return
@@ -493,6 +512,10 @@ func (s *DebugSession) runDiagnostic(call debugCall, command string) {
 }
 
 func (s *DebugSession) printResultDetails(result debugCallResult) {
+	if result.Call.Context.Sensitive {
+		s.printField("result", "<sensitive>", termstyle.Yellow)
+		return
+	}
 	writeDebugBytesBlockWithStyle(s.w, "stdout", []byte(result.Result.Stdout), s.style)
 	writeDebugBytesBlockWithStyle(s.w, "stderr", []byte(result.Result.Stderr), s.style)
 }

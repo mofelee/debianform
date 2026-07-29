@@ -13,10 +13,14 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	coreengine "github.com/mofelee/debianform/internal/core/engine"
 	coregraph "github.com/mofelee/debianform/internal/core/graph"
+	coreir "github.com/mofelee/debianform/internal/core/ir"
+	coremerge "github.com/mofelee/debianform/internal/core/merge"
+	coreparser "github.com/mofelee/debianform/internal/core/parser"
 )
 
 type localRunner struct{}
@@ -167,4 +171,129 @@ int main(void) {
 	if _, err := os.Stat(buildOutputPath); err != nil {
 		t.Fatalf("build output missing: %v", err)
 	}
+}
+
+func TestParsedComponentArtifactInputsDownloadPerInstance(t *testing.T) {
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("curl is required for component artifact input integration test")
+	}
+
+	payloads := map[string][]byte{
+		"binary":  []byte("binary artifact input payload\n"),
+		"archive": []byte("archive artifact input payload\n"),
+		"source":  []byte("source artifact input payload\n"),
+	}
+	requested := map[string]int{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
+		if len(parts) != 2 || (parts[0] != "mirror-a" && parts[0] != "mirror-b") {
+			http.NotFound(w, r)
+			return
+		}
+		payload, ok := payloads[parts[1]]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		requested[r.URL.Path]++
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	shaValues := map[string]string{}
+	for name, payload := range payloads {
+		sum := sha256.Sum256(payload)
+		shaValues[name] = hex.EncodeToString(sum[:])
+	}
+	variableSource := coreir.SourceRef{File: "<integration>", Line: 1, Path: "test.variable"}
+	cfg, err := coreparser.ParseFilesWithOptions(
+		[]string{"testdata/component_artifact_inputs.dbf.hcl"},
+		coreparser.ParseOptions{VariableValues: []coreparser.ExternalVariableValue{
+			{Name: "base_url", Value: server.URL, Source: variableSource},
+			{Name: "binary_sha256", Value: shaValues["binary"], Source: variableSource},
+			{Name: "archive_sha256", Value: shaValues["archive"], Source: variableSource},
+			{Name: "source_sha256", Value: shaValues["source"], Source: variableSource},
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := coremerge.Compile(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resourceGraph, err := coregraph.Compile(program)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	currentUser, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentGroup, err := user.LookupGroupId(currentUser.Gid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := coreengine.NewNativeProvider(localRunner{})
+	root := t.TempDir()
+	downloads := 0
+	for _, original := range resourceGraph.Nodes {
+		if original.Kind != "component_download" {
+			continue
+		}
+		downloads++
+		node := original
+		node.Desired = cloneMap(original.Desired)
+		node.ProviderPayload = cloneMap(original.ProviderPayload)
+		component, _ := node.Desired["component"].(string)
+		mirror := strings.ReplaceAll(node.Host, "_", "-")
+		wantURL := server.URL + "/" + mirror + "/" + component
+		if node.Desired["url"] != wantURL || node.Desired["sha256"] != shaValues[component] {
+			t.Fatalf("%s resolved source = %#v, want %s / %s", node.Address, node.Desired, wantURL, shaValues[component])
+		}
+		downloadPath := filepath.Join(root, node.Host, component)
+		for _, values := range []map[string]any{node.Desired, node.ProviderPayload} {
+			values["path"] = downloadPath
+			values["owner"] = currentUser.Username
+			values["group"] = currentGroup.Name
+		}
+
+		plan, err := provider.Plan(context.Background(), node, nil)
+		if err != nil {
+			t.Fatalf("%s plan failed: %v", node.Address, err)
+		}
+		if plan.Action != coreengine.ActionCreate {
+			t.Fatalf("%s action = %q, want create", node.Address, plan.Action)
+		}
+		if _, err := provider.Apply(context.Background(), coreengine.Step{Address: node.Address, Host: node.Host, Action: coreengine.ActionCreate, Node: node}); err != nil {
+			t.Fatalf("%s apply failed: %v", node.Address, err)
+		}
+		got, err := os.ReadFile(downloadPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, payloads[component]) {
+			t.Fatalf("%s payload = %q, want %q", node.Address, got, payloads[component])
+		}
+	}
+	if downloads != 6 {
+		t.Fatalf("component download count = %d, want 6", downloads)
+	}
+	for _, mirror := range []string{"mirror-a", "mirror-b"} {
+		for component := range payloads {
+			path := "/" + mirror + "/" + component
+			if requested[path] != 1 {
+				t.Fatalf("request count for %s = %d, want 1", path, requested[path])
+			}
+		}
+	}
+}
+
+func cloneMap(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }

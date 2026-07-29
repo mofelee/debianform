@@ -51,6 +51,38 @@ func TestNativeProviderComponentDownloadURL(t *testing.T) {
 	}
 }
 
+func TestNativeProviderSensitiveComponentDownloadRedactsFailure(t *testing.T) {
+	secretURL := "https://not-a-real-variable-secret@example.invalid/private-tool"
+	node := graph.Node{
+		Address: "host.server1.components.private.artifact.download[\"amd64\"]",
+		Host:    "server1",
+		Kind:    "component_download",
+		Desired: map[string]any{
+			"path":      "/var/cache/debianform/components/private/redacted/source",
+			"url":       secretURL,
+			"sha256":    "5555555555555555555555555555555555555555555555555555555555555555",
+			"owner":     "root",
+			"group":     "root",
+			"mode":      "0644",
+			"ensure":    "present",
+			"sensitive": true,
+		},
+	}
+	runner := &recordingRunner{errors: []error{errors.New("remote echoed " + secretURL)}}
+	provider := NewNativeProvider(runner)
+
+	_, err := provider.Apply(context.Background(), Step{Address: node.Address, Node: node, Action: ActionCreate})
+	if err == nil {
+		t.Fatal("sensitive component download succeeded, want injected failure")
+	}
+	if strings.Contains(err.Error(), secretURL) || err.Error() != "redacted payload command failed: <redacted>" {
+		t.Fatalf("sensitive component download error = %q", err)
+	}
+	if len(runner.scripts) != 1 || !strings.Contains(runner.scripts[0], secretURL) {
+		t.Fatalf("provider did not receive sensitive URL in memory: %#v", runner.scripts)
+	}
+}
+
 func TestNativeProviderComponentDownloadFileURL(t *testing.T) {
 	node := graph.Node{
 		Address: "host.server1.components.hello.artifact.download[\"default\"]",

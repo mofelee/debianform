@@ -69,6 +69,19 @@ func (s ComponentScriptSpec) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
+type componentArtifactSourceSpecJSON ComponentArtifactSourceSpec
+
+func (s ComponentArtifactSourceSpec) MarshalJSON() ([]byte, error) {
+	out := componentArtifactSourceSpecJSON(s)
+	if s.URLSensitive {
+		out.URL = "<sensitive>"
+	}
+	if s.SHA256Sensitive {
+		out.SHA256 = "<sensitive>"
+	}
+	return json.Marshal(out)
+}
+
 type systemdUnitJSON SystemdUnit
 
 func (u SystemdUnit) MarshalJSON() ([]byte, error) {

@@ -759,8 +759,64 @@ download/build/installation. Artifact fields:
 
 | Field | Description |
 | --- | --- |
-| `url` | Non-empty URL. |
-| `sha256` | 64-character hexadecimal value. |
+| `url` | Non-empty URL. May reference `input.<name>`. |
+| `sha256` | 64-character hexadecimal value. May reference `input.<name>`. |
+
+`source.url` and `source.sha256` are evaluated separately for every mounted
+component instance, after that instance's typed inputs have been defaulted,
+normalized, and validated. An input-dependent component template may remain
+unmounted; parsing the template does not require concrete input values. This
+applies to `binary`, `archive`, `file`, `ca_certificate`, and `source`
+artifacts. Resource addresses continue to use the host and component-instance
+labels, so changing a mirror does not change resource identity.
+
+Other artifact attributes, including `type`, `version`, `extract`, `build`, and
+`install`, are still evaluated as template metadata and cannot reference
+`input`. This is the current artifact-expression boundary.
+
+```hcl
+component "tool" {
+  input "download_url" {
+    type     = string
+    nullable = false
+  }
+
+  type = "binary"
+
+  source {
+    url    = input.download_url
+    sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+
+  install {
+    path = "/usr/local/bin/tool"
+  }
+}
+
+host "region_a" {
+  component "tool" {
+    source = component.tool
+    inputs = {
+      download_url = "https://mirror-a.example.invalid/tool"
+    }
+  }
+}
+
+host "region_b" {
+  component "tool" {
+    source = component.tool
+    inputs = {
+      download_url = "https://mirror-b.example.invalid/tool"
+    }
+  }
+}
+```
+
+If either source field depends on a sensitive input, DebianForm keeps its
+resolved plaintext only in the in-memory provider payload. HostSpec and graph
+JSON, text/JSON/HTML plans, state, diagnostics, debugger output, and cache
+metadata expose only redacted values or derived digests. Literal, non-sensitive
+checksums retain their existing content-addressed cache paths.
 
 `extract` fields:
 

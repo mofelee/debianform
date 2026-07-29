@@ -497,6 +497,63 @@ func TestSensitiveServiceEnvironmentPlanDoesNotLeak(t *testing.T) {
 	}
 }
 
+func TestComponentArtifactInputsPlanResolvesPerHostAndRedactsSensitiveURLs(t *testing.T) {
+	fixture := "../testdata/fixtures/component-artifact-inputs.dbf.hcl"
+	doc := planFixture(t, fixture, Options{
+		CommandFile: fixture,
+		Now: func() time.Time {
+			return time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonPlan := string(data)
+	for _, want := range []string{
+		"https://mirror-a.example.invalid/input-binary.gz",
+		"https://mirror-b.example.invalid/input-binary.gz",
+		`host.mirror_a.components.binary.artifact.download[\"amd64\"]`,
+		`host.mirror_b.components.binary.artifact.download[\"amd64\"]`,
+	} {
+		if !strings.Contains(jsonPlan, want) {
+			t.Fatalf("artifact input plan JSON missing %q: %s", want, jsonPlan)
+		}
+	}
+	testassert.NoSecretLeak(t, "sensitive artifact input plan JSON", jsonPlan)
+	for _, secret := range []string{
+		"5555555555555555555555555555555555555555555555555555555555555555",
+		"6666666666666666666666666666666666666666666666666666666666666666",
+	} {
+		if strings.Contains(jsonPlan, secret) {
+			t.Fatalf("sensitive artifact checksum leaked in plan JSON: %s", jsonPlan)
+		}
+	}
+
+	for _, host := range []string{"mirror_a", "mirror_b"} {
+		address := `host.` + host + `.components.private.artifact.download["amd64"]`
+		var change *Change
+		for i := range doc.Changes {
+			if doc.Changes[i].Address == address {
+				change = &doc.Changes[i]
+				break
+			}
+		}
+		if change == nil || !change.Diff.Sensitive {
+			t.Fatalf("private artifact change %s = %#v", address, change)
+		}
+	}
+
+	var text bytes.Buffer
+	PrintText(&text, doc)
+	testassert.NoSecretLeak(t, "sensitive artifact input text plan", text.String())
+	var html bytes.Buffer
+	if err := PrintHTML(&html, doc); err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive artifact input HTML plan", html.String())
+}
+
 func TestSensitiveVariablePlanDoesNotLeak(t *testing.T) {
 	doc := planFixture(t, "../testdata/fixtures/sensitive-variable-files.dbf.hcl", Options{
 		CommandFile: "../testdata/fixtures/sensitive-variable-files.dbf.hcl",

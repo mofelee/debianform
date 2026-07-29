@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/mofelee/debianform/internal/core/testassert"
 )
 
 func TestCompileBIRD2ResourceGraphGolden(t *testing.T) {
@@ -67,6 +69,58 @@ func TestCompileComponentSourceBuildResourceGraphGolden(t *testing.T) {
 	}
 	if !foundBuild {
 		t.Fatalf("source install deps = %#v, want artifact build", installDeps)
+	}
+}
+
+func TestCompileComponentArtifactInputsKeepInstanceAddressesAndRedactPayloads(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/component-artifact-inputs.dbf.hcl")
+	for _, host := range []string{"mirror_a", "mirror_b"} {
+		wantURLHost := strings.ReplaceAll(host, "_", "-")
+		for _, instance := range []string{"binary", "archive", "source"} {
+			address := `host.` + host + `.components.` + instance + `.artifact.download["amd64"]`
+			node := nodeFor(resourceGraph, address)
+			if node == nil {
+				t.Fatalf("missing artifact input address %s", address)
+			}
+			url, _ := node.Desired["url"].(string)
+			if !strings.Contains(url, wantURLHost+".example.invalid") {
+				t.Fatalf("%s resolved url = %q", address, url)
+			}
+		}
+
+		privateAddress := `host.` + host + `.components.private.artifact.download["amd64"]`
+		private := nodeFor(resourceGraph, privateAddress)
+		if private == nil {
+			t.Fatalf("missing private artifact input address %s", privateAddress)
+		}
+		if private.Desired["sensitive"] != true || private.Desired["url"] != nil || private.Desired["url_digest"] == "" {
+			t.Fatalf("private artifact desired = %#v", private.Desired)
+		}
+		if private.Desired["sha256"] != nil || private.Desired["sha256_digest"] == "" {
+			t.Fatalf("private artifact checksum desired = %#v", private.Desired)
+		}
+		payloadURL, _ := private.ProviderPayload["url"].(string)
+		if !strings.Contains(payloadURL, testassert.SensitiveVariableDefault) {
+			t.Fatalf("private artifact provider payload = %#v", private.ProviderPayload)
+		}
+		payloadSHA, _ := private.ProviderPayload["sha256"].(string)
+		if payloadSHA == "" || !strings.Contains(private.Desired["path"].(string), componentArtifactFieldDigest(payloadSHA)) || strings.Contains(private.Desired["path"].(string), payloadSHA) {
+			t.Fatalf("private artifact cache path/payload = %q / %#v", private.Desired["path"], private.ProviderPayload)
+		}
+	}
+
+	data, err := json.Marshal(resourceGraph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testassert.NoSecretLeak(t, "sensitive artifact resource graph", string(data))
+	for _, secret := range []string{
+		"5555555555555555555555555555555555555555555555555555555555555555",
+		"6666666666666666666666666666666666666666666666666666666666666666",
+	} {
+		if strings.Contains(string(data), secret) {
+			t.Fatalf("sensitive artifact checksum leaked in resource graph: %s", data)
+		}
 	}
 }
 

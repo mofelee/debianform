@@ -150,10 +150,16 @@ type ScriptReference struct {
 }
 
 type ComponentArtifactSource struct {
-	Architecture string
-	URL          string
-	SHA256       string
-	Source       ir.SourceRef
+	Architecture    string
+	URL             string
+	SHA256          string
+	URLSensitive    bool
+	SHA256Sensitive bool
+	URLExpr         hcl.Expression
+	SHA256Expr      hcl.Expression
+	URLSource       ir.SourceRef
+	SHA256Source    ir.SourceRef
+	Source          ir.SourceRef
 }
 
 type ComponentArtifactExtract struct {
@@ -831,22 +837,87 @@ func parseComponentSourceBlock(file, componentPath string, block *hclsyntax.Bloc
 	for name, attr := range block.Body.Attributes {
 		switch name {
 		case "url":
-			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
-			if err != nil {
-				return ComponentArtifactSource{}, err
+			source.URLExpr = attr.Expr
+			source.URLSource = ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+			if !expressionReferencesRoot(attr.Expr, "input") {
+				value, sensitive, err := evaluateComponentArtifactString(attr.Expr, ctx, source.URLSource)
+				if err != nil {
+					return ComponentArtifactSource{}, err
+				}
+				source.URL = value
+				source.URLSensitive = sensitive
 			}
-			source.URL = value
 		case "sha256":
-			value, err := parseStringAttribute(file, path+"."+name, attr, ctx)
-			if err != nil {
-				return ComponentArtifactSource{}, err
+			source.SHA256Expr = attr.Expr
+			source.SHA256Source = ir.SourceRef{File: file, Line: attr.NameRange.Start.Line, Path: path + "." + name}
+			if !expressionReferencesRoot(attr.Expr, "input") {
+				value, sensitive, err := evaluateComponentArtifactString(attr.Expr, ctx, source.SHA256Source)
+				if err != nil {
+					return ComponentArtifactSource{}, err
+				}
+				source.SHA256 = value
+				source.SHA256Sensitive = sensitive
 			}
-			source.SHA256 = value
 		default:
 			return ComponentArtifactSource{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, path, name)
 		}
 	}
 	return source, nil
+}
+
+func expressionReferencesRoot(expr hcl.Expression, name string) bool {
+	for _, traversal := range expr.Variables() {
+		root, ok := traversalRoot(traversal)
+		if ok && root == name {
+			return true
+		}
+	}
+	return false
+}
+
+func evaluateComponentArtifactString(expr hcl.Expression, ctx EvalContext, source ir.SourceRef) (string, bool, error) {
+	value, err := evalValue(expr, ctx, source)
+	if err != nil {
+		return "", false, fmt.Errorf("%s:%d: %s: %w", source.File, source.Line, source.Path, err)
+	}
+	str, ok := value.StringValue()
+	if !ok {
+		return "", false, fmt.Errorf("%s:%d: %s must be a string", source.File, source.Line, source.Path)
+	}
+	return str, value.ContainsSensitive(), nil
+}
+
+// EvaluateComponentArtifactSources resolves source fields after component inputs
+// have been bound to a concrete host component instance.
+func EvaluateComponentArtifactSources(component Component, ctx EvalContext) (Component, error) {
+	out := component
+	out.Sources = make(map[string]ComponentArtifactSource, len(component.Sources))
+	names := make([]string, 0, len(component.Sources))
+	for name := range component.Sources {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		source := component.Sources[name]
+		if source.URLExpr != nil {
+			value, sensitive, err := evaluateComponentArtifactString(source.URLExpr, ctx, source.URLSource)
+			if err != nil {
+				return Component{}, err
+			}
+			source.URL = value
+			source.URLSensitive = sensitive
+		}
+		if source.SHA256Expr != nil {
+			value, sensitive, err := evaluateComponentArtifactString(source.SHA256Expr, ctx, source.SHA256Source)
+			if err != nil {
+				return Component{}, err
+			}
+			source.SHA256 = value
+			source.SHA256Sensitive = sensitive
+		}
+		out.Sources[name] = source
+	}
+	return out, nil
 }
 
 func parseComponentExtractBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentArtifactExtract, error) {

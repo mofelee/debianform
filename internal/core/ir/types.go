@@ -641,10 +641,12 @@ type ComponentInstanceSpec struct {
 }
 
 type ComponentArtifactSourceSpec struct {
-	Architecture string    `json:"architecture,omitempty"`
-	URL          string    `json:"url"`
-	SHA256       string    `json:"sha256"`
-	Source       SourceRef `json:"source,omitempty"`
+	Architecture    string    `json:"architecture,omitempty"`
+	URL             string    `json:"url"`
+	SHA256          string    `json:"sha256"`
+	URLSensitive    bool      `json:"url_sensitive,omitempty"`
+	SHA256Sensitive bool      `json:"sha256_sensitive,omitempty"`
+	Source          SourceRef `json:"source,omitempty"`
 }
 
 type ComponentArtifactExtractSpec struct {

@@ -117,7 +117,7 @@ func componentArtifactCachePath(component ir.ComponentInstanceSpec) string {
 	if component.Template != "" && component.Template != component.Name {
 		name = providerName(component.Template, component.Name)
 	}
-	return "/var/cache/debianform/components/" + name + "/" + component.SelectedSource.SHA256 + "/source"
+	return "/var/cache/debianform/components/" + name + "/" + componentArtifactCacheKey(*component.SelectedSource) + "/source"
 }
 
 func componentArtifactBuildPath(component ir.ComponentInstanceSpec) string {
@@ -128,7 +128,38 @@ func componentArtifactBuildPath(component ir.ComponentInstanceSpec) string {
 	if component.Template != "" && component.Template != component.Name {
 		name = providerName(component.Template, component.Name)
 	}
-	return "/var/cache/debianform/components/" + name + "/" + component.SelectedSource.SHA256 + "/build"
+	return "/var/cache/debianform/components/" + name + "/" + componentArtifactCacheKey(*component.SelectedSource) + "/build"
+}
+
+func componentArtifactCacheKey(source ir.ComponentArtifactSourceSpec) string {
+	if !source.SHA256Sensitive {
+		return source.SHA256
+	}
+	return componentArtifactFieldDigest(source.SHA256)
+}
+
+func componentArtifactSourceSensitive(source ir.ComponentArtifactSourceSpec) bool {
+	return source.URLSensitive || source.SHA256Sensitive
+}
+
+func redactComponentArtifactSourceFields(desired map[string]any, urlKey, shaKey string, source ir.ComponentArtifactSourceSpec) {
+	if !componentArtifactSourceSensitive(source) {
+		return
+	}
+	desired["sensitive"] = true
+	if source.URLSensitive {
+		delete(desired, urlKey)
+		desired[urlKey+"_digest"] = componentArtifactFieldDigest(source.URL)
+	}
+	if source.SHA256Sensitive {
+		delete(desired, shaKey)
+		desired[shaKey+"_digest"] = componentArtifactFieldDigest(source.SHA256)
+	}
+}
+
+func componentArtifactFieldDigest(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
 
 func componentArtifactBuildOutputPath(component ir.ComponentInstanceSpec) string {
