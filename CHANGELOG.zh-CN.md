@@ -6,7 +6,14 @@ DebianForm 的所有重要变更都会记录在此文件中。
 
 公开 beta 版本线开始后，本项目遵循语义化版本控制。
 
-## Unreleased
+## v0.9.0
+
+- 新增用于静态 component-root 重命名的声明式顶层 `moved` block。基于 state 的 plan 和 check
+  会在内存中 rebase 旧 state；apply 则在 provider 变更前，以原子方式持久化已校验的同 host
+  address move，并在所有 plan 格式中单独展示已实现的 move。
+- 保持 state schema version 2 和 plan format `debianform.plan.alpha1`：move chain 保持确定性，
+  cycle 和 collision 会被拒绝，provider identity、ownership 与 sensitive payload 保持不变。
+  `moved` block 是显式、临时的迁移指令。
 
 - 通用化 Preview `systemd.networkd` provider，新增按声明顺序的任意重复 section、raw
   `content`/`source`、interface reconfigure 和按 declaration identity 的 post-reload script，
@@ -18,6 +25,15 @@ DebianForm 的所有重要变更都会记录在此文件中。
   `debianform.plan.alpha1`，原本已包含 `depends_on`/`triggered_by` 字段。
 - 新增可运行的 BIRD-owned WireGuard 示例和双语 DSL/迁移指南。从 `files.file` 改为原生
   networkd resource 仍是需审查的 ownership/state-address 交接，不是自动或零停机迁移。
+- 新增按 component instance 求值的 artifact `source.url` 和 `source.sha256` `input.*`
+  expression，覆盖 binary、archive、file、CA certificate 和 source artifact，同时避免在 plan、
+  state、diagnostic、cache metadata 和 debug output 中暴露已解析的 sensitive 值。
+- 修复原生 networkd netdev 的 orphan destroy；移除声明时，现在会同时删除受管 `.netdev` 文件和
+  从旧 state 推导出的 runtime interface。
+- 修改 `dbf fmt`，使其无需解析 required variable 即可格式化语法有效的配置，包括 sensitive
+  variable；无效 HCL 会在任何选中文件被改写之前报错。
+- 将 `golang.org/x/text` 更新到 0.39.0，并同步更新 `x/mod` 与 `x/tools` 依赖，以修复
+  GO-2026-5970。
 
 ## v0.8.1
 

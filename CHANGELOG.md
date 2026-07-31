@@ -6,7 +6,14 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
-## Unreleased
+## v0.9.0
+
+- Added declarative top-level `moved` blocks for static component-root renames. State-backed plan
+  and check rebase prior state in memory, while apply persists validated same-host address moves
+  atomically before provider changes and exposes realized moves separately in every plan format.
+- Kept state schema version 2 and plan format `debianform.plan.alpha1`: move chains are
+  deterministic, cycles and collisions are rejected, and provider identity, ownership, and
+  sensitive payloads remain intact. Move blocks are explicit, temporary migration instructions.
 
 - Generalized the Preview `systemd.networkd` provider with arbitrary declaration-ordered repeated
   sections, raw `content`/`source`, interface reconfigure, and declaration-identity post-reload
@@ -19,6 +26,16 @@ This project follows semantic versioning after the public beta line begins.
 - Added a runnable BIRD-owned WireGuard example and bilingual DSL/migration guidance. Moving from
   `files.file` to a native networkd resource remains a reviewed ownership/state-address handoff,
   not an automatic or zero-downtime migration.
+- Added per-instance evaluation of component artifact `source.url` and `source.sha256` expressions
+  that use `input.*` for binary, archive, file, CA certificate, and source artifacts, while keeping
+  resolved sensitive values out of plans, state, diagnostics, cache metadata, and debug output.
+- Fixed orphaned native networkd netdev destruction so removing a declaration deletes both the
+  managed `.netdev` file and the runtime interface derived from prior state.
+- Changed `dbf fmt` to format syntactically valid configurations without resolving required
+  variables, including sensitive variables, while rejecting invalid HCL before rewriting any
+  selected file.
+- Updated `golang.org/x/text` to 0.39.0, together with its `x/mod` and `x/tools` dependencies, to
+  remediate GO-2026-5970.
 
 ## v0.8.1
 
