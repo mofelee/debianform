@@ -2477,6 +2477,77 @@ content="hello"
 	}
 }
 
+func TestFmtRequiredSensitiveVariableWithoutValue(t *testing.T) {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "example.dbf.hcl")
+	writeTestFile(t, config, `variable "api_token" {
+type=string
+nullable=false
+sensitive=true
+}
+
+host "example" {
+platform {
+architecture="amd64"
+}
+}
+`)
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"fmt", "-f", config}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(output, "formatted 1 file(s)") {
+		t.Fatalf("fmt output = %q", output)
+	}
+	data, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`variable "api_token" {`,
+		`type      = string`,
+		`nullable  = false`,
+		`sensitive = true`,
+		`architecture = "amd64"`,
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("formatted config does not contain %q:\n%s", want, data)
+		}
+	}
+}
+
+func TestFmtInvalidHCLDoesNotRewriteAnyFile(t *testing.T) {
+	dir := t.TempDir()
+	valid := filepath.Join(dir, "valid.dbf.hcl")
+	invalid := filepath.Join(dir, "invalid.dbf.hcl")
+	rawValid := "host \"valid\"{\n}\n"
+	rawInvalid := "host \"invalid\"{\n"
+	writeTestFile(t, valid, rawValid)
+	writeTestFile(t, invalid, rawInvalid)
+
+	err := run([]string{"fmt", "-f", valid, "-f", invalid})
+	if err == nil {
+		t.Fatal("fmt succeeded for invalid HCL")
+	}
+	if !strings.Contains(err.Error(), invalid) {
+		t.Fatalf("fmt error = %q, want invalid file path", err)
+	}
+	for path, want := range map[string]string{
+		valid:   rawValid,
+		invalid: rawInvalid,
+	} {
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if string(data) != want {
+			t.Fatalf("%s was rewritten after syntax error:\n%s", path, data)
+		}
+	}
+}
+
 func TestFmtRepeatedConfigFilesFormatsOnlyExplicitFiles(t *testing.T) {
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.dbf.hcl")
