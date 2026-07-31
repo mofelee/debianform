@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	coreengine "github.com/mofelee/debianform/internal/core/engine"
 	coregraph "github.com/mofelee/debianform/internal/core/graph"
@@ -267,24 +268,37 @@ func runFmt(args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := loadProgram(files, "", coremerge.CompileOptions{SkipComponents: true}); err != nil {
-		return err
+	type fmtFile struct {
+		path      string
+		original  []byte
+		formatted []byte
 	}
-	changed := 0
+	prepared := make([]fmtFile, 0, len(files))
 	for _, path := range files {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		formatted := hclwrite.Format(data)
-		if bytes.Equal(data, formatted) {
+		if _, diags := hclwrite.ParseConfig(data, path, hcl.InitialPos); diags.HasErrors() {
+			return fmt.Errorf("%s", diags.Error())
+		}
+		prepared = append(prepared, fmtFile{
+			path:      path,
+			original:  data,
+			formatted: hclwrite.Format(data),
+		})
+	}
+
+	changed := 0
+	for _, file := range prepared {
+		if bytes.Equal(file.original, file.formatted) {
 			continue
 		}
-		info, err := os.Stat(path)
+		info, err := os.Stat(file.path)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, formatted, info.Mode().Perm()); err != nil {
+		if err := os.WriteFile(file.path, file.formatted, info.Mode().Perm()); err != nil {
 			return err
 		}
 		changed++
