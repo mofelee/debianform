@@ -9,14 +9,4 @@ host "cihost" {
     path      = "/var/lib/debianform-integration/service-unit-state.json"
     lock_path = "/var/lock/debianform-integration/service-unit-state.lock"
   }
-
-  component "service_unit_fixture" {
-    source = component.service_unit_fixture
-
-    inputs = {
-      structured_extra = "from-structured"
-      service_enabled  = true
-      service_state    = "running"
-    }
-  }
 }

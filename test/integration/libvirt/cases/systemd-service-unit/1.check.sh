@@ -16,5 +16,9 @@ assert_remote "raw service observed runtime environment" \
   "test \"\$(cat /run/debianform-service-unit/raw.mode)\" = 'raw'"
 assert_remote "structured service observed runtime environment" \
   "test \"\$(cat /run/debianform-service-unit/structured.mode)\" = 'structured' && test \"\$(cat /run/debianform-service-unit/structured.extra)\" = 'from-structured'"
+assert_remote "new services started exactly once" \
+  "test \"\$(cat /run/debianform-service-unit/raw.starts)\" = 1 && test \"\$(cat /run/debianform-service-unit/structured.starts)\" = 1"
 assert_remote "state records raw and structured service unit resources" \
-  "grep -F 'host.cihost.systemd.unit[\\\"dbf-raw.service\\\"]' /var/lib/debianform-integration/service-unit-state.json && grep -F 'host.cihost.systemd.unit[\\\"dbf-structured.service\\\"]' /var/lib/debianform-integration/service-unit-state.json"
+  "grep -F 'host.cihost.components.service_unit_fixture.systemd.unit[\\\"dbf-raw.service\\\"]' /var/lib/debianform-integration/service-unit-state.json && grep -F 'host.cihost.components.service_unit_fixture.systemd.unit[\\\"dbf-structured.service\\\"]' /var/lib/debianform-integration/service-unit-state.json"
+assert_remote "state records successful structured change action completion" \
+  "grep -F '\"change_action_digest\":' /var/lib/debianform-integration/service-unit-state.json"
