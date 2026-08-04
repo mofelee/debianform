@@ -70,14 +70,15 @@ host "manual1" {
 
   systemd {
     service_unit "manualsvc" {
-      description = "DebianForm manual service"
-      run         = ["/usr/local/bin/manualsvc-worker"]
-      user        = "manualsvc"
-      group       = "manualsvc"
-      working_dir = "/var/lib/manualsvc"
-      restart     = "always"
-      stdout      = "journal"
-      stderr      = "journal"
+      description   = "DebianForm manual service"
+      run           = ["/usr/local/bin/manualsvc-worker"]
+      user          = "manualsvc"
+      group         = "manualsvc"
+      working_dir   = "/var/lib/manualsvc"
+      restart       = "always"
+      change_action = "try-restart"
+      stdout        = "journal"
+      stderr        = "journal"
     }
   }
 
@@ -104,16 +105,22 @@ dbf plan --offline
 dbf apply --auto-approve
 ```
 
-The offline plan contains six resources and one operation:
+The offline plan contains six resources and two operations:
 
 ```text
-Summary: 6 create, 0 update, 0 delete, 0 no-op, 1 operations
+Summary: 6 create, 0 update, 0 delete, 0 no-op, 2 operations
 ```
 
-The operation is a systemd daemon reload. After changing a unit file, DebianForm runs:
+The operations reload the systemd manager and conditionally apply the configured
+service action. After changing this unit, DebianForm runs daemon-reload followed
+by `try-restart` when the service is already active. On the first apply the
+service is inactive, so `services.service.state = "running"` starts it once.
 
 ```text
 systemctl daemon-reload
+if systemctl is-active --quiet manualsvc.service; then
+  systemctl try-restart manualsvc.service
+fi
 ```
 
 ## Verify the Service
@@ -245,14 +252,15 @@ host "manual1" {
 
   systemd {
     service_unit "manualsvc" {
-      description = "DebianForm manual service"
-      run         = ["/usr/local/bin/manualsvc-worker"]
-      user        = "manualsvc"
-      group       = "manualsvc"
-      working_dir = "/var/lib/manualsvc"
-      restart     = "always"
-      stdout      = "journal"
-      stderr      = "journal"
+      description   = "DebianForm manual service"
+      run           = ["/usr/local/bin/manualsvc-worker"]
+      user          = "manualsvc"
+      group         = "manualsvc"
+      working_dir   = "/var/lib/manualsvc"
+      restart       = "always"
+      change_action = "try-restart"
+      stdout        = "journal"
+      stderr        = "journal"
     }
   }
 

@@ -522,6 +522,7 @@ Available in `host`, `profile`, and `component`.
 | `environment` | `{}` | `map(string)`, rendered as `Environment=`. |
 | `restart` | None | `no`, `on-success`, `on-failure`, `on-abnormal`, `on-watchdog`, `on-abort`, or `always`. |
 | `restart_delay` | None | `[Service] RestartSec=`. |
+| `change_action` | None | Run `restart`, `reload`, or `try-restart` after this unit changes and daemon-reload completes; inactive services remain stopped. |
 | `wants` / `after` | `[]` | `[Unit] Wants=` / `After=`. |
 | `wanted_by` | `["multi-user.target"]` | `[Install] WantedBy=`; an empty list omits the Install section. |
 | `stdout` / `stderr` | None | StandardOutput/StandardError. |
@@ -532,6 +533,14 @@ Available in `host`, `profile`, and `component`.
 
 Both `unit` and `service_unit` support
 `lifecycle { prevent_destroy = true }`.
+
+`change_action` is available only on `service_unit`, in both raw and structured
+modes. Its operation appears explicitly in the plan. The graph writes the unit,
+runs `systemctl daemon-reload`, conditionally applies the selected action to an
+active service, and only then reconciles a matching `services.service`. A newly
+created inactive unit is therefore started once by `state = "running"`, without
+an extra restart. A failed action fails apply and remains pending for the next
+apply. `reload` requires the unit to support reload.
 
 #### systemd.networkd
 

@@ -110,7 +110,7 @@ the prior 20-case baseline. The current 22-case gate additionally requires `comp
 | `groups` | Beta | Group gid/system/ensure. | User/group example and tests. |
 | `users` | Beta | uid/home/shell/primary group/supplementary groups/authorized keys. | User/group example and tests. |
 | `systemd.unit` | Beta | Raw unit-file management. | systemd examples and integration case. |
-| `systemd.service_unit` | Beta | Structured `.service` generation. | `systemd-service-unit` integration case. |
+| `systemd.service_unit` | Beta | Raw/structured `.service` generation plus restart/reload/try-restart actions after unit changes. | Graph/engine retry tests and `systemd-service-unit` integration case. |
 | `systemd.timer` | Preview | Structured `.timer` generation and timer enabled/state. | Merge/graph tests, `fleet` example, and `systemd-extensions` integration case. |
 | `systemd.resolved` | Preview | `/etc/systemd/resolved.conf.d/debianform.conf` drop-in and optional service management/restart. | Merge/graph tests, `fleet` example, and `systemd-extensions` case. |
 | `systemd.journald` | Preview | `/etc/systemd/journald.conf.d/debianform.conf` drop-in and journald reload/restart. | Merge/graph tests, `fleet` example, and `systemd-extensions` case. |

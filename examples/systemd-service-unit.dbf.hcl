@@ -73,6 +73,7 @@ host "service_unit1" {
       working_dir   = "/var/lib/myapp"
       restart       = "always"
       restart_delay = "5s"
+      change_action = "restart"
 
       wants = ["network-online.target"]
       after = ["network-online.target"]

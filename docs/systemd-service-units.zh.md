@@ -8,8 +8,8 @@ DebianForm 支持两种 `.service` unit 写法：
 - `systemd.service_unit`：结构化描述常见服务，DebianForm 生成 `.service` unit 文件。
 
 两者最终都会编译成同一种 `SystemdUnit`，写入 `/etc/systemd/system/*.service`，
-并在内容变化后触发 `systemctl daemon-reload`。服务是否开机启动、当前是否运行，仍然由
-`services.service` 管理。
+并在内容变化后触发 `systemctl daemon-reload`。`service_unit` 还可以在 reload 后显式执行
+runtime action。服务是否开机启动、当前是否运行，仍然由 `services.service` 管理。
 
 ## 纯文本写法
 
@@ -80,6 +80,7 @@ systemd {
     working_dir   = "/var/lib/myapp"
     restart       = "always"
     restart_delay = "5s"
+    change_action = "restart"
 
     wants = ["network-online.target"]
     after = ["network-online.target"]
@@ -122,6 +123,32 @@ StandardError=journal
 WantedBy=multi-user.target
 ```
 
+## 让运行中的服务应用 unit 变化
+
+`systemctl daemon-reload` 只更新 systemd 读取到的 unit 定义，不会替换已经运行的进程。如果
+unit 变化还必须作用到 live service，应在 `service_unit` 上设置 `change_action`：
+
+```hcl
+systemd {
+  service_unit "myapp" {
+    run           = ["/usr/local/bin/myapp", "--config", "/etc/myapp/config.yaml"]
+    change_action = "try-restart"
+  }
+}
+```
+
+支持 `restart`、`reload` 和 `try-restart`。DebianForm 会把动作作为独立 operation 显示在
+plan 中，并保证以下顺序：
+
+1. 写入发生变化的 unit；
+2. 运行 `systemctl daemon-reload`；
+3. 仅当服务 active 时运行所选动作；
+4. 收敛匹配的 `services.service` 状态。
+
+inactive 服务会保持 stopped。新建 unit 配合 `state = "running"` 时，动作会看到服务仍为
+inactive，随后 service resource 只启动一次。动作失败会使 apply 失败且不会记录完成状态，
+下一次 apply 会重试。active unit 不支持 reload 时，`reload` 会失败。
+
 ## 对比
 
 | 能力 | `systemd.unit` 纯文本 | `systemd.service_unit` 结构化 |
@@ -132,6 +159,7 @@ WantedBy=multi-user.target
 | 不常见 systemd 指令 | 直接写 | 暂未覆盖时应改用纯文本 |
 | 文件元数据 | `owner`、`group`、`mode` | `owner`、`file_group`、`mode` |
 | 服务运行状态 | 配合 `services.service` | 配合 `services.service` |
+| unit 变化后的 runtime action | 不支持 | 可选 `change_action` |
 
 `service_unit` 结构化字段当前覆盖：
 
@@ -149,6 +177,7 @@ WantedBy=multi-user.target
 - `wanted_by`
 - `stdout`
 - `stderr`
+- `change_action`（raw `service_unit` 模式也可用）
 
 `wanted_by` 默认是 `["multi-user.target"]`，这样 `services.service.enabled = true`
 可以直接启用服务。需要只生成无 install section 的 unit 时，可以显式设置
