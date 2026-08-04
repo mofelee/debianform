@@ -1041,6 +1041,18 @@ func systemdServiceUnitSpec(name string, item parser.Value) (ir.SystemdUnit, err
 	if err != nil {
 		return ir.SystemdUnit{}, err
 	}
+	changeAction, hasChangeAction, err := stringField(item, "change_action")
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	if hasChangeAction && !stringIn(changeAction, "restart", "reload", "try-restart") {
+		source := item.Map["change_action"].Source
+		return ir.SystemdUnit{}, fmt.Errorf("%s:%d:%s: systemd.service_unit change_action must be restart, reload, or try-restart", source.File, source.Line, source.Path)
+	}
+	if hasChangeAction && ensure == "absent" {
+		source := item.Map["change_action"].Source
+		return ir.SystemdUnit{}, fmt.Errorf("%s:%d:%s: systemd.service_unit change_action requires ensure = \"present\"", source.File, source.Line, source.Path)
+	}
 	content, hasContent, err := stringFieldAllowEphemeral(item, "content")
 	if err != nil {
 		return ir.SystemdUnit{}, err
@@ -1084,17 +1096,21 @@ func systemdServiceUnitSpec(name string, item parser.Value) (ir.SystemdUnit, err
 		return ir.SystemdUnit{}, err
 	}
 	unit := ir.SystemdUnit{
-		Name:       unitName,
-		Path:       "/etc/systemd/system/" + unitName,
-		Content:    content,
-		SourcePath: resolvePath(item.Source.File, sourcePath),
-		Owner:      owner,
-		Group:      group,
-		Mode:       mode,
-		Sensitive:  sensitive,
-		Ensure:     ensure,
-		Lifecycle:  lifecycle,
-		Source:     item.Source,
+		Name:         unitName,
+		Path:         "/etc/systemd/system/" + unitName,
+		Content:      content,
+		SourcePath:   resolvePath(item.Source.File, sourcePath),
+		Owner:        owner,
+		Group:        group,
+		Mode:         mode,
+		Sensitive:    sensitive,
+		Ensure:       ensure,
+		ChangeAction: changeAction,
+		Lifecycle:    lifecycle,
+		Source:       item.Source,
+	}
+	if hasChangeAction {
+		unit.ChangeActionSource = item.Map["change_action"].Source
 	}
 	if hasContent {
 		unit.Summary = contentSummary([]byte(content))

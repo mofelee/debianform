@@ -164,6 +164,68 @@ host "server1" {
 	}
 }
 
+func TestCompileSystemdServiceUnitChangeAction(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  systemd {
+    service_unit "myapp" {
+      content       = "[Service]\nExecStart=/bin/true\n"
+      change_action = "try-restart"
+    }
+  }
+
+  assert {
+    condition = self.systemd.units["myapp.service"].change_action == "try-restart"
+    message   = "service unit change action missing"
+  }
+}
+`)
+
+	unit := program.Hosts[0].Systemd.Units["myapp.service"]
+	if unit.ChangeAction != "try-restart" {
+		t.Fatalf("change action = %q, want try-restart", unit.ChangeAction)
+	}
+	if unit.ChangeActionSource.Path != `host.server1.systemd.service_unit["myapp"].change_action` {
+		t.Fatalf("change action source = %#v", unit.ChangeActionSource)
+	}
+}
+
+func TestCompileSystemdServiceUnitRejectsInvalidChangeAction(t *testing.T) {
+	t.Run("unsupported action", func(t *testing.T) {
+		_, err := parseOrCompileInline(t, `
+host "server1" {
+  systemd {
+    service_unit "myapp" {
+      run           = "/bin/true"
+      change_action = "start"
+    }
+  }
+}
+`)
+		want := "change_action must be restart, reload, or try-restart"
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("compile error = %v, want %q", err, want)
+		}
+	})
+
+	t.Run("absent unit", func(t *testing.T) {
+		_, err := parseOrCompileInline(t, `
+host "server1" {
+  systemd {
+    service_unit "myapp" {
+      ensure        = "absent"
+      change_action = "restart"
+    }
+  }
+}
+`)
+		want := `change_action requires ensure = "present"`
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("compile error = %v, want %q", err, want)
+		}
+	})
+}
+
 func TestCompileSystemdTimerResolvedAndJournald(t *testing.T) {
 	program := compileInline(t, `
 host "server1" {

@@ -2910,7 +2910,7 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 			"content", "source", "owner", "file_group", "mode", "ensure",
 			"description", "run", "type", "user", "group", "working_dir",
 			"environment", "restart", "restart_delay", "wants", "after",
-			"wanted_by", "stdout", "stderr", "service_config",
+			"wanted_by", "stdout", "stderr", "service_config", "change_action",
 		)
 	case "systemd.timer":
 		return attrSet("description", "timer", "install", "wanted_by", "enable", "state", "owner", "file_group", "mode", "ensure")
