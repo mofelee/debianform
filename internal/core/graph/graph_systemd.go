@@ -31,6 +31,9 @@ func systemdUnitNode(hostName, address, component string, item ir.SystemdUnit, d
 		desired["content_sha256"] = item.Summary.SHA256
 		desired["content_bytes"] = item.Summary.Bytes
 	}
+	if item.ChangeAction != "" {
+		desired["change_action"] = item.ChangeAction
+	}
 	payload := cloneMap(desired)
 	if item.SourcePath != "" {
 		payload["source_path"] = item.SourcePath
@@ -56,6 +59,38 @@ func systemdUnitNode(hostName, address, component string, item ir.SystemdUnit, d
 		ProviderAddress: "systemd_unit." + providerName(providerParts...),
 		ProviderPayload: payload,
 	}
+}
+
+type systemdServiceChangeAction struct {
+	UnitAddress string
+	UnitName    string
+	Action      string
+	Source      ir.SourceRef
+}
+
+func systemdServiceChangeActionOperation(daemonReloadAddress string, item systemdServiceChangeAction) Operation {
+	deps := []string{item.UnitAddress}
+	if daemonReloadAddress != "" {
+		deps = append(deps, daemonReloadAddress)
+	}
+	return Operation{
+		Address:        item.UnitAddress + ".change_action",
+		Action:         "run",
+		Summary:        item.Action + " service " + item.UnitName + " after unit change",
+		DependsOn:      dedupeStrings(deps),
+		TriggeredBy:    []string{item.UnitAddress},
+		CommandPreview: systemdServiceChangeActionCommand(item.Action, item.UnitName),
+		Completion: &OperationCompletion{
+			ResourceAddress: item.UnitAddress,
+			ObservedField:   "change_action_digest",
+		},
+		Source: item.Source,
+	}
+}
+
+func systemdServiceChangeActionCommand(action, unit string) string {
+	quotedUnit := shellQuoteGraph(unit)
+	return "set -eu\nif systemctl is-active --quiet " + quotedUnit + "; then\n  systemctl " + action + " " + quotedUnit + "\nfi"
 }
 
 func systemdDropInFileNode(hostName, address, component string, item ir.SystemdUnit, summary string, deps []string) Node {

@@ -315,18 +315,20 @@ type SystemdSpec struct {
 }
 
 type SystemdUnit struct {
-	Name       string         `json:"name"`
-	Path       string         `json:"path"`
-	Content    string         `json:"content,omitempty"`
-	SourcePath string         `json:"source_path,omitempty"`
-	Owner      string         `json:"owner"`
-	Group      string         `json:"group"`
-	Mode       string         `json:"mode"`
-	Sensitive  bool           `json:"sensitive,omitempty"`
-	Ensure     string         `json:"ensure"`
-	Lifecycle  *LifecycleSpec `json:"lifecycle,omitempty"`
-	Summary    ContentSummary `json:"summary,omitempty"`
-	Source     SourceRef      `json:"source,omitempty"`
+	Name               string         `json:"name"`
+	Path               string         `json:"path"`
+	Content            string         `json:"content,omitempty"`
+	SourcePath         string         `json:"source_path,omitempty"`
+	Owner              string         `json:"owner"`
+	Group              string         `json:"group"`
+	Mode               string         `json:"mode"`
+	Sensitive          bool           `json:"sensitive,omitempty"`
+	Ensure             string         `json:"ensure"`
+	ChangeAction       string         `json:"change_action,omitempty"`
+	ChangeActionSource SourceRef      `json:"-"`
+	Lifecycle          *LifecycleSpec `json:"lifecycle,omitempty"`
+	Summary            ContentSummary `json:"summary,omitempty"`
+	Source             SourceRef      `json:"source,omitempty"`
 }
 
 type NetworkdSpec struct {

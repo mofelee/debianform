@@ -10,7 +10,8 @@ DebianForm supports two ways to define a `.service` unit:
 
 Both forms ultimately compile into the same `SystemdUnit`, are written to
 `/etc/systemd/system/*.service`, and trigger `systemctl daemon-reload` when the
-content changes. Whether the service starts at boot and whether it is currently
+content changes. `service_unit` can also apply an explicit runtime action after
+the reload. Whether the service starts at boot and whether it is currently
 running are still managed by `services.service`.
 
 ## Plain-Text Form
@@ -84,6 +85,7 @@ systemd {
     working_dir   = "/var/lib/myapp"
     restart       = "always"
     restart_delay = "5s"
+    change_action = "restart"
 
     wants = ["network-online.target"]
     after = ["network-online.target"]
@@ -127,6 +129,34 @@ StandardError=journal
 WantedBy=multi-user.target
 ```
 
+## Applying Unit Changes to a Running Service
+
+`systemctl daemon-reload` updates systemd's unit definition but does not replace
+an already running process. Set `change_action` on `service_unit` when a unit
+change must also reach the live service:
+
+```hcl
+systemd {
+  service_unit "myapp" {
+    run           = ["/usr/local/bin/myapp", "--config", "/etc/myapp/config.yaml"]
+    change_action = "try-restart"
+  }
+}
+```
+
+Supported values are `restart`, `reload`, and `try-restart`. DebianForm shows the
+action as a separate plan operation and guarantees this order:
+
+1. write the changed unit;
+2. run `systemctl daemon-reload`;
+3. run the selected action if the service is active;
+4. reconcile the matching `services.service` state.
+
+Inactive services remain stopped. When a new unit has `state = "running"`, the
+action observes it as inactive and the service resource starts it once. If the
+action fails, apply fails and does not record the action as complete, so the next
+apply retries it. `reload` fails unless the active unit supports reloading.
+
 ## Comparison
 
 | Capability | Plain-text `systemd.unit` | Structured `systemd.service_unit` |
@@ -137,6 +167,7 @@ WantedBy=multi-user.target
 | Uncommon systemd directives | Write them directly | Use plain text when they are not yet covered |
 | File metadata | `owner`, `group`, `mode` | `owner`, `file_group`, `mode` |
 | Service runtime state | Pair with `services.service` | Pair with `services.service` |
+| Runtime action after a unit change | Not available | Optional `change_action` |
 
 The structured `service_unit` form currently supports these fields:
 
@@ -154,6 +185,7 @@ The structured `service_unit` form currently supports these fields:
 - `wanted_by`
 - `stdout`
 - `stderr`
+- `change_action` (also available in raw `service_unit` mode)
 
 `wanted_by` defaults to `["multi-user.target"]`, allowing
 `services.service.enabled = true` to enable the service directly. To generate a

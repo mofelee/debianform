@@ -107,7 +107,7 @@ raw policy route/rule 生效和清理。上述 CI run 和三个 gates 保留了�
 | `groups` | Beta | group gid/system/ensure。 | user/group example 和 tests。 |
 | `users` | Beta | uid/home/shell/primary group/supplementary groups/authorized keys。 | user/group example 和 tests。 |
 | `systemd.unit` | Beta | 原始 unit 文件管理。 | systemd examples 和 integration case。 |
-| `systemd.service_unit` | Beta | 结构化 `.service` 生成。 | `systemd-service-unit` integration case。 |
+| `systemd.service_unit` | Beta | raw/structured `.service` 生成，并可在 unit 变化后执行 restart/reload/try-restart。 | graph/engine 重试测试和 `systemd-service-unit` integration case。 |
 | `systemd.timer` | Preview | 结构化 `.timer` 生成，并可管理 timer enabled/state。 | merge/graph 单测、`fleet` 示例和 `systemd-extensions` integration case。 |
 | `systemd.resolved` | Preview | 管理 `/etc/systemd/resolved.conf.d/debianform.conf` drop-in，并可管理/重启 `systemd-resolved`。 | merge/graph 单测、`fleet` 示例和 `systemd-extensions` integration case。 |
 | `systemd.journald` | Preview | 管理 `/etc/systemd/journald.conf.d/debianform.conf` drop-in，并可重载/重启 journald。 | merge/graph 单测、`fleet` 示例和 `systemd-extensions` integration case。 |

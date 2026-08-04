@@ -1226,6 +1226,73 @@ func TestComponentScriptOnChangeOperationRunsAfterFileChange(t *testing.T) {
 	}
 }
 
+func TestServiceUnitChangeActionFailureRetriesUntilCompletion(t *testing.T) {
+	program, resourceGraph := fixtureProgramAndGraph(t, writeEngineConfig(t, `
+host "server1" {
+  systemd {
+    service_unit "worker" {
+      run           = "/bin/true"
+      change_action = "restart"
+    }
+  }
+
+  services {
+    service "worker" {
+      enabled = true
+      state   = "running"
+    }
+  }
+}
+`))
+	backend := NewMemoryBackend()
+	provider := &recordingOperationProvider{MemoryProvider: NewMemoryProvider(), OperationError: errors.New("injected restart failure")}
+	engine := Engine{Backend: backend, Provider: provider}
+	unitAddress := `host.server1.systemd.unit["worker.service"]`
+	actionAddress := unitAddress + ".change_action"
+	provider.OperationErrorAt = actionAddress
+
+	failed, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err == nil || !strings.Contains(err.Error(), actionAddress+" failed: injected restart failure") {
+		t.Fatalf("first apply error = %v", err)
+	}
+	if len(failed.Operations) != 2 || operationStepFor(failed, actionAddress) == nil {
+		t.Fatalf("failed apply operations = %#v", failed.Operations)
+	}
+	stateAfterFailure, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	unitAfterFailure := stateAfterFailure.Resources[unitAddress]
+	if stringMapValue(unitAfterFailure.Observed, changeActionDigestObservedField) != "" {
+		t.Fatalf("failed action recorded completion: %#v", unitAfterFailure)
+	}
+
+	provider.OperationError = nil
+	retry, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasStepAction(retry, unitAddress, ActionUpdate) || operationStepFor(retry, actionAddress) == nil {
+		t.Fatalf("retry plan = steps %#v operations %#v", retry.Steps, retry.Operations)
+	}
+	stateAfterRetry, err := backend.Read(context.Background(), program.Hosts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	unitAfterRetry := stateAfterRetry.Resources[unitAddress]
+	if got := stringMapValue(unitAfterRetry.Observed, changeActionDigestObservedField); got != unitAfterRetry.DesiredDigest {
+		t.Fatalf("completion digest = %q, want %q", got, unitAfterRetry.DesiredDigest)
+	}
+
+	converged, err := engine.Apply(context.Background(), program, resourceGraph, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(converged.Steps) != 0 || len(converged.Operations) != 0 {
+		t.Fatalf("converged apply = steps %#v operations %#v", converged.Steps, converged.Operations)
+	}
+}
+
 func TestComponentScriptOutputsTriggerOperationAndRecordState(t *testing.T) {
 	program, resourceGraph := fixtureProgramAndGraph(t, "../testdata/fixtures/component-script-on-change.dbf.hcl")
 	backend := NewMemoryBackend()
@@ -2459,9 +2526,10 @@ func (p *recordingPayloadProvider) Apply(ctx context.Context, step Step) (map[st
 
 type recordingOperationProvider struct {
 	*MemoryProvider
-	ScriptPayloads map[string][]graph.ScriptPayload
-	OutputSHA      string
-	OperationError error
+	ScriptPayloads   map[string][]graph.ScriptPayload
+	OutputSHA        string
+	OperationError   error
+	OperationErrorAt string
 }
 
 func (p *recordingOperationProvider) RunOperation(ctx context.Context, operation graph.Operation) (OperationResult, error) {
@@ -2476,7 +2544,7 @@ func (p *recordingOperationProvider) RunOperation(ctx context.Context, operation
 		payload.TriggerPaths = append([]string(nil), payload.TriggerPaths...)
 		p.ScriptPayloads[operation.Address] = append(p.ScriptPayloads[operation.Address], payload)
 	}
-	if p.OperationError != nil {
+	if p.OperationError != nil && (p.OperationErrorAt == "" || p.OperationErrorAt == operation.Address) {
 		return OperationResult{}, p.OperationError
 	}
 	result, err := p.MemoryProvider.RunOperation(ctx, operation)

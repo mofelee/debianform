@@ -69,14 +69,15 @@ host "manual1" {
 
   systemd {
     service_unit "manualsvc" {
-      description = "DebianForm manual service"
-      run         = ["/usr/local/bin/manualsvc-worker"]
-      user        = "manualsvc"
-      group       = "manualsvc"
-      working_dir = "/var/lib/manualsvc"
-      restart     = "always"
-      stdout      = "journal"
-      stderr      = "journal"
+      description   = "DebianForm manual service"
+      run           = ["/usr/local/bin/manualsvc-worker"]
+      user          = "manualsvc"
+      group         = "manualsvc"
+      working_dir   = "/var/lib/manualsvc"
+      restart       = "always"
+      change_action = "try-restart"
+      stdout        = "journal"
+      stderr        = "journal"
     }
   }
 
@@ -102,16 +103,21 @@ dbf plan --offline
 dbf apply --auto-approve
 ```
 
-离线 plan 会包含 6 个资源和 1 个 operation：
+离线 plan 会包含 6 个资源和 2 个 operation：
 
 ```text
-Summary: 6 create, 0 update, 0 delete, 0 no-op, 1 operations
+Summary: 6 create, 0 update, 0 delete, 0 no-op, 2 operations
 ```
 
-operation 是 systemd daemon reload。unit 文件变化后，DebianForm 会运行：
+两个 operation 会 reload systemd manager，并按配置对服务执行条件动作。这个 unit 变化后，
+DebianForm 先运行 daemon-reload；服务已经 active 时再运行 `try-restart`。首次 apply 时服务仍
+为 inactive，因此只会由 `services.service.state = "running"` 启动一次。
 
 ```text
 systemctl daemon-reload
+if systemctl is-active --quiet manualsvc.service; then
+  systemctl try-restart manualsvc.service
+fi
 ```
 
 ## 验证服务
@@ -243,14 +249,15 @@ host "manual1" {
 
   systemd {
     service_unit "manualsvc" {
-      description = "DebianForm manual service"
-      run         = ["/usr/local/bin/manualsvc-worker"]
-      user        = "manualsvc"
-      group       = "manualsvc"
-      working_dir = "/var/lib/manualsvc"
-      restart     = "always"
-      stdout      = "journal"
-      stderr      = "journal"
+      description   = "DebianForm manual service"
+      run           = ["/usr/local/bin/manualsvc-worker"]
+      user          = "manualsvc"
+      group         = "manualsvc"
+      working_dir   = "/var/lib/manualsvc"
+      restart       = "always"
+      change_action = "try-restart"
+      stdout        = "journal"
+      stderr        = "journal"
     }
   }
 

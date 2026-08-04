@@ -799,7 +799,11 @@ func Compare(node graph.Node, prior *corestate.Resource, observed Observed) Prov
 	}
 	if observed.DesiredDigest == desiredDigest {
 		if prior == nil {
+			observedValues = completeChangeActionOnAdopt(node, prior, observedValues)
 			return ProviderPlan{Action: ActionAdopt, Summary: "adopt existing " + node.Kind + " " + identity(node), Observed: observedValues, Ownership: "adopted"}
+		}
+		if changeActionCompletionPending(node, prior) {
+			return ProviderPlan{Action: ActionUpdate, Summary: "retry " + stringDesired(node, "change_action") + " after updating " + identity(node), Observed: observedValues, Ownership: prior.Ownership}
 		}
 		return ProviderPlan{Action: ActionNoOp, Summary: "no changes for " + node.Kind + " " + identity(node), Observed: observedValues, Ownership: prior.Ownership}
 	}
@@ -1717,7 +1721,7 @@ func (e Engine) executeItem(ctx context.Context, hosts map[string]ir.HostSpec, s
 }
 
 func (e Engine) recordOperationOutputs(ctx context.Context, hosts map[string]ir.HostSpec, states map[string]corestate.State, statesLock *sync.Mutex, stateLocks map[string]*sync.Mutex, step OperationStep, result OperationResult) error {
-	if len(result.Outputs) == 0 {
+	if len(result.Outputs) == 0 && step.Operation.Completion == nil {
 		return nil
 	}
 	hostName := step.Operation.Host
@@ -1756,6 +1760,23 @@ func (e Engine) recordOperationOutputs(ctx context.Context, hosts map[string]ir.
 			Observed:  observed,
 			Ownership: "managed",
 		}, observed, now)
+	}
+	if completion := step.Operation.Completion; completion != nil {
+		resource, ok := st.Resources[completion.ResourceAddress]
+		if !ok {
+			return fmt.Errorf("%s completion resource %q is missing from state", step.Address, completion.ResourceAddress)
+		}
+		if completion.ObservedField == "" {
+			return fmt.Errorf("%s completion observed field is empty", step.Address)
+		}
+		observed := cloneMap(resource.Observed)
+		if observed == nil {
+			observed = map[string]any{}
+		}
+		observed[completion.ObservedField] = resource.DesiredDigest
+		resource.Observed = corestate.SanitizeObserved(observed)
+		resource.UpdatedAt = now
+		st.Resources[completion.ResourceAddress] = resource
 	}
 	committed, err := e.Backend.Write(ctx, host, st)
 	if err != nil {

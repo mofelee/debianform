@@ -489,6 +489,7 @@ Debian fixture，离线配置省略 `distribution/version` 时仍保留历史 De
 | `environment` | `{}` | map(string)，渲染为 `Environment=`。 |
 | `restart` | 无 | `no`、`on-success`、`on-failure`、`on-abnormal`、`on-watchdog`、`on-abort`、`always`。 |
 | `restart_delay` | 无 | `[Service] RestartSec=`。 |
+| `change_action` | 无 | unit 变化且 daemon-reload 完成后执行 `restart`、`reload` 或 `try-restart`；inactive 服务保持 stopped。 |
 | `wants` / `after` | `[]` | `[Unit] Wants=` / `After=`。 |
 | `wanted_by` | `["multi-user.target"]` | `[Install] WantedBy=`；空列表会省略 Install section。 |
 | `stdout` / `stderr` | 无 | StandardOutput/StandardError。 |
@@ -498,6 +499,12 @@ Debian fixture，离线配置省略 `distribution/version` 时仍保留历史 De
 | `ensure` | `"present"` | `"present"` 或 `"absent"`。 |
 
 `unit` 和 `service_unit` 支持 `lifecycle { prevent_destroy = true }`。
+
+`change_action` 只用于 `service_unit`，raw 和 structured 模式都支持。对应 operation 会明确显示在
+plan 中。执行图先写 unit，再运行 `systemctl daemon-reload`，仅对 active 服务执行所选动作，最后
+才收敛匹配的 `services.service`。因此新建的 inactive unit 会由 `state = "running"` 启动一次，不会
+额外 restart。动作失败会使 apply 失败，并在下一次 apply 中继续处于 pending 状态。使用 `reload`
+时 unit 必须支持 reload。
 
 #### systemd.networkd
 

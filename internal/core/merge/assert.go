@@ -264,13 +264,14 @@ func systemdSpecToCty(spec ir.SystemdSpec) cty.Value {
 	for _, name := range sortedMapKeys(spec.Units) {
 		item := spec.Units[name]
 		units[name] = cty.ObjectVal(map[string]cty.Value{
-			"name":        cty.StringVal(item.Name),
-			"path":        cty.StringVal(item.Path),
-			"owner":       cty.StringVal(item.Owner),
-			"group":       cty.StringVal(item.Group),
-			"mode":        cty.StringVal(item.Mode),
-			"ensure":      cty.StringVal(item.Ensure),
-			"source_path": cty.StringVal(item.SourcePath),
+			"name":          cty.StringVal(item.Name),
+			"path":          cty.StringVal(item.Path),
+			"owner":         cty.StringVal(item.Owner),
+			"group":         cty.StringVal(item.Group),
+			"mode":          cty.StringVal(item.Mode),
+			"ensure":        cty.StringVal(item.Ensure),
+			"change_action": cty.StringVal(item.ChangeAction),
+			"source_path":   cty.StringVal(item.SourcePath),
 		})
 	}
 	timers := make(map[string]cty.Value, len(spec.Timers))
@@ -310,13 +311,14 @@ func systemdSpecToCty(spec ir.SystemdSpec) cty.Value {
 
 func systemdUnitToCty(item ir.SystemdUnit) cty.Value {
 	return cty.ObjectVal(map[string]cty.Value{
-		"name":        cty.StringVal(item.Name),
-		"path":        cty.StringVal(item.Path),
-		"owner":       cty.StringVal(item.Owner),
-		"group":       cty.StringVal(item.Group),
-		"mode":        cty.StringVal(item.Mode),
-		"ensure":      cty.StringVal(item.Ensure),
-		"source_path": cty.StringVal(item.SourcePath),
+		"name":          cty.StringVal(item.Name),
+		"path":          cty.StringVal(item.Path),
+		"owner":         cty.StringVal(item.Owner),
+		"group":         cty.StringVal(item.Group),
+		"mode":          cty.StringVal(item.Mode),
+		"ensure":        cty.StringVal(item.Ensure),
+		"change_action": cty.StringVal(item.ChangeAction),
+		"source_path":   cty.StringVal(item.SourcePath),
 	})
 }
 

@@ -12,6 +12,8 @@ import (
 	corestate "github.com/mofelee/debianform/internal/core/state"
 )
 
+const changeActionDigestObservedField = "change_action_digest"
+
 func inSyncPlan(node graph.Node, prior *corestate.Resource, summary string, observed map[string]any) ProviderPlan {
 	if observed == nil {
 		observed = map[string]any{}
@@ -22,6 +24,29 @@ func inSyncPlan(node graph.Node, prior *corestate.Resource, summary string, obse
 		return ProviderPlan{Action: ActionAdopt, Summary: "adopt existing " + node.Kind + " " + identity(node), Observed: observed, Ownership: "adopted"}
 	}
 	return ProviderPlan{Action: ActionNoOp, Summary: summary, Observed: observed, Ownership: ownership(prior)}
+}
+
+func changeActionCompletionPending(node graph.Node, prior *corestate.Resource) bool {
+	if stringDesired(node, "change_action") == "" || prior == nil {
+		return false
+	}
+	return stringMapValue(prior.Observed, changeActionDigestObservedField) != corestate.DesiredDigest(node.Desired)
+}
+
+func changeActionConfigurationRemoved(node graph.Node, prior *corestate.Resource) bool {
+	return stringDesired(node, "change_action") == "" && prior != nil && stringMapValue(prior.Desired, "change_action") != ""
+}
+
+func completeChangeActionOnAdopt(node graph.Node, prior *corestate.Resource, observed map[string]any) map[string]any {
+	if stringDesired(node, "change_action") == "" || prior != nil {
+		return observed
+	}
+	out := cloneMap(observed)
+	if out == nil {
+		out = map[string]any{}
+	}
+	out[changeActionDigestObservedField] = corestate.DesiredDigest(node.Desired)
+	return out
 }
 
 func absentInSyncPlan(prior *corestate.Resource, summary string, observed map[string]any) ProviderPlan {

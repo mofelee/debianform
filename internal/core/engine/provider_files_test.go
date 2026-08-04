@@ -104,6 +104,70 @@ func TestNativeProviderObservedModeUsesFourDigitDisplay(t *testing.T) {
 	}
 }
 
+func TestNativeProviderSystemdChangeActionCompletionPlans(t *testing.T) {
+	content := "[Service]\nExecStart=/bin/true\n"
+	node := graph.Node{
+		Address: "host.server1.systemd.unit[\"demo.service\"]",
+		Host:    "server1",
+		Kind:    "systemd_unit",
+		Desired: map[string]any{
+			"path":          "/etc/systemd/system/demo.service",
+			"content":       content,
+			"owner":         "root",
+			"group":         "root",
+			"mode":          "0644",
+			"ensure":        "present",
+			"change_action": "restart",
+		},
+	}
+	remote := Result{Stdout: "file\nroot\nroot\n644\n" + sha256Hex([]byte(content)) + "\n"}
+	provider := NewNativeProvider(&recordingRunner{outputs: []Result{remote}})
+	adopt, err := provider.Plan(context.Background(), node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if adopt.Action != ActionAdopt || adopt.Observed[changeActionDigestObservedField] != corestate.DesiredDigest(node.Desired) {
+		t.Fatalf("adopt plan = %#v", adopt)
+	}
+
+	prior := &corestate.Resource{
+		Ownership:     "managed",
+		Desired:       cloneMap(node.Desired),
+		DesiredDigest: corestate.DesiredDigest(node.Desired),
+		Observed:      map[string]any{"exists": true},
+	}
+	provider = NewNativeProvider(&recordingRunner{outputs: []Result{remote}})
+	retry, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry.Action != ActionUpdate || !strings.Contains(retry.Summary, "retry restart") {
+		t.Fatalf("retry plan = %#v", retry)
+	}
+
+	prior.Observed[changeActionDigestObservedField] = prior.DesiredDigest
+	provider = NewNativeProvider(&recordingRunner{outputs: []Result{remote}})
+	converged, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if converged.Action != ActionNoOp {
+		t.Fatalf("converged plan = %#v", converged)
+	}
+
+	withoutAction := node
+	withoutAction.Desired = cloneMap(node.Desired)
+	delete(withoutAction.Desired, "change_action")
+	provider = NewNativeProvider(&recordingRunner{outputs: []Result{remote}})
+	removed, err := provider.Plan(context.Background(), withoutAction, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed.Action != ActionUpdate || !strings.Contains(removed.Summary, "remove change action metadata") {
+		t.Fatalf("removed action plan = %#v", removed)
+	}
+}
+
 func TestNativeProviderPlanHostBulkInspectsMultipleFilesWithOneRun(t *testing.T) {
 	dir := t.TempDir()
 	fileA := filepath.Join(dir, "a.txt")

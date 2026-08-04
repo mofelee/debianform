@@ -53,6 +53,13 @@ func (p NativeProvider) planFileLike(ctx context.Context, node graph.Node, prior
 		normalizeMode(current.Mode) != normalizeMode(stringDesired(node, "mode")) {
 		return ProviderPlan{Action: ActionUpdate, Summary: "update file " + path, Observed: observed, Ownership: ownership(prior)}, nil
 	}
+	if changeActionCompletionPending(node, prior) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "retry " + stringDesired(node, "change_action") + " after updating " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	if changeActionConfigurationRemoved(node, prior) {
+		return ProviderPlan{Action: ActionUpdate, Summary: "remove change action metadata for " + path, Observed: observed, Ownership: ownership(prior)}, nil
+	}
+	observed = completeChangeActionOnAdopt(node, prior, observed)
 	return inSyncPlan(node, prior, "no changes for file "+path, observed), nil
 }
 
