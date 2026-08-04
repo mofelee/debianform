@@ -6,6 +6,17 @@ DebianForm 的所有重要变更都会记录在此文件中。
 
 公开 beta 版本线开始后，本项目遵循语义化版本控制。
 
+## v0.10.0
+
+- 为 Beta `systemd.service_unit` resource（包括 raw-content unit）新增可选的 `change_action`
+  attribute。支持 `restart`、`reload` 和 `try-restart`，触发的 action 会在 plan 中显式展示。
+- 将变更后的 unit write 排在 host-scoped `systemctl daemon-reload` 之前，随后执行所选 service
+  action，最后收敛匹配的 `services.service`。应为 running 的新 unit 只启动一次，不会重复 restart；
+  `try-restart` 不会启动 inactive service，同一 unit 的重复 action 会合并。
+- 仅在命令成功后持久化 action 完成状态，因此失败的 action 会使 apply 失败，并保持待重试状态。
+  既有配置和 resource address 不变，state schema 仍为 version 2，plan JSON 仍为
+  `debianform.plan.alpha1`，无需迁移。
+
 ## v0.9.0
 
 - 新增用于静态 component-root 重命名的声明式顶层 `moved` block。基于 state 的 plan 和 check

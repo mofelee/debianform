@@ -6,6 +6,19 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
+## v0.10.0
+
+- Added the optional `change_action` attribute to Beta `systemd.service_unit` resources, including
+  raw-content units. The supported actions are `restart`, `reload`, and `try-restart`, and a
+  triggered action is shown explicitly in the plan.
+- Ordered changed unit writes before the host-scoped `systemctl daemon-reload`, then the selected
+  service action, and finally matching `services.service` reconciliation. Newly created units that
+  should be running start once without a redundant restart, while `try-restart` does not start an
+  inactive service and duplicate actions for the same unit coalesce.
+- Persisted action completion only after the command succeeds, so a failed action fails apply and
+  remains pending for retry. Existing configurations and resource addresses are unchanged, state
+  schema remains version 2, plan JSON remains `debianform.plan.alpha1`, and no migration is needed.
+
 ## v0.9.0
 
 - Added declarative top-level `moved` blocks for static component-root renames. State-backed plan
