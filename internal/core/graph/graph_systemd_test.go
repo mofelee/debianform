@@ -78,6 +78,90 @@ host "server1" {
 	}
 }
 
+func TestCompileServiceUnitChangeActionOrdering(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+host "server1" {
+  systemd {
+    service_unit "worker" {
+      run           = ["/bin/true"]
+      change_action = "restart"
+    }
+  }
+
+  services {
+    service "worker" {
+      enabled = true
+      state   = "running"
+    }
+  }
+}
+`)
+
+	unitAddress := `host.server1.systemd.unit["worker.service"]`
+	daemonReloadAddress := "host.server1.systemd.daemon_reload"
+	actionAddress := unitAddress + ".change_action"
+	action := operationFor(resourceGraph, actionAddress)
+	if action == nil {
+		t.Fatalf("change action missing: %#v", resourceGraph.Operations)
+	}
+	if !containsString(action.TriggeredBy, unitAddress) || !containsString(action.DependsOn, unitAddress) || !containsString(action.DependsOn, daemonReloadAddress) {
+		t.Fatalf("change action deps=%#v triggered_by=%#v", action.DependsOn, action.TriggeredBy)
+	}
+	if action.CommandPreview != "set -eu\nif systemctl is-active --quiet 'worker.service'; then\n  systemctl restart 'worker.service'\nfi" {
+		t.Fatalf("change action command = %q", action.CommandPreview)
+	}
+	if action.Completion == nil || action.Completion.ResourceAddress != unitAddress || action.Completion.ObservedField != "change_action_digest" {
+		t.Fatalf("change action completion = %#v", action.Completion)
+	}
+	serviceDeps := dependsOnFor(resourceGraph, `host.server1.services.service["worker"]`)
+	if !containsString(serviceDeps, actionAddress) {
+		t.Fatalf("service deps = %#v, want %q", serviceDeps, actionAddress)
+	}
+}
+
+func TestCompileComponentServiceUnitChangeActions(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+component "app" {
+  systemd {
+    service_unit "app" {
+      run           = "/bin/true"
+      change_action = "try-restart"
+    }
+  }
+
+  services {
+    service "app" {
+      state = "running"
+    }
+  }
+}
+
+host "server1" {
+  components = [component.app]
+}
+`)
+
+	unitAddress := `host.server1.components.app.systemd.unit["app.service"]`
+	actionAddress := unitAddress + ".change_action"
+	action := operationFor(resourceGraph, actionAddress)
+	if action == nil || !strings.Contains(action.CommandPreview, "systemctl try-restart 'app.service'") {
+		t.Fatalf("component change action = %#v", action)
+	}
+	serviceDeps := dependsOnFor(resourceGraph, `host.server1.components.app.services.service["app"]`)
+	if !containsString(serviceDeps, actionAddress) {
+		t.Fatalf("component service deps = %#v, want %q", serviceDeps, actionAddress)
+	}
+}
+
+func TestSystemdServiceChangeActionCommandsKeepInactiveUnitsStopped(t *testing.T) {
+	for _, action := range []string{"restart", "reload", "try-restart"} {
+		command := systemdServiceChangeActionCommand(action, "demo.service")
+		if !strings.Contains(command, "if systemctl is-active --quiet 'demo.service'; then") || !strings.Contains(command, "systemctl "+action+" 'demo.service'") {
+			t.Fatalf("%s command = %q", action, command)
+		}
+	}
+}
+
 func TestCompileSystemdTimerResolvedAndJournaldGraph(t *testing.T) {
 	resourceGraph := compileGraphInline(t, `
 host "server1" {

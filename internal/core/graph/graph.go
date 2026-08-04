@@ -50,16 +50,22 @@ func nodeSensitive(n Node) bool {
 }
 
 type Operation struct {
-	Host           string         `json:"host"`
-	Address        string         `json:"address"`
-	Action         string         `json:"action"`
-	Summary        string         `json:"summary"`
-	Sensitive      bool           `json:"sensitive,omitempty"`
-	DependsOn      []string       `json:"depends_on,omitempty"`
-	TriggeredBy    []string       `json:"triggered_by,omitempty"`
-	CommandPreview string         `json:"command_preview,omitempty"`
-	ScriptPayload  *ScriptPayload `json:"-"`
-	Source         ir.SourceRef   `json:"source,omitempty"`
+	Host           string               `json:"host"`
+	Address        string               `json:"address"`
+	Action         string               `json:"action"`
+	Summary        string               `json:"summary"`
+	Sensitive      bool                 `json:"sensitive,omitempty"`
+	DependsOn      []string             `json:"depends_on,omitempty"`
+	TriggeredBy    []string             `json:"triggered_by,omitempty"`
+	CommandPreview string               `json:"command_preview,omitempty"`
+	ScriptPayload  *ScriptPayload       `json:"-"`
+	Completion     *OperationCompletion `json:"-"`
+	Source         ir.SourceRef         `json:"source,omitempty"`
+}
+
+type OperationCompletion struct {
+	ResourceAddress string
+	ObservedField   string
 }
 
 type ScriptPayload struct {

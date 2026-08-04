@@ -1318,6 +1318,8 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	}
 
 	unitTriggers := []string{}
+	unitChangeActions := []systemdServiceChangeAction{}
+	unitChangeActionAddresses := map[string]string{}
 	timerServiceNodes := []Node{}
 	networkdTriggers := []string{}
 	resolvedTriggers := []string{}
@@ -1340,6 +1342,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		unitAddresses[name] = address
 		unitTriggers = append(unitTriggers, address)
 		nodes = append(nodes, systemdUnitNode(host.Name, address, "", item, ownershipDependencies(item.Owner, item.Group, userAddresses, groupAddresses)))
+		if item.ChangeAction != "" {
+			unitChangeActions = append(unitChangeActions, systemdServiceChangeAction{UnitAddress: address, UnitName: item.Name, Action: item.ChangeAction, Source: item.ChangeActionSource})
+		}
 	}
 
 	for _, name := range sortedKeys(host.Systemd.Timers) {
@@ -1368,6 +1373,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				deps = append(deps, installAddress)
 			}
 			nodes = append(nodes, systemdUnitNode(host.Name, address, component.Name, item, dedupeStrings(deps)))
+			if item.ChangeAction != "" {
+				unitChangeActions = append(unitChangeActions, systemdServiceChangeAction{UnitAddress: address, UnitName: item.Name, Action: item.ChangeAction, Source: item.ChangeActionSource})
+			}
 		}
 		for _, name := range sortedKeys(component.Systemd.Timers) {
 			timer := component.Systemd.Timers[name]
@@ -1620,6 +1628,11 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 		}
 	}
 	nodes = append(nodes, timerServiceNodes...)
+	for _, item := range unitChangeActions {
+		operation := systemdServiceChangeActionOperation(daemonReloadAddress, item)
+		operations = append(operations, operation)
+		unitChangeActionAddresses[item.UnitName] = operation.Address
+	}
 
 	if len(resolvedTriggers) > 0 && resolvedRestartOnChange {
 		deps := append([]string(nil), resolvedTriggers...)
@@ -1664,6 +1677,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			if daemonReloadAddress != "" {
 				deps = append(deps, daemonReloadAddress)
 			}
+		}
+		if changeActionAddress, ok := unitChangeActionAddresses[item.Unit]; ok {
+			deps = append(deps, changeActionAddress)
 		}
 		deps = dedupeStrings(deps)
 		desired := map[string]any{
@@ -1723,6 +1739,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				if daemonReloadAddress != "" {
 					deps = append(deps, daemonReloadAddress)
 				}
+			}
+			if changeActionAddress, ok := unitChangeActionAddresses[item.Unit]; ok {
+				deps = append(deps, changeActionAddress)
 			}
 			deps = dedupeStrings(deps)
 			desired := map[string]any{
