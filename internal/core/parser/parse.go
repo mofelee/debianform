@@ -149,6 +149,12 @@ type ScriptReference struct {
 	Source ir.SourceRef
 }
 
+type ResourceReference struct {
+	Type   string
+	Name   string
+	Source ir.SourceRef
+}
+
 type ComponentArtifactSource struct {
 	Architecture    string
 	URL             string
@@ -1623,6 +1629,60 @@ func parseScriptTraversal(file string, expr hcl.Expression) (ScriptReference, er
 	return ScriptReference{}, fmt.Errorf("%s:%d: script reference must be script.<name> or global.script.<name>", file, expr.Range().Start.Line)
 }
 
+func parseResourceReferenceList(file string, expr hcl.Expression, source ir.SourceRef) (Value, error) {
+	items, diags := hcl.ExprList(expr)
+	if diags.HasErrors() {
+		return Value{}, fmt.Errorf("%s:%d:%s: depends_on must be a list of resource references", file, expr.Range().Start.Line, source.Path)
+	}
+	values := make([]Value, 0, len(items))
+	seen := map[string]struct{}{}
+	for i, item := range items {
+		itemSource := source
+		itemSource.Line = item.Range().Start.Line
+		itemSource.Path = fmt.Sprintf("%s[%d]", source.Path, i)
+		ref, err := parseResourceTraversal(file, item, itemSource)
+		if err != nil {
+			return Value{}, err
+		}
+		key := ref.Type + "\x00" + ref.Name
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		values = append(values, Value{
+			Kind:              KindString,
+			String:            fmt.Sprintf("%s[%s]", ref.Type, strconv.Quote(ref.Name)),
+			ResourceReference: &ref,
+			Source:            itemSource,
+		})
+	}
+	return Value{Kind: KindList, List: values, Source: source}, nil
+}
+
+func parseResourceTraversal(file string, expr hcl.Expression, source ir.SourceRef) (ResourceReference, error) {
+	traversal, diags := hcl.AbsTraversalForExpr(expr)
+	if diags.HasErrors() || len(traversal) != 2 {
+		return ResourceReference{}, fmt.Errorf("%s:%d:%s: depends_on entry must be package.<name>, file[<label>], or service.<name>", file, expr.Range().Start.Line, source.Path)
+	}
+	root, ok := traversal[0].(hcl.TraverseRoot)
+	if !ok || (root.Name != "package" && root.Name != "file" && root.Name != "service") {
+		return ResourceReference{}, fmt.Errorf("%s:%d:%s: depends_on reference type is out of scope; supported types are package, file, and service", file, expr.Range().Start.Line, source.Path)
+	}
+	name := ""
+	switch step := traversal[1].(type) {
+	case hcl.TraverseAttr:
+		name = step.Name
+	case hcl.TraverseIndex:
+		if step.Key.IsKnown() && !step.Key.IsNull() && step.Key.Type() == cty.String {
+			name = step.Key.AsString()
+		}
+	}
+	if name == "" {
+		return ResourceReference{}, fmt.Errorf("%s:%d:%s: depends_on resource label must be a non-empty static string", file, expr.Range().Start.Line, source.Path)
+	}
+	return ResourceReference{Type: root.Name, Name: name, Source: source}, nil
+}
+
 func parseComponentInputBlock(file, componentPath string, block *hclsyntax.Block, ctx EvalContext) (ComponentInput, error) {
 	if len(block.Labels) != 1 {
 		return ComponentInput{}, fmt.Errorf("%s:%d: component input block requires exactly one label", file, block.TypeRange.Start.Line)
@@ -2720,6 +2780,14 @@ func parseLabeledObjectBlock(file, domain, path string, block *hclsyntax.Block, 
 			Line: attr.NameRange.Start.Line,
 			Path: path + "." + name,
 		}
+		if name == "depends_on" {
+			value, err := parseResourceReferenceList(file, attr.Expr, attrSource)
+			if err != nil {
+				return Value{}, err
+			}
+			values[name] = value
+			continue
+		}
 		if domain == "files" && block.Type == "file" && name == "on_change" {
 			ref, err := parseScriptTraversal(file, attr.Expr)
 			if err != nil {
@@ -2915,9 +2983,9 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 	case "apt.source_file":
 		return attrSet("path", "content", "source", "owner", "group", "mode", "ensure", "on_destroy")
 	case "packages.package":
-		return attrSet("repositories")
+		return attrSet("repositories", "depends_on")
 	case "files.file":
-		return attrSet("path", "content", "content_version", "source", "owner", "group", "mode", "ensure", "sensitive", "on_change")
+		return attrSet("path", "content", "content_version", "source", "owner", "group", "mode", "ensure", "sensitive", "on_change", "depends_on")
 	case "secrets.file":
 		return attrSet("path", "source", "owner", "group", "mode", "ensure")
 	case "directories.directory":
@@ -2938,7 +3006,7 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 	case "systemd.timer":
 		return attrSet("description", "timer", "install", "wanted_by", "enable", "state", "owner", "file_group", "mode", "ensure")
 	case "services.service":
-		return attrSet("package", "enabled", "state")
+		return attrSet("package", "enabled", "state", "depends_on")
 	case "nftables.file":
 		return attrSet("path", "content", "source", "owner", "group", "mode", "ensure", "sensitive", "validate", "activate")
 	default:

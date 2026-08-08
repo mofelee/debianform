@@ -323,6 +323,11 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 		if err != nil {
 			return nil, err
 		}
+		dependencies, err := resourceDependencies(raw, fmt.Sprintf("host.%s.components.%s", target.Name, component.Name))
+		if err != nil {
+			return nil, err
+		}
+		component.ExplicitDependencies = dependencies
 		artifactTemplate, err := parser.EvaluateComponentArtifactSources(template, componentCtx)
 		if err != nil {
 			return nil, fmt.Errorf("%s:%d:%s mounted at %s:%d:%s: %w", template.Source.File, template.Source.Line, template.Source.Path, instance.Source.File, instance.Source.Line, instance.Source.Path, err)
@@ -444,6 +449,11 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 			}
 			return err
 		}
+		dependencies, err := resourceDependencies(raw, fmt.Sprintf("host.%s.components.%s", target.Name, component.Name))
+		if err != nil {
+			return err
+		}
+		component.ExplicitDependencies = dependencies
 		component.Template = template.Name
 		component.InputValues = inputJSON
 		component.StagingRoot = stagingRoot

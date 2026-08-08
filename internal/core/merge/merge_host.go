@@ -365,6 +365,11 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 		spec.Docker = compiled
 	}
 
+	dependencies, err := resourceDependencies(raw, "host."+host.Name)
+	if err != nil {
+		return spec, err
+	}
+	spec.ExplicitDependencies = dependencies
 	return spec, nil
 }
 

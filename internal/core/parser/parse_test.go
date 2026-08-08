@@ -109,6 +109,91 @@ host "router1" {
 	}
 }
 
+func TestParseTypedResourceDependsOnTraversals(t *testing.T) {
+	file := writeConfig(t, `
+host "server1" {
+  packages {
+    package "vault" {}
+  }
+  files {
+    file "/etc/vault.d/vault.hcl" {
+      content    = "storage {}"
+      depends_on = [package.vault]
+    }
+  }
+  services {
+    service "vault" {
+      depends_on = [file["/etc/vault.d/vault.hcl"]]
+      state      = "running"
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := cfg.Hosts["server1"]
+	fileDependsOn := host.Body.Map["files"].Map["file"].Map["/etc/vault.d/vault.hcl"].Map["depends_on"]
+	if len(fileDependsOn.List) != 1 || fileDependsOn.List[0].ResourceReference == nil {
+		t.Fatalf("file depends_on = %#v", fileDependsOn)
+	}
+	if got := *fileDependsOn.List[0].ResourceReference; got.Type != "package" || got.Name != "vault" || got.Source.Path != `host.server1.files.file["/etc/vault.d/vault.hcl"].depends_on[0]` {
+		t.Fatalf("package reference = %#v", got)
+	}
+	serviceDependsOn := host.Body.Map["services"].Map["service"].Map["vault"].Map["depends_on"]
+	if len(serviceDependsOn.List) != 1 || serviceDependsOn.List[0].ResourceReference == nil {
+		t.Fatalf("service depends_on = %#v", serviceDependsOn)
+	}
+	if got := *serviceDependsOn.List[0].ResourceReference; got.Type != "file" || got.Name != "/etc/vault.d/vault.hcl" {
+		t.Fatalf("file reference = %#v", got)
+	}
+}
+
+func TestParseRejectsInvalidResourceDependsOnReferences(t *testing.T) {
+	tests := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{name: "not a list", expr: `package.vault`, want: "depends_on must be a list"},
+		{name: "literal", expr: `["package.vault"]`, want: "depends_on entry must be"},
+		{name: "cross host", expr: `[host.server1.package.vault]`, want: "depends_on entry must be"},
+		{name: "out of scope", expr: `[var.target]`, want: "reference type is out of scope"},
+		{name: "dynamic index", expr: `[file[var.path]]`, want: "depends_on entry must be"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			file := writeConfig(t, `
+variable "target" {
+  type    = string
+  default = "vault"
+}
+variable "path" {
+  type    = string
+  default = "/etc/vault.hcl"
+}
+host "server1" {
+  files {
+    file "/etc/vault.hcl" {
+      content = "ok"
+      depends_on = `+tt.expr+`
+    }
+  }
+}
+`)
+			_, err := ParseFiles([]string{file})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("ParseFiles() error = %v, want %q", err, tt.want)
+			}
+			if !strings.Contains(err.Error(), ".depends_on") {
+				t.Fatalf("ParseFiles() error lacks source path: %v", err)
+			}
+		})
+	}
+}
+
 func TestParseMovedAllowsAbsentSourceAndAcyclicChains(t *testing.T) {
 	file := writeConfig(t, `
 moved {

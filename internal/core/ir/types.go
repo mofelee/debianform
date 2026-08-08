@@ -19,29 +19,36 @@ type Warning struct {
 }
 
 type HostSpec struct {
-	Name        string                         `json:"name"`
-	Source      SourceRef                      `json:"source"`
-	Facts       HostFacts                      `json:"facts,omitempty"`
-	SSH         SSHSpec                        `json:"ssh"`
-	State       StateSpec                      `json:"state"`
-	Staging     *StagingSpec                   `json:"staging,omitempty"`
-	Moves       []MovedSpec                    `json:"moves,omitempty"`
-	Platform    *PlatformSpec                  `json:"platform,omitempty"`
-	System      SystemSpec                     `json:"system"`
-	Kernel      KernelSpec                     `json:"kernel"`
-	Packages    PackageSpec                    `json:"packages"`
-	APT         APTSpec                        `json:"apt"`
-	Files       FileSpec                       `json:"files"`
-	Secrets     SecretSpec                     `json:"secrets"`
-	Directories DirectorySpec                  `json:"directories"`
-	Groups      GroupSpec                      `json:"groups"`
-	Users       UserSpec                       `json:"users"`
-	Systemd     SystemdSpec                    `json:"systemd"`
-	Services    ServiceSpec                    `json:"services"`
-	Nftables    NftablesSpec                   `json:"nftables"`
-	Docker      *DockerSpec                    `json:"docker,omitempty"`
-	Scripts     map[string]ComponentScriptSpec `json:"scripts,omitempty"`
-	Components  []ComponentInstanceSpec        `json:"components,omitempty"`
+	Name                 string                         `json:"name"`
+	Source               SourceRef                      `json:"source"`
+	Facts                HostFacts                      `json:"facts,omitempty"`
+	SSH                  SSHSpec                        `json:"ssh"`
+	State                StateSpec                      `json:"state"`
+	Staging              *StagingSpec                   `json:"staging,omitempty"`
+	Moves                []MovedSpec                    `json:"moves,omitempty"`
+	Platform             *PlatformSpec                  `json:"platform,omitempty"`
+	System               SystemSpec                     `json:"system"`
+	Kernel               KernelSpec                     `json:"kernel"`
+	Packages             PackageSpec                    `json:"packages"`
+	APT                  APTSpec                        `json:"apt"`
+	Files                FileSpec                       `json:"files"`
+	Secrets              SecretSpec                     `json:"secrets"`
+	Directories          DirectorySpec                  `json:"directories"`
+	Groups               GroupSpec                      `json:"groups"`
+	Users                UserSpec                       `json:"users"`
+	Systemd              SystemdSpec                    `json:"systemd"`
+	Services             ServiceSpec                    `json:"services"`
+	Nftables             NftablesSpec                   `json:"nftables"`
+	Docker               *DockerSpec                    `json:"docker,omitempty"`
+	Scripts              map[string]ComponentScriptSpec `json:"scripts,omitempty"`
+	Components           []ComponentInstanceSpec        `json:"components,omitempty"`
+	ExplicitDependencies []ResourceDependencySpec       `json:"explicit_dependencies,omitempty"`
+}
+
+type ResourceDependencySpec struct {
+	From      string    `json:"from"`
+	DependsOn string    `json:"depends_on"`
+	Source    SourceRef `json:"source,omitempty"`
 }
 
 type MovedSpec struct {
@@ -626,27 +633,28 @@ type ComponentObjectAttrSpec struct {
 }
 
 type ComponentInstanceSpec struct {
-	Name           string                         `json:"name"`
-	Template       string                         `json:"template"`
-	InputValues    map[string]any                 `json:"input_values,omitempty"`
-	StagingRoot    string                         `json:"staging_root,omitempty"`
-	ArtifactType   string                         `json:"artifact_type,omitempty"`
-	Version        string                         `json:"version,omitempty"`
-	Scripts        map[string]ComponentScriptSpec `json:"scripts,omitempty"`
-	SelectedSource *ComponentArtifactSourceSpec   `json:"selected_source,omitempty"`
-	Extract        *ComponentArtifactExtractSpec  `json:"extract,omitempty"`
-	Build          *ComponentArtifactBuildSpec    `json:"build,omitempty"`
-	Install        *ComponentArtifactInstallSpec  `json:"install,omitempty"`
-	APT            APTSpec                        `json:"apt"`
-	Packages       PackageSpec                    `json:"packages"`
-	Files          FileSpec                       `json:"files"`
-	Secrets        SecretSpec                     `json:"secrets"`
-	Directories    DirectorySpec                  `json:"directories"`
-	Groups         GroupSpec                      `json:"groups"`
-	Users          UserSpec                       `json:"users"`
-	Systemd        SystemdSpec                    `json:"systemd"`
-	Services       ServiceSpec                    `json:"services"`
-	Source         SourceRef                      `json:"source,omitempty"`
+	Name                 string                         `json:"name"`
+	Template             string                         `json:"template"`
+	InputValues          map[string]any                 `json:"input_values,omitempty"`
+	StagingRoot          string                         `json:"staging_root,omitempty"`
+	ArtifactType         string                         `json:"artifact_type,omitempty"`
+	Version              string                         `json:"version,omitempty"`
+	Scripts              map[string]ComponentScriptSpec `json:"scripts,omitempty"`
+	SelectedSource       *ComponentArtifactSourceSpec   `json:"selected_source,omitempty"`
+	Extract              *ComponentArtifactExtractSpec  `json:"extract,omitempty"`
+	Build                *ComponentArtifactBuildSpec    `json:"build,omitempty"`
+	Install              *ComponentArtifactInstallSpec  `json:"install,omitempty"`
+	APT                  APTSpec                        `json:"apt"`
+	Packages             PackageSpec                    `json:"packages"`
+	Files                FileSpec                       `json:"files"`
+	Secrets              SecretSpec                     `json:"secrets"`
+	Directories          DirectorySpec                  `json:"directories"`
+	Groups               GroupSpec                      `json:"groups"`
+	Users                UserSpec                       `json:"users"`
+	Systemd              SystemdSpec                    `json:"systemd"`
+	Services             ServiceSpec                    `json:"services"`
+	Source               SourceRef                      `json:"source,omitempty"`
+	ExplicitDependencies []ResourceDependencySpec       `json:"explicit_dependencies,omitempty"`
 }
 
 type ComponentArtifactSourceSpec struct {

@@ -721,7 +721,7 @@ host "server1" {
   }
 }
 `,
-			want: "unsupported attribute",
+			want: "depends_on reference type is out of scope",
 		},
 	}
 	for _, tt := range tests {
