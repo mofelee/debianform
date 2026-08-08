@@ -187,10 +187,13 @@ type ComponentArtifactInstall struct {
 }
 
 type ComponentInstance struct {
-	Name     string
-	Template string
-	Inputs   map[string]Value
-	Source   ir.SourceRef
+	Name              string
+	Template          string
+	Inputs            map[string]Value
+	StagingRoot       string
+	StagingRootSet    bool
+	StagingRootSource ir.SourceRef
+	Source            ir.SourceRef
 }
 
 type Assert struct {
@@ -1280,7 +1283,7 @@ func parseHostLikeBody(file, path string, body *hclsyntax.Body, ctx EvalContext,
 
 	for _, block := range body.Blocks {
 		switch block.Type {
-		case "ssh", "state", "platform", "system", "kernel", "packages", "apt", "files", "secrets", "directories", "groups", "users", "systemd", "services", "nftables":
+		case "ssh", "state", "staging", "platform", "system", "kernel", "packages", "apt", "files", "secrets", "directories", "groups", "users", "systemd", "services", "nftables":
 			if len(block.Labels) != 0 {
 				return nil, nil, Value{}, nil, fmt.Errorf("%s:%d: %s block must not have labels", file, block.TypeRange.Start.Line, block.Type)
 			}
@@ -1533,7 +1536,7 @@ func parseComponentInstanceBlock(file, path string, block *hclsyntax.Block, ctx 
 		return ComponentInstance{}, fmt.Errorf("%s:%d: %s does not support nested blocks", file, block.Body.Blocks[0].TypeRange.Start.Line, source.Path)
 	}
 	for attrName, attr := range block.Body.Attributes {
-		if attrName != "source" && attrName != "inputs" {
+		if attrName != "source" && attrName != "inputs" && attrName != "staging_root" {
 			return ComponentInstance{}, fmt.Errorf("%s:%d: unsupported attribute %s.%s", file, attr.NameRange.Start.Line, source.Path, attrName)
 		}
 	}
@@ -1557,7 +1560,25 @@ func parseComponentInstanceBlock(file, path string, block *hclsyntax.Block, ctx 
 		}
 		inputs = inputValue.Map
 	}
-	return ComponentInstance{Name: name, Template: template, Inputs: inputs, Source: source}, nil
+	instance := ComponentInstance{Name: name, Template: template, Inputs: inputs, Source: source}
+	if stagingAttr, ok := block.Body.Attributes["staging_root"]; ok {
+		stagingSource := ir.SourceRef{File: file, Line: stagingAttr.NameRange.Start.Line, Path: source.Path + ".staging_root"}
+		value, err := evalValue(stagingAttr.Expr, ctx, stagingSource)
+		if err != nil {
+			return ComponentInstance{}, fmt.Errorf("%s:%d: %s.staging_root: %w", file, stagingSource.Line, source.Path, err)
+		}
+		if value.ContainsEphemeral() || value.ContainsSensitive() {
+			return ComponentInstance{}, fmt.Errorf("%s:%d: %s.staging_root does not accept sensitive or ephemeral values", file, stagingSource.Line, source.Path)
+		}
+		stagingRoot, ok := value.StringValue()
+		if !ok {
+			return ComponentInstance{}, fmt.Errorf("%s:%d: %s.staging_root must be a string", file, stagingSource.Line, source.Path)
+		}
+		instance.StagingRoot = stagingRoot
+		instance.StagingRootSet = true
+		instance.StagingRootSource = stagingSource
+	}
+	return instance, nil
 }
 
 func parseComponentTraversal(file string, expr hcl.Expression) (string, error) {
@@ -2843,6 +2864,8 @@ func allowedDomainAttrs(domain string) map[string]struct{} {
 		return attrSet("host", "port", "user", "identity_file")
 	case "state":
 		return attrSet("path", "lock_path")
+	case "staging":
+		return attrSet("root")
 	case "platform":
 		return attrSet("distribution", "version", "architecture", "codename")
 	case "system":

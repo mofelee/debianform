@@ -1,8 +1,13 @@
 package engine
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -126,9 +131,10 @@ func TestNativeProviderComponentBuildSingleSourceFile(t *testing.T) {
 		Host:    "server1",
 		Kind:    "component_build",
 		Desired: map[string]any{
-			"cache_path":  "/var/cache/debianform/components/hello/source",
-			"build_path":  "/var/cache/debianform/components/hello/build",
-			"output_path": "/var/cache/debianform/components/hello/build/out/hash/hello",
+			"cache_path":   "/var/cache/debianform/components/hello/source",
+			"build_path":   "/var/cache/debianform/components/hello/build",
+			"output_path":  "/var/cache/debianform/components/hello/build/out/hash/hello",
+			"staging_root": "/var/tmp/debianform-source-staging",
 			"commands": [][]string{
 				{"cc", "-O2", "-o", "hello", "hello.c"},
 			},
@@ -162,13 +168,24 @@ func TestNativeProviderComponentBuildSingleSourceFile(t *testing.T) {
 		t.Fatalf("observed sha256 = %#v, want %s", observed["sha256"], builtSHA)
 	}
 	applied := runner.scripts[len(runner.scripts)-2]
+	assertComponentWorkspaceScript(t, applied, "/var/tmp/debianform-source-staging")
 	for _, want := range []string{
 		"cp -- '/var/cache/debianform/components/hello/source' \"$src/hello.c\"",
+		"rm -rf -- \"$build_root/work\"",
+		"cd \"$src\"",
 		"set -- 'cc' '-O2' '-o' 'hello' 'hello.c'\n\"$@\"",
 		"install -o 'root' -g 'root' -m '0644' \"$built\" '/var/cache/debianform/components/hello/build/out/hash/hello'",
 	} {
 		if !strings.Contains(applied, want) {
 			t.Fatalf("component build script missing %q:\n%s", want, applied)
+		}
+	}
+	for _, unwanted := range []string{
+		"mv \"$src\" \"$build_root/work\"",
+		"cd \"$build_root/work\"",
+	} {
+		if strings.Contains(applied, unwanted) {
+			t.Fatalf("component build script retained persistent work path %q:\n%s", unwanted, applied)
 		}
 	}
 }
@@ -182,6 +199,7 @@ func TestNativeProviderComponentBinaryZipInstall(t *testing.T) {
 		Desired: map[string]any{
 			"path":             "/usr/local/bin/rclone",
 			"cache_path":       "/var/cache/debianform/components/rclone/source",
+			"staging_root":     "/var/tmp/debianform component staging",
 			"extract_format":   "zip",
 			"strip_components": 1,
 			"include":          "rclone",
@@ -213,6 +231,7 @@ func TestNativeProviderComponentBinaryZipInstall(t *testing.T) {
 		t.Fatalf("observed sha256 = %#v, want %s", observed["sha256"], installedSHA)
 	}
 	applied := runner.scripts[len(runner.scripts)-2]
+	assertComponentWorkspaceScript(t, applied, "/var/tmp/debianform component staging")
 	for _, want := range []string{
 		"unzip -q '/var/cache/debianform/components/rclone/source'",
 		"include='rclone'",
@@ -248,6 +267,7 @@ func TestNativeProviderComponentBinaryTarXZInstall(t *testing.T) {
 		Desired: map[string]any{
 			"path":             "/usr/local/bin/tool",
 			"cache_path":       "/var/cache/debianform/components/tool/source",
+			"staging_root":     "/var/tmp/debianform-tar-staging",
 			"extract_format":   "tar.xz",
 			"strip_components": 1,
 			"include":          "tool",
@@ -268,6 +288,7 @@ func TestNativeProviderComponentBinaryTarXZInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	applied := runner.scripts[len(runner.scripts)-2]
+	assertComponentWorkspaceScript(t, applied, "/var/tmp/debianform-tar-staging")
 	for _, want := range []string{
 		"apt-get install -y tar xz-utils",
 		"tar --no-same-owner -xJf '/var/cache/debianform/components/tool/source'",
@@ -286,6 +307,7 @@ func TestNativeProviderComponentBinaryGzipInstall(t *testing.T) {
 		Desired: map[string]any{
 			"path":           "/usr/local/bin/tool",
 			"cache_path":     "/var/cache/debianform/components/tool/source",
+			"staging_root":   "/var/tmp/debianform-gzip-staging",
 			"extract_format": "gz",
 			"owner":          "root",
 			"group":          "root",
@@ -304,6 +326,7 @@ func TestNativeProviderComponentBinaryGzipInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	applied := runner.scripts[len(runner.scripts)-2]
+	assertComponentWorkspaceScript(t, applied, "/var/tmp/debianform-gzip-staging")
 	for _, want := range []string{
 		"apt-get install -y gzip",
 		"gzip -dc '/var/cache/debianform/components/tool/source' > \"$work/binary\"",
@@ -361,6 +384,7 @@ func TestNativeProviderComponentArchiveInstall(t *testing.T) {
 		Desired: map[string]any{
 			"path":             "/opt/myapp",
 			"cache_path":       "/var/cache/debianform/components/myapp/source",
+			"staging_root":     "/opt/.debianform-myapp-staging",
 			"extract_format":   "tar.gz",
 			"strip_components": 1,
 			"owner":            "myapp",
@@ -387,15 +411,308 @@ func TestNativeProviderComponentArchiveInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	applied := runner.scripts[len(runner.scripts)-2]
+	assertComponentWorkspaceScript(t, applied, "/opt/.debianform-myapp-staging")
 	for _, want := range []string{
 		"tar --no-same-owner -xzf '/var/cache/debianform/components/myapp/source'",
 		"--strip-components '1'",
 		"chown -R 'myapp:myapp'",
-		"mv \"$tmp\" '/opt/myapp'",
+		"mv -- \"$tmp\" \"$archive_destination\"",
+		"component_workspace_rollback() {",
+		"archive_old_moved=1",
+		"archive_committed=1",
 	} {
 		if !strings.Contains(applied, want) {
 			t.Fatalf("component archive apply script missing %q:\n%s", want, applied)
 		}
+	}
+}
+
+func TestComponentWorkspaceSetupKeepsAutomaticMktempCompatibility(t *testing.T) {
+	script := strings.Join(componentWorkspaceSetup(graph.Node{}, ""), "\n")
+	for _, want := range []string{
+		"staging_root=${TMPDIR:-/tmp}",
+		"work=$(mktemp -d)",
+		"staging_root=$(dirname \"$work\")",
+		"df -Pk \"$staging_root\"",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("automatic component workspace script missing %q:\n%s", want, script)
+		}
+	}
+}
+
+func TestNativeProviderComponentWorkspaceFailureReportsSpaceAndCleans(t *testing.T) {
+	if _, err := exec.LookPath("gzip"); err != nil {
+		t.Skip("gzip is required for component workspace failure test")
+	}
+
+	root := t.TempDir()
+	stagingRoot := filepath.Join(root, "alternate staging root with spaces")
+	cachePath := filepath.Join(root, "broken.gz")
+	installPath := filepath.Join(root, "bin", "tool")
+	if err := os.WriteFile(cachePath, []byte("not a gzip stream\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	owner, group := currentUserAndGroup(t)
+	node := graph.Node{
+		Address: "host.local.components.tool.artifact.install[\"" + installPath + "\"]",
+		Host:    "local",
+		Kind:    "component_binary",
+		Desired: map[string]any{
+			"path":           installPath,
+			"cache_path":     cachePath,
+			"staging_root":   stagingRoot,
+			"extract_format": "gz",
+			"owner":          owner,
+			"group":          group,
+			"mode":           "0755",
+			"ensure":         "present",
+		},
+	}
+	runner := &countingLocalRunner{}
+	provider := NewNativeProvider(runner)
+
+	_, err := provider.Apply(context.Background(), Step{Address: node.Address, Node: node, Action: ActionCreate})
+	if err == nil {
+		t.Fatal("broken compressed component succeeded, want staging failure")
+	}
+	for _, want := range []string{stagingRoot, "work_path=", "available_kib="} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("component workspace failure = %v, want %q", err, want)
+		}
+	}
+	entries, readErr := os.ReadDir(stagingRoot)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("component workspace residue = %#v, want empty staging root", entries)
+	}
+	info, statErr := os.Stat(stagingRoot)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Fatalf("created staging root mode = %04o, want 0700", got)
+	}
+	if len(runner.scripts) != 1 {
+		t.Fatalf("component workspace runner scripts = %d, want 1", len(runner.scripts))
+	}
+	assertComponentWorkspaceScript(t, runner.scripts[0], stagingRoot)
+}
+
+func TestNativeProviderComponentWorkspaceCleanupFailureFailsApply(t *testing.T) {
+	realRM, err := exec.LookPath("rm")
+	if err != nil {
+		t.Skip("rm is required for component workspace cleanup failure test")
+	}
+	if _, err := exec.LookPath("gzip"); err != nil {
+		t.Skip("gzip is required for component workspace cleanup failure test")
+	}
+
+	root := t.TempDir()
+	stagingRoot := filepath.Join(root, "alternate staging root")
+	cachePath := filepath.Join(root, "tool.gz")
+	installPath := filepath.Join(root, "bin", "tool")
+	writeComponentGzipFixture(t, cachePath, []byte("installed\n"))
+
+	fakeBin := filepath.Join(root, "fake-bin")
+	if err := os.Mkdir(fakeBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rmWrapper := "#!/bin/sh\ncase \"$*\" in\n  *.debianform-component.*) exit 43 ;;\nesac\nexec " + shellQuote(realRM) + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(fakeBin, "rm"), []byte(rmWrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+":"+os.Getenv("PATH"))
+
+	owner, group := currentUserAndGroup(t)
+	node := graph.Node{
+		Address: "host.local.components.tool.artifact.install[\"" + installPath + "\"]",
+		Host:    "local",
+		Kind:    "component_binary",
+		Desired: map[string]any{
+			"path":           installPath,
+			"cache_path":     cachePath,
+			"staging_root":   stagingRoot,
+			"extract_format": "gz",
+			"owner":          owner,
+			"group":          group,
+			"mode":           "0755",
+			"ensure":         "present",
+		},
+	}
+	runner := &countingLocalRunner{}
+	provider := NewNativeProvider(runner)
+
+	_, err = provider.Apply(context.Background(), Step{Address: node.Address, Node: node, Action: ActionCreate})
+	if err == nil {
+		t.Fatal("component cleanup failure succeeded, want apply failure")
+	}
+	for _, want := range []string{"exit status 43", stagingRoot, "work_path=", "available_kib="} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("component cleanup failure = %v, want %q", err, want)
+		}
+	}
+	if got, readErr := os.ReadFile(installPath); readErr != nil || string(got) != "installed\n" {
+		t.Fatalf("component operation did not finish before cleanup failure: content=%q err=%v", got, readErr)
+	}
+	entries, readErr := os.ReadDir(stagingRoot)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), ".debianform-component.") {
+		t.Fatalf("injected cleanup residue = %#v, want one workspace", entries)
+	}
+}
+
+func TestNativeProviderComponentArchiveFailureRollsBackAndCleans(t *testing.T) {
+	realMV, err := exec.LookPath("mv")
+	if err != nil {
+		t.Skip("mv is required for component archive rollback test")
+	}
+	if _, err := exec.LookPath("tar"); err != nil {
+		t.Skip("tar is required for component archive rollback test")
+	}
+
+	root := t.TempDir()
+	parent := filepath.Join(root, "archive destination with spaces")
+	destination := filepath.Join(parent, "app")
+	if err := os.MkdirAll(destination, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(destination, "old.txt"), []byte("old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cachePath := filepath.Join(root, "app.tar.gz")
+	writeComponentTarGzipFixture(t, cachePath, "payload/new.txt", []byte("new\n"))
+
+	fakeBin := filepath.Join(root, "fake-bin")
+	if err := os.Mkdir(fakeBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mvWrapper := "#!/bin/sh\nif [ \"$1\" = -- ]; then shift; fi\ncase \"$1\" in\n  *.dbf-new) exit 42 ;;\nesac\nexec " + shellQuote(realMV) + " -- \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(fakeBin, "mv"), []byte(mvWrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fakeBin+":"+os.Getenv("PATH"))
+
+	owner, group := currentUserAndGroup(t)
+	node := graph.Node{
+		Address: "host.local.components.app.artifact.install[\"" + destination + "\"]",
+		Host:    "local",
+		Kind:    "component_archive",
+		Desired: map[string]any{
+			"path":             destination,
+			"cache_path":       cachePath,
+			"extract_format":   "tar.gz",
+			"strip_components": 1,
+			"owner":            owner,
+			"group":            group,
+			"mode":             "0755",
+			"ensure":           "present",
+		},
+	}
+	runner := &countingLocalRunner{}
+	provider := NewNativeProvider(runner)
+
+	_, err = provider.Apply(context.Background(), Step{Address: node.Address, Node: node, Action: ActionCreate})
+	if err == nil {
+		t.Fatal("archive commit succeeded, want injected mv failure")
+	}
+	for _, want := range []string{"exit status 42", parent, "work_path=", "available_kib="} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("archive workspace failure = %v, want %q", err, want)
+		}
+	}
+	if got, readErr := os.ReadFile(filepath.Join(destination, "old.txt")); readErr != nil || string(got) != "old\n" {
+		t.Fatalf("archive rollback original = %q, %v", got, readErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(destination, "new.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("failed archive content survived rollback: %v", statErr)
+	}
+	entries, readErr := os.ReadDir(parent)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".debianform-component.") || entry.Name() == ".app.dbf-new" || entry.Name() == ".app.dbf-old" {
+			t.Fatalf("archive rollback left residue %q", entry.Name())
+		}
+	}
+	if len(runner.scripts) != 1 {
+		t.Fatalf("archive workspace runner scripts = %d, want 1", len(runner.scripts))
+	}
+	assertComponentWorkspaceScript(t, runner.scripts[0], parent)
+}
+
+func assertComponentWorkspaceScript(t *testing.T, script, stagingRoot string) {
+	t.Helper()
+	for _, want := range []string{
+		"staging_root=" + shellQuote(stagingRoot),
+		"component_previous_umask=$(umask)",
+		"umask 077",
+		"trap component_workspace_cleanup EXIT",
+		"mkdir -p -- \"$staging_root\"",
+		"work=$(mktemp -d \"${staging_root%/}/.debianform-component.XXXXXX\")",
+		"chmod 0700 \"$work\"",
+		"umask \"$component_previous_umask\"",
+		"df -Pk \"$staging_root\"",
+		"available_kib=%s",
+		"if rm -rf -- \"$work\"; then",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("component workspace script missing %q:\n%s", want, script)
+		}
+	}
+	for _, line := range strings.Split(script, "\n") {
+		if strings.TrimSpace(line) == "work=$(mktemp -d)" {
+			t.Fatalf("explicit component workspace used bare mktemp:\n%s", script)
+		}
+	}
+}
+
+func writeComponentGzipFixture(t *testing.T, destination string, content []byte) {
+	t.Helper()
+	file, err := os.Create(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gzipWriter := gzip.NewWriter(file)
+	if _, err := gzipWriter.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeComponentTarGzipFixture(t *testing.T, destination, name string, content []byte) {
+	t.Helper()
+	file, err := os.Create(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gzipWriter := gzip.NewWriter(file)
+	tarWriter := tar.NewWriter(gzipWriter)
+	header := &tar.Header{Name: name, Mode: 0o644, Size: int64(len(content))}
+	if err := tarWriter.WriteHeader(header); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tarWriter.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -47,6 +47,7 @@ func hostSpecToCty(host ir.HostSpec) cty.Value {
 		"name":        cty.StringVal(host.Name),
 		"ssh":         sshSpecToCty(host.SSH),
 		"state":       stateSpecToCty(host.State),
+		"staging":     stagingSpecToCty(host.Staging),
 		"platform":    platformSpecToCty(host),
 		"system":      systemSpecToCty(host.System),
 		"kernel":      kernelSpecToCty(host.Kernel),
@@ -101,6 +102,16 @@ func stateSpecToCty(spec ir.StateSpec) cty.Value {
 	return cty.ObjectVal(map[string]cty.Value{
 		"path":      cty.StringVal(spec.Path),
 		"lock_path": cty.StringVal(spec.LockPath),
+	})
+}
+
+func stagingSpecToCty(spec *ir.StagingSpec) cty.Value {
+	root := ""
+	if spec != nil {
+		root = spec.Root
+	}
+	return cty.ObjectVal(map[string]cty.Value{
+		"root": cty.StringVal(root),
 	})
 }
 

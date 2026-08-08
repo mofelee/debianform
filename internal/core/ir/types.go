@@ -24,6 +24,7 @@ type HostSpec struct {
 	Facts       HostFacts                      `json:"facts,omitempty"`
 	SSH         SSHSpec                        `json:"ssh"`
 	State       StateSpec                      `json:"state"`
+	Staging     *StagingSpec                   `json:"staging,omitempty"`
 	Moves       []MovedSpec                    `json:"moves,omitempty"`
 	Platform    *PlatformSpec                  `json:"platform,omitempty"`
 	System      SystemSpec                     `json:"system"`
@@ -115,6 +116,11 @@ type StateSpec struct {
 	Path     string    `json:"path"`
 	LockPath string    `json:"lock_path"`
 	Source   SourceRef `json:"source,omitempty"`
+}
+
+type StagingSpec struct {
+	Root   string    `json:"root"`
+	Source SourceRef `json:"source,omitempty"`
 }
 
 type PlatformSpec struct {
@@ -623,6 +629,7 @@ type ComponentInstanceSpec struct {
 	Name           string                         `json:"name"`
 	Template       string                         `json:"template"`
 	InputValues    map[string]any                 `json:"input_values,omitempty"`
+	StagingRoot    string                         `json:"staging_root,omitempty"`
 	ArtifactType   string                         `json:"artifact_type,omitempty"`
 	Version        string                         `json:"version,omitempty"`
 	Scripts        map[string]ComponentScriptSpec `json:"scripts,omitempty"`

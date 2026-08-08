@@ -1024,12 +1024,17 @@ component "rclone" {
 component "restic" {}
 
 host "web1" {
-  components = [
-    component.rclone,
-  ]
+	staging {
+		root = "/var/lib/debianform/staging"
+	}
 
-  component "backup" {
-    source = component.restic
+	components = [
+		component.rclone,
+	]
+
+	component "backup" {
+		source       = component.restic
+		staging_root = "/srv/restic/staging"
 
     inputs = {
       environment_source = "secrets/restic.env"
@@ -1051,6 +1056,9 @@ host "web1" {
 		t.Fatalf("component input = %#v", input)
 	}
 	host := cfg.Hosts["web1"]
+	if got := host.Body.Map["staging"].Map["root"].String; got != "/var/lib/debianform/staging" {
+		t.Fatalf("host staging root = %q", got)
+	}
 	if len(host.Components) != 2 {
 		t.Fatalf("host components = %d, want 2", len(host.Components))
 	}
@@ -1062,6 +1070,9 @@ host "web1" {
 	}
 	if got := host.Components[1].Inputs["environment_source"].String; got != "secrets/restic.env" {
 		t.Fatalf("component input value = %q", got)
+	}
+	if !host.Components[1].StagingRootSet || host.Components[1].StagingRoot != "/srv/restic/staging" {
+		t.Fatalf("component staging root = %#v", host.Components[1])
 	}
 }
 

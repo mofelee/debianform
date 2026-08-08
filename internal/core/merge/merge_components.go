@@ -287,6 +287,10 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 		if !ok {
 			return nil, fmt.Errorf("%s:%d:%s: unknown component.%s", instance.Source.File, instance.Source.Line, instance.Source.Path, instance.Template)
 		}
+		stagingRoot, err := componentInstanceStagingRoot(instance, template)
+		if err != nil {
+			return nil, err
+		}
 		inputValues, inputJSON, err := componentInputValues(template, instance, c.warningSink())
 		if err != nil {
 			return nil, fmt.Errorf("%s:%d:%s: %w", instance.Source.File, instance.Source.Line, instance.Source.Path, err)
@@ -328,6 +332,7 @@ func (c *compiler) instantiateComponents(instances []parser.ComponentInstance, t
 		}
 		component.Template = template.Name
 		component.InputValues = inputJSON
+		component.StagingRoot = stagingRoot
 		out = append(out, component)
 	}
 	return out, nil
@@ -353,6 +358,10 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 		template, ok := c.cfg.Components[instance.Template]
 		if !ok {
 			return fmt.Errorf("%s:%d:%s: unknown component.%s", instance.Source.File, instance.Source.Line, instance.Source.Path, instance.Template)
+		}
+		stagingRoot, err := componentInstanceStagingRoot(instance, template)
+		if err != nil {
+			return err
 		}
 		inputValues, inputJSON, err := componentInputValues(template, instance, c.warningSink())
 		if err != nil {
@@ -397,6 +406,7 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 						Name:         instance.Name,
 						Template:     template.Name,
 						InputValues:  inputJSON,
+						StagingRoot:  stagingRoot,
 						ArtifactType: template.Type,
 						Version:      template.Version,
 						Install:      install,
@@ -419,6 +429,7 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 						Name:         instance.Name,
 						Template:     template.Name,
 						InputValues:  inputJSON,
+						StagingRoot:  stagingRoot,
 						ArtifactType: template.Type,
 						Version:      template.Version,
 						Install:      install,
@@ -435,6 +446,7 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 		}
 		component.Template = template.Name
 		component.InputValues = inputJSON
+		component.StagingRoot = stagingRoot
 		if install != nil {
 			component.ArtifactType = template.Type
 			component.Version = template.Version
@@ -446,6 +458,20 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 		check.Components = append(check.Components, component)
 	}
 	return nil
+}
+
+func componentInstanceStagingRoot(instance parser.ComponentInstance, template parser.Component) (string, error) {
+	if !instance.StagingRootSet {
+		return "", nil
+	}
+	source := instance.StagingRootSource
+	if instance.StagingRoot == "" || !filepath.IsAbs(instance.StagingRoot) {
+		return "", fmt.Errorf("%s:%d:%s: component staging_root must be absolute and non-empty", source.File, source.Line, source.Path)
+	}
+	if template.Type == "" && template.Version == "" && len(template.Sources) == 0 && template.Extract == nil && template.Build == nil && template.Install == nil {
+		return "", fmt.Errorf("%s:%d:%s: component staging_root requires an artifact component", source.File, source.Line, source.Path)
+	}
+	return instance.StagingRoot, nil
 }
 
 func validateComponentAgainstHost(target ir.HostSpec, component ir.ComponentInstanceSpec) error {
@@ -490,6 +516,7 @@ func runtimeValidationTargetValue(host ir.HostSpec) cty.Value {
 		"name":        cty.StringVal(host.Name),
 		"ssh":         sshSpecToCty(host.SSH),
 		"state":       stateSpecToCty(host.State),
+		"staging":     stagingSpecToCty(host.Staging),
 		"platform":    platform,
 		"system":      system,
 		"kernel":      kernelSpecToCty(host.Kernel),

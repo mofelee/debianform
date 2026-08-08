@@ -2,6 +2,7 @@ package merge
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/mofelee/debianform/internal/core/ir"
 	"github.com/mofelee/debianform/internal/core/parser"
@@ -101,6 +102,24 @@ func (c *compiler) buildHostSpec(host parser.Host, raw parser.Value) (ir.HostSpe
 			return spec, err
 		} else if ok {
 			spec.State.LockPath = value
+		}
+	}
+
+	if staging, ok, err := mapField(raw, "staging"); err != nil {
+		return spec, err
+	} else if ok {
+		if value, exists := staging.Map["root"]; exists && (value.ContainsEphemeral() || value.ContainsSensitive()) {
+			return spec, fmt.Errorf("%s:%d:%s: staging root does not accept sensitive or ephemeral values", value.Source.File, value.Source.Line, value.Source.Path)
+		}
+		root, rootSet, err := stringField(staging, "root")
+		if err != nil {
+			return spec, err
+		}
+		if rootSet {
+			if root == "" || !filepath.IsAbs(root) {
+				return spec, fmt.Errorf("%s:%d:%s.root: staging root must be absolute and non-empty", staging.Source.File, staging.Source.Line, staging.Source.Path)
+			}
+			spec.Staging = &ir.StagingSpec{Root: root, Source: staging.Source}
 		}
 	}
 

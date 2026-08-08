@@ -552,6 +552,155 @@ host "server1" {
 	}
 }
 
+func TestCompileComponentStagingPolicy(t *testing.T) {
+	program := compileInline(t, `
+profile "staging_defaults" {
+  staging {
+    root = "/var/lib/debianform/staging"
+  }
+}
+
+component "tool" {
+  type = "binary"
+
+  source {
+    url    = "https://downloads.example/tool.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  extract { format = "gz" }
+  install { path = "/usr/local/bin/tool" }
+
+  files {
+    file "/etc/tool-staging-root" {
+      content = target.staging.root
+    }
+  }
+}
+
+host "inherited" {
+  imports    = [profile.staging_defaults]
+  components = [component.tool]
+}
+
+host "overridden" {
+  imports = [profile.staging_defaults]
+
+  staging {
+    root = "/srv/host-staging"
+  }
+
+  component "tool" {
+    source       = component.tool
+    staging_root = "/srv/component-staging"
+  }
+
+  assert {
+    condition = self.staging.root == "/srv/host-staging"
+    message   = "host staging root was not merged"
+  }
+}
+`)
+
+	hosts := map[string]ir.HostSpec{}
+	for _, host := range program.Hosts {
+		hosts[host.Name] = host
+	}
+	inherited := hosts["inherited"]
+	if inherited.Staging == nil || inherited.Staging.Root != "/var/lib/debianform/staging" {
+		t.Fatalf("inherited staging = %#v", inherited.Staging)
+	}
+	if inherited.Components[0].StagingRoot != "" {
+		t.Fatalf("inherited component override = %q, want empty", inherited.Components[0].StagingRoot)
+	}
+	if got := inherited.Components[0].Files.Files["/etc/tool-staging-root"].Content; got != "/var/lib/debianform/staging" {
+		t.Fatalf("target staging root content = %q", got)
+	}
+	overridden := hosts["overridden"]
+	if overridden.Staging == nil || overridden.Staging.Root != "/srv/host-staging" {
+		t.Fatalf("overridden host staging = %#v", overridden.Staging)
+	}
+	if got := overridden.Components[0].StagingRoot; got != "/srv/component-staging" {
+		t.Fatalf("component staging override = %q", got)
+	}
+}
+
+func TestCompileRejectsInvalidComponentStagingRoots(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "relative host root",
+			hcl: `host "server1" {
+  staging { root = "var/tmp" }
+}`,
+			want: "staging root must be absolute and non-empty",
+		},
+		{
+			name: "empty host root",
+			hcl: `host "server1" {
+  staging { root = "" }
+}`,
+			want: "staging root must be absolute and non-empty",
+		},
+		{
+			name: "ephemeral host root",
+			hcl: `
+variable "staging_root" {
+  type      = string
+  default   = "/var/tmp"
+  ephemeral = true
+}
+host "server1" {
+  staging { root = var.staging_root }
+}`,
+			want: "staging root does not accept sensitive or ephemeral values",
+		},
+		{
+			name: "relative component root",
+			hcl: `
+component "tool" {
+  type = "binary"
+  source {
+    url    = "https://downloads.example/tool"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+  install { path = "/usr/local/bin/tool" }
+}
+host "server1" {
+  component "tool" {
+    source       = component.tool
+    staging_root = "var/tmp"
+  }
+}`,
+			want: "component staging_root must be absolute and non-empty",
+		},
+		{
+			name: "non-artifact component root",
+			hcl: `
+component "files" {}
+host "server1" {
+  component "files" {
+    source       = component.files
+    staging_root = "/var/tmp"
+  }
+}`,
+			want: "component staging_root requires an artifact component",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestCompileRejectsInvalidComponentArtifacts(t *testing.T) {
 	tests := []struct {
 		name string

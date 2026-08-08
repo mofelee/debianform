@@ -6,7 +6,7 @@ assert_remote "shadowsocks-rust user and managed groups were destroyed" \
   "! getent passwd shadowsocks && ! getent group shadowsocks && ! getent group shadowsocks-observers"
 assert_remote "shadowsocks-rust final state contains no managed resources" \
   "grep -F '\"resources\": {}' /var/lib/debianform-integration/shadowsocks-rust-state.json"
-run_remote "remove shadowsocks-rust integration state and component cache after verification" \
+run_remote "remove shadowsocks-rust integration state, staging root, and component cache after verification" \
   "rm -rf /var/lib/debianform-integration /var/lock/debianform-integration /var/cache/debianform"
 assert_remote "shadowsocks-rust integration cleanup completed" \
-  "test ! -e /var/lib/debianform-integration && test ! -e /var/lock/debianform-integration"
+  "test ! -e /var/lib/debianform-integration && test ! -e /var/lib/debianform-integration/component-staging && test ! -e /var/lock/debianform-integration"

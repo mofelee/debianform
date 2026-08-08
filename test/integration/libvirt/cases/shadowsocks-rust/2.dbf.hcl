@@ -112,6 +112,10 @@ host "cihost" {
     lock_path = "/var/lock/debianform-integration/shadowsocks-rust-state.lock"
   }
 
+  staging {
+    root = "/var/lib/debianform-integration/component-staging"
+  }
+
   components = [
     component.shadowsocks_rust,
   ]
