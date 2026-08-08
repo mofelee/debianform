@@ -428,14 +428,28 @@ func reconcileStateDependencies(st corestate.State, host string, resourceGraph *
 			continue
 		}
 		resource, exists := st.Resources[node.Address]
-		if !exists || slices.Equal(resource.DependsOn, node.DependsOn) {
+		if !exists {
 			continue
 		}
-		resource.DependsOn = append([]string(nil), node.DependsOn...)
+		dependsOn := trackedStateDependencies(node.DependsOn, st.Resources)
+		if slices.Equal(resource.DependsOn, dependsOn) {
+			continue
+		}
+		resource.DependsOn = dependsOn
 		st.Resources[node.Address] = resource
 		changed = true
 	}
 	return st, changed
+}
+
+func trackedStateDependencies(dependencies []string, resources map[string]corestate.Resource) []string {
+	out := make([]string, 0, len(dependencies))
+	for _, dependency := range dependencies {
+		if _, exists := resources[dependency]; exists {
+			out = append(out, dependency)
+		}
+	}
+	return out
 }
 
 func hasHostFacts(facts ir.HostFacts) bool {

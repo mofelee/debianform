@@ -111,6 +111,27 @@ func TestRemoveStateDependencyReferences(t *testing.T) {
 	}
 }
 
+func TestReconcileStateDependenciesOmitsUntrackedResources(t *testing.T) {
+	retained := `host.server1.systemd.networkd.enable`
+	present := `host.server1.systemd.networkd.netdev["wg-core"]`
+	absent := `host.server1.systemd.networkd.netdev["wg-edge"]`
+	st := corestate.Empty("server1")
+	st.Resources[retained] = corestate.Resource{DependsOn: []string{absent}}
+	st.Resources[present] = corestate.Resource{}
+	resourceGraph := &graph.ResourceGraph{Nodes: []graph.Node{{
+		Host:      "server1",
+		Address:   retained,
+		DependsOn: []string{present, absent},
+	}}}
+	got, changed := reconcileStateDependencies(st, "server1", resourceGraph)
+	if !changed {
+		t.Fatal("dependency reconciliation did not report a change")
+	}
+	if want := []string{present}; !reflect.DeepEqual(got.Resources[retained].DependsOn, want) {
+		t.Fatalf("tracked dependencies = %#v, want %#v", got.Resources[retained].DependsOn, want)
+	}
+}
+
 func noOpDependencyState(host, kind string, desired map[string]any, dependsOn []string) corestate.Resource {
 	digest := corestate.DesiredDigest(desired)
 	return corestate.Resource{
