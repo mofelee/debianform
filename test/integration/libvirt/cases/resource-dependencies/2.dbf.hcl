@@ -11,27 +11,27 @@ host "cihost" {
   }
 
   packages {
-    package "cron" {}
+    package "apache2" {}
   }
 
   files {
-    file "/etc/default/cron" {
-      depends_on = [package.cron]
+    file "/etc/apache2/ports.conf" {
+      depends_on = [package.apache2]
       owner      = "root"
       group      = "root"
       mode       = "0644"
 
       content = <<-EOF
         # Managed by DebianForm's resource-dependencies integration case.
-        READ_ENV="yes"
+        Listen 8080
       EOF
     }
   }
 
   services {
-    service "cron" {
-      package    = "cron"
-      depends_on = [file["/etc/default/cron"]]
+    service "apache2" {
+      package    = "apache2"
+      depends_on = [file["/etc/apache2/ports.conf"]]
       enabled    = true
       state      = "running"
     }

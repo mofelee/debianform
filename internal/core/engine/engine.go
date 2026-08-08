@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -389,7 +390,9 @@ func (e Engine) prepareHostStates(ctx context.Context, program *ir.Program, reso
 			return err
 		}
 		st = moveResult.State
-		write := len(moveResult.Moves) > 0
+		var dependenciesChanged bool
+		st, dependenciesChanged = reconcileStateDependencies(st, host.Name, resourceGraph)
+		write := len(moveResult.Moves) > 0 || dependenciesChanged
 		if hasHostFacts(host.Facts) {
 			facts := host.Facts
 			st.Facts = &facts
@@ -416,6 +419,23 @@ func (e Engine) prepareHostStates(ctx context.Context, program *ir.Program, reso
 		return nil, err
 	}
 	return prepared, nil
+}
+
+func reconcileStateDependencies(st corestate.State, host string, resourceGraph *graph.ResourceGraph) (corestate.State, bool) {
+	changed := false
+	for _, node := range resourceGraph.Nodes {
+		if node.Host != host {
+			continue
+		}
+		resource, exists := st.Resources[node.Address]
+		if !exists || slices.Equal(resource.DependsOn, node.DependsOn) {
+			continue
+		}
+		resource.DependsOn = append([]string(nil), node.DependsOn...)
+		st.Resources[node.Address] = resource
+		changed = true
+	}
+	return st, changed
 }
 
 func hasHostFacts(facts ir.HostFacts) bool {

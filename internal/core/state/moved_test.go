@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -37,6 +38,7 @@ func TestResolveMovesRebasesComponentStateWithoutMutatingRemoteIdentity(t *testi
 		Observed:        map[string]any{"exists": true, "desired_digest": fileDigest, "sha256": "remote-sha"},
 		UpdatedAt:       "2026-07-28T00:00:00Z",
 		Order:           12,
+		DependsOn:       []string{oldOutput, boundary},
 	}
 	st.Resources[oldOutput] = Resource{
 		Host:            "server1",
@@ -58,7 +60,13 @@ func TestResolveMovesRebasesComponentStateWithoutMutatingRemoteIdentity(t *testi
 		Observed:        map[string]any{"active": true},
 		Order:           14,
 	}
-	st.Resources[boundary] = Resource{Host: "server1", Kind: "file", Ownership: "managed", Desired: map[string]any{"component": "oldish", "path": "/etc/example.conf"}}
+	st.Resources[boundary] = Resource{
+		Host:      "server1",
+		Kind:      "file",
+		Ownership: "managed",
+		Desired:   map[string]any{"component": "oldish", "path": "/etc/example.conf"},
+		DependsOn: []string{oldFile, oldExternal},
+	}
 	before, err := json.Marshal(st)
 	if err != nil {
 		t.Fatal(err)
@@ -111,6 +119,9 @@ func TestResolveMovesRebasesComponentStateWithoutMutatingRemoteIdentity(t *testi
 	if file.DesiredDigest != DesiredDigest(file.Desired) || file.Observed["desired_digest"] != file.DesiredDigest {
 		t.Fatalf("file digests were not rebased: %#v", file)
 	}
+	if want := []string{newOutput, boundary}; !reflect.DeepEqual(file.DependsOn, want) {
+		t.Fatalf("file dependencies = %#v, want %#v", file.DependsOn, want)
+	}
 	output := result.State.Resources[newOutput]
 	if output.Ownership != "adopted" || output.Desired["script_digest"] != "same-script" || output.Observed["sha256"] != "output-sha" || output.ProviderAddress != "component_script_output.server1_current_render" {
 		t.Fatalf("script output payload changed unexpectedly: %#v", output)
@@ -118,6 +129,9 @@ func TestResolveMovesRebasesComponentStateWithoutMutatingRemoteIdentity(t *testi
 	external := result.State.Resources[newExternal]
 	if external.Ownership != "external" || external.Desired["unit"] != "example.service" || external.Observed["active"] != true {
 		t.Fatalf("external ownership payload changed unexpectedly: %#v", external)
+	}
+	if got, want := result.State.Resources[boundary].DependsOn, []string{newFile, newExternal}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("external dependencies into moved state = %#v, want %#v", got, want)
 	}
 }
 

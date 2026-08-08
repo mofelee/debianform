@@ -177,6 +177,7 @@ func cloneState(st corestate.State) corestate.State {
 		resource.Desired = cloneMap(resource.Desired)
 		resource.Observed = cloneMap(resource.Observed)
 		resource.Lifecycle = cloneLifecycle(resource.Lifecycle)
+		resource.DependsOn = append([]string(nil), resource.DependsOn...)
 		out.Resources[address] = resource
 	}
 	return out

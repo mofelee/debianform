@@ -301,6 +301,20 @@ func TestMovedStateMystackFiveHostAcceptance(t *testing.T) {
 	if len(applied.Moves) != 35 || len(provider.Applied) != 5 || len(provider.Destroyed) != 0 || len(provider.Operations) != 5 {
 		t.Fatalf("five-host apply caused false provider work: plan=%#v applied=%#v destroyed=%#v operations=%#v", applied, provider.Applied, provider.Destroyed, provider.Operations)
 	}
+	for _, host := range program.Hosts {
+		st, err := backend.Read(context.Background(), host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		oldPrefix := fmt.Sprintf("host.%s.components.bird2_babel", host.Name)
+		for address, resource := range st.Resources {
+			for _, dependency := range resource.DependsOn {
+				if dependency == oldPrefix || strings.HasPrefix(dependency, oldPrefix+".") {
+					t.Fatalf("state resource %s retained moved dependency %s", address, dependency)
+				}
+			}
+		}
+	}
 
 	retained, err := engine.Check(context.Background(), program, resourceGraph, Options{Parallel: len(hostNames)})
 	if err != nil {
@@ -514,6 +528,10 @@ func movedPriorResource(node graph.Node, fromComponent, toComponent string) core
 	desired := cloneMap(node.Desired)
 	desired["component"] = toComponent
 	digest := corestate.DesiredDigest(desired)
+	dependsOn := make([]string, len(node.DependsOn))
+	for i, dependency := range node.DependsOn {
+		dependsOn[i] = strings.Replace(dependency, fromComponent, toComponent, 1)
+	}
 	return corestate.Resource{
 		Host:            node.Host,
 		Kind:            node.Kind,
@@ -523,6 +541,7 @@ func movedPriorResource(node graph.Node, fromComponent, toComponent string) core
 		Desired:         desired,
 		DesiredDigest:   digest,
 		Observed:        map[string]any{"exists": true, "desired_digest": digest},
+		DependsOn:       dependsOn,
 	}
 }
 

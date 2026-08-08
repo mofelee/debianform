@@ -8,9 +8,9 @@ mode, path = sys.argv[1:]
 with open(path, encoding="utf-8") as handle:
     document = json.load(handle)
 
-package = 'host.cihost.packages.install["cron"]'
-config = 'host.cihost.files.file["/etc/default/cron"]'
-service = 'host.cihost.services.service["cron"]'
+package = 'host.cihost.packages.install["apache2"]'
+config = 'host.cihost.files.file["/etc/apache2/ports.conf"]'
+service = 'host.cihost.services.service["apache2"]'
 changes = {change["address"]: change for change in document["changes"]}
 
 if mode == "initial":

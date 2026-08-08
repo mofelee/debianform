@@ -76,6 +76,7 @@ func ResolveMoves(st State, declarations []ir.MovedSpec, desiredComponents map[s
 			result.State.Resources[to] = resource
 			result.Moves = append(result.Moves, RealizedMove{Host: st.Host, From: from, To: to})
 		}
+		rebaseResourceDependencies(result.State.Resources, declaration.From, declaration.To)
 	}
 	return result, nil
 }
@@ -239,6 +240,24 @@ func rebaseMovedResource(resource Resource, fromComponent, toComponent string, t
 	return resource
 }
 
+func rebaseResourceDependencies(resources map[string]Resource, from, to string) {
+	for address, resource := range resources {
+		dependsOn := append([]string(nil), resource.DependsOn...)
+		changed := false
+		for i, dependency := range dependsOn {
+			if dependency != from && !strings.HasPrefix(dependency, from+".") {
+				continue
+			}
+			dependsOn[i] = replaceAddressPrefix(dependency, from, to)
+			changed = true
+		}
+		if changed {
+			resource.DependsOn = dependsOn
+			resources[address] = resource
+		}
+	}
+}
+
 func cloneState(st State) State {
 	out := st
 	if st.Facts != nil {
@@ -250,6 +269,7 @@ func cloneState(st State) State {
 		resource.Desired = cloneMap(resource.Desired)
 		resource.Observed = cloneMap(resource.Observed)
 		resource.Lifecycle = cloneLifecycle(resource.Lifecycle)
+		resource.DependsOn = append([]string(nil), resource.DependsOn...)
 		out.Resources[address] = resource
 	}
 	return out
