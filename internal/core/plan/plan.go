@@ -66,6 +66,7 @@ type Change struct {
 	Action          string       `json:"action"`
 	Summary         string       `json:"summary"`
 	Source          ir.SourceRef `json:"source"`
+	DependsOn       []string     `json:"depends_on,omitempty"`
 	ProviderAddress string       `json:"provider_address,omitempty"`
 	DeleteBehavior  string       `json:"delete_behavior,omitempty"`
 	DeleteNotes     []string     `json:"delete_notes,omitempty"`
@@ -131,12 +132,13 @@ func New(resourceGraph *graph.ResourceGraph, opts Options) Document {
 	changes := make([]Change, 0, len(nodes))
 	for _, node := range nodes {
 		change := Change{
-			Host:    node.Host,
-			Address: node.Address,
-			Action:  "create",
-			Summary: node.Summary,
-			Source:  node.Source,
-			Diff:    diffForNode(node),
+			Host:      node.Host,
+			Address:   node.Address,
+			Action:    "create",
+			Summary:   node.Summary,
+			Source:    node.Source,
+			DependsOn: append([]string(nil), node.ExplicitDependsOn...),
+			Diff:      diffForNode(node),
 		}
 		if opts.Debug {
 			change.ProviderAddress = node.ProviderAddress
@@ -220,6 +222,9 @@ func (r textRenderer) print(doc Document) {
 		}
 		if change.ProviderAddress != "" {
 			fmt.Fprintf(r.w, "    %s %s\n", r.label("provider:"), r.muted(change.ProviderAddress))
+		}
+		if len(change.DependsOn) > 0 {
+			fmt.Fprintf(r.w, "    %s %s\n", r.label("depends_on:"), r.muted(strings.Join(change.DependsOn, ", ")))
 		}
 		if change.DeleteBehavior != "" {
 			r.printDeleteBehaviorExplanation(change)
@@ -836,10 +841,10 @@ const planHTMLTemplate = `<!doctype html>
       <thead><tr><th>Action</th><th>Address</th><th>Summary</th>{{if .HasDeleteBehaviors}}<th>Delete behavior</th>{{end}}<th>Source</th></tr></thead>
       <tbody>
       {{range .Changes}}
-        <tr data-plan-row data-action="{{.Action}}" data-host="{{.Host}}" data-search="{{.Address}} {{.Summary}} {{.DeleteBehavior}} {{sourceText .Source}}">
+        <tr data-plan-row data-action="{{.Action}}" data-host="{{.Host}}" data-search="{{.Address}} {{.Summary}} {{range .DependsOn}}{{.}} {{end}}{{.DeleteBehavior}} {{sourceText .Source}}">
           <td><span class="action action-{{.Action}}">{{actionText .Action}}</span></td>
           <td><code>{{.Address}}</code></td>
-          <td>{{.Summary}}{{if .ProviderAddress}}<div class="source">provider: <code>{{.ProviderAddress}}</code></div>{{end}}{{with diffText .Diff}}<details><summary>Field diff</summary><pre>{{.}}</pre></details>{{end}}</td>
+          <td>{{.Summary}}{{if .DependsOn}}<div class="source">depends_on: {{range $index, $address := .DependsOn}}{{if $index}}, {{end}}<code>{{$address}}</code>{{end}}</div>{{end}}{{if .ProviderAddress}}<div class="source">provider: <code>{{.ProviderAddress}}</code></div>{{end}}{{with diffText .Diff}}<details><summary>Field diff</summary><pre>{{.}}</pre></details>{{end}}</td>
           {{if $.HasDeleteBehaviors}}<td>{{if .DeleteBehavior}}<span class="delete-behavior delete-behavior-{{.DeleteBehavior}}">{{.DeleteBehavior}}</span>{{if .DeleteRisk}}<div class="source">risk: {{.DeleteRisk}}</div>{{end}}{{if .DeleteNotes}}<ul class="delete-notes">{{range .DeleteNotes}}<li>{{.}}</li>{{end}}</ul>{{end}}{{end}}</td>{{end}}
           <td class="source">{{sourceText .Source}}</td>
         </tr>

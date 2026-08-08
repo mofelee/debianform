@@ -826,13 +826,15 @@ func (p Plan) Document(opts coreplan.Options) coreplan.Document {
 			before = step.Prior.Desired
 			after = nil
 		}
+		dependsOn := append([]string(nil), step.Node.ExplicitDependsOn...)
 		change := coreplan.Change{
-			Host:    step.Host,
-			Address: step.Address,
-			Action:  step.Action,
-			Summary: step.Summary,
-			Source:  step.Node.Source,
-			Diff:    coreplan.BuildDiff(step.Action, before, after),
+			Host:      step.Host,
+			Address:   step.Address,
+			Action:    step.Action,
+			Summary:   step.Summary,
+			Source:    step.Node.Source,
+			DependsOn: dependsOn,
+			Diff:      coreplan.BuildDiff(step.Action, before, after),
 		}
 		if diagnostic := deleteDiagnosticForStep(step); diagnostic.Behavior != "" {
 			change.DeleteBehavior = diagnostic.Behavior
@@ -1350,6 +1352,7 @@ func resourceStateForStep(step Step, observed map[string]any, updatedAt string) 
 		Observed:        sanitizedObserved,
 		UpdatedAt:       updatedAt,
 		Order:           step.Order,
+		DependsOn:       append([]string(nil), step.Node.DependsOn...),
 	}
 }
 
@@ -1525,33 +1528,27 @@ func executionWaves(resourceGraph *graph.ResourceGraph, plan Plan) ([][]executio
 		}
 	}
 	aliases := map[string]string{}
-	aliasDependsOn := map[string][]string{}
+	dependencyOverrides := activeDependencyOverrides(resourceGraph, active, activeOps)
 	for address, step := range activeOps {
 		activeAddresses[address] = true
 		if address != step.Operation.Address {
 			aliases[address] = step.Operation.Address
-			aliasDependsOn[address] = append([]string(nil), step.Operation.DependsOn...)
+			dependencyOverrides[address] = append([]string(nil), step.Operation.DependsOn...)
 		}
 	}
 
-	scheduled, err := resourceGraph.ActiveWavesWithAliases(activeAddresses, aliases, aliasDependsOn)
+	scheduled, err := resourceGraph.ActiveWavesWithAliases(activeAddresses, aliases, dependencyOverrides)
 	if err != nil {
 		return nil, err
 	}
 
-	waves := make([][]executionItem, 0, len(scheduled)+1)
+	waves := make([][]executionItem, 0, len(scheduled)+len(orphanSteps))
 	if len(orphanSteps) > 0 {
-		sortSteps(orphanSteps)
-		wave := make([]executionItem, 0, len(orphanSteps))
-		for _, step := range orphanSteps {
-			wave = append(wave, executionItem{
-				kind:    "resource",
-				address: step.Address,
-				host:    step.Host,
-				step:    step,
-			})
+		orphanWaves, err := orphanExecutionWaves(orphanSteps)
+		if err != nil {
+			return nil, err
 		}
-		waves = append(waves, wave)
+		waves = append(waves, orphanWaves...)
 	}
 	for _, scheduledWave := range scheduled {
 		wave := make([]executionItem, 0, len(scheduledWave))
@@ -1578,6 +1575,98 @@ func executionWaves(resourceGraph *graph.ResourceGraph, plan Plan) ([][]executio
 			})
 		}
 		waves = append(waves, wave)
+	}
+	return waves, nil
+}
+
+func activeDependencyOverrides(resourceGraph *graph.ResourceGraph, active map[string]Step, activeOps map[string]OperationStep) map[string][]string {
+	overrides := map[string][]string{}
+	for address := range active {
+		overrides[address] = []string{}
+	}
+	for _, node := range resourceGraph.Nodes {
+		step, enabled := active[node.Address]
+		if !enabled {
+			continue
+		}
+		for _, dependency := range node.DependsOn {
+			if dependencyStep, activeResource := active[dependency]; activeResource {
+				if destroysResource(dependencyStep.Action) {
+					overrides[dependency] = append(overrides[dependency], node.Address)
+				} else {
+					overrides[node.Address] = append(overrides[node.Address], dependency)
+				}
+				continue
+			}
+			if _, activeOperation := activeOps[dependency]; activeOperation && !destroysResource(step.Action) {
+				overrides[node.Address] = append(overrides[node.Address], dependency)
+			}
+		}
+	}
+	for address := range overrides {
+		overrides[address] = dedupeOperationDependencies(overrides[address])
+	}
+	return overrides
+}
+
+func orphanExecutionWaves(steps []Step) ([][]executionItem, error) {
+	byAddress := make(map[string]Step, len(steps))
+	indegree := make(map[string]int, len(steps))
+	dependents := make(map[string][]string, len(steps))
+	for _, step := range steps {
+		byAddress[step.Address] = step
+		indegree[step.Address] = 0
+	}
+	for _, step := range steps {
+		if step.Prior == nil {
+			continue
+		}
+		for _, dependency := range step.Prior.DependsOn {
+			if _, exists := byAddress[dependency]; !exists {
+				continue
+			}
+			indegree[dependency]++
+			dependents[step.Address] = append(dependents[step.Address], dependency)
+		}
+	}
+	ready := make([]Step, 0, len(steps))
+	for address, degree := range indegree {
+		if degree == 0 {
+			ready = append(ready, byAddress[address])
+		}
+	}
+	sortSteps(ready)
+	var waves [][]executionItem
+	emitted := 0
+	for len(ready) > 0 {
+		current := ready
+		ready = nil
+		wave := make([]executionItem, 0, len(current))
+		for _, step := range current {
+			kind := ""
+			if step.Prior != nil {
+				kind = step.Prior.Kind
+			}
+			wave = append(wave, executionItem{
+				kind:         "resource",
+				address:      step.Address,
+				host:         step.Host,
+				safeParallel: graph.SafeParallelKind(kind),
+				step:         step,
+			})
+			emitted++
+			for _, dependent := range dependents[step.Address] {
+				indegree[dependent]--
+				if indegree[dependent] == 0 {
+					ready = append(ready, byAddress[dependent])
+				}
+			}
+		}
+		sortSteps(ready)
+		waves = append(waves, wave)
+	}
+	if emitted != len(steps) {
+		return nil, fmt.Errorf("orphan resource dependency cycle detected")
 	}
 	return waves, nil
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/mofelee/debianform/internal/core/ir"
 )
 
 type ScheduleItem struct {
@@ -16,9 +18,11 @@ type ScheduleItem struct {
 }
 
 type scheduleEntry struct {
-	item      ScheduleItem
-	dependsOn []string
-	order     int
+	item              ScheduleItem
+	dependsOn         []string
+	order             int
+	source            ir.SourceRef
+	dependencySources map[string]ir.SourceRef
 }
 
 func (g *ResourceGraph) Validate() error {
@@ -178,8 +182,10 @@ func (g *ResourceGraph) scheduleEntries() (map[string]scheduleEntry, error) {
 				Kind:         node.Kind,
 				SafeParallel: SafeParallelKind(node.Kind),
 			},
-			dependsOn: deps,
-			order:     order,
+			dependsOn:         deps,
+			order:             order,
+			source:            node.Source,
+			dependencySources: node.DependencySources,
 		}
 		order++
 	}
@@ -203,6 +209,7 @@ func (g *ResourceGraph) scheduleEntries() (map[string]scheduleEntry, error) {
 			},
 			dependsOn: deps,
 			order:     order,
+			source:    op.Source,
 		}
 		order++
 	}
@@ -234,7 +241,18 @@ func validateAcyclic(entries map[string]scheduleEntry) error {
 			start := stackIndex[address]
 			cycle := append([]string(nil), stack[start:]...)
 			cycle = append(cycle, address)
-			return fmt.Errorf("resource graph dependency cycle: %s", strings.Join(cycle, " -> "))
+			message := fmt.Sprintf("resource graph dependency cycle: %s", strings.Join(cycle, " -> "))
+			source := entries[address].source
+			if len(stack) > 0 {
+				parent := stack[len(stack)-1]
+				if edgeSource, ok := entries[parent].dependencySources[address]; ok {
+					source = edgeSource
+				}
+			}
+			if source.File != "" {
+				return fmt.Errorf("%s:%d:%s: %s", source.File, source.Line, source.Path, message)
+			}
+			return fmt.Errorf("%s", message)
 		case 2:
 			return nil
 		}

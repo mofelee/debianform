@@ -1802,6 +1802,13 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 	for i := range operations {
 		operations[i].Host = host.Name
 	}
+	dependencies := append([]ir.ResourceDependencySpec(nil), host.ExplicitDependencies...)
+	for _, component := range host.Components {
+		dependencies = append(dependencies, component.ExplicitDependencies...)
+	}
+	if err := applyExplicitDependencies(host.Name, nodes, dependencies); err != nil {
+		return nil, nil, err
+	}
 	sort.SliceStable(nodes, func(i, j int) bool {
 		return nodes[i].Address < nodes[j].Address
 	})

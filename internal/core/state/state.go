@@ -34,6 +34,7 @@ type Resource struct {
 	Observed        map[string]any    `json:"observed,omitempty"`
 	UpdatedAt       string            `json:"updated_at,omitempty"`
 	Order           int               `json:"order"`
+	DependsOn       []string          `json:"depends_on,omitempty"`
 }
 
 func Empty(host string) State {

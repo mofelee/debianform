@@ -13,17 +13,19 @@ type ResourceGraph struct {
 }
 
 type Node struct {
-	Host            string            `json:"host,omitempty"`
-	Address         string            `json:"address"`
-	Kind            string            `json:"kind"`
-	Summary         string            `json:"summary"`
-	Source          ir.SourceRef      `json:"source"`
-	Lifecycle       *ir.LifecycleSpec `json:"lifecycle,omitempty"`
-	Desired         map[string]any    `json:"desired,omitempty"`
-	ProviderType    string            `json:"provider_type,omitempty"`
-	ProviderAddress string            `json:"provider_address,omitempty"`
-	ProviderPayload map[string]any    `json:"provider_payload,omitempty"`
-	DependsOn       []string          `json:"depends_on,omitempty"`
+	Host              string                  `json:"host,omitempty"`
+	Address           string                  `json:"address"`
+	Kind              string                  `json:"kind"`
+	Summary           string                  `json:"summary"`
+	Source            ir.SourceRef            `json:"source"`
+	Lifecycle         *ir.LifecycleSpec       `json:"lifecycle,omitempty"`
+	Desired           map[string]any          `json:"desired,omitempty"`
+	ProviderType      string                  `json:"provider_type,omitempty"`
+	ProviderAddress   string                  `json:"provider_address,omitempty"`
+	ProviderPayload   map[string]any          `json:"provider_payload,omitempty"`
+	DependsOn         []string                `json:"depends_on,omitempty"`
+	ExplicitDependsOn []string                `json:"-"`
+	DependencySources map[string]ir.SourceRef `json:"-"`
 }
 
 func (n Node) MarshalJSON() ([]byte, error) {
