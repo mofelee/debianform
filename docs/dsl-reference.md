@@ -297,6 +297,35 @@ Available in `host` and `profile`. Defaults:
 | `path` | Remote state JSON path. |
 | `lock_path` | Remote state-lock path. |
 
+### staging
+
+Available in `host` and `profile`. The optional block selects the remote root
+for component build and extraction workspaces:
+
+| Field | Description |
+| --- | --- |
+| `root` | Non-empty absolute remote path used as the host/profile component staging root. |
+
+```hcl
+profile "large_artifacts" {
+  staging {
+    root = "/var/lib/debianform/staging"
+  }
+}
+```
+
+An explicit mounted component may override this value with an absolute
+`staging_root`. Precedence is component instance, then host/profile, then the
+operation default. With no configured root, binary extraction and source builds
+retain the remote `mktemp` default, while archive installation stages under the
+destination parent so its final move remains on the destination filesystem.
+
+Staging is provider-only execution policy. It does not change resource identity
+or desired state, so changing only the staging path does not reinstall a
+converged artifact. Work directories are private and removed after success or
+failure. A failed workspace operation reports the selected staging path and its
+available space.
+
 ### system
 
 Available in `host`. A `profile` may set only `timezone` and `locale`;
@@ -783,6 +812,11 @@ Other artifact attributes, including `type`, `version`, `extract`, `build`, and
 `install`, are still evaluated as template metadata and cannot reference
 `input`. This is the current artifact-expression boundary.
 
+`staging_root` is available only on an explicit mounted `component` block and
+must be a non-empty absolute remote path. It overrides the enclosing
+host/profile `staging.root` for that component instance. Shorthand mounts in a
+`components` list use the host/profile value or the operation default.
+
 ```hcl
 component "tool" {
   input "download_url" {
@@ -812,8 +846,13 @@ host "region_a" {
 }
 
 host "region_b" {
+  staging {
+    root = "/var/lib/debianform/staging"
+  }
+
   component "tool" {
-    source = component.tool
+    source       = component.tool
+    staging_root = "/srv/debianform/tool-staging"
     inputs = {
       download_url = "https://mirror-b.example.invalid/tool"
     }

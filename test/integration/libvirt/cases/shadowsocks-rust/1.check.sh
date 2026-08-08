@@ -16,3 +16,13 @@ assert_remote "shadowsocks-rust state records artifact install and service resou
   "grep -F 'host.cihost.components.shadowsocks_rust.artifact.install[\\\"/usr/local/bin/ssserver\\\"]' /var/lib/debianform-integration/shadowsocks-rust-state.json && grep -F 'host.cihost.components.shadowsocks_rust.services.service[\\\"shadowsocks-rust\\\"]' /var/lib/debianform-integration/shadowsocks-rust-state.json"
 assert_remote "shadowsocks-rust runtime facts were discovered from the target host" \
   "grep -F '\"architecture\": \"${DBF_INTEGRATION_TARGET_ARCHITECTURE}\"' /var/lib/debianform-integration/shadowsocks-rust-state.json && grep -F '\"codename\": \"${DBF_INTEGRATION_TARGET_CODENAME}\"' /var/lib/debianform-integration/shadowsocks-rust-state.json"
+assert_remote "component staging root is on a larger filesystem than constrained /tmp" \
+  "tmp_device=\$(stat -c '%d' /tmp); staging_device=\$(stat -c '%d' /var/lib/debianform-integration/component-staging); tmp_blocks=\$(df -Pk /tmp | awk 'NR == 2 { print \$2 }'); staging_blocks=\$(df -Pk /var/lib/debianform-integration/component-staging | awk 'NR == 2 { print \$2 }'); test \"\$tmp_device\" != \"\$staging_device\" && test \"\$tmp_blocks\" -le 1024 && test \"\$staging_blocks\" -gt \"\$tmp_blocks\""
+assert_remote "installed binary is larger than the constrained /tmp filesystem" \
+  "test \"\$(stat -c '%s' /usr/local/bin/ssserver)\" -gt 1048576"
+assert_remote "component staging workspaces were removed after installation" \
+  "test -z \"\$(find /var/lib/debianform-integration/component-staging -mindepth 1 -maxdepth 1 -print -quit)\""
+run_remote "unmount constrained component staging test /tmp" \
+  "umount /tmp"
+assert_remote "constrained component staging test /tmp was unmounted" \
+  "! grep -q '^dbf-issue87-tmpfs /tmp tmpfs ' /proc/mounts"

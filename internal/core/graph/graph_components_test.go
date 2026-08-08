@@ -2,6 +2,7 @@ package graph
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -69,6 +70,114 @@ func TestCompileComponentSourceBuildResourceGraphGolden(t *testing.T) {
 	}
 	if !foundBuild {
 		t.Fatalf("source install deps = %#v, want artifact build", installDeps)
+	}
+}
+
+func TestCompileComponentStagingProviderPayloads(t *testing.T) {
+	config := func(hostRoot string) string {
+		return `
+component "compressed" {
+  type = "binary"
+  source {
+    url    = "https://downloads.example/tool.gz"
+    sha256 = "1111111111111111111111111111111111111111111111111111111111111111"
+  }
+  extract { format = "gz" }
+  install { path = "/usr/local/bin/compressed" }
+}
+
+component "plain" {
+  type = "binary"
+  source {
+    url    = "https://downloads.example/plain"
+    sha256 = "2222222222222222222222222222222222222222222222222222222222222222"
+  }
+  install { path = "/usr/local/bin/plain" }
+}
+
+component "archive" {
+  type = "archive"
+  source {
+    url    = "https://downloads.example/app.tar.gz"
+    sha256 = "3333333333333333333333333333333333333333333333333333333333333333"
+  }
+  extract { format = "tar.gz" }
+  install { path = "/opt/app" }
+}
+
+component "source_build" {
+  type = "source"
+  source {
+    url    = "https://downloads.example/main.c"
+    sha256 = "4444444444444444444444444444444444444444444444444444444444444444"
+  }
+  build {
+    commands   = [["cc", "-o", "tool", "main.c"]]
+    output     = "tool"
+    source_name = "main.c"
+  }
+  install { path = "/usr/local/bin/source-tool" }
+}
+
+host "custom" {
+  staging { root = "` + hostRoot + `" }
+  components = [component.compressed, component.plain]
+  component "source_build" {
+    source       = component.source_build
+    staging_root = "/srv/component-staging"
+  }
+}
+
+host "automatic" {
+  components = [component.archive]
+}
+`
+	}
+
+	first := compileGraphInline(t, config("/srv/host-staging-a"))
+	compressed := nodeFor(first, `host.custom.components.compressed.artifact.install["/usr/local/bin/compressed"]`)
+	if compressed == nil || compressed.ProviderPayload["staging_root"] != "/srv/host-staging-a" {
+		t.Fatalf("compressed provider payload = %#v", compressed)
+	}
+	if _, ok := compressed.Desired["staging_root"]; ok {
+		t.Fatalf("compressed desired persisted operational staging root: %#v", compressed.Desired)
+	}
+	plain := nodeFor(first, `host.custom.components.plain.artifact.install["/usr/local/bin/plain"]`)
+	if _, ok := plain.ProviderPayload["staging_root"]; ok {
+		t.Fatalf("plain binary unexpectedly allocated staging: %#v", plain.ProviderPayload)
+	}
+	archive := nodeFor(first, `host.automatic.components.archive.artifact.install["/opt/app"]`)
+	if _, ok := archive.ProviderPayload["staging_root"]; ok {
+		t.Fatalf("automatic archive root should be resolved by provider: %#v", archive.ProviderPayload)
+	}
+	var build *Node
+	for i := range first.Nodes {
+		if strings.HasPrefix(first.Nodes[i].Address, `host.custom.components.source_build.artifact.build[`) {
+			build = &first.Nodes[i]
+			break
+		}
+	}
+	if build == nil || build.ProviderPayload["staging_root"] != "/srv/component-staging" {
+		t.Fatalf("source build provider payload = %#v", build)
+	}
+	if _, ok := build.Desired["staging_root"]; ok {
+		t.Fatalf("source build desired persisted operational staging root: %#v", build.Desired)
+	}
+	for _, node := range first.Nodes {
+		if node.Kind == "component_download" {
+			if _, ok := node.ProviderPayload["staging_root"]; ok {
+				t.Fatalf("download node received staging root: %#v", node.ProviderPayload)
+			}
+		}
+	}
+
+	second := compileGraphInline(t, config("/srv/host-staging-b"))
+	secondCompressed := nodeFor(second, compressed.Address)
+	if secondCompressed == nil || !reflect.DeepEqual(compressed.Desired, secondCompressed.Desired) {
+		t.Fatalf("staging policy changed desired resource: first=%#v second=%#v", compressed.Desired, secondCompressed)
+	}
+	if secondCompressed.ProviderPayload["staging_root"] != "/srv/host-staging-b" {
+		t.Fatalf("updated provider staging root = %#v", secondCompressed.ProviderPayload)
 	}
 }
 

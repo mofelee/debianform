@@ -771,6 +771,11 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				buildDesired["strip_components"] = component.Extract.StripComponents
 			}
 			redactComponentArtifactSourceFields(buildDesired, "source_url", "source_sha256", *component.SelectedSource)
+			buildPayload := buildDesired
+			if stagingRoot := componentWorkspaceRoot(host, component); stagingRoot != "" {
+				buildPayload = cloneMap(buildDesired)
+				buildPayload["staging_root"] = stagingRoot
+			}
 			nodes = append(nodes, Node{
 				Host:            host.Name,
 				Address:         buildAddress,
@@ -781,7 +786,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				DependsOn:       dedupeStrings(buildDeps),
 				ProviderType:    "component_build",
 				ProviderAddress: "component_build." + providerName(host.Name, component.Name),
-				ProviderPayload: buildDesired,
+				ProviderPayload: buildPayload,
 			})
 		}
 
@@ -823,6 +828,14 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			delete(installDesired, "strip_components")
 			delete(installDesired, "include")
 		}
+		installPayload := installDesired
+		extractFormat, _ := installDesired["extract_format"].(string)
+		if installKind == "component_archive" || extractFormat != "" {
+			if stagingRoot := componentWorkspaceRoot(host, component); stagingRoot != "" {
+				installPayload = cloneMap(installDesired)
+				installPayload["staging_root"] = stagingRoot
+			}
+		}
 		deps = append(deps, ownershipDependencies(component.Install.Owner, component.Install.Group, userAddresses, groupAddresses)...)
 		deps = dedupeStrings(deps)
 		nodes = append(nodes, Node{
@@ -835,7 +848,7 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			DependsOn:       deps,
 			ProviderType:    installKind,
 			ProviderAddress: installKind + "." + providerName(host.Name, component.Name, component.Install.Path),
-			ProviderPayload: installDesired,
+			ProviderPayload: installPayload,
 		})
 		componentArtifactInstallAddresses[component.Name] = installAddress
 		if component.ArtifactType == "ca_certificate" {

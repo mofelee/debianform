@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	pathpkg "path"
 	"strings"
 
 	"github.com/mofelee/debianform/internal/core/graph"
@@ -359,25 +360,41 @@ func (p NativeProvider) applyComponentArchive(ctx context.Context, step Step) (m
 		"parent=$(dirname " + shellQuote(path) + ")",
 		"base=$(basename " + shellQuote(path) + ")",
 		"mkdir -p \"$parent\"",
-		"work=$(mktemp -d)",
-		"trap 'rm -rf -- \"$work\"' EXIT",
-		"staging=\"$work/staging\"",
-		"mkdir -p \"$staging\"",
-		"tar --no-same-owner -xzf " + shellQuote(cachePath) + " -C \"$staging\" --strip-components " + shellQuote(stripComponents),
-		"chown -R " + shellQuote(stringDesired(step.Node, "owner")+":"+stringDesired(step.Node, "group")) + " \"$staging\"",
-		"chmod " + shellQuote(stringDesired(step.Node, "mode")) + " \"$staging\"",
+	}
+	lines = append(lines, componentWorkspaceSetup(step.Node, pathpkg.Dir(path))...)
+	lines = append(lines,
+		"archive_destination="+shellQuote(path),
 		"tmp=\"$parent/.${base}.dbf-new\"",
 		"old=\"$parent/.${base}.dbf-old\"",
+		"archive_old_moved=0",
+		"archive_committed=0",
+		"component_workspace_rollback() {",
+		"  if [ \"$archive_committed\" -eq 0 ]; then",
+		"    rm -rf -- \"$tmp\" || true",
+		"    if [ \"$archive_old_moved\" -eq 1 ] && [ -e \"$old\" ]; then",
+		"      rm -rf -- \"$archive_destination\" || true",
+		"      mv -- \"$old\" \"$archive_destination\" || true",
+		"    else",
+		"      rm -rf -- \"$old\" || true",
+		"    fi",
+		"  fi",
+		"}",
 		"rm -rf -- \"$tmp\" \"$old\"",
-		"mv \"$staging\" \"$tmp\"",
-		"if [ -e " + shellQuote(path) + " ]; then mv " + shellQuote(path) + " \"$old\"; fi",
-		"if mv \"$tmp\" " + shellQuote(path) + "; then",
-		"  rm -rf -- \"$old\"",
-		"else",
-		"  if [ -e \"$old\" ]; then mv \"$old\" " + shellQuote(path) + "; fi",
-		"  exit 1",
+		"staging=\"$work/staging\"",
+		"mkdir -p \"$staging\"",
+		"tar --no-same-owner -xzf "+shellQuote(cachePath)+" -C \"$staging\" --strip-components "+shellQuote(stripComponents),
+		"chown -R "+shellQuote(stringDesired(step.Node, "owner")+":"+stringDesired(step.Node, "group"))+" \"$staging\"",
+		"chmod "+shellQuote(stringDesired(step.Node, "mode"))+" \"$staging\"",
+		"mv -- \"$staging\" \"$tmp\"",
+		"if [ -e \"$archive_destination\" ]; then",
+		"  mv -- \"$archive_destination\" \"$old\"",
+		"  archive_old_moved=1",
 		"fi",
-	}
+		"mv -- \"$tmp\" \"$archive_destination\"",
+		"archive_committed=1",
+		"rm -rf -- \"$old\"",
+		"archive_old_moved=0",
+	)
 	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
 	if err != nil {
 		return nil, err
@@ -446,20 +463,21 @@ func componentBinaryExtractInstallScript(node graph.Node) []string {
 			command = "gzip"
 			packageName = "gzip"
 		}
-		return []string{
+		lines := []string{
 			"if ! command -v " + command + " >/dev/null 2>&1; then",
 			"  export DEBIAN_FRONTEND=noninteractive",
 			"  apt-get update",
 			"  apt-get install -y " + packageName,
 			"fi",
-			"work=$(mktemp -d)",
-			"trap 'rm -rf -- \"$work\"' EXIT",
-			command + " -dc " + shellQuote(cachePath) + " > \"$work/binary\"",
-			"install -o " + shellQuote(stringDesired(node, "owner")) +
-				" -g " + shellQuote(stringDesired(node, "group")) +
-				" -m " + shellQuote(stringDesired(node, "mode")) +
-				" \"$work/binary\" " + shellQuote(path),
 		}
+		lines = append(lines, componentWorkspaceSetup(node, "")...)
+		return append(lines,
+			command+" -dc "+shellQuote(cachePath)+" > \"$work/binary\"",
+			"install -o "+shellQuote(stringDesired(node, "owner"))+
+				" -g "+shellQuote(stringDesired(node, "group"))+
+				" -m "+shellQuote(stringDesired(node, "mode"))+
+				" \"$work/binary\" "+shellQuote(path),
+		)
 	}
 	include := stringDesired(node, "include")
 	stripComponents := fmt.Sprintf("%v", node.Desired["strip_components"])
@@ -482,9 +500,8 @@ func componentBinaryExtractInstallScript(node graph.Node) []string {
 		"  apt-get update",
 		"  apt-get install -y tar xz-utils",
 		"fi",
-		"work=$(mktemp -d)",
-		"trap 'rm -rf -- \"$work\"' EXIT",
 	}
+	lines = append(lines, componentWorkspaceSetup(node, "")...)
 	if format == "zip" {
 		lines = append(lines, "unzip -q "+shellQuote(cachePath)+" -d \"$work\"")
 	} else if format == "tar.xz" {
@@ -565,11 +582,12 @@ func componentBuildScript(node graph.Node) ([]string, error) {
 		"  apt-get update",
 		"  apt-get install -y tar xz-utils",
 		"fi",
-		"work=$(mktemp -d)",
-		"trap 'rm -rf -- \"$work\"' EXIT",
+	}
+	lines = append(lines, componentWorkspaceSetup(node, "")...)
+	lines = append(lines,
 		"src=\"$work/src\"",
 		"mkdir -p \"$src\"",
-	}
+	)
 	switch format {
 	case "zip":
 		lines = append(lines, "unzip -q "+shellQuote(cachePath)+" -d \"$src\"")
@@ -583,9 +601,7 @@ func componentBuildScript(node graph.Node) ([]string, error) {
 	lines = append(lines,
 		"build_root="+shellQuote(buildPath),
 		"rm -rf -- \"$build_root/work\"",
-		"mkdir -p \"$build_root\"",
-		"mv \"$src\" \"$build_root/work\"",
-		"cd \"$build_root/work\"",
+		"cd \"$src\"",
 	)
 	if workingDir := stringDesired(node, "working_dir"); workingDir != "" {
 		lines = append(lines, "cd "+shellQuote(workingDir))
@@ -603,6 +619,65 @@ func componentBuildScript(node graph.Node) ([]string, error) {
 			" \"$built\" "+shellQuote(outputPath),
 	)
 	return lines, nil
+}
+
+func componentWorkspaceSetup(node graph.Node, defaultRoot string) []string {
+	stagingRoot := stringDesired(node, "staging_root")
+	if stagingRoot == "" {
+		stagingRoot = defaultRoot
+	}
+	lines := []string{}
+	if stagingRoot == "" {
+		lines = append(lines, "staging_root=${TMPDIR:-/tmp}")
+	} else {
+		lines = append(lines, "staging_root="+shellQuote(stagingRoot))
+	}
+	lines = append(lines,
+		"component_previous_umask=$(umask)",
+		"umask 077",
+		"work=",
+		"component_workspace_diagnostic() {",
+		"  available=$(df -Pk \"$staging_root\" 2>/dev/null | awk 'NR == 2 { print $4; exit }')",
+		"  if [ -z \"$available\" ]; then available=unknown; fi",
+		"  printf 'component workspace failed: staging_root=%s work_path=%s available_kib=%s\\n' \"$staging_root\" \"${work:-$staging_root}\" \"$available\" >&2",
+		"}",
+		"component_workspace_rollback() { :; }",
+		"component_workspace_cleanup() {",
+		"  status=$?",
+		"  trap - EXIT",
+		"  component_workspace_rollback \"$status\" || true",
+		"  if [ \"$status\" -ne 0 ]; then component_workspace_diagnostic; fi",
+		"  if [ -n \"$work\" ]; then",
+		"    if rm -rf -- \"$work\"; then",
+		"      :",
+		"    else",
+		"      cleanup_status=$?",
+		"      if [ \"$status\" -eq 0 ]; then",
+		"        status=$cleanup_status",
+		"        component_workspace_diagnostic",
+		"      fi",
+		"    fi",
+		"  fi",
+		"  exit \"$status\"",
+		"}",
+		"trap component_workspace_cleanup EXIT",
+	)
+	if stagingRoot == "" {
+		lines = append(lines,
+			"work=$(mktemp -d)",
+			"staging_root=$(dirname \"$work\")",
+		)
+	} else {
+		lines = append(lines,
+			"mkdir -p -- \"$staging_root\"",
+			"work=$(mktemp -d \"${staging_root%/}/.debianform-component.XXXXXX\")",
+		)
+	}
+	lines = append(lines,
+		"chmod 0700 \"$work\"",
+		"umask \"$component_previous_umask\"",
+	)
+	return lines
 }
 
 func shellCommandArgv(args []string) string {

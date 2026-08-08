@@ -169,6 +169,16 @@ func componentArtifactBuildOutputPath(component ir.ComponentInstanceSpec) string
 	return componentArtifactBuildPath(component) + "/out/" + shortHash(component.Build.Output) + "/" + component.Build.Output
 }
 
+func componentWorkspaceRoot(host ir.HostSpec, component ir.ComponentInstanceSpec) string {
+	if component.StagingRoot != "" {
+		return component.StagingRoot
+	}
+	if host.Staging != nil && host.Staging.Root != "" {
+		return host.Staging.Root
+	}
+	return ""
+}
+
 func cloneCommandMatrix(in [][]string) [][]string {
 	if len(in) == 0 {
 		return nil

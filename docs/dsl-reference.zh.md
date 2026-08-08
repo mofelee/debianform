@@ -274,6 +274,30 @@ host "force_example" {
 | `path` | 远端 state JSON 路径。 |
 | `lock_path` | 远端 state lock 路径。 |
 
+### staging
+
+`host`/`profile` 可用。可选的 block 用来选择 component 构建和解压 workspace 的远端根目录：
+
+| 字段 | 说明 |
+| --- | --- |
+| `root` | 非空的远端绝对路径，用作 host/profile 的 component staging root。 |
+
+```hcl
+profile "large_artifacts" {
+  staging {
+    root = "/var/lib/debianform/staging"
+  }
+}
+```
+
+显式挂载的 component 可用绝对路径 `staging_root` 覆盖该值。优先级依次为 component instance、
+host/profile、operation 默认值。未配置 root 时，binary 解压和 source build 保留远端 `mktemp`
+默认行为；archive install 则在目标父目录下 staging，使最终 move 保持在目标文件系统上。
+
+Staging 只是 provider 执行策略，不改变资源身份或 desired state，因此只修改 staging 路径不会
+重新安装已收敛的 artifact。工作目录保持私有，并在成功或失败后删除。workspace operation
+失败时会报告所选 staging 路径及其可用空间。
+
 ### system
 
 `host` 可用。`profile` 只能设置 `timezone`、`locale`；`hostname` 是 host-only。
@@ -733,6 +757,10 @@ Compose label、project、service name 必须以字母或数字开头，后续�
 其他 artifact 属性，包括 `type`、`version`、`extract`、`build` 和 `install`，目前仍作为模板
 元数据求值，不能引用 `input`。这是当前 artifact expression 的明确边界。
 
+`staging_root` 只可用于显式挂载的 `component` block，且必须是非空的远端绝对路径。它会为该
+component instance 覆盖所在 host/profile 的 `staging.root`。`components` list 中的简写挂载
+使用 host/profile 值或 operation 默认值。
+
 ```hcl
 component "tool" {
   input "download_url" {
@@ -762,8 +790,13 @@ host "region_a" {
 }
 
 host "region_b" {
+  staging {
+    root = "/var/lib/debianform/staging"
+  }
+
   component "tool" {
-    source = component.tool
+    source       = component.tool
+    staging_root = "/srv/debianform/tool-staging"
     inputs = {
       download_url = "https://mirror-b.example.invalid/tool"
     }
