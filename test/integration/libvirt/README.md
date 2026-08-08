@@ -46,10 +46,10 @@ version, codename, and architecture before executing a case.
 
 Every numbered case step runs `validate`, an online JSON plan, drift rejection
 when the case provides a drift hook, `apply`, an asserted JSON no-op plan,
-`check`, and its case-specific post-apply checks. CI currently discovers 22
-case directories. The Debian matrix expands to 2 versions x 22 cases, or 44
+`check`, and its case-specific post-apply checks. CI currently discovers 23
+case directories. The Debian matrix expands to 2 versions x 23 cases, or 46
 jobs guarded by `Managed target matrix gate`. Each separate Ubuntu matrix runs
-the same 22 cases and has its own target matrix gate.
+the same 23 cases and has its own target matrix gate.
 
 `wireguard` uses the two-host runner and `wireguard-three-host` uses the
 three-host runner. On Ubuntu, these cases and `shared-script-networkd` carry a

@@ -177,7 +177,7 @@ Ownership checks read only `/lib/netplan`, `/etc/netplan`, `/run/netplan`, and N
 systemd-networkd/NetworkManager runtime files. They do not run the Netplan CLI, `systemctl`, or file
 mutations.
 
-## 22-Case 26.04 Baseline and Acceptance Mapping
+## 23-Case 26.04 Baseline and Acceptance Mapping
 
 "Released image" preserves the image's Netplan ownership. "Native-networkd image" means the
 harness performs external preparation before DebianForm.
@@ -197,6 +197,7 @@ harness performs external preparation before DebianForm.
 | `hostname` | released image | Shared system hostname | #56/#58 |
 | `multi-directory` | released image | Shared merge/files | #56/#58 |
 | `nftables` | released image | Shared nftables | #56/#58 |
+| `resource-dependencies` | released image | Shared dependency graph/package conffile policy | #88 |
 | `script-on-change` | released image | Shared operation | #56/#58 |
 | `shadowsocks-rust` | released image | Shared artifact/systemd | #56/#58 |
 | `shared-script-networkd` | native-networkd image | Ownership plus reload deduplication | #56/#59 |
@@ -242,10 +243,10 @@ sensitive text, JSON, HTML, debug, and state output.
 
 ## CI and Support-Claim Gates
 
-- Keep a separately named 22-case Ubuntu 26.04 matrix and `Ubuntu 26.04 target matrix gate`.
+- Keep a separately named 23-case Ubuntu 26.04 matrix and `Ubuntu 26.04 target matrix gate`.
 - Do not rename or weaken `Managed target matrix gate` or `Ubuntu 24.04 target matrix gate`.
-- A support claim requires Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04 at 22 cases each on
-  the same commit: all 88 target-case results green.
+- A support claim requires Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04 at 23 cases each on
+  the same commit: all 92 target-case results green.
 - Record the exact commit, CI run URL, released-image digest, and hypervisor cleanup after success or
   failure.
 - Preview describes maturity rather than permission to merge known regressions. After the claim is

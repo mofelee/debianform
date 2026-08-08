@@ -164,7 +164,7 @@ Netplan ownership。
 ownership 检查只读取 `/lib/netplan`、`/etc/netplan`、`/run/netplan` 以及 Netplan 生成的
 systemd-networkd/NetworkManager runtime 文件；不执行 Netplan CLI、`systemctl` 或文件 mutation。
 
-## 22-case 26.04 baseline 和验收映射
+## 23-case 26.04 baseline 和验收映射
 
 “released image”表示保留镜像原有 Netplan ownership；“native-networkd image”表示 harness 在
 DebianForm 运行前完成外部准备。
@@ -184,6 +184,7 @@ DebianForm 运行前完成外部准备。
 | `hostname` | released image | system hostname shared | #56/#58 |
 | `multi-directory` | released image | merge/files shared | #56/#58 |
 | `nftables` | released image | nftables shared | #56/#58 |
+| `resource-dependencies` | released image | dependency graph/package conffile policy shared | #88 |
 | `script-on-change` | released image | operation shared | #56/#58 |
 | `shadowsocks-rust` | released image | artifact/systemd shared | #56/#58 |
 | `shared-script-networkd` | native-networkd image | ownership + reload dedup | #56/#59 |
@@ -227,10 +228,10 @@ rejection、`apply`、JSON no-op plan、`check`、case assertion 和 cleanup。#
 
 ## CI 和支持声明 gate
 
-- 保留独立命名的 22-case Ubuntu 26.04 matrix 和 `Ubuntu 26.04 target matrix gate`。
+- 保留独立命名的 23-case Ubuntu 26.04 matrix 和 `Ubuntu 26.04 target matrix gate`。
 - 不重命名或弱化现有 `Managed target matrix gate` 与 `Ubuntu 24.04 target matrix gate`。
-- 支持声明要求同一提交上 Debian 12、Debian 13、Ubuntu 24.04、Ubuntu 26.04 各 22 个 case，
-  即 88 个 target-case 结果全部绿色。
+- 支持声明要求同一提交上 Debian 12、Debian 13、Ubuntu 24.04、Ubuntu 26.04 各 23 个 case，
+  即 92 个 target-case 结果全部绿色。
 - 记录 exact commit、CI run URL、released image digest 和成功/失败后的 hypervisor cleanup。
 - Preview 代表成熟度，不代表允许合并已知回归；声明完成后 26.04 gate 是 release blocker。
 

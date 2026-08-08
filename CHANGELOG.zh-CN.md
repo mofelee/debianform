@@ -6,6 +6,16 @@ DebianForm 的所有重要变更都会记录在此文件中。
 
 公开 beta 版本线开始后，本项目遵循语义化版本控制。
 
+## Unreleased
+
+- 为带 label 的 package、managed file 和 service resource 新增 typed `depends_on` 排序，覆盖
+  merge/component 展开后解析、带 source location 的校验、cycle 诊断、plan 输出、dependency
+  持久化和反向 destroy 调度。
+- 新增确定性的 package `conffile_policy`：`keep`（兼容性默认值）、`replace` 和 `error`。
+  package install/update 不再可能等待无人回答的 dpkg conffile prompt。
+- 新增阻断式 package 到 managed conffile 到 service 集成工作流，覆盖并行首次 apply、no-op
+  收敛、真实 keep-policy dpkg upgrade、反向删除和清理。
+
 ## v0.10.0
 
 - 为 Beta `systemd.service_unit` resource（包括 raw-content unit）新增可选的 `change_action`

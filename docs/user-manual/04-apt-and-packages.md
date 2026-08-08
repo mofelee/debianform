@@ -60,6 +60,45 @@ and triggers `apt-get update` without enabling a duplicate repository.
 effort to restore the content that existed before adoption. If the file did not exist before
 adoption, DebianForm removes it.
 
+## Order a Package-Owned Configuration File
+
+Use labeled resources and `depends_on` when DebianForm manages a conffile shipped by the package:
+
+```hcl
+packages {
+  package "cron" {
+    conffile_policy = "keep"
+  }
+}
+
+files {
+  file "/etc/default/cron" {
+    depends_on = [package.cron]
+    content    = "READ_ENV=\"yes\"\n"
+  }
+}
+
+services {
+  service "cron" {
+    package    = "cron"
+    depends_on = [file["/etc/default/cron"]]
+    enabled    = true
+    state      = "running"
+  }
+}
+```
+
+This produces package to file to service ordering during create and update, and the reverse order
+during removal. `depends_on` does not trigger the file or service when the package changes; it only
+controls scheduling. The `package = "cron"` field is still useful because DebianForm also infers the
+ordinary package-to-service relationship.
+
+`conffile_policy = "keep"` retains the existing local conffile during package upgrades. It is also
+the behavioral default when the field is omitted. Use `"replace"` to accept the package
+maintainer's version, or `"error"` to reject a modified or missing registered conffile before APT
+runs. All policies are noninteractive. List-form package entries cannot be dependency targets, so
+convert `install = ["cron"]` to a labeled `package "cron"` block for this workflow.
+
 ## Apply the Configuration
 
 Run:

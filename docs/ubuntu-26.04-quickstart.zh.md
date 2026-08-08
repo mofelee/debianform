@@ -120,7 +120,7 @@ DebianForm 只读检查 Netplan ownership；发现冲突会在任何网络写入
 
 ## 7. Preview 边界
 
-- Ubuntu 26.04 LTS amd64 有独立的 22-case 阻断矩阵和
+- Ubuntu 26.04 LTS amd64 有独立的 23-case 阻断矩阵和
   `Ubuntu 26.04 target matrix gate`；Preview 代表成熟度，不表示 CI 回归可以忽略。
 - Ubuntu 24.04 LTS amd64 是另一条独立验证的 Preview 路径，不能互相借用矩阵结果。
 - Ubuntu 26.04 arm64、桌面/NetworkManager、Netplan 管理、sudo/become、默认 `ubuntu` 用户、

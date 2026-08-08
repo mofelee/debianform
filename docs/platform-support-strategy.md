@@ -28,13 +28,13 @@ independent gates.
 | CLI Linux arm64 | Preview | Release artifact is built; real arm64 installer verification still needs a runner or host. |
 | CLI macOS amd64 | Beta | Release artifact, curl installer, and Homebrew install/test/upgrade are verified. |
 | CLI macOS arm64 | Beta | Release artifact, curl installer, and Homebrew install/test/upgrade are verified. |
-| Target Debian 13 amd64 | Beta | Primary target; all 22 libvirt cases block merge and release. |
+| Target Debian 13 amd64 | Beta | Primary target; all 23 libvirt cases block merge and release. |
 | Target Debian 13 arm64 | Preview | Runtime facts and artifact-source selection support arm64, but no real target matrix exists. |
-| Target Debian 12 amd64 | Beta | Runs the same 22 blocking libvirt cases as Debian 13. |
+| Target Debian 12 amd64 | Beta | Runs the same 23 blocking libvirt cases as Debian 13. |
 | Target Debian 12 arm64 | Preview | Requires a real Debian 12 arm64 apply/check matrix before promotion. |
 | Debian 11 or earlier | Unsupported | Outside current support commitments and release gates. |
 | Debian testing/unstable | Unsupported | Outside beta support commitments. |
-| Target Ubuntu 24.04 LTS amd64 | Preview | Independent blocking 22-case matrix; does not change Debian defaults or Beta tiers. |
+| Target Ubuntu 24.04 LTS amd64 | Preview | Independent blocking 23-case matrix; does not change Debian defaults or Beta tiers. |
 | Target Ubuntu 26.04 LTS amd64 | Preview | Official released image, independent blocking matrix, and exact `resolute` tuple. |
 | Other Ubuntu tuple or desktop environment | Unsupported | Only Ubuntu 24.04 (`noble`) and 26.04 (`resolute`) amd64 Server are allowlisted. |
 | Other distribution | Unsupported | Requires a separate contract, implementation, and real target matrix first. |
@@ -56,7 +56,7 @@ Debian 13 is the highest-priority target:
 
 Debian 12 amd64 is Beta:
 
-- It runs exactly the same 22 libvirt cases as Debian 13 amd64; every failure blocks release.
+- It runs exactly the same 23 libvirt cases as Debian 13 amd64; every failure blocks release.
 - Every case asserts Debian ID, version, `bookworm` codename, and `amd64` architecture.
 - Each configured path covers `validate`, online JSON plan, drift rejection where applicable,
   `apply`, JSON no-op plan, `check`, and case-specific assertions.
@@ -73,7 +73,7 @@ must retain independent evidence:
 - Use the same `dbf` CLI, DSL, resource addresses, plan format, and state schema; do not create
   UbuntuForm.
 - Continue to support root SSH only; do not add sudo/become or the default `ubuntu` user.
-- Run complete blocking 22-case matrices separately from Debian. The
+- Run complete blocking 23-case matrices separately from Debian. The
   `Ubuntu 24.04 target matrix gate` and `Ubuntu 26.04 target matrix gate` block independently.
 - Ordinary non-network resources may leave the target's existing network under Netplan.
 - DebianForm does not manage Netplan or NetworkManager. Structured networkd declarations and raw
@@ -175,7 +175,7 @@ Every release-note verification matrix must distinguish:
   `Ubuntu 26.04 target matrix gate`.
 
 Do not collapse evidence for four targets into one "libvirt passed" statement. Record each current
-22-case matrix as `22/22` with its CI run URL and prove all results came from the same release
+23-case matrix as `23/23` with its CI run URL and prove all results came from the same release
 commit. Record each aggregate gate separately as well.
 
 When a platform cannot be verified automatically, write:
@@ -229,8 +229,8 @@ brew upgrade dbf
 
 - Debian 13 amd64 is the highest-priority target. Debian 12 amd64 is also Beta and a release
   blocker.
-- Ubuntu 24.04 and 26.04 LTS amd64 are Preview, each with an independent blocking 22-case matrix.
-- CI runs 88 amd64 libvirt jobs as four targets times 22 cases and requires three aggregate gates.
+- Ubuntu 24.04 and 26.04 LTS amd64 are Preview, each with an independent blocking 23-case matrix.
+- CI runs 92 amd64 libvirt jobs as four targets times 23 cases and requires three aggregate gates.
 - Debian 12 arm64, Debian 13 arm64, and the Linux arm64 CLI installer remain Preview/best-effort.
 - Ubuntu arm64, desktop environments, and Ubuntu versions other than 24.04/26.04 are Unsupported.
 - Debian 11 and earlier are Unsupported.

@@ -248,6 +248,48 @@ host "force_example" {
 除特别说明外，下面的 domain 可出现在 `host` 和 `profile` 中；`component` 只能使用
 `apt`、`packages`、`files`、`secrets`、`directories`、`groups`、`users`、`systemd`、`services`。
 
+### Resource dependencies
+
+带 label 的 `packages.package`、`files.file` 和 `services.service` resource 可使用
+`depends_on`，其值是指向上述 resource 类型的静态 typed reference 列表。它只增加执行顺序：
+apply 时先执行 dependency，destroy 时反向执行；dependency 发生变化不会触发 dependent resource。
+如果真实文件变化需要触发 script operation，应使用 `files.file.on_change`。
+
+```hcl
+packages {
+  package "cron" {
+    conffile_policy = "keep"
+  }
+}
+
+files {
+  file "/etc/default/cron" {
+    depends_on = [package.cron]
+    content    = "READ_ENV=\"yes\"\n"
+  }
+}
+
+services {
+  service "cron" {
+    package    = "cron"
+    depends_on = [file["/etc/default/cron"]]
+    enabled    = true
+    state      = "running"
+  }
+}
+```
+
+reference 标识 declaration，而不是展开后的 graph-address 字符串。它会在 profile merge 和
+component instantiation 后解析，再以稳定的 host-scoped address 进入 plan 和 state。
+`install = ["cron"]` 形式的 list package 不能被引用；需要显式排序时应改为带 label 的
+`package` block。未知、动态、跨 scope、sensitive、ephemeral 和跨 host reference 会带 source
+location 被拒绝。显式 edge 会和 inferred edge 去重，cycle 会报告完整路径，不相关资源仍可并行。
+
+DebianForm 仍会推断 APT repository 到 cache refresh 到 package、
+`services.service.package` dependency 以及 provider-specific activation 等领域关系。
+`depends_on` 只用于补充无法推断的排序；它与阻止删除而非控制顺序的
+`lifecycle.prevent_destroy` 相互独立。
+
 ### ssh
 
 `host`/`profile` 可用。默认 `host = host block label`、`port = 22`、`user = "root"`。
@@ -360,6 +402,12 @@ Debian fixture，离线配置省略 `distribution/version` 时仍保留历史 De
 | `install = ["curl"]` | 安装 package。 |
 | `package "<name>" { repositories = ["repo"] }` | 安装 package，并依赖指定 `apt.repository`。 |
 
+带 label 的 `package` block 还支持 `depends_on` 和 `conffile_policy`。行为默认值为
+`"keep"`，向 dpkg 传递 `--force-confdef` 和 `--force-confold`；`"replace"` 通过
+`--force-confnew` 选择 package maintainer 版本；`"error"` 会在安装前拒绝已修改或缺失的
+registered conffile，并关闭 APT stdin，确保不会等待无人回答的 prompt。显式策略变化会计划一次
+package update。
+
 `package` block 可带 `lifecycle { prevent_destroy = true }`。
 
 ### apt
@@ -416,6 +464,7 @@ Debian fixture，离线配置省略 `distribution/version` 时仍保留历史 De
 | `mode` | `"0644"` | 四位八进制字符串。 |
 | `ensure` | `"present"` | `"present"` 或 `"absent"`。 |
 | `sensitive` | `false` | 明确脱敏；含 sensitive/ephemeral 内容时会自动脱敏。 |
+| `depends_on` | `[]` | 必须在该文件之前 apply 的静态 package/file/service reference。 |
 | `on_change` | 无 | 仅 component 内可用；可引用 component-local 或根 script，实际变化时生成并执行 operation。 |
 
 支持 `lifecycle { prevent_destroy = true }`。
@@ -611,6 +660,7 @@ activation；`check` 只观察；offline plan 会展示 operation graph。两类
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `package` | `""` | 可选 package 依赖。 |
+| `depends_on` | `[]` | 必须在该 service 之前 apply 的静态 package/file/service reference。 |
 | `enabled` | `null` | `true`/`false` 时管理 enablement；省略则不管理。 |
 | `state` | `""` | `running`、`stopped`、`restarted`、`reloaded`；省略则不管理运行状态。 |
 

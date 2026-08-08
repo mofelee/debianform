@@ -150,9 +150,9 @@ Before managing either, the online preflight must inspect `/etc/netplan/*.yaml` 
 - Arbitrary script command text is not inferred; its safety remains the configuration author's
   responsibility.
 
-## 22-Case Ubuntu Matrix
+## 23-Case Ubuntu Matrix
 
-These 22 cases run as an independent blocking Ubuntu matrix. "Native-networkd image" means the test
+These 23 cases run as an independent blocking Ubuntu matrix. "Native-networkd image" means the test
 harness performs external preparation before DebianForm; it is not product-managed migration.
 
 | Case | Ubuntu fixture | Classification/implementation loop |
@@ -170,6 +170,7 @@ harness performs external preparation before DebianForm; it is not product-manag
 | `hostname` | official image | Shared system, #48 |
 | `multi-directory` | official image | Shared parser/files, #48 |
 | `nftables` | official image | Shared nftables, #48 |
+| `resource-dependencies` | official image | Shared dependency graph/package conffile policy, #88 |
 | `script-on-change` | official image | Shared operation, #48 |
 | `shadowsocks-rust` | official image | Shared artifact/systemd, #48 |
 | `shared-script-networkd` | native-networkd image | Ownership guard plus networkd, #49 |
@@ -195,8 +196,8 @@ same commit:
 
 That is the historical baseline for the initial 24.04 delivery. The later four-target 20-case
 baseline is recorded in the [Support Matrix](support-matrix.md); the current gate adds
-`component-moved` and `bird-wireguard-networkd` and requires separate `22/22` matrices for 24.04
-and 26.04.
+`component-moved`, `bird-wireguard-networkd`, and `resource-dependencies` and requires separate
+`23/23` matrices for 24.04 and 26.04.
 
 Preview describes maturity, does not permit a known Ubuntu regression, and is not Beta. Promotion
 to Beta requires sustained blocking CI, release-verification evidence, resolved high-risk user

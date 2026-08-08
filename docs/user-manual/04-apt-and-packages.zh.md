@@ -59,6 +59,44 @@ host "manual1" {
 `on_destroy = "restore"` 表示如果以后不再管理这个 source 文件，DebianForm 会尽量恢复它接管前的内容。
 如果接管前文件不存在，则删除它。
 
+## 为 package-owned 配置文件排序
+
+当 DebianForm 管理由 package 提供的 conffile 时，使用带 label 的 resource 和 `depends_on`：
+
+```hcl
+packages {
+  package "cron" {
+    conffile_policy = "keep"
+  }
+}
+
+files {
+  file "/etc/default/cron" {
+    depends_on = [package.cron]
+    content    = "READ_ENV=\"yes\"\n"
+  }
+}
+
+services {
+  service "cron" {
+    package    = "cron"
+    depends_on = [file["/etc/default/cron"]]
+    enabled    = true
+    state      = "running"
+  }
+}
+```
+
+create/update 时会按 package 到 file 到 service 的顺序执行，删除时则反向执行。
+`depends_on` 不会在 package 变化时触发 file 或 service，只控制调度顺序。
+`package = "cron"` 仍然有意义，因为 DebianForm 也会据此推断普通的 package-to-service 关系。
+
+package upgrade 时，`conffile_policy = "keep"` 会保留已有本地 conffile；省略该字段时的行为默认值
+也是 `"keep"`。使用 `"replace"` 可接受 package maintainer 版本，使用 `"error"` 可在 APT 运行前
+拒绝已修改或缺失的 registered conffile。所有策略都不会进入交互式 prompt。list-form package
+不能作为 dependency target，因此这个工作流需要把 `install = ["cron"]` 改为带 label 的
+`package "cron"` block。
+
 ## 应用配置
 
 运行：

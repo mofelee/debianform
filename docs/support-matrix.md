@@ -37,21 +37,21 @@ rules.
 | CLI on Linux arm64 | Preview | Release artifact is built; real arm64 curl-installer verification still requires a runner or manual host. |
 | CLI on macOS amd64 | Beta | Release artifact, curl installer, and Homebrew install/test/upgrade are verified. |
 | CLI on macOS arm64 | Beta | Release artifact, curl installer, and Homebrew install/test/upgrade are verified. |
-| Target Debian 13 amd64 | Beta | Highest-priority target; all 22 libvirt cases are blocking gates. |
+| Target Debian 13 amd64 | Beta | Highest-priority target; all 23 libvirt cases are blocking gates. |
 | Target Debian 13 arm64 | Preview | Runtime facts and architecture selection support arm64, but no real arm64 target matrix exists. |
-| Target Debian 12 amd64 | Beta | The same blocking gate as Debian 13 runs all 22 cases. |
+| Target Debian 12 amd64 | Beta | The same blocking gate as Debian 13 runs all 23 cases. |
 | Target Debian 12 arm64 | Preview | Runtime facts recognize arm64, but no Debian 12 arm64 apply/check matrix exists. |
 | Target Debian 11 or earlier | Unsupported | Outside current support commitments and release gates. |
 | Debian testing/unstable | Unsupported | Outside current beta support commitments. |
-| Target Ubuntu 24.04 LTS amd64 | Preview | Independent blocking 22-case matrix; see the Ubuntu support contract for scope and exclusions. |
-| Target Ubuntu 26.04 LTS amd64 | Preview | Official released image, independent blocking 22-case matrix, and independent gate; only `resolute` amd64 Server is allowed. |
+| Target Ubuntu 24.04 LTS amd64 | Preview | Independent blocking 23-case matrix; see the Ubuntu support contract for scope and exclusions. |
+| Target Ubuntu 26.04 LTS amd64 | Preview | Official released image, independent blocking 23-case matrix, and independent gate; only `resolute` amd64 Server is allowed. |
 | Ubuntu 22.04, other Ubuntu versions, Ubuntu arm64, or desktop | Unsupported | Outside current support commitments and release gates. |
 | Other distributions | Unsupported | Not in the managed-target allowlist. |
 | Root SSH management connection | Beta | `ssh.user` must be omitted or set to `"root"`. |
 | sudo/become/non-root management connection | Unsupported | Sudo elevation, become, and non-root management are unsupported. |
 
-CI discovers 22 libvirt cases and expands them across four amd64 matrices: Debian 12, Debian 13,
-Ubuntu 24.04, and Ubuntu 26.04, for 88 blocking libvirt jobs. The Ubuntu versions have separate
+CI discovers 23 libvirt cases and expands them across four amd64 matrices: Debian 12, Debian 13,
+Ubuntu 24.04, and Ubuntu 26.04, for 92 blocking libvirt jobs. The Ubuntu versions have separate
 `Ubuntu 24.04 target matrix gate` and `Ubuntu 26.04 target matrix gate` jobs. Debian 12/13 use
 `Managed target matrix gate`. Debian 13 remains the local default and the highest-priority target
 for new features.
@@ -67,8 +67,8 @@ official released image `ubuntu-26.04-server-cloudimg-amd64.img` with SHA-256
 The host-scoped shared-script `shared-script-networkd` case passed 14 assertions on a real Debian 13
 amd64 VM on 2026-07-12, covering one reload for two files, zero reload on no-op, one reload after
 single-file drift, raw policy-route/rule behavior, and cleanup. The CI run and gates above preserve
-the prior 20-case baseline. The current 22-case gate additionally requires `component-moved` and
-`bird-wireguard-networkd` on every target.
+the prior 20-case baseline. The current 23-case gate additionally requires `component-moved`,
+`bird-wireguard-networkd`, and `resource-dependencies` on every target.
 
 ## CLI Commands
 
@@ -102,7 +102,7 @@ the prior 20-case baseline. The current 22-case gate additionally requires `comp
 | `system` | Beta | Desired hostname, timezone, and default locale; omitted fields remain unmanaged. | Merge/graph/engine unit tests and `hostname`/`system-settings` integration cases. |
 | `platform` | Beta | Target distribution/version/architecture/codename facts for target validation, Docker repository selection, component sources, and offline plan. | Merge/graph/plan tests and four target matrices. |
 | `kernel` | Beta | Kernel modules and persistent/runtime sysctl. | BBR example and libvirt `bbr` case. |
-| `packages` | Beta | Package installation with repository dependencies. | Graph/plan and integration cases. |
+| `packages` | Beta | Package installation with repository and explicit resource dependencies, plus deterministic dpkg conffile policies. | Graph/plan/provider tests and `resource-dependencies` integration. |
 | `apt` | Beta | deb822 repository, source file, signing key, APT-refresh operation. | `apt-source` integration case. |
 | `files` | Beta | content/source, write-only content_version, sensitive redaction, ownership/mode. | Files integration and secret-redaction matrix. |
 | `secrets` | Compat | Compatibility form for `secrets.file`. | Deprecation warning and redaction tests. |
@@ -214,7 +214,8 @@ the prior 20-case baseline. The current 22-case gate additionally requires `comp
 | `test/integration/libvirt/cases/systemd-extensions` | Preview | `service_config`, timer enable/state and firing, resolved/journald drop-ins, drift repair, and removal. |
 | `test/integration/libvirt/cases/script-on-change` | Beta | Script on component-file change, no trigger on no-op, trigger again after configuration update. |
 | `test/integration/libvirt/cases/component-moved` | Beta | Component-prefix state migration, one real file update/operation, retained and removed block convergence, and cleanup. |
-| `test/integration/libvirt/cases/*` | Beta/Preview | 22 Beta cases each on Debian 12/13 amd64 and 22 Preview cases each on Ubuntu 24.04/26.04 amd64, covering platform assertions, validate, online plan, drift check, apply, JSON no-op plan, check, and case-specific assertions. |
+| `test/integration/libvirt/cases/resource-dependencies` | Beta | Package to managed conffile to service ordering, no-op convergence, keep-policy upgrade, reverse removal, and cleanup. |
+| `test/integration/libvirt/cases/*` | Beta/Preview | 23 Beta cases each on Debian 12/13 amd64 and 23 Preview cases each on Ubuntu 24.04/26.04 amd64, covering platform assertions, validate, online plan, drift check, apply, JSON no-op plan, check, and case-specific assertions. |
 
 ## Currently Unsupported or Not Yet Committed
 

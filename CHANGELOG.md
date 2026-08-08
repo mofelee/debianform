@@ -6,6 +6,17 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
+## Unreleased
+
+- Added typed `depends_on` ordering for labeled package, managed file, and service resources,
+  including post-merge/component resolution, source-located validation, cycle diagnostics, plan
+  output, persisted dependencies, and reverse destroy scheduling.
+- Added deterministic package `conffile_policy` values: `keep` (the compatibility default),
+  `replace`, and `error`. Package installs and updates can no longer wait on an unanswered dpkg
+  conffile prompt.
+- Added a blocking package to managed conffile to service integration workflow covering parallel
+  first apply, no-op convergence, a real keep-policy dpkg upgrade, reverse removal, and cleanup.
+
 ## v0.10.0
 
 - Added the optional `change_action` attribute to Beta `systemd.service_unit` resources, including

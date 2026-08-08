@@ -76,10 +76,10 @@ section after post-release verification jobs finish.
   - `make vulncheck`: <pass | fail | skipped with reason>
   - `make test-integration-layout`: <pass | fail | skipped with reason>
 - Managed-target CI evidence for this commit:
-  - Ubuntu 24.04 LTS amd64 libvirt matrix (22/22): <pass | fail; CI run URL>
-  - Ubuntu 26.04 LTS amd64 libvirt matrix (22/22): <pass | fail; CI run URL>
-  - Debian 12 amd64 libvirt matrix (22/22): <pass | fail; CI run URL>
-  - Debian 13 amd64 libvirt matrix (22/22): <pass | fail; CI run URL>
+  - Ubuntu 24.04 LTS amd64 libvirt matrix (23/23): <pass | fail; CI run URL>
+  - Ubuntu 26.04 LTS amd64 libvirt matrix (23/23): <pass | fail; CI run URL>
+  - Debian 12 amd64 libvirt matrix (23/23): <pass | fail; CI run URL>
+  - Debian 13 amd64 libvirt matrix (23/23): <pass | fail; CI run URL>
   - `Ubuntu 24.04 target matrix gate`: <pass | fail; CI run URL>
   - `Ubuntu 26.04 target matrix gate`: <pass | fail; CI run URL>
   - `Managed target matrix gate`: <pass | fail; CI run URL>
@@ -124,7 +124,7 @@ Before creating the release tag, check that:
   `files.file` handoff must be described as manual, require state/file backups and recovery access,
   and must not claim automatic or zero-downtime migration.
 - Ubuntu 24.04, Ubuntu 26.04, Debian 12, and Debian 13 managed-target evidence
-  is listed separately as `22/22`, points to the release commit's CI run, and
+  is listed separately as `23/23`, points to the release commit's CI run, and
   all three aggregate gates passed. Record the 26.04 released-image URL and digest.
 - The release notes do not use stable/GA/production-ready language unless the
   release has passed the stable gates in

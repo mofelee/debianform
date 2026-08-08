@@ -270,6 +270,50 @@ Unless noted otherwise, the following domains may appear in `host` and
 `profile`. A `component` may use only `apt`, `packages`, `files`, `secrets`,
 `directories`, `groups`, `users`, `systemd`, and `services`.
 
+### Resource dependencies
+
+Labeled `packages.package`, `files.file`, and `services.service` resources accept
+`depends_on`, a list of static typed references to those same resource types. It adds ordering only:
+a dependency is applied first, while destruction runs in reverse order. A dependency change does
+not cause the dependent resource to run. Use `files.file.on_change` when a real file change should
+trigger a script operation.
+
+```hcl
+packages {
+  package "cron" {
+    conffile_policy = "keep"
+  }
+}
+
+files {
+  file "/etc/default/cron" {
+    depends_on = [package.cron]
+    content    = "READ_ENV=\"yes\"\n"
+  }
+}
+
+services {
+  service "cron" {
+    package    = "cron"
+    depends_on = [file["/etc/default/cron"]]
+    enabled    = true
+    state      = "running"
+  }
+}
+```
+
+References identify declarations, not expanded graph-address strings. They resolve after profile
+merge and component instantiation, then become stable host-scoped addresses in plans and state.
+List-form packages such as `install = ["cron"]` cannot be referenced; use a labeled `package`
+block when explicit ordering is required. Unknown, dynamic, cross-scope, sensitive, ephemeral, and
+cross-host references are rejected with source locations. Explicit edges are deduplicated with
+inferred edges, cycles report their full path, and unrelated resources remain parallel.
+
+DebianForm still infers domain relationships such as APT repository to cache refresh to package,
+the `services.service.package` dependency, and provider-specific activation. `depends_on` is the
+escape hatch for ordering that cannot be inferred. It is separate from
+`lifecycle.prevent_destroy`, which blocks deletion rather than ordering it.
+
 ### ssh
 
 Available in `host` and `profile`. Defaults are
@@ -394,6 +438,12 @@ Available in `host`, `profile`, and `component`.
 | `install = ["curl"]` | Install a package. |
 | `package "<name>" { repositories = ["repo"] }` | Install a package with dependencies on named `apt.repository` resources. |
 
+A labeled `package` block also supports `depends_on` and `conffile_policy`. The behavioral default
+policy is `"keep"`, which passes `--force-confdef` and `--force-confold` to dpkg. `"replace"`
+selects the package maintainer's version with `--force-confnew`. `"error"` rejects modified or
+missing registered conffiles before installation and closes APT stdin so an unanswered prompt is
+never possible. Changing an explicitly selected policy plans a package update.
+
 A `package` block may include `lifecycle { prevent_destroy = true }`.
 
 ### apt
@@ -451,6 +501,7 @@ Fields of `file "<path-or-label>"`:
 | `mode` | `"0644"` | Four-digit octal string. |
 | `ensure` | `"present"` | `"present"` or `"absent"`. |
 | `sensitive` | `false` | Request explicit redaction; content containing sensitive or ephemeral values is redacted automatically. |
+| `depends_on` | `[]` | Static package/file/service references that must be applied before this file. |
 | `on_change` | None | Component-only. May reference a component-local or root script, generating and executing an operation after an actual change. |
 
 Supports `lifecycle { prevent_destroy = true }`.
@@ -654,6 +705,7 @@ Fields of `service "<name>"`:
 | Field | Default | Description |
 | --- | --- | --- |
 | `package` | `""` | Optional package dependency. |
+| `depends_on` | `[]` | Static package/file/service references that must be applied before this service. |
 | `enabled` | `null` | Manage enablement when true/false; omission leaves it unmanaged. |
 | `state` | `""` | `running`, `stopped`, `restarted`, or `reloaded`; omission leaves runtime state unmanaged. |
 
