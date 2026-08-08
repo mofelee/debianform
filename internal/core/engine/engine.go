@@ -1990,6 +1990,7 @@ func (e Engine) executeResourceStep(ctx context.Context, hosts map[string]ir.Hos
 		st.Resources[step.Address] = resourceStateForStep(step, observed, now)
 	case ActionDelete, ActionDestroy, ActionForget:
 		delete(st.Resources, step.Address)
+		removeStateDependencyReferences(st.Resources, step.Address)
 	case ActionAdopt:
 		st.Resources[step.Address] = resourceStateForStep(step, step.Observed, now)
 	case ActionNoOp:
@@ -2003,6 +2004,22 @@ func (e Engine) executeResourceStep(ctx context.Context, hosts map[string]ir.Hos
 	states[host.Name] = committed
 	statesLock.Unlock()
 	return nil
+}
+
+func removeStateDependencyReferences(resources map[string]corestate.Resource, removed string) {
+	for address, resource := range resources {
+		if !slices.Contains(resource.DependsOn, removed) {
+			continue
+		}
+		dependsOn := make([]string, 0, len(resource.DependsOn)-1)
+		for _, dependency := range resource.DependsOn {
+			if dependency != removed {
+				dependsOn = append(dependsOn, dependency)
+			}
+		}
+		resource.DependsOn = dependsOn
+		resources[address] = resource
+	}
 }
 
 func blockedDependency(deps []string, failed map[string]error, blocked map[string]string) string {

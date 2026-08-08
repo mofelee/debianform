@@ -99,6 +99,18 @@ func TestApplySynchronizesDependenciesForNoOpResources(t *testing.T) {
 	}
 }
 
+func TestRemoveStateDependencyReferences(t *testing.T) {
+	removed := `host.server1.systemd.networkd.netdev["wg0"]`
+	retained := `host.server1.files.file["/etc/example"]`
+	resources := map[string]corestate.Resource{
+		retained: {DependsOn: []string{removed, "host.server1.packages.install[\"bird2\"]", removed}},
+	}
+	removeStateDependencyReferences(resources, removed)
+	if want := []string{`host.server1.packages.install["bird2"]`}; !reflect.DeepEqual(resources[retained].DependsOn, want) {
+		t.Fatalf("dependencies after removal = %#v, want %#v", resources[retained].DependsOn, want)
+	}
+}
+
 func noOpDependencyState(host, kind string, desired map[string]any, dependsOn []string) corestate.Resource {
 	digest := corestate.DesiredDigest(desired)
 	return corestate.Resource{
