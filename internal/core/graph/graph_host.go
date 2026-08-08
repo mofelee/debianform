@@ -487,6 +487,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 			"name":   item.Name,
 			"ensure": "present",
 		}
+		if item.ConffilePolicySet {
+			desired["conffile_policy"] = item.ConffilePolicy
+		}
 		if len(item.Repositories) > 0 {
 			desired["repositories"] = append([]string(nil), item.Repositories...)
 		}
@@ -524,6 +527,9 @@ func compileHost(host ir.HostSpec) ([]Node, []Operation, error) {
 				"name":      item.Name,
 				"component": component.Name,
 				"ensure":    "present",
+			}
+			if item.ConffilePolicySet {
+				desired["conffile_policy"] = item.ConffilePolicy
 			}
 			if len(item.Repositories) > 0 {
 				desired["repositories"] = append([]string(nil), item.Repositories...)

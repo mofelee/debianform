@@ -2983,7 +2983,7 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 	case "apt.source_file":
 		return attrSet("path", "content", "source", "owner", "group", "mode", "ensure", "on_destroy")
 	case "packages.package":
-		return attrSet("repositories", "depends_on")
+		return attrSet("repositories", "conffile_policy", "depends_on")
 	case "files.file":
 		return attrSet("path", "content", "content_version", "source", "owner", "group", "mode", "ensure", "sensitive", "on_change", "depends_on")
 	case "secrets.file":

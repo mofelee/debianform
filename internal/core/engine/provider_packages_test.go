@@ -29,14 +29,88 @@ func TestNativeProviderPackageInstallRefreshesMissingAPTCache(t *testing.T) {
 	for _, want := range []string{
 		"apt-cache policy 'nftables'",
 		"apt-get update",
-		"apt-get install -y 'nftables'",
+		"Dpkg::Options::=--force-confdef",
+		"Dpkg::Options::=--force-confold",
+		"install -y 'nftables'",
 	} {
 		if !strings.Contains(applied, want) {
 			t.Fatalf("package install script missing %q:\n%s", want, applied)
 		}
 	}
-	if strings.Index(applied, "apt-get update") > strings.Index(applied, "apt-get install -y 'nftables'") {
+	if strings.Index(applied, "apt-get update") > strings.Index(applied, "install -y 'nftables'") {
 		t.Fatalf("package install should refresh apt cache before install:\n%s", applied)
+	}
+}
+
+func TestNativeProviderPackageConffilePolicyCommands(t *testing.T) {
+	tests := []struct {
+		policy string
+		want   []string
+		reject []string
+	}{
+		{
+			policy: "keep",
+			want:   []string{"Dpkg::Options::=--force-confdef", "Dpkg::Options::=--force-confold", "install -y 'vault'"},
+			reject: []string{"--force-confnew", "</dev/null"},
+		},
+		{
+			policy: "replace",
+			want:   []string{"Dpkg::Options::=--force-confnew", "install -y 'vault'"},
+			reject: []string{"--force-confold", "</dev/null"},
+		},
+		{
+			policy: "error",
+			want:   []string{"dpkg-query", "md5sum", "apt-get install -y 'vault' </dev/null", "conffile_policy=error", `host.server1.packages.install["vault"]`},
+			reject: []string{"--force-confold", "--force-confnew", "--force-confdef"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.policy, func(t *testing.T) {
+			node := graph.Node{
+				Address: `host.server1.packages.install["vault"]`,
+				Host:    "server1",
+				Kind:    "package",
+				Desired: map[string]any{"name": "vault", "ensure": "present", "conffile_policy": tt.policy},
+			}
+			runner := &recordingRunner{outputs: []Result{{}, {Stdout: "package\tvault\n"}}}
+			provider := NewNativeProvider(runner)
+			if _, err := provider.Apply(context.Background(), Step{Address: node.Address, Node: node, Action: ActionUpdate}); err != nil {
+				t.Fatal(err)
+			}
+			script := runner.scripts[0]
+			for _, want := range tt.want {
+				if !strings.Contains(script, want) {
+					t.Fatalf("%s script lacks %q:\n%s", tt.policy, want, script)
+				}
+			}
+			for _, reject := range tt.reject {
+				if strings.Contains(script, reject) {
+					t.Fatalf("%s script unexpectedly contains %q:\n%s", tt.policy, reject, script)
+				}
+			}
+		})
+	}
+}
+
+func TestNativeProviderPackagePlanUpdatesWhenExplicitConffilePolicyChanges(t *testing.T) {
+	node := graph.Node{
+		Address: `host.server1.packages.install["vault"]`,
+		Host:    "server1",
+		Kind:    "package",
+		Desired: map[string]any{"name": "vault", "ensure": "present", "conffile_policy": "replace"},
+	}
+	prior := &corestate.Resource{
+		Ownership: "managed",
+		Desired:   map[string]any{"name": "vault", "ensure": "present", "conffile_policy": "keep"},
+	}
+	runner := &recordingRunner{outputs: []Result{{Stdout: "package\tvault\n"}}}
+	provider := NewNativeProvider(runner)
+	plan, err := provider.Plan(context.Background(), node, prior)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Action != ActionUpdate || !strings.Contains(plan.Summary, "conffile policy replace") {
+		t.Fatalf("package policy plan = %#v", plan)
 	}
 }
 
@@ -204,7 +278,8 @@ func TestNativeProviderDockerPackageApplyScript(t *testing.T) {
 	for _, want := range []string{
 		"apt-cache policy 'docker-ce'",
 		"apt-get update",
-		"apt-get install -y 'docker-ce'",
+		"Dpkg::Options::=--force-confold",
+		"install -y 'docker-ce'",
 	} {
 		if !strings.Contains(applied, want) {
 			t.Fatalf("docker package script missing %q:\n%s", want, applied)

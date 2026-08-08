@@ -58,8 +58,29 @@ func packageItems(packages parser.Value) ([]ir.PackageItem, error) {
 		if err != nil {
 			return nil, err
 		}
+		conffilePolicy, conffilePolicySet, err := stringField(item, "conffile_policy")
+		if err != nil {
+			return nil, err
+		}
+		if !conffilePolicySet {
+			conffilePolicy = ""
+		}
+		if conffilePolicySet && conffilePolicy != "keep" && conffilePolicy != "replace" && conffilePolicy != "error" {
+			source := item.Source
+			if value, ok := item.Map["conffile_policy"]; ok {
+				source = value.Source
+			}
+			return nil, fmt.Errorf("%s:%d:%s: conffile_policy must be keep, replace, or error", source.File, source.Line, source.Path)
+		}
 		seen[name] = item.Source
-		out = append(out, ir.PackageItem{Name: name, Repositories: repositories, Lifecycle: lifecycle, Source: item.Source})
+		out = append(out, ir.PackageItem{
+			Name:              name,
+			Repositories:      repositories,
+			ConffilePolicy:    conffilePolicy,
+			ConffilePolicySet: conffilePolicySet,
+			Lifecycle:         lifecycle,
+			Source:            item.Source,
+		})
 	}
 	return out, nil
 }

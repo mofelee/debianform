@@ -175,10 +175,12 @@ type PackageSpec struct {
 }
 
 type PackageItem struct {
-	Name         string         `json:"name"`
-	Repositories []string       `json:"repositories,omitempty"`
-	Lifecycle    *LifecycleSpec `json:"lifecycle,omitempty"`
-	Source       SourceRef      `json:"source,omitempty"`
+	Name              string         `json:"name"`
+	Repositories      []string       `json:"repositories,omitempty"`
+	ConffilePolicy    string         `json:"conffile_policy,omitempty"`
+	ConffilePolicySet bool           `json:"-"`
+	Lifecycle         *LifecycleSpec `json:"lifecycle,omitempty"`
+	Source            SourceRef      `json:"source,omitempty"`
 }
 
 type APTSpec struct {

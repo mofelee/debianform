@@ -32,6 +32,13 @@ func (p NativeProvider) planPackage(ctx context.Context, node graph.Node, prior 
 	if state.Virtual && state.Package != "" {
 		return inSyncPlan(node, prior, "no changes for package "+name+" provided by "+state.Package, observed), nil
 	}
+	if prior != nil {
+		policy, policySet := node.Desired["conffile_policy"].(string)
+		priorPolicy, _ := prior.Desired["conffile_policy"].(string)
+		if policySet && policy != priorPolicy {
+			return ProviderPlan{Action: ActionUpdate, Summary: "apply conffile policy " + policy + " to package " + name, Observed: observed, Ownership: ownership(prior)}, nil
+		}
+	}
 	return inSyncPlan(node, prior, "no changes for package "+name, observed), nil
 }
 
@@ -49,7 +56,7 @@ func (p NativeProvider) applyPackage(ctx context.Context, step Step) (map[string
 			"  apt-get update",
 			"fi",
 		)
-		lines = append(lines, "apt-get install -y "+shellQuote(name))
+		lines = append(lines, packageInstallCommand(name, packageConffilePolicy(step.Node), packageConffileDiagnostic(step.Node))...)
 	}
 	_, err := p.Runner.Run(ctx, step.Node.Host, strings.Join(lines, "\n")+"\n")
 	if err != nil {
@@ -68,6 +75,53 @@ func (p NativeProvider) applyPackage(ctx context.Context, step Step) (map[string
 	observed := state.observed()
 	observed["desired_digest"] = corestate.DesiredDigest(step.Node.Desired)
 	return observed, nil
+}
+
+func packageConffilePolicy(node graph.Node) string {
+	policy := stringDesired(node, "conffile_policy")
+	switch policy {
+	case "replace", "error":
+		return policy
+	default:
+		return "keep"
+	}
+}
+
+func packageConffileDiagnostic(node graph.Node) string {
+	if node.Source.File != "" {
+		return fmt.Sprintf("%s:%d:%s: %s", node.Source.File, node.Source.Line, node.Source.Path, node.Address)
+	}
+	return node.Address
+}
+
+func packageInstallCommand(name, policy, diagnostic string) []string {
+	switch policy {
+	case "replace":
+		return []string{"apt-get -o Dpkg::Options::=--force-confnew install -y " + shellQuote(name)}
+	case "error":
+		modifiedMessage := diagnostic + ": conffile_policy=error rejected locally modified package conffiles"
+		installMessage := diagnostic + ": package install failed under conffile_policy=error; resolve conffile differences or select keep or replace"
+		return []string{
+			"dbf_conffile_conflicts=$(dpkg-query -W -f='${Conffiles}\\n' " + shellQuote(name) + " 2>/dev/null | while read -r dbf_path dbf_expected dbf_status; do",
+			"  [ -n \"$dbf_path\" ] || continue",
+			"  [ \"$dbf_status\" = obsolete ] && continue",
+			"  if [ ! -f \"$dbf_path\" ]; then printf '%s\\n' \"$dbf_path\"; continue; fi",
+			"  dbf_actual=$(md5sum -- \"$dbf_path\" | awk '{print $1}')",
+			"  [ \"$dbf_actual\" = \"$dbf_expected\" ] || printf '%s\\n' \"$dbf_path\"",
+			"done)",
+			"if [ -n \"$dbf_conffile_conflicts\" ]; then",
+			"  echo " + shellQuote(modifiedMessage) + " >&2",
+			"  printf '%s\\n' \"$dbf_conffile_conflicts\" >&2",
+			"  exit 1",
+			"fi",
+			"if ! apt-get install -y " + shellQuote(name) + " </dev/null; then",
+			"  echo " + shellQuote(installMessage) + " >&2",
+			"  exit 1",
+			"fi",
+		}
+	default:
+		return []string{"apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y " + shellQuote(name)}
+	}
 }
 
 type packageInstallState struct {
