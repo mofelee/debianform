@@ -6,16 +6,28 @@ All notable changes to DebianForm will be documented in this file.
 
 This project follows semantic versioning after the public beta line begins.
 
-## Unreleased
+## v0.11.0
 
+- Added configurable remote component staging through host/profile `staging.root` and per-instance
+  `staging_root`. Existing configurations retain the temporary-directory default, archive installs
+  stage beside their destination for same-filesystem commits, workspaces remain private and are
+  cleaned after success or failure, and failures report the selected path and available space.
 - Added typed `depends_on` ordering for labeled package, managed file, and service resources,
   including post-merge/component resolution, source-located validation, cycle diagnostics, plan
-  output, persisted dependencies, and reverse destroy scheduling.
+  output, dependency-first create/update scheduling, and reverse destroy scheduling. Dependencies
+  control ordering only and do not trigger otherwise converged resources.
+- Persisted and reconciled dependency metadata within state schema version 2, including component
+  move rebasing and pruning for removed or untracked targets, so orphan removal preserves safe
+  reverse ordering without retaining stale references.
 - Added deterministic package `conffile_policy` values: `keep` (the compatibility default),
   `replace`, and `error`. Package installs and updates can no longer wait on an unanswered dpkg
   conffile prompt.
-- Added a blocking package to managed conffile to service integration workflow covering parallel
+- Added a blocking package-to-managed-conffile-to-service integration workflow covering parallel
   first apply, no-op convergence, a real keep-policy dpkg upgrade, reverse removal, and cleanup.
+  All 23 cases now gate Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04 independently.
+- Existing configurations and resource addresses remain valid, state schema remains version 2,
+  and plan JSON remains `debianform.plan.alpha1` with a compatible additive `depends_on` field. No
+  migration is needed.
 
 ## v0.10.0
 

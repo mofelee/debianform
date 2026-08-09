@@ -6,15 +6,25 @@ DebianForm 的所有重要变更都会记录在此文件中。
 
 公开 beta 版本线开始后，本项目遵循语义化版本控制。
 
-## Unreleased
+## v0.11.0
 
+- 新增可配置的远端 component staging：host/profile 使用 `staging.root`，单个 instance 使用
+  `staging_root`。既有配置保留临时目录默认值；archive install 在 destination 旁 staging，
+  以便在同一文件系统提交；workspace 保持私有并在成功或失败后清理；失败时会报告所选路径和
+  可用空间。
 - 为带 label 的 package、managed file 和 service resource 新增 typed `depends_on` 排序，覆盖
   merge/component 展开后解析、带 source location 的校验、cycle 诊断、plan 输出、dependency
-  持久化和反向 destroy 调度。
+  优先的 create/update 调度和反向 destroy 调度。Dependency 只控制排序，不会触发原本已收敛的
+  resource。
+- 在 state schema version 2 内持久化并收敛 dependency metadata，包括 component move rebase，
+  以及删除或未跟踪 target 的引用清理，使 orphan removal 保持安全的反向顺序且不保留陈旧引用。
 - 新增确定性的 package `conffile_policy`：`keep`（兼容性默认值）、`replace` 和 `error`。
   package install/update 不再可能等待无人回答的 dpkg conffile prompt。
-- 新增阻断式 package 到 managed conffile 到 service 集成工作流，覆盖并行首次 apply、no-op
-  收敛、真实 keep-policy dpkg upgrade、反向删除和清理。
+- 新增阻断式 package-to-managed-conffile-to-service 集成工作流，覆盖并行首次 apply、no-op
+  收敛、真实 keep-policy dpkg upgrade、反向删除和清理。全部 23 个 case 现在分别 gate
+  Debian 12、Debian 13、Ubuntu 24.04 和 Ubuntu 26.04。
+- 既有配置和 resource address 保持有效，state schema 仍为 version 2，plan JSON 仍为
+  `debianform.plan.alpha1`，并兼容新增 `depends_on` 字段。无需迁移。
 
 ## v0.10.0
 
