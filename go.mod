@@ -1,12 +1,12 @@
 module github.com/mofelee/debianform
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/zclconf/go-cty v1.19.0
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.23.0
 )
 
 require (
