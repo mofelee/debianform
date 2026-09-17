@@ -2,6 +2,8 @@ module github.com/mofelee/debianform
 
 go 1.26.0
 
+toolchain go1.26.8
+
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/hashicorp/hcl/v2 v2.24.0
