@@ -281,6 +281,40 @@ func TestCompileComponentInputsResourceGraphGolden(t *testing.T) {
 	}
 }
 
+func TestCompileComponentMultiInstanceNamesResourceGraphGolden(t *testing.T) {
+	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/component-multi-instance-names.dbf.hcl")
+
+	data, err := json.MarshalIndent(resourceGraph, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data) + "\n"
+	assertGolden(t, "../testdata/graph/component-multi-instance-names.golden.json", got)
+
+	for _, address := range []string{
+		`host.server1.components.alpha.files.file["/etc/demo-alpha/app.conf"]`,
+		`host.server1.components.alpha.directories.directory["/var/lib/demo-alpha"]`,
+		`host.server1.components.alpha.systemd.unit["demo-raw-alpha.service"]`,
+		`host.server1.components.alpha.systemd.unit["demo-alpha.service"]`,
+		`host.server1.components.alpha.services.service["demo-alpha"]`,
+		`host.server1.components.beta.files.file["/etc/demo-beta/app.conf"]`,
+		`host.server1.components.beta.directories.directory["/var/lib/demo-beta"]`,
+		`host.server1.components.beta.systemd.unit["demo-raw-beta.service"]`,
+		`host.server1.components.beta.systemd.unit["demo-beta.service"]`,
+		`host.server1.components.beta.services.service["demo-beta"]`,
+	} {
+		if node := nodeFor(resourceGraph, address); node == nil {
+			t.Fatalf("resource node %s was not found", address)
+		}
+	}
+
+	fileAddress := `host.server1.components.alpha.files.file["/etc/demo-alpha/app.conf"]`
+	serviceAddress := `host.server1.components.alpha.services.service["demo-alpha"]`
+	if deps := dependsOnFor(resourceGraph, fileAddress); !containsString(deps, serviceAddress) {
+		t.Fatalf("file deps = %#v, want resolved service %q", deps, serviceAddress)
+	}
+}
+
 func TestCompileComponentScriptOnChangeResourceGraphGolden(t *testing.T) {
 	resourceGraph := compileGraphFixture(t, "../testdata/fixtures/component-script-on-change.dbf.hcl")
 

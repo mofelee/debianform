@@ -1733,6 +1733,152 @@ host "server1" {
 	}
 }
 
+func TestCompileComponentMountedTwiceWithPerInstanceResourceNames(t *testing.T) {
+	program := compileInline(t, `
+component "transport" {
+  input "tag" {
+    type     = string
+    nullable = false
+  }
+
+  files {
+    file "conf" {
+      path       = "/etc/demo-${input.tag}/app.conf"
+      content    = "tag=${input.tag}\n"
+      depends_on = [service.svc]
+    }
+  }
+
+  directories {
+    directory "state" {
+      path  = "/var/lib/demo-${input.tag}"
+      owner = "root"
+      mode  = "0750"
+    }
+  }
+
+  systemd {
+    unit "raw" {
+      name    = "demo-raw-${input.tag}.service"
+      content = "[Unit]\nDescription=raw ${input.tag}\n"
+    }
+
+    service_unit "unit" {
+      name = "demo-${input.tag}"
+      run  = ["/usr/bin/true"]
+    }
+  }
+
+  services {
+    service "svc" {
+      name    = "demo-${input.tag}"
+      enabled = true
+      state   = "running"
+    }
+  }
+}
+
+host "h" {
+  component "a" {
+    source = component.transport
+    inputs = { tag = "alpha" }
+  }
+
+  component "b" {
+    source = component.transport
+    inputs = { tag = "beta" }
+  }
+}
+`)
+	host := program.Hosts[0]
+	if len(host.Components) != 2 {
+		t.Fatalf("components = %d, want 2", len(host.Components))
+	}
+	for _, tt := range []struct {
+		instance string
+		tag      string
+	}{
+		{instance: "a", tag: "alpha"},
+		{instance: "b", tag: "beta"},
+	} {
+		var component ir.ComponentInstanceSpec
+		for _, candidate := range host.Components {
+			if candidate.Name == tt.instance {
+				component = candidate
+			}
+		}
+		filePath := "/etc/demo-" + tt.tag + "/app.conf"
+		if _, ok := component.Files.Files[filePath]; !ok {
+			t.Fatalf("%s files = %#v, want %q", tt.instance, component.Files.Files, filePath)
+		}
+		directoryPath := "/var/lib/demo-" + tt.tag
+		if _, ok := component.Directories.Directories[directoryPath]; !ok {
+			t.Fatalf("%s directories = %#v, want %q", tt.instance, component.Directories.Directories, directoryPath)
+		}
+		rawUnit := component.Systemd.Units["demo-raw-"+tt.tag+".service"]
+		if rawUnit.Path != "/etc/systemd/system/demo-raw-"+tt.tag+".service" {
+			t.Fatalf("%s raw unit = %#v", tt.instance, rawUnit)
+		}
+		serviceUnitName := "demo-" + tt.tag + ".service"
+		serviceUnit, ok := component.Systemd.Units[serviceUnitName]
+		if !ok {
+			t.Fatalf("%s units = %#v, want %q", tt.instance, component.Systemd.Units, serviceUnitName)
+		}
+		if serviceUnit.Path != "/etc/systemd/system/"+serviceUnitName {
+			t.Fatalf("%s service unit path = %q", tt.instance, serviceUnit.Path)
+		}
+		service, ok := component.Services.Services["demo-"+tt.tag]
+		if !ok {
+			t.Fatalf("%s services = %#v", tt.instance, component.Services.Services)
+		}
+		if service.Unit != serviceUnitName {
+			t.Fatalf("%s service unit = %q, want %q", tt.instance, service.Unit, serviceUnitName)
+		}
+	}
+
+	fileAddress := `host.h.components.a.files.file["/etc/demo-alpha/app.conf"]`
+	serviceAddress := `host.h.components.a.services.service["demo-alpha"]`
+	foundDependency := false
+	for _, dependency := range host.Components[0].ExplicitDependencies {
+		if dependency.From != fileAddress {
+			continue
+		}
+		foundDependency = true
+		if dependency.DependsOn != serviceAddress {
+			t.Fatalf("file dependency = %#v, want depends_on %q", dependency, serviceAddress)
+		}
+	}
+	if !foundDependency {
+		t.Fatalf("explicit dependencies = %#v, want entry from %q", host.Components[0].ExplicitDependencies, fileAddress)
+	}
+}
+
+func TestCompileRejectsTwoComponentMountsWithSameResolvedName(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+component "fixed" {
+  systemd {
+    service_unit "unit" {
+      name = "same-unit"
+      run  = ["/usr/bin/true"]
+    }
+  }
+}
+
+host "h" {
+  component "a" {
+    source = component.fixed
+  }
+
+  component "b" {
+    source = component.fixed
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), `component "b" systemd unit "same-unit.service" conflicts with unit declared`) {
+		t.Fatalf("error = %v, want resolved-name conflict rejection", err)
+	}
+}
+
 func TestValidateRuntimeComponentsRejectsRepeatedNetworkdPath(t *testing.T) {
 	cfg := parseInline(t, `
 component "wireguard_networkd" {

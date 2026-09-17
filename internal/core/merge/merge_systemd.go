@@ -978,6 +978,10 @@ func addSystemdUnit(units map[string]ir.SystemdUnit, unit ir.SystemdUnit) error 
 }
 
 func systemdUnitSpec(name string, item parser.Value) (ir.SystemdUnit, error) {
+	unitName, err := objectName(item, "name", name)
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
 	ensure, err := ensureField(item, "present")
 	if err != nil {
 		return ir.SystemdUnit{}, err
@@ -1011,8 +1015,8 @@ func systemdUnitSpec(name string, item parser.Value) (ir.SystemdUnit, error) {
 		return ir.SystemdUnit{}, err
 	}
 	unit := ir.SystemdUnit{
-		Name:       name,
-		Path:       "/etc/systemd/system/" + name,
+		Name:       unitName,
+		Path:       "/etc/systemd/system/" + unitName,
 		Content:    content,
 		SourcePath: resolvePath(item.Source.File, sourcePath),
 		Owner:      owner,
@@ -1036,7 +1040,11 @@ func systemdUnitSpec(name string, item parser.Value) (ir.SystemdUnit, error) {
 }
 
 func systemdServiceUnitSpec(name string, item parser.Value) (ir.SystemdUnit, error) {
-	unitName := serviceUnitName(name)
+	baseName, err := objectName(item, "name", name)
+	if err != nil {
+		return ir.SystemdUnit{}, err
+	}
+	unitName := serviceUnitName(baseName)
 	ensure, err := ensureField(item, "present")
 	if err != nil {
 		return ir.SystemdUnit{}, err

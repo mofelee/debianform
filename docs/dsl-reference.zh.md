@@ -495,6 +495,7 @@ package update。
 
 | 字段 | 默认 |
 | --- | --- |
+| `path` | Label | 要管理的绝对路径。当 label 不是绝对路径时必须显式指定。 |
 | `owner` | `"root"` |
 | `group` | `"root"` |
 | `mode` | `"0755"` |
@@ -543,6 +544,7 @@ package update。
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
+| `name` | Label | 解析后的 unit 文件名，可插值 component input；省略时使用 block label。 |
 | `content` / `source` | 无 | present 时必须二选一。 |
 | `owner` | `"root"` | 文件 owner。 |
 | `group` | `"root"` | 文件 group。 |
@@ -553,6 +555,7 @@ package update。
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
+| `name` | Label | 解析后的 service unit 基础名，可插值 component input；值中不含点时自动补 `.service`。 |
 | `content` / `source` | 无 | raw unit 模式；不能和结构化字段混用。 |
 | `description` | unit 名去掉 `.service` | `[Unit] Description=`。 |
 | `run` | 无 | 结构化模式必填；字符串或 argv 字符串列表。 |
@@ -659,12 +662,24 @@ activation；`check` 只观察；offline plan 会展示 operation graph。两类
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
+| `name` | Label | 解析后的 service 名，可插值 component input；unit 名会自动补 `.service`。 |
 | `package` | `""` | 可选 package 依赖。 |
 | `depends_on` | `[]` | 必须在该 service 之前 apply 的静态 package/file/service reference。 |
 | `enabled` | `null` | `true`/`false` 时管理 enablement；省略则不管理。 |
 | `state` | `""` | `running`、`stopped`、`restarted`、`reloaded`；省略则不管理运行状态。 |
 
 service unit 名会自动补 `.service`。支持 `lifecycle { prevent_destroy = true }`。
+
+### 名称覆盖
+
+`files.file.path`、`secrets.file.path`、原生 networkd 的 `path` 字段、
+`nftables.file.path`、`directories.directory.path`、`systemd.unit.name`、
+`systemd.service_unit.name` 和 `services.service.name` 都会覆盖由 block label 推导的资源标识。
+
+覆盖值在声明该 block 的作用域中求值。位于 component 内时按挂载实例逐个求值，因此
+`"demo-${input.tag}"` 这样的表达式会为每个实例生成不同资源，而 block label 保持不变。resource
+address 以及生成的文件、unit、service 名使用解析后的值，而不是表达式本身。两个挂载解析到
+同一名称时，仍会以现有的 conflict 诊断失败。
 
 ### nftables
 

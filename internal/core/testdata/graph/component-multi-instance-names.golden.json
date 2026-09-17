@@ -1,0 +1,410 @@
+{
+  "nodes": [
+    {
+      "host": "server1",
+      "address": "host.server1.components.alpha.directories.directory[\"/var/lib/demo-alpha\"]",
+      "kind": "directory",
+      "summary": "create directory /var/lib/demo-alpha",
+      "source": {
+        "file": "../testdata/fixtures/component-multi-instance-names.dbf.hcl",
+        "line": 19,
+        "path": "component.transport.directories.directory[\"state\"]"
+      },
+      "desired": {
+        "component": "alpha",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0750",
+        "owner": "root",
+        "path": "/var/lib/demo-alpha"
+      },
+      "provider_type": "directory",
+      "provider_address": "directory.server1_alpha__var_lib_demo_alpha",
+      "provider_payload": {
+        "component": "alpha",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0750",
+        "owner": "root",
+        "path": "/var/lib/demo-alpha"
+      }
+    },
+    {
+      "host": "server1",
+      "address": "host.server1.components.alpha.files.file[\"/etc/demo-alpha/app.conf\"]",
+      "kind": "file",
+      "summary": "create file /etc/demo-alpha/app.conf",
+      "source": {
+        "file": "../testdata/fixtures/component-multi-instance-names.dbf.hcl",
+        "line": 8,
+        "path": "component.transport.files.file[\"conf\"]"
+      },
+      "desired": {
+        "component": "alpha",
+        "content": "tag=alpha\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0600",
+        "owner": "root",
+        "path": "/etc/demo-alpha/app.conf",
+        "sensitive": false,
+        "summary": {
+          "sha256": "f25708f4526b3ee3cac836208f14884a2871f62657b2954a8500076977fe3397",
+          "bytes": 10
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.server1_alpha__etc_demo_alpha_app_conf",
+      "provider_payload": {
+        "component": "alpha",
+        "content": "tag=alpha\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0600",
+        "owner": "root",
+        "path": "/etc/demo-alpha/app.conf",
+        "sensitive": false,
+        "summary": {
+          "sha256": "f25708f4526b3ee3cac836208f14884a2871f62657b2954a8500076977fe3397",
+          "bytes": 10
+        }
+      },
+      "depends_on": [
+        "host.server1.components.alpha.services.service[\"demo-alpha\"]"
+      ]
+    },
+    {
+      "host": "server1",
+      "address": "host.server1.components.alpha.services.service[\"demo-alpha\"]",
+      "kind": "service",
+      "summary": "manage service demo-alpha",
+      "source": {
+        "file": "../testdata/fixtures/component-multi-instance-names.dbf.hcl",
+        "line": 40,
+        "path": "component.transport.services.service[\"svc\"]"
+      },
+      "desired": {
+        "component": "alpha",
+        "enabled": true,
+        "name": "demo-alpha",
+        "package": "",
+        "state": "running",
+        "unit": "demo-alpha.service"
+      },
+      "provider_type": "service",
+      "provider_address": "service.server1_alpha_demo_alpha",
+      "provider_payload": {
+        "component": "alpha",
+        "enabled": true,
+        "name": "demo-alpha",
+        "package": "",
+        "state": "running",
+        "unit": "demo-alpha.service"
+      },
+      "depends_on": [
+        "host.server1.components.alpha.systemd.unit[\"demo-alpha.service\"]",
+        "host.server1.systemd.daemon_reload"
+      ]
+    },
+    {
+      "host": "server1",
+      "address": "host.server1.components.alpha.systemd.unit[\"demo-alpha.service\"]",
+      "kind": "systemd_unit",
+      "summary": "create systemd unit demo-alpha.service",
+      "source": {
+        "file": "../testdata/fixtures/component-multi-instance-names.dbf.hcl",
+        "line": 33,
+        "path": "component.transport.systemd.service_unit[\"unit\"]"
+      },
+      "desired": {
+        "component": "alpha",
+        "content": "[Unit]\nDescription=demo-alpha\n\n[Service]\nExecStart=/usr/bin/true\n\n[Install]\nWantedBy=multi-user.target\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "demo-alpha.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/demo-alpha.service",
+        "source_path": "",
+        "summary": {
+          "sha256": "ea3d0b93b5c91d5c663f460a43652d5dc2836f62f512894c7f3d4eb8643e22d4",
+          "bytes": 103
+        }
+      },
+      "provider_type": "systemd_unit",
+      "provider_address": "systemd_unit.server1_alpha_demo_alpha_service",
+      "provider_payload": {
+        "component": "alpha",
+        "content": "[Unit]\nDescription=demo-alpha\n\n[Service]\nExecStart=/usr/bin/true\n\n[Install]\nWantedBy=multi-user.target\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "demo-alpha.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/demo-alpha.service",
+        "source_path": "",
+        "summary": {
+          "sha256": "ea3d0b93b5c91d5c663f460a43652d5dc2836f62f512894c7f3d4eb8643e22d4",
+          "bytes": 103
+        }
+      }
+    },
+    {
+      "host": "server1",
+      "address": "host.server1.components.alpha.systemd.unit[\"demo-raw-alpha.service\"]",
+      "kind": "systemd_unit",
+      "summary": "create systemd unit demo-raw-alpha.service",
+      "source": {
+        "file": "../testdata/fixtures/component-multi-instance-names.dbf.hcl",
+        "line": 28,
+        "path": "component.transport.systemd.unit[\"raw\"]"
+      },
+      "desired": {
+        "component": "alpha",
+        "content": "[Unit]\nDescription=raw alpha\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "demo-raw-alpha.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/demo-raw-alpha.service",
+        "source_path": "",
+        "summary": {
+          "sha256": "e5f0085e160fb544c742e78c588d4ea0101b30e371f54f4c12d8df1d06b0461e",
+          "bytes": 29
+        }
+      },
+      "provider_type": "systemd_unit",
+      "provider_address": "systemd_unit.server1_alpha_demo_raw_alpha_service",
+      "provider_payload": {
+        "component": "alpha",
+        "content": "[Unit]\nDescription=raw alpha\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "demo-raw-alpha.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/demo-raw-alpha.service",
+        "source_path": "",
+        "summary": {
+          "sha256": "e5f0085e160fb544c742e78c588d4ea0101b30e371f54f4c12d8df1d06b0461e",
+          "bytes": 29
+        }
+      }
+    },
+    {
+      "host": "server1",
+      "address": "host.server1.components.beta.directories.directory[\"/var/lib/demo-beta\"]",
+      "kind": "directory",
+      "summary": "create directory /var/lib/demo-beta",
+      "source": {
+        "file": "../testdata/fixtures/component-multi-instance-names.dbf.hcl",
+        "line": 19,
+        "path": "component.transport.directories.directory[\"state\"]"
+      },
+      "desired": {
+        "component": "beta",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0750",
+        "owner": "root",
+        "path": "/var/lib/demo-beta"
+      },
+      "provider_type": "directory",
+      "provider_address": "directory.server1_beta__var_lib_demo_beta",
+      "provider_payload": {
+        "component": "beta",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0750",
+        "owner": "root",
+        "path": "/var/lib/demo-beta"
+      }
+    },
+    {
+      "host": "server1",
+      "address": "host.server1.components.beta.files.file[\"/etc/demo-beta/app.conf\"]",
+      "kind": "file",
+      "summary": "create file /etc/demo-beta/app.conf",
+      "source": {
+        "file": "../testdata/fixtures/component-multi-instance-names.dbf.hcl",
+        "line": 8,
+        "path": "component.transport.files.file[\"conf\"]"
+      },
+      "desired": {
+        "component": "beta",
+        "content": "tag=beta\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0600",
+        "owner": "root",
+        "path": "/etc/demo-beta/app.conf",
+        "sensitive": false,
+        "summary": {
+          "sha256": "95d22bb49a2e0ebabf603c7b6d0318aa1d38ffead65999f636da9e005877ddb2",
+          "bytes": 9
+        }
+      },
+      "provider_type": "file",
+      "provider_address": "file.server1_beta__etc_demo_beta_app_conf",
+      "provider_payload": {
+        "component": "beta",
+        "content": "tag=beta\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0600",
+        "owner": "root",
+        "path": "/etc/demo-beta/app.conf",
+        "sensitive": false,
+        "summary": {
+          "sha256": "95d22bb49a2e0ebabf603c7b6d0318aa1d38ffead65999f636da9e005877ddb2",
+          "bytes": 9
+        }
+      },
+      "depends_on": [
+        "host.server1.components.beta.services.service[\"demo-beta\"]"
+      ]
+    },
+    {
+      "host": "server1",
+      "address": "host.server1.components.beta.services.service[\"demo-beta\"]",
+      "kind": "service",
+      "summary": "manage service demo-beta",
+      "source": {
+        "file": "../testdata/fixtures/component-multi-instance-names.dbf.hcl",
+        "line": 40,
+        "path": "component.transport.services.service[\"svc\"]"
+      },
+      "desired": {
+        "component": "beta",
+        "enabled": true,
+        "name": "demo-beta",
+        "package": "",
+        "state": "running",
+        "unit": "demo-beta.service"
+      },
+      "provider_type": "service",
+      "provider_address": "service.server1_beta_demo_beta",
+      "provider_payload": {
+        "component": "beta",
+        "enabled": true,
+        "name": "demo-beta",
+        "package": "",
+        "state": "running",
+        "unit": "demo-beta.service"
+      },
+      "depends_on": [
+        "host.server1.components.beta.systemd.unit[\"demo-beta.service\"]",
+        "host.server1.systemd.daemon_reload"
+      ]
+    },
+    {
+      "host": "server1",
+      "address": "host.server1.components.beta.systemd.unit[\"demo-beta.service\"]",
+      "kind": "systemd_unit",
+      "summary": "create systemd unit demo-beta.service",
+      "source": {
+        "file": "../testdata/fixtures/component-multi-instance-names.dbf.hcl",
+        "line": 33,
+        "path": "component.transport.systemd.service_unit[\"unit\"]"
+      },
+      "desired": {
+        "component": "beta",
+        "content": "[Unit]\nDescription=demo-beta\n\n[Service]\nExecStart=/usr/bin/true\n\n[Install]\nWantedBy=multi-user.target\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "demo-beta.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/demo-beta.service",
+        "source_path": "",
+        "summary": {
+          "sha256": "e22c126bc4af220c943ade298600bd183ff007207dfe72438ca0eabc3c6c7e08",
+          "bytes": 102
+        }
+      },
+      "provider_type": "systemd_unit",
+      "provider_address": "systemd_unit.server1_beta_demo_beta_service",
+      "provider_payload": {
+        "component": "beta",
+        "content": "[Unit]\nDescription=demo-beta\n\n[Service]\nExecStart=/usr/bin/true\n\n[Install]\nWantedBy=multi-user.target\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "demo-beta.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/demo-beta.service",
+        "source_path": "",
+        "summary": {
+          "sha256": "e22c126bc4af220c943ade298600bd183ff007207dfe72438ca0eabc3c6c7e08",
+          "bytes": 102
+        }
+      }
+    },
+    {
+      "host": "server1",
+      "address": "host.server1.components.beta.systemd.unit[\"demo-raw-beta.service\"]",
+      "kind": "systemd_unit",
+      "summary": "create systemd unit demo-raw-beta.service",
+      "source": {
+        "file": "../testdata/fixtures/component-multi-instance-names.dbf.hcl",
+        "line": 28,
+        "path": "component.transport.systemd.unit[\"raw\"]"
+      },
+      "desired": {
+        "component": "beta",
+        "content": "[Unit]\nDescription=raw beta\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "demo-raw-beta.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/demo-raw-beta.service",
+        "source_path": "",
+        "summary": {
+          "sha256": "76486ca9ac947e5486f24fe65f70c51a87df307fc8b7ebf147bdac9df1dd9b07",
+          "bytes": 28
+        }
+      },
+      "provider_type": "systemd_unit",
+      "provider_address": "systemd_unit.server1_beta_demo_raw_beta_service",
+      "provider_payload": {
+        "component": "beta",
+        "content": "[Unit]\nDescription=raw beta\n",
+        "ensure": "present",
+        "group": "root",
+        "mode": "0644",
+        "name": "demo-raw-beta.service",
+        "owner": "root",
+        "path": "/etc/systemd/system/demo-raw-beta.service",
+        "source_path": "",
+        "summary": {
+          "sha256": "76486ca9ac947e5486f24fe65f70c51a87df307fc8b7ebf147bdac9df1dd9b07",
+          "bytes": 28
+        }
+      }
+    }
+  ],
+  "operations": [
+    {
+      "host": "server1",
+      "address": "host.server1.systemd.daemon_reload",
+      "action": "run",
+      "summary": "reload systemd manager configuration",
+      "depends_on": [
+        "host.server1.components.alpha.systemd.unit[\"demo-alpha.service\"]",
+        "host.server1.components.alpha.systemd.unit[\"demo-raw-alpha.service\"]",
+        "host.server1.components.beta.systemd.unit[\"demo-beta.service\"]",
+        "host.server1.components.beta.systemd.unit[\"demo-raw-beta.service\"]"
+      ],
+      "triggered_by": [
+        "host.server1.components.alpha.systemd.unit[\"demo-alpha.service\"]",
+        "host.server1.components.alpha.systemd.unit[\"demo-raw-alpha.service\"]",
+        "host.server1.components.beta.systemd.unit[\"demo-beta.service\"]",
+        "host.server1.components.beta.systemd.unit[\"demo-raw-beta.service\"]"
+      ],
+      "command_preview": "systemctl daemon-reload",
+      "source": {}
+    }
+  ]
+}

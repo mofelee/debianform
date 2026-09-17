@@ -463,6 +463,39 @@ func TestValidateAndPlanAcceptVariableDefaults(t *testing.T) {
 	}
 }
 
+func TestValidateAndPlanResolvePerInstanceComponentResourceNames(t *testing.T) {
+	fixture := "../../internal/core/testdata/fixtures/component-multi-instance-names.dbf.hcl"
+
+	validateOutput := captureStdout(t, func() {
+		if err := run([]string{"validate", "-f", fixture}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(validateOutput, "configuration is valid: 1 host(s)") {
+		t.Fatalf("validate output = %q", validateOutput)
+	}
+
+	planOutput := captureStdout(t, func() {
+		if err := run([]string{"plan", "-f", fixture, "--offline", "--format", "json"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	for _, want := range []string{
+		`host.server1.components.alpha.systemd.unit[\"demo-alpha.service\"]`,
+		`host.server1.components.alpha.systemd.unit[\"demo-raw-alpha.service\"]`,
+		`host.server1.components.alpha.services.service[\"demo-alpha\"]`,
+		`host.server1.components.beta.systemd.unit[\"demo-beta.service\"]`,
+		`host.server1.components.beta.systemd.unit[\"demo-raw-beta.service\"]`,
+		`host.server1.components.beta.services.service[\"demo-beta\"]`,
+		`host.server1.components.alpha.directories.directory[\"/var/lib/demo-alpha\"]`,
+		`host.server1.components.beta.directories.directory[\"/var/lib/demo-beta\"]`,
+	} {
+		if !strings.Contains(planOutput, want) {
+			t.Fatalf("plan output does not contain %q", want)
+		}
+	}
+}
+
 func TestValidateAndPlanAcceptCLIVariableValues(t *testing.T) {
 	fixture := "../../internal/core/testdata/fixtures/variable-cli.dbf.hcl"
 	args := []string{

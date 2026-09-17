@@ -533,6 +533,7 @@ Fields of `directory "<absolute-path>"`:
 
 | Field | Default |
 | --- | --- |
+| `path` | Label | Absolute path to manage. Required explicitly when the label is not an absolute path. |
 | `owner` | `"root"` |
 | `group` | `"root"` |
 | `mode` | `"0755"` |
@@ -582,6 +583,7 @@ Available in `host`, `profile`, and `component`.
 
 | Field | Default | Description |
 | --- | --- | --- |
+| `name` | Label | Resolved unit file name. May interpolate component inputs; when omitted the block label is used. |
 | `content` / `source` | None | Exactly one is required when present. |
 | `owner` | `"root"` | File owner. |
 | `group` | `"root"` | File group. |
@@ -593,6 +595,7 @@ Available in `host`, `profile`, and `component`.
 
 | Field | Default | Description |
 | --- | --- | --- |
+| `name` | Label | Resolved service unit base name. May interpolate component inputs; `.service` is appended unless the value already contains a dot. |
 | `content` / `source` | None | Raw-unit mode; cannot combine with structured fields. |
 | `description` | Unit name without `.service` | `[Unit] Description=`. |
 | `run` | None | Required in structured mode; a string or string argv list. |
@@ -704,6 +707,7 @@ Fields of `service "<name>"`:
 
 | Field | Default | Description |
 | --- | --- | --- |
+| `name` | Label | Resolved service name. May interpolate component inputs; the unit name gains `.service` automatically. |
 | `package` | `""` | Optional package dependency. |
 | `depends_on` | `[]` | Static package/file/service references that must be applied before this service. |
 | `enabled` | `null` | Manage enablement when true/false; omission leaves it unmanaged. |
@@ -711,6 +715,20 @@ Fields of `service "<name>"`:
 
 The service-unit name gains `.service` automatically. Supports
 `lifecycle { prevent_destroy = true }`.
+
+### Name overrides
+
+`files.file.path`, `secrets.file.path`, the native networkd `path` fields,
+`nftables.file.path`, `directories.directory.path`, `systemd.unit.name`,
+`systemd.service_unit.name`, and `services.service.name` all override the
+resource identity derived from the block label.
+
+Overrides are evaluated in the scope where the block is declared. Inside a
+component they are evaluated per mounted instance, so an expression such as
+`"demo-${input.tag}"` produces a distinct resource for every instance while the
+block label stays static. The resolved value, not the expression, appears in the
+resource address and in the generated file, unit, or service name. Two mounts
+that resolve to the same name still fail with the existing conflict diagnostic.
 
 ### nftables
 

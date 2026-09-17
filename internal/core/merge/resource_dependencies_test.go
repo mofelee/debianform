@@ -135,3 +135,47 @@ host "server1" {
 		})
 	}
 }
+
+func TestResourceDependenciesUseResolvedServiceName(t *testing.T) {
+	program := compileInline(t, `
+component "app" {
+  input "tag" {
+    type = string
+  }
+
+  files {
+    file "config" {
+      path       = "/etc/app/${input.tag}.conf"
+      content    = "ok"
+      depends_on = [service.svc]
+    }
+  }
+
+  services {
+    service "svc" {
+      name  = "app-${input.tag}"
+      state = "running"
+    }
+  }
+}
+
+host "server1" {
+  component "one" {
+    source = component.app
+    inputs = { tag = "one" }
+  }
+}
+`)
+	got := program.Hosts[0].Components[0].ExplicitDependencies
+	want := ir.ResourceDependencySpec{
+		From:      `host.server1.components.one.files.file["/etc/app/one.conf"]`,
+		DependsOn: `host.server1.components.one.services.service["app-one"]`,
+	}
+	if len(got) != 1 {
+		t.Fatalf("explicit dependencies = %#v, want %#v", got, want)
+	}
+	got[0].Source = ir.SourceRef{}
+	if !reflect.DeepEqual(got[0], want) {
+		t.Fatalf("explicit dependencies = %#v, want %#v", got, want)
+	}
+}

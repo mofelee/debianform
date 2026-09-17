@@ -13,10 +13,14 @@ func serviceSpecs(services parser.Value) (map[string]ir.ManagedService, error) {
 		return map[string]ir.ManagedService{}, err
 	}
 	out := make(map[string]ir.ManagedService, len(objects))
-	for _, name := range sortedKeys(objects) {
-		item := objects[name]
-		if name == "" {
+	for _, label := range sortedKeys(objects) {
+		item := objects[label]
+		if label == "" {
 			return nil, fmt.Errorf("%s:%d:%s: service name must be non-empty", item.Source.File, item.Source.Line, item.Source.Path)
+		}
+		name, err := objectName(item, "name", label)
+		if err != nil {
+			return nil, err
 		}
 		pkg, _, err := stringField(item, "package")
 		if err != nil {
@@ -41,7 +45,11 @@ func serviceSpecs(services parser.Value) (map[string]ir.ManagedService, error) {
 		if err != nil {
 			return nil, err
 		}
-		out[name] = ir.ManagedService{Name: name, Unit: serviceUnitName(name), Package: pkg, Enabled: enabled, State: state, Lifecycle: lifecycle, Source: item.Source}
+		managed := ir.ManagedService{Name: name, Unit: serviceUnitName(name), Package: pkg, Enabled: enabled, State: state, Lifecycle: lifecycle, Source: item.Source}
+		if previous, exists := out[name]; exists {
+			return nil, fmt.Errorf("%s:%d:%s: service %q conflicts with service declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, name, previous.Source.File, previous.Source.Line, previous.Source.Path)
+		}
+		out[name] = managed
 	}
 	return out, nil
 }

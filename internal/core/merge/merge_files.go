@@ -244,8 +244,12 @@ func directorySpecs(directories parser.Value) (map[string]ir.ManagedDirectory, e
 		return map[string]ir.ManagedDirectory{}, err
 	}
 	out := make(map[string]ir.ManagedDirectory, len(objects))
-	for _, path := range sortedKeys(objects) {
-		item := objects[path]
+	for _, label := range sortedKeys(objects) {
+		item := objects[label]
+		path, err := objectPath(item, "path", label)
+		if err != nil {
+			return nil, err
+		}
 		if path == "" || !filepath.IsAbs(path) {
 			return nil, fmt.Errorf("%s:%d:%s: directory path must be absolute and non-empty", item.Source.File, item.Source.Line, item.Source.Path)
 		}
@@ -269,7 +273,14 @@ func directorySpecs(directories parser.Value) (map[string]ir.ManagedDirectory, e
 		if err != nil {
 			return nil, err
 		}
-		out[path] = ir.ManagedDirectory{Path: path, Owner: owner, Group: group, Mode: mode, Ensure: ensure, Lifecycle: lifecycle, Source: item.Source}
+		managed := ir.ManagedDirectory{Path: path, Owner: owner, Group: group, Mode: mode, Ensure: ensure, Lifecycle: lifecycle, Source: item.Source}
+		if previous, exists := out[path]; exists {
+			if sameManagedDirectory(managed, previous) {
+				continue
+			}
+			return nil, fmt.Errorf("%s:%d:%s: directory path %q conflicts with directory declared at %s:%d:%s", item.Source.File, item.Source.Line, item.Source.Path, path, previous.Source.File, previous.Source.Line, previous.Source.Path)
+		}
+		out[path] = managed
 	}
 	return out, nil
 }

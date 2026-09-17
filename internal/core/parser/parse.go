@@ -2989,16 +2989,16 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 	case "secrets.file":
 		return attrSet("path", "source", "owner", "group", "mode", "ensure")
 	case "directories.directory":
-		return attrSet("owner", "group", "mode", "ensure")
+		return attrSet("path", "owner", "group", "mode", "ensure")
 	case "groups.group":
 		return attrSet("gid", "system", "ensure")
 	case "users.user":
 		return attrSet("uid", "home", "shell", "group", "groups", "system", "ssh_authorized_keys", "ensure")
 	case "systemd.unit":
-		return attrSet("content", "source", "owner", "group", "mode", "ensure")
+		return attrSet("name", "content", "source", "owner", "group", "mode", "ensure")
 	case "systemd.service_unit":
 		return attrSet(
-			"content", "source", "owner", "file_group", "mode", "ensure",
+			"name", "content", "source", "owner", "file_group", "mode", "ensure",
 			"description", "run", "type", "user", "group", "working_dir",
 			"environment", "restart", "restart_delay", "wants", "after",
 			"wanted_by", "stdout", "stderr", "service_config", "change_action",
@@ -3006,7 +3006,7 @@ func allowedLabeledObjectAttrs(domain string, blockType string) map[string]struc
 	case "systemd.timer":
 		return attrSet("description", "timer", "install", "wanted_by", "enable", "state", "owner", "file_group", "mode", "ensure")
 	case "services.service":
-		return attrSet("package", "enabled", "state", "depends_on")
+		return attrSet("name", "package", "enabled", "state", "depends_on")
 	case "nftables.file":
 		return attrSet("path", "content", "source", "owner", "group", "mode", "ensure", "sensitive", "validate", "activate")
 	default:

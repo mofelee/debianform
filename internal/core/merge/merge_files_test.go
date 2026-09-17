@@ -119,3 +119,89 @@ host "server1" {
 		t.Fatalf("error = %v, want duplicate file path rejection", err)
 	}
 }
+
+func TestCompileDirectoryPathOverride(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  directories {
+    directory "state" {
+      path  = "/var/lib/custom-state"
+      owner = "root"
+      group = "root"
+      mode  = "0750"
+    }
+  }
+}
+`)
+	directories := program.Hosts[0].Directories.Directories
+	directory, ok := directories["/var/lib/custom-state"]
+	if !ok {
+		t.Fatalf("directories = %#v", directories)
+	}
+	if directory.Path != "/var/lib/custom-state" {
+		t.Fatalf("directory path = %q", directory.Path)
+	}
+	if directory.Mode != "0750" {
+		t.Fatalf("directory mode = %q", directory.Mode)
+	}
+}
+
+func TestCompileRejectsRelativeDirectoryPathOverride(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+host "server1" {
+  directories {
+    directory "state" {
+      path = "relative/state"
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "directory path must be absolute and non-empty") {
+		t.Fatalf("error = %v, want relative directory path rejection", err)
+	}
+}
+
+func TestCompileDeduplicatesIdenticalDirectoryPathOverride(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  directories {
+    directory "one" {
+      path  = "/var/lib/shared"
+      owner = "root"
+      mode  = "0750"
+    }
+
+    directory "two" {
+      path  = "/var/lib/shared"
+      owner = "root"
+      mode  = "0750"
+    }
+  }
+}
+`)
+	directories := program.Hosts[0].Directories.Directories
+	if len(directories) != 1 {
+		t.Fatalf("directories = %#v, want one deduplicated entry", directories)
+	}
+}
+
+func TestCompileRejectsConflictingDirectoryPathOverride(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+host "server1" {
+  directories {
+    directory "one" {
+      path = "/var/lib/shared"
+      mode = "0755"
+    }
+
+    directory "two" {
+      path = "/var/lib/shared"
+      mode = "0700"
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), `directory path "/var/lib/shared" conflicts with directory declared`) {
+		t.Fatalf("error = %v, want conflicting directory path rejection", err)
+	}
+}

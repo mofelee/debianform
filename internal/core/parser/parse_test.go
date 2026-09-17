@@ -1547,6 +1547,62 @@ component "app" {
 	}
 }
 
+func TestParseComponentNameOverrideAttributes(t *testing.T) {
+	file := writeConfig(t, `
+component "app" {
+  directories {
+    directory "state" {
+      path = "/var/lib/app-state"
+    }
+  }
+
+  systemd {
+    unit "raw" {
+      name    = "raw-app.service"
+      content = "[Unit]\nDescription=raw\n"
+    }
+
+    service_unit "structured" {
+      name = "app-structured"
+      run  = ["/usr/bin/true"]
+    }
+  }
+
+  services {
+    service "svc" {
+      name  = "app-svc"
+      state = "running"
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	component := cfg.Components["app"]
+	if err := ValidateComponentBodyShape(component); err != nil {
+		t.Fatalf("ValidateComponentBodyShape error = %v", err)
+	}
+	body, err := ParseComponentBody(component, EvalContext{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := body.Map["directories"].Map["directory"].Map["state"].Map["path"].String; got != "/var/lib/app-state" {
+		t.Fatalf("directory path = %q", got)
+	}
+	if got := body.Map["systemd"].Map["unit"].Map["raw"].Map["name"].String; got != "raw-app.service" {
+		t.Fatalf("unit name = %q", got)
+	}
+	if got := body.Map["systemd"].Map["service_unit"].Map["structured"].Map["name"].String; got != "app-structured" {
+		t.Fatalf("service_unit name = %q", got)
+	}
+	if got := body.Map["services"].Map["service"].Map["svc"].Map["name"].String; got != "app-svc" {
+		t.Fatalf("service name = %q", got)
+	}
+}
+
 func TestParseRejectsInvalidFileOnChangeTraversal(t *testing.T) {
 	tests := []struct {
 		name string

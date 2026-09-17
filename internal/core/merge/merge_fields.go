@@ -97,6 +97,24 @@ func objectPath(root parser.Value, name string, defaultPath string) (string, err
 	return defaultPath, nil
 }
 
+// objectName resolves an optional interpolable identity override, falling back to
+// the static block label. The resolved value becomes the resource name and is
+// therefore expected to be non-empty.
+func objectName(root parser.Value, name string, defaultName string) (string, error) {
+	value, ok, err := stringField(root, name)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return defaultName, nil
+	}
+	if value == "" {
+		source := root.Map[name].Source
+		return "", fmt.Errorf("%s:%d:%s: name must be non-empty", source.File, source.Line, source.Path)
+	}
+	return value, nil
+}
+
 func objectCollection(root parser.Value, field string) (map[string]parser.Value, bool, error) {
 	collection, ok := root.Map[field]
 	if !ok {

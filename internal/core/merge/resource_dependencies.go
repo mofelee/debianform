@@ -92,6 +92,11 @@ func dependencyDeclarations(raw parser.Value, prefix string) ([]resourceDeclarat
 				if err != nil {
 					return nil, err
 				}
+			case "service":
+				identity, err = objectName(value, "name", label)
+				if err != nil {
+					return nil, err
+				}
 			}
 			address := fmt.Sprintf("%s.%s.%s[%s]", prefix, spec.domain, addressCollection, strconv.Quote(identity))
 			out = append(out, resourceDeclaration{typ: spec.typ, label: label, address: address, value: value})

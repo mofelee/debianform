@@ -468,3 +468,55 @@ host "server1" {
 		t.Fatalf("error = %v, want inline private key rejection", err)
 	}
 }
+
+func TestCompileSystemdUnitNameOverride(t *testing.T) {
+	program := compileInline(t, `
+host "server1" {
+  systemd {
+    unit "raw" {
+      name    = "custom-raw.service"
+      content = "[Unit]\nDescription=custom\n"
+    }
+
+    service_unit "structured" {
+      name = "custom-structured"
+      run  = ["/usr/bin/true"]
+    }
+  }
+}
+`)
+	host := program.Hosts[0]
+	raw, ok := host.Systemd.Units["custom-raw.service"]
+	if !ok {
+		t.Fatalf("units = %#v", host.Systemd.Units)
+	}
+	if raw.Path != "/etc/systemd/system/custom-raw.service" {
+		t.Fatalf("raw unit path = %q", raw.Path)
+	}
+	structured, ok := host.Systemd.Units["custom-structured.service"]
+	if !ok {
+		t.Fatalf("units = %#v", host.Systemd.Units)
+	}
+	if structured.Path != "/etc/systemd/system/custom-structured.service" {
+		t.Fatalf("structured unit path = %q", structured.Path)
+	}
+	if !strings.Contains(structured.Content, "Description=custom-structured") {
+		t.Fatalf("structured unit content = %q", structured.Content)
+	}
+}
+
+func TestCompileRejectsEmptySystemdUnitNameOverride(t *testing.T) {
+	_, err := parseOrCompileInline(t, `
+host "server1" {
+  systemd {
+    service_unit "structured" {
+      name = ""
+      run  = ["/usr/bin/true"]
+    }
+  }
+}
+`)
+	if err == nil || !strings.Contains(err.Error(), "name must be non-empty") {
+		t.Fatalf("error = %v, want empty name rejection", err)
+	}
+}
