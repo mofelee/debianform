@@ -1662,11 +1662,11 @@ func parseResourceReferenceList(file string, expr hcl.Expression, source ir.Sour
 func parseResourceTraversal(file string, expr hcl.Expression, source ir.SourceRef) (ResourceReference, error) {
 	traversal, diags := hcl.AbsTraversalForExpr(expr)
 	if diags.HasErrors() || len(traversal) != 2 {
-		return ResourceReference{}, fmt.Errorf("%s:%d:%s: depends_on entry must be package.<name>, file[<label>], or service.<name>", file, expr.Range().Start.Line, source.Path)
+		return ResourceReference{}, fmt.Errorf("%s:%d:%s: depends_on entry must be package.<name>, file[<label>], service.<name>, or artifact[<path>]", file, expr.Range().Start.Line, source.Path)
 	}
 	root, ok := traversal[0].(hcl.TraverseRoot)
-	if !ok || (root.Name != "package" && root.Name != "file" && root.Name != "service") {
-		return ResourceReference{}, fmt.Errorf("%s:%d:%s: depends_on reference type is out of scope; supported types are package, file, and service", file, expr.Range().Start.Line, source.Path)
+	if !ok || (root.Name != "package" && root.Name != "file" && root.Name != "service" && root.Name != "artifact") {
+		return ResourceReference{}, fmt.Errorf("%s:%d:%s: depends_on reference type is out of scope; supported types are package, file, service, and artifact", file, expr.Range().Start.Line, source.Path)
 	}
 	name := ""
 	switch step := traversal[1].(type) {

@@ -285,6 +285,37 @@ component instantiation 后解析，再以稳定的 host-scoped address 进入 p
 `package` block。未知、动态、跨 scope、sensitive、ephemeral 和跨 host reference 会带 source
 location 被拒绝。显式 edge 会和 inferred edge 去重，cycle 会报告完整路径，不相关资源仍可并行。
 
+`depends_on` entry 还可以用 `artifact["<installed-path>"]` 引用同一 host 上另一个 component
+安装的 artifact。这是唯一支持的跨 scope reference：它在 component instantiation 之后按安装
+路径在整个 host 上解析，因此可复用的 runtime component 可以严格排在安装它所运行二进制的
+component 之后。路径必须恰好匹配一个 component 的 `install.path`；未知或歧义路径会带 source
+location 被拒绝。解析后的 address 是 host-scoped 且稳定的，destroy 时会像其他 dependency
+一样反向执行。
+
+```hcl
+component "udp2raw" {
+  # ... binary artifact，install.path = "/usr/local/bin/udp2raw"
+}
+
+component "transport" {
+  input "link" {
+    type = string
+  }
+
+  services {
+    service "transport" {
+      name       = "transport-${input.link}"
+      depends_on = [artifact["/usr/local/bin/udp2raw"]]
+      state      = "running"
+    }
+  }
+}
+```
+
+wave 内的执行顺序是未定义的。彼此之间没有 dependency edge 的 resource 可以任意顺序运行，
+因此不要依赖声明顺序或 address 排序。当某个 resource 必须观察到另一个 resource 的结果时，
+应添加 `depends_on`。
+
 DebianForm 仍会推断 APT repository 到 cache refresh 到 package、
 `services.service.package` dependency 以及 provider-specific activation 等领域关系。
 `depends_on` 只用于补充无法推断的排序；它与阻止删除而非控制顺序的
@@ -464,7 +495,7 @@ package update。
 | `mode` | `"0644"` | 四位八进制字符串。 |
 | `ensure` | `"present"` | `"present"` 或 `"absent"`。 |
 | `sensitive` | `false` | 明确脱敏；含 sensitive/ephemeral 内容时会自动脱敏。 |
-| `depends_on` | `[]` | 必须在该文件之前 apply 的静态 package/file/service reference。 |
+| `depends_on` | `[]` | 必须在该文件之前 apply 的静态 package/file/service reference，或跨 component 的 `artifact["<path>"]` reference。 |
 | `on_change` | 无 | 仅 component 内可用；可引用 component-local 或根 script，实际变化时生成并执行 operation。 |
 
 支持 `lifecycle { prevent_destroy = true }`。
@@ -664,7 +695,7 @@ activation；`check` 只观察；offline plan 会展示 operation graph。两类
 | --- | --- | --- |
 | `name` | Label | 解析后的 service 名，可插值 component input；unit 名会自动补 `.service`。 |
 | `package` | `""` | 可选 package 依赖。 |
-| `depends_on` | `[]` | 必须在该 service 之前 apply 的静态 package/file/service reference。 |
+| `depends_on` | `[]` | 必须在该 service 之前 apply 的静态 package/file/service reference，或跨 component 的 `artifact["<path>"]` reference。 |
 | `enabled` | `null` | `true`/`false` 时管理 enablement；省略则不管理。 |
 | `state` | `""` | `running`、`stopped`、`restarted`、`reloaded`；省略则不管理运行状态。 |
 

@@ -37,21 +37,21 @@ rules.
 | CLI on Linux arm64 | Preview | Release artifact is built; real arm64 curl-installer verification still requires a runner or manual host. |
 | CLI on macOS amd64 | Beta | Release artifact, curl installer, and Homebrew install/test/upgrade are verified. |
 | CLI on macOS arm64 | Beta | Release artifact, curl installer, and Homebrew install/test/upgrade are verified. |
-| Target Debian 13 amd64 | Beta | Highest-priority target; all 24 libvirt cases are blocking gates. |
+| Target Debian 13 amd64 | Beta | Highest-priority target; all 25 libvirt cases are blocking gates. |
 | Target Debian 13 arm64 | Preview | Runtime facts and architecture selection support arm64, but no real arm64 target matrix exists. |
-| Target Debian 12 amd64 | Beta | The same blocking gate as Debian 13 runs all 24 cases. |
+| Target Debian 12 amd64 | Beta | The same blocking gate as Debian 13 runs all 25 cases. |
 | Target Debian 12 arm64 | Preview | Runtime facts recognize arm64, but no Debian 12 arm64 apply/check matrix exists. |
 | Target Debian 11 or earlier | Unsupported | Outside current support commitments and release gates. |
 | Debian testing/unstable | Unsupported | Outside current beta support commitments. |
-| Target Ubuntu 24.04 LTS amd64 | Preview | Independent blocking 24-case matrix; see the Ubuntu support contract for scope and exclusions. |
-| Target Ubuntu 26.04 LTS amd64 | Preview | Official released image, independent blocking 24-case matrix, and independent gate; only `resolute` amd64 Server is allowed. |
+| Target Ubuntu 24.04 LTS amd64 | Preview | Independent blocking 25-case matrix; see the Ubuntu support contract for scope and exclusions. |
+| Target Ubuntu 26.04 LTS amd64 | Preview | Official released image, independent blocking 25-case matrix, and independent gate; only `resolute` amd64 Server is allowed. |
 | Ubuntu 22.04, other Ubuntu versions, Ubuntu arm64, or desktop | Unsupported | Outside current support commitments and release gates. |
 | Other distributions | Unsupported | Not in the managed-target allowlist. |
 | Root SSH management connection | Beta | `ssh.user` must be omitted or set to `"root"`. |
 | sudo/become/non-root management connection | Unsupported | Sudo elevation, become, and non-root management are unsupported. |
 
-CI discovers 24 libvirt cases and expands them across four amd64 matrices: Debian 12, Debian 13,
-Ubuntu 24.04, and Ubuntu 26.04, for 96 blocking libvirt jobs. The Ubuntu versions have separate
+CI discovers 25 libvirt cases and expands them across four amd64 matrices: Debian 12, Debian 13,
+Ubuntu 24.04, and Ubuntu 26.04, for 100 blocking libvirt jobs. The Ubuntu versions have separate
 `Ubuntu 24.04 target matrix gate` and `Ubuntu 26.04 target matrix gate` jobs. Debian 12/13 use
 `Managed target matrix gate`. Debian 13 remains the local default and the highest-priority target
 for new features.
@@ -67,8 +67,9 @@ official released image `ubuntu-26.04-server-cloudimg-amd64.img` with SHA-256
 The host-scoped shared-script `shared-script-networkd` case passed 14 assertions on a real Debian 13
 amd64 VM on 2026-07-12, covering one reload for two files, zero reload on no-op, one reload after
 single-file drift, raw policy-route/rule behavior, and cleanup. The CI run and gates above preserve
-the prior 20-case baseline. The current 24-case gate additionally requires `component-moved`,
-`bird-wireguard-networkd`, `resource-dependencies`, and `component-multi-instance-names` on every target.
+the prior 20-case baseline. The current 25-case gate additionally requires `component-moved`,
+`bird-wireguard-networkd`, `resource-dependencies`, `component-multi-instance-names`, and
+`component-artifact-dependency` on every target.
 
 ## CLI Commands
 

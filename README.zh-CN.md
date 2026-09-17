@@ -442,7 +442,7 @@ Docker 官方源和跨架构 component 依赖目标 platform facts。真实主�
 - 被管理目标主机当前最高优先级是 Debian 13 amd64。
 - Debian 12 amd64 为 Beta，和 Debian 13 amd64 一起进入阻断式 libvirt CI；Debian 12 arm64
   仍为 Preview。
-- Ubuntu 24.04 和 26.04 LTS amd64 均为 Preview，并各有独立的 20-case 阻断矩阵和 gate；
+- Ubuntu 24.04 和 26.04 LTS amd64 均为 Preview，并各有独立的 25-case 阻断矩阵和 gate；
   其他 Ubuntu 版本、Ubuntu arm64 和桌面环境为 Unsupported。
 - DebianForm 不管理 Netplan 或 NetworkManager；Ubuntu 上的 networkd 配置需要运维人员先准备
   native-networkd 目标，普通非网络资源不受此限制。

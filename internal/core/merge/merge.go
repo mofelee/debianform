@@ -109,6 +109,15 @@ func CompileWithOptions(cfg *parser.Config, opts CompileOptions) (*ir.Program, e
 				return nil, err
 			}
 			spec.Components = components
+			artifactIndex := artifactInstallAddresses(spec.Name, components)
+			if err := resolveArtifactDependencies(spec.ExplicitDependencies, artifactIndex); err != nil {
+				return nil, err
+			}
+			for i := range spec.Components {
+				if err := resolveArtifactDependencies(spec.Components[i].ExplicitDependencies, artifactIndex); err != nil {
+					return nil, err
+				}
+			}
 		}
 		if err := validateHostSpec(spec); err != nil {
 			return nil, err

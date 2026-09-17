@@ -113,3 +113,57 @@ func countDependency(values []string, want string) int {
 	}
 	return count
 }
+
+func TestExplicitCrossComponentArtifactDependencyOrdersInstallFirst(t *testing.T) {
+	resourceGraph := compileGraphInline(t, `
+component "zbin" {
+  type    = "binary"
+  version = "1.0.0"
+
+  source "amd64" {
+    url    = "https://example.invalid/tool-amd64.tar.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/usr/local/bin/tool"
+  }
+}
+
+component "link" {
+  input "peer" {
+    type = string
+  }
+
+  services {
+    service "svc" {
+      name       = "tool-${input.peer}"
+      depends_on = [artifact["/usr/local/bin/tool"]]
+      state      = "running"
+    }
+  }
+}
+
+host "server1" {
+  platform {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  components = [component.zbin]
+
+  component "alink" {
+    source = component.link
+    inputs = { peer = "alpha" }
+  }
+}
+`)
+	installAddress := `host.server1.components.zbin.artifact.install["/usr/local/bin/tool"]`
+	serviceAddress := `host.server1.components.alink.services.service["tool-alpha"]`
+	serviceNode := nodeFor(resourceGraph, serviceAddress)
+	if serviceNode == nil || !containsString(serviceNode.DependsOn, installAddress) || !containsString(serviceNode.ExplicitDependsOn, installAddress) {
+		t.Fatalf("service dependencies = %#v explicit=%#v", serviceNode.DependsOn, serviceNode.ExplicitDependsOn)
+	}
+	order := topologicalOrder(t, resourceGraph)
+	assertBefore(t, order, installAddress, serviceAddress)
+}

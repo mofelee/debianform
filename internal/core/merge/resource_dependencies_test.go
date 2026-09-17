@@ -179,3 +179,225 @@ host "server1" {
 		t.Fatalf("explicit dependencies = %#v, want %#v", got, want)
 	}
 }
+
+func TestResourceDependenciesResolveCrossComponentArtifactInstall(t *testing.T) {
+	program := compileInline(t, `
+component "zbin" {
+  type    = "binary"
+  version = "1.0.0"
+
+  source "amd64" {
+    url    = "https://example.invalid/tool-amd64.tar.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  extract {
+    format  = "tar.gz"
+    include = "tool"
+  }
+
+  install {
+    path = "/usr/local/bin/tool"
+  }
+}
+
+component "link" {
+  input "peer" {
+    type = string
+  }
+
+  services {
+    service "svc" {
+      name       = "tool-${input.peer}"
+      depends_on = [artifact["/usr/local/bin/tool"]]
+      enabled    = true
+      state      = "running"
+    }
+  }
+}
+
+host "server1" {
+  platform {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  components = [component.zbin]
+
+  component "alink" {
+    source = component.link
+    inputs = { peer = "alpha" }
+  }
+}
+`)
+	if len(program.Hosts[0].Components) != 2 {
+		t.Fatalf("components = %#v", program.Hosts[0].Components)
+	}
+	got := program.Hosts[0].Components[1].ExplicitDependencies
+	want := ir.ResourceDependencySpec{
+		From:      `host.server1.components.alink.services.service["tool-alpha"]`,
+		DependsOn: `host.server1.components.zbin.artifact.install["/usr/local/bin/tool"]`,
+	}
+	if len(got) != 1 {
+		t.Fatalf("explicit dependencies = %#v, want %#v", got, want)
+	}
+	got[0].Source = ir.SourceRef{}
+	if !reflect.DeepEqual(got[0], want) {
+		t.Fatalf("explicit dependencies = %#v, want %#v", got, want)
+	}
+}
+
+func TestResourceDependenciesResolveHostLevelArtifactInstall(t *testing.T) {
+	program := compileInline(t, `
+component "zbin" {
+  type    = "binary"
+  version = "1.0.0"
+
+  source "amd64" {
+    url    = "https://example.invalid/tool-amd64.tar.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/usr/local/bin/tool"
+  }
+}
+
+host "server1" {
+  platform {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  components = [component.zbin]
+
+  services {
+    service "runner" {
+      depends_on = [artifact["/usr/local/bin/tool"]]
+      state      = "running"
+    }
+  }
+}
+`)
+	got := program.Hosts[0].ExplicitDependencies
+	want := ir.ResourceDependencySpec{
+		From:      `host.server1.services.service["runner"]`,
+		DependsOn: `host.server1.components.zbin.artifact.install["/usr/local/bin/tool"]`,
+	}
+	if len(got) != 1 {
+		t.Fatalf("explicit dependencies = %#v, want %#v", got, want)
+	}
+	got[0].Source = ir.SourceRef{}
+	if !reflect.DeepEqual(got[0], want) {
+		t.Fatalf("explicit dependencies = %#v, want %#v", got, want)
+	}
+}
+
+func TestResourceDependenciesRejectUnknownAndAmbiguousArtifacts(t *testing.T) {
+	tests := []struct {
+		name string
+		hcl  string
+		want string
+	}{
+		{
+			name: "unknown",
+			hcl: `
+component "link" {
+  services {
+    service "svc" {
+      depends_on = [artifact["/usr/local/bin/missing"]]
+      state      = "running"
+    }
+  }
+}
+
+host "server1" {
+  component "alink" { source = component.link }
+}`,
+			want: `depends_on references unknown artifact["/usr/local/bin/missing"]`,
+		},
+		{
+			name: "ambiguous",
+			hcl: `
+component "one" {
+  type    = "binary"
+  version = "1.0.0"
+
+  source "amd64" {
+    url    = "https://example.invalid/one.tar.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/usr/local/bin/tool"
+  }
+}
+
+component "two" {
+  type    = "binary"
+  version = "1.0.0"
+
+  source "amd64" {
+    url    = "https://example.invalid/two.tar.gz"
+    sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+
+  install {
+    path = "/usr/local/bin/tool"
+  }
+}
+
+component "link" {
+  services {
+    service "svc" {
+      depends_on = [artifact["/usr/local/bin/tool"]]
+      state      = "running"
+    }
+  }
+}
+
+host "server1" {
+  platform {
+    architecture = "amd64"
+    codename     = "trixie"
+  }
+
+  components = [component.one, component.two]
+
+  component "alink" { source = component.link }
+}`,
+			want: `depends_on references ambiguous artifact["/usr/local/bin/tool"]`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseOrCompileInline(t, tt.hcl)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+			if !strings.Contains(err.Error(), ".depends_on[0]") {
+				t.Fatalf("error lacks depends_on source path: %v", err)
+			}
+		})
+	}
+}
+
+func TestResourceDependenciesArtifactReferenceValidatedWithoutRuntimeFacts(t *testing.T) {
+	cfg := parseInline(t, `
+component "link" {
+  services {
+    service "svc" {
+      depends_on = [artifact["/usr/local/bin/missing"]]
+      state      = "running"
+    }
+  }
+}
+
+host "server1" {
+  component "alink" { source = component.link }
+}`)
+	_, err := CompileWithOptions(cfg, CompileOptions{ValidateRuntimeTemplates: true})
+	if err == nil || !strings.Contains(err.Error(), `depends_on references unknown artifact["/usr/local/bin/missing"]`) {
+		t.Fatalf("validate error = %v", err)
+	}
+}

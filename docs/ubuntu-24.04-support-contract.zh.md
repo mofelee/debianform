@@ -139,9 +139,9 @@ Netplan ownership。
 - 不提供自动接管或 override；管理员必须在 DebianForm 之外准备 native-networkd 主机。
 - arbitrary script 的命令文本不参与推断；这部分始终由配置作者负责。
 
-## 24-case Ubuntu 矩阵
+## 25-case Ubuntu 矩阵
 
-以下 24 个 cases 作为独立 Ubuntu 阻断矩阵运行。`native-networkd image` 表示测试 harness
+以下 25 个 cases 作为独立 Ubuntu 阻断矩阵运行。`native-networkd image` 表示测试 harness
 在 DebianForm 运行前完成外部准备，不是 DebianForm 自动迁移。
 
 | Case | Ubuntu fixture | 分类/实现 Loop |
@@ -150,6 +150,7 @@ Netplan ownership。
 | `apt-virtual-package` | official image | package shared，#47 |
 | `bbr` | official image | kernel shared，#48 |
 | `bird-wireguard-networkd` | native-networkd image | 通用 networkd section 与 activation，#72/#80 |
+| `component-artifact-dependency` | official image | 跨 component artifact 排序 shared，#97 |
 | `component-inputs` | official image | component shared，#48 |
 | `component-moved` | official image | state refactoring shared，#65 |
 | `component-multi-instance-names` | official image | component resource name shared，#96 |
@@ -185,8 +186,9 @@ Ubuntu Preview 的权威实现基线是提交
 
 这是 24.04 首次交付时的历史基线。后续四目标 20-case 基线记录在
 [支持矩阵](support-matrix.zh.md)；当前 gate 新增 `component-moved`、
-`bird-wireguard-networkd` 和 `resource-dependencies`，并要求 24.04 与 26.04 分别使用独立的
-`24/24` 矩阵。
+`bird-wireguard-networkd`、`resource-dependencies`、`component-multi-instance-names` 和
+`component-artifact-dependency`，并要求 24.04 与 26.04 分别使用独立的
+`25/25` 矩阵。
 
 Preview 表示成熟度，不允许合并已知 Ubuntu 回归，也不等同于 Beta。未来提升 Beta 至少要求
 持续阻断 CI、release verification 证据、已解决高风险用户反馈，以及显式 support-tier 决策。

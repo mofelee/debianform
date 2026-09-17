@@ -151,6 +151,32 @@ host "server1" {
 	}
 }
 
+func TestParseArtifactResourceDependsOnTraversal(t *testing.T) {
+	file := writeConfig(t, `
+host "server1" {
+  services {
+    service "runner" {
+      depends_on = [artifact["/usr/local/bin/tool"]]
+      state      = "running"
+    }
+  }
+}
+`)
+
+	cfg, err := ParseFiles([]string{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	serviceDependsOn := cfg.Hosts["server1"].Body.Map["services"].Map["service"].Map["runner"].Map["depends_on"]
+	if len(serviceDependsOn.List) != 1 || serviceDependsOn.List[0].ResourceReference == nil {
+		t.Fatalf("service depends_on = %#v", serviceDependsOn)
+	}
+	got := *serviceDependsOn.List[0].ResourceReference
+	if got.Type != "artifact" || got.Name != "/usr/local/bin/tool" || got.Source.Path != `host.server1.services.service["runner"].depends_on[0]` {
+		t.Fatalf("artifact reference = %#v", got)
+	}
+}
+
 func TestParseRejectsInvalidResourceDependsOnReferences(t *testing.T) {
 	tests := []struct {
 		name string

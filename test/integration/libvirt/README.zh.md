@@ -25,6 +25,7 @@ make test-integration-case CASE=apt-source DEBIAN_VERSION=12
 make test-integration-case CASE=files TARGET=ubuntu-24.04
 make test-integration-case CASE=files TARGET=ubuntu-26.04
 make test-integration-case CASE=bbr
+make test-integration-case CASE=component-artifact-dependency
 make test-integration-case CASE=component-inputs
 make test-integration-case CASE=files
 make test-integration-case CASE=multi-directory
@@ -42,8 +43,8 @@ version、codename 和 architecture。
 
 每个编号 case 步骤都会运行 `validate`、在线 JSON plan；在 case 提供 drift hook 时拒绝 drift；
 然后运行 `apply`、断言为 no-op 的 JSON plan、`check` 以及 case 特有的 apply 后检查。CI 当前发现
-24 个 case 目录。Debian 矩阵展开为 2 个版本 x 24 个 case，即 48 个由
-`Managed target matrix gate` 守卫的 job。两套独立 Ubuntu 矩阵都运行相同的 24 个 case，
+25 个 case 目录。Debian 矩阵展开为 2 个版本 x 25 个 case，即 50 个由
+`Managed target matrix gate` 守卫的 job。两套独立 Ubuntu 矩阵都运行相同的 25 个 case，
 并分别使用自己的 target matrix gate。
 
 `wireguard` 使用双 host runner，`wireguard-three-host` 使用三 host runner。在 Ubuntu 上，

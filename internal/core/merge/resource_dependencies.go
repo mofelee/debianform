@@ -3,6 +3,7 @@ package merge
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/mofelee/debianform/internal/core/ir"
 	"github.com/mofelee/debianform/internal/core/parser"
@@ -40,6 +41,15 @@ func resourceDependencies(raw parser.Value, prefix string) ([]ir.ResourceDepende
 				return nil, fmt.Errorf("%s:%d:%s: depends_on entry is not a typed resource reference", item.Source.File, item.Source.Line, item.Source.Path)
 			}
 			ref := *item.ResourceReference
+			if ref.Type == "artifact" {
+				key := declaration.address + "\x00artifact\x00" + ref.Name
+				if _, exists := seen[key]; exists {
+					continue
+				}
+				seen[key] = struct{}{}
+				out = append(out, ir.ResourceDependencySpec{From: declaration.address, ArtifactPath: ref.Name, Source: ref.Source})
+				continue
+			}
 			target, exists := byReference[resourceReferenceKey(ref.Type, ref.Name)]
 			if !exists {
 				if ref.Type == "package" && listPackageDeclared(raw, ref.Name) {
@@ -56,6 +66,42 @@ func resourceDependencies(raw parser.Value, prefix string) ([]ir.ResourceDepende
 		}
 	}
 	return out, nil
+}
+
+// artifactInstallAddresses indexes host component artifact install addresses by
+// installed path so cross-component artifact references can be resolved.
+func artifactInstallAddresses(hostName string, components []ir.ComponentInstanceSpec) map[string][]string {
+	index := map[string][]string{}
+	for _, component := range components {
+		if component.Install == nil || component.Install.Path == "" {
+			continue
+		}
+		address := fmt.Sprintf("host.%s.components.%s.artifact.install[%s]", hostName, component.Name, strconv.Quote(component.Install.Path))
+		index[component.Install.Path] = append(index[component.Install.Path], address)
+	}
+	return index
+}
+
+// resolveArtifactDependencies rewrites cross-component artifact references in
+// place into concrete host-scoped artifact install addresses.
+func resolveArtifactDependencies(dependencies []ir.ResourceDependencySpec, index map[string][]string) error {
+	for i := range dependencies {
+		path := dependencies[i].ArtifactPath
+		if path == "" {
+			continue
+		}
+		addresses := index[path]
+		switch len(addresses) {
+		case 0:
+			return fmt.Errorf("%s:%d:%s: depends_on references unknown %s", dependencies[i].Source.File, dependencies[i].Source.Line, dependencies[i].Source.Path, resourceReferenceDisplay("artifact", path))
+		case 1:
+			dependencies[i].DependsOn = addresses[0]
+			dependencies[i].ArtifactPath = ""
+		default:
+			return fmt.Errorf("%s:%d:%s: depends_on references ambiguous %s; installed by %s", dependencies[i].Source.File, dependencies[i].Source.Line, dependencies[i].Source.Path, resourceReferenceDisplay("artifact", path), strings.Join(addresses, ", "))
+		}
+	}
+	return nil
 }
 
 func dependencyDeclarations(raw parser.Value, prefix string) ([]resourceDeclaration, error) {

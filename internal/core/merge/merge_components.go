@@ -467,6 +467,15 @@ func (c *compiler) validateRuntimeComponentTemplates(instances []parser.Componen
 		}
 		check.Components = append(check.Components, component)
 	}
+	artifactIndex := artifactInstallAddresses(target.Name, check.Components)
+	if err := resolveArtifactDependencies(target.ExplicitDependencies, artifactIndex); err != nil {
+		return err
+	}
+	for i := range check.Components {
+		if err := resolveArtifactDependencies(check.Components[i].ExplicitDependencies, artifactIndex); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

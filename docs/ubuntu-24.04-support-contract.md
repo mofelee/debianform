@@ -150,9 +150,9 @@ Before managing either, the online preflight must inspect `/etc/netplan/*.yaml` 
 - Arbitrary script command text is not inferred; its safety remains the configuration author's
   responsibility.
 
-## 24-Case Ubuntu Matrix
+## 25-Case Ubuntu Matrix
 
-These 24 cases run as an independent blocking Ubuntu matrix. "Native-networkd image" means the test
+These 25 cases run as an independent blocking Ubuntu matrix. "Native-networkd image" means the test
 harness performs external preparation before DebianForm; it is not product-managed migration.
 
 | Case | Ubuntu fixture | Classification/implementation loop |
@@ -161,6 +161,7 @@ harness performs external preparation before DebianForm; it is not product-manag
 | `apt-virtual-package` | official image | Shared package, #47 |
 | `bbr` | official image | Shared kernel, #48 |
 | `bird-wireguard-networkd` | native-networkd image | General networkd sections and activation, #72/#80 |
+| `component-artifact-dependency` | official image | Shared cross-component artifact ordering, #97 |
 | `component-inputs` | official image | Shared component, #48 |
 | `component-moved` | official image | Shared state refactoring, #65 |
 | `component-multi-instance-names` | official image | Shared component resource names, #96 |
@@ -197,9 +198,9 @@ same commit:
 
 That is the historical baseline for the initial 24.04 delivery. The later four-target 20-case
 baseline is recorded in the [Support Matrix](support-matrix.md); the current gate adds
-`component-moved`, `bird-wireguard-networkd`, `resource-dependencies`, and
-`component-multi-instance-names` and requires separate
-`24/24` matrices for 24.04 and 26.04.
+`component-moved`, `bird-wireguard-networkd`, `resource-dependencies`,
+`component-multi-instance-names`, and `component-artifact-dependency` and requires separate
+`25/25` matrices for 24.04 and 26.04.
 
 Preview describes maturity, does not permit a known Ubuntu regression, and is not Beta. Promotion
 to Beta requires sustained blocking CI, release-verification evidence, resolved high-risk user

@@ -309,6 +309,38 @@ block when explicit ordering is required. Unknown, dynamic, cross-scope, sensiti
 cross-host references are rejected with source locations. Explicit edges are deduplicated with
 inferred edges, cycles report their full path, and unrelated resources remain parallel.
 
+A `depends_on` entry may also reference an artifact installed by another component on the same
+host as `artifact["<installed-path>"]`. This is the one supported cross-scope reference. It
+resolves by installed path across the host after component instantiation, so a reusable runtime
+component can be ordered strictly after the component that installs the binary it runs. The path
+must match exactly one component `install.path`; unknown or ambiguous paths are rejected with
+source locations. The resolved address is host-scoped and stable, and destruction inverts the
+edge like any other dependency.
+
+```hcl
+component "udp2raw" {
+  # ... binary artifact with install.path = "/usr/local/bin/udp2raw"
+}
+
+component "transport" {
+  input "link" {
+    type = string
+  }
+
+  services {
+    service "transport" {
+      name       = "transport-${input.link}"
+      depends_on = [artifact["/usr/local/bin/udp2raw"]]
+      state      = "running"
+    }
+  }
+}
+```
+
+Intra-wave execution order is unspecified. Resources without a dependency edge between them may
+run in any order, so do not rely on declaration order or address sorting. Add `depends_on` when a
+resource must observe another resource's result.
+
 DebianForm still infers domain relationships such as APT repository to cache refresh to package,
 the `services.service.package` dependency, and provider-specific activation. `depends_on` is the
 escape hatch for ordering that cannot be inferred. It is separate from
@@ -501,7 +533,7 @@ Fields of `file "<path-or-label>"`:
 | `mode` | `"0644"` | Four-digit octal string. |
 | `ensure` | `"present"` | `"present"` or `"absent"`. |
 | `sensitive` | `false` | Request explicit redaction; content containing sensitive or ephemeral values is redacted automatically. |
-| `depends_on` | `[]` | Static package/file/service references that must be applied before this file. |
+| `depends_on` | `[]` | Static package/file/service references, or a cross-component `artifact["<path>"]` reference, that must be applied before this file. |
 | `on_change` | None | Component-only. May reference a component-local or root script, generating and executing an operation after an actual change. |
 
 Supports `lifecycle { prevent_destroy = true }`.
@@ -709,7 +741,7 @@ Fields of `service "<name>"`:
 | --- | --- | --- |
 | `name` | Label | Resolved service name. May interpolate component inputs; the unit name gains `.service` automatically. |
 | `package` | `""` | Optional package dependency. |
-| `depends_on` | `[]` | Static package/file/service references that must be applied before this service. |
+| `depends_on` | `[]` | Static package/file/service references, or a cross-component `artifact["<path>"]` reference, that must be applied before this service. |
 | `enabled` | `null` | Manage enablement when true/false; omission leaves it unmanaged. |
 | `state` | `""` | `running`, `stopped`, `restarted`, or `reloaded`; omission leaves runtime state unmanaged. |
 

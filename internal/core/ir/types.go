@@ -46,9 +46,10 @@ type HostSpec struct {
 }
 
 type ResourceDependencySpec struct {
-	From      string    `json:"from"`
-	DependsOn string    `json:"depends_on"`
-	Source    SourceRef `json:"source,omitempty"`
+	From         string    `json:"from"`
+	DependsOn    string    `json:"depends_on"`
+	ArtifactPath string    `json:"artifact,omitempty"`
+	Source       SourceRef `json:"source,omitempty"`
 }
 
 type MovedSpec struct {
