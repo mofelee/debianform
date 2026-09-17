@@ -177,7 +177,7 @@ Ownership checks read only `/lib/netplan`, `/etc/netplan`, `/run/netplan`, and N
 systemd-networkd/NetworkManager runtime files. They do not run the Netplan CLI, `systemctl`, or file
 mutations.
 
-## 23-Case 26.04 Baseline and Acceptance Mapping
+## 24-Case 26.04 Baseline and Acceptance Mapping
 
 "Released image" preserves the image's Netplan ownership. "Native-networkd image" means the
 harness performs external preparation before DebianForm.
@@ -190,6 +190,7 @@ harness performs external preparation before DebianForm.
 | `bird-wireguard-networkd` | native-networkd image | General networkd sections and activation | #72/#80 |
 | `component-inputs` | released image | Shared component | #56/#58 |
 | `component-moved` | released image | Shared state refactoring | #65 |
+| `component-multi-instance-names` | released image | Shared component resource names | #96 |
 | `docker-compose` | released image | Packages plus shared Compose | #56/#57/#58 |
 | `docker-daemon` | released image | Packages plus shared daemon | #56/#57/#58 |
 | `docker-engine` | released image | Docker `resolute` repository | #56/#57 |
@@ -243,10 +244,10 @@ sensitive text, JSON, HTML, debug, and state output.
 
 ## CI and Support-Claim Gates
 
-- Keep a separately named 23-case Ubuntu 26.04 matrix and `Ubuntu 26.04 target matrix gate`.
+- Keep a separately named 24-case Ubuntu 26.04 matrix and `Ubuntu 26.04 target matrix gate`.
 - Do not rename or weaken `Managed target matrix gate` or `Ubuntu 24.04 target matrix gate`.
-- A support claim requires Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04 at 23 cases each on
-  the same commit: all 92 target-case results green.
+- A support claim requires Debian 12, Debian 13, Ubuntu 24.04, and Ubuntu 26.04 at 24 cases each on
+  the same commit: all 96 target-case results green.
 - Record the exact commit, CI run URL, released-image digest, and hypervisor cleanup after success or
   failure.
 - Preview describes maturity rather than permission to merge known regressions. After the claim is
