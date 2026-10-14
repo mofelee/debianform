@@ -193,7 +193,7 @@ jobs:
 
       - name: Upload libvirt diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: debianform-libvirt-debian-${{ matrix.debian_version }}-${{ matrix.case }}-diagnostics
           path: ${{ runner.temp }}/debianform-integration-artifacts
@@ -336,7 +336,7 @@ jobs:
 
       - name: Upload Ubuntu libvirt diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: debianform-libvirt-ubuntu-24.04-${{ matrix.case }}-diagnostics
           path: ${{ runner.temp }}/debianform-integration-artifacts
@@ -521,7 +521,7 @@ jobs:
 
       - name: Upload Ubuntu 26.04 libvirt diagnostics
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: debianform-libvirt-ubuntu-26.04-${{ matrix.case }}-diagnostics
           path: ${{ runner.temp }}/debianform-integration-artifacts
