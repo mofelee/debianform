@@ -210,7 +210,7 @@ jobs:
           EOF
 
       - name: Upload Linux verification result
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-verification-linux-amd64-${{ needs.release.outputs.tag }}
           path: ${{ runner.temp }}/linux-verification.env
@@ -279,7 +279,7 @@ jobs:
           } > "$result_file"
 
       - name: Upload macOS verification result
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-verification-darwin-${{ matrix.arch }}-${{ needs.release.outputs.tag }}
           path: ${{ runner.temp }}/macos-${{ matrix.arch }}-verification.env
@@ -354,7 +354,7 @@ jobs:
           gh release edit "$tag" --repo mofelee/debianform --notes-file "$updated_body"
 
       - name: Upload verification matrix
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-verification-${{ needs.release.outputs.tag }}
           path: ${{ runner.temp }}/release-verification-matrix.md
