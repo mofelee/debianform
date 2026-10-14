@@ -6,9 +6,9 @@ toolchain go1.26.8
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
-	github.com/hashicorp/hcl/v2 v2.24.0
+	github.com/hashicorp/hcl/v2 v2.25.0
 	github.com/zclconf/go-cty v1.19.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.24.0
 )
 
 require (
